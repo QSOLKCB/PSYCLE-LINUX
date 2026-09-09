@@ -8,12 +8,35 @@ The initial technical reference supplied for the port is:
 
 - Project: Psycle / C-Psycle
 - Upstream host: SourceForge
-- Upstream tree: `https://sourceforge.net/p/psycle/code/HEAD/tree/`
+- Revision: `r12005`
+- Revision-pinned tree: `https://sourceforge.net/p/psycle/code/12005/tree/trunk/cpsycle/`
+- Revision-pinned snapshot: `https://sourceforge.net/p/psycle/code/12005/tree/trunk/cpsycle/?format=zip`
+- Canonical SVN path: `https://svn.code.sf.net/p/psycle/code/trunk/cpsycle`
 - Snapshot/archive label: `r12005-trunk-cpsycle`
 - Archive filename: `psycle-code-r12005-trunk-cpsycle.zip`
 - SHA-256: `2f70d86e64ab8be3755cf449fa5dc757e3c005d8aecd59f3890f2d222089dabc`
 
-The SHA-256 identifies the exact archive used during the initial PSYCLE-LINUX documentation and source audit. Future upstream snapshots must receive their own provenance record rather than silently replacing this baseline.
+The revision-pinned SourceForge URLs above are the retrieval references for this baseline. Do not use the mutable `HEAD` tree when reproducing the selected source.
+
+The same source revision can also be exported directly with Subversion:
+
+```bash
+svn export -r 12005 https://svn.code.sf.net/p/psycle/code/trunk/cpsycle cpsycle-r12005
+```
+
+The SHA-256 identifies the exact SourceForge ZIP archive used during the initial PSYCLE-LINUX documentation and source audit. Verify a downloaded snapshot before treating it as the selected baseline:
+
+```bash
+sha256sum psycle-code-r12005-trunk-cpsycle.zip
+```
+
+Expected result:
+
+```text
+2f70d86e64ab8be3755cf449fa5dc757e3c005d8aecd59f3890f2d222089dabc  psycle-code-r12005-trunk-cpsycle.zip
+```
+
+A raw `svn export` reproduces the r12005 source revision but is not expected to have the ZIP archive's byte-for-byte checksum because the archive container/metadata differ. Future upstream snapshots must receive their own provenance record rather than silently replacing this baseline.
 
 ## Why This Baseline
 
