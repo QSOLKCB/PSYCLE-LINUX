@@ -22,6 +22,7 @@
 #define MIXER_SLOT 1
 #define DOWNSTREAM_MIXER_SLOT 2
 #define ROUTE_MIXER_SLOT 3
+#define RAW_MIXER_SLOT 4
 #define MIXER_INPUT_VOLUME 0.37
 #define MIXER_INPUT_PANNING 0.23
 #define MIXER_INPUT_GAIN 0.61
@@ -29,6 +30,8 @@
 #define DOWNSTREAM_RETURN_VOLUME 0.44
 #define DOWNSTREAM_RETURN_PANNING 0.71
 #define DOWNSTREAM_RETURN_INPUTCONVOL 0.58
+#define NEWER_ROUTE_RETURN_VOLUME 0.29
+#define NEWER_ROUTE_RETURN_PANNING 0.18
 
 static int fail(const char* message)
 {
@@ -77,8 +80,7 @@ static psy_audio_Mixer* mixer_client(psy_audio_Machine* machine)
 	if (!machine || psy_audio_machine_type(machine) != psy_audio_MIXER) {
 		return NULL;
 	}
-	/* MachineFactory wraps built-ins in MachineProxy; inspect the retained
-	** Mixer client so this regression can verify its internal channel state. */
+	/* Normal factory-created built-ins are proxied in this regression build. */
 	proxy = (psy_audio_MachineProxy*)machine;
 	if (!proxy->client || psy_audio_machine_type(proxy->client) != psy_audio_MIXER) {
 		return NULL;
@@ -188,6 +190,27 @@ static int downstream_return_state_is_preserved(psy_audio_Machines* machines)
 		psy_table_exists(&ret->sendsto, route_return_id);
 }
 
+static int newer_unaffected_return_edit_is_preserved(
+	psy_audio_Machines* machines)
+{
+	psy_audio_Mixer* mixer;
+	uintptr_t route_return_id;
+	psy_audio_ReturnChannel* ret;
+
+	mixer = mixer_client(psy_audio_machines_at(machines,
+		DOWNSTREAM_MIXER_SLOT));
+	if (!mixer) {
+		return FALSE;
+	}
+	route_return_id = mixer_return_id_for_slot(mixer, ROUTE_MIXER_SLOT);
+	if (route_return_id == psy_INDEX_INVALID) {
+		return FALSE;
+	}
+	ret = psy_audio_mixer_return(mixer, route_return_id);
+	return ret && ret->volume == NEWER_ROUTE_RETURN_VOLUME &&
+		ret->panning == NEWER_ROUTE_RETURN_PANNING && ret->mute == 1;
+}
+
 int main(void)
 {
 	psy_audio_MachineCallback callback;
@@ -199,11 +222,13 @@ int main(void)
 	psy_audio_Machine* mixer;
 	psy_audio_Machine* downstream_mixer;
 	psy_audio_Machine* route_mixer;
+	psy_audio_Machine* raw_mixer;
 	psy_audio_InputChannel* input;
 	psy_audio_Mixer* downstream;
 	uintptr_t deleted_return_id;
 	uintptr_t route_return_id;
 	psy_audio_ReturnChannel* downstream_return;
+	psy_audio_ReturnChannel* route_return;
 	psy_audio_MixerSend* downstream_send;
 
 	psy_audio_init();
@@ -316,7 +341,31 @@ int main(void)
 		psy_audio_song_deallocate(song);
 		return fail("delete did not rebuild downstream mixer for temporary wire");
 	}
+
+	/* Mixer parameter tweaks are independent of Machines undo. Change the
+	** persistent route return after deletion; undo must not roll this newer,
+	** unrelated edit back to the deletion-time snapshot. */
+	downstream = mixer_client(psy_audio_machines_at(machines,
+		DOWNSTREAM_MIXER_SLOT));
+	route_return_id = mixer_return_id_for_slot(downstream, ROUTE_MIXER_SLOT);
+	route_return = psy_audio_mixer_return(downstream, route_return_id);
+	if (!route_return) {
+		psy_audio_song_deallocate(song);
+		return fail("persistent route return disappeared after delete");
+	}
+	route_return->volume = NEWER_ROUTE_RETURN_VOLUME;
+	route_return->panning = NEWER_ROUTE_RETURN_PANNING;
+	route_return->mute = 1;
+
+	/* The saved A->B wire is a Mixer return. Deliberately switch the current
+	** toolbar mode to normal Mixer input before undo; restoration must replay
+	** the saved return classification without changing this current preference. */
+	psy_audio_machines_connect_as_mixerinput(machines);
 	psy_undoredo_undo(&machines->undoredo);
+	if (psy_audio_machines_is_connect_as_mixersend(machines)) {
+		psy_audio_song_deallocate(song);
+		return fail("delete undo changed the current mixer-input toolbar mode");
+	}
 	if (!topology_is_routed(machines)) {
 		psy_audio_song_deallocate(song);
 		return fail("delete undo did not restore mixer and connections");
@@ -328,12 +377,17 @@ int main(void)
 	}
 	if (!downstream_mixer_is_routed(machines)) {
 		psy_audio_song_deallocate(song);
-		return fail("delete undo did not reconcile downstream mixer state");
+		return fail("delete undo did not restore saved Mixer-return classification");
 	}
 	if (!downstream_return_state_is_preserved(machines)) {
 		psy_audio_song_deallocate(song);
 		return fail("delete undo did not preserve downstream return settings");
 	}
+	if (!newer_unaffected_return_edit_is_preserved(machines)) {
+		psy_audio_song_deallocate(song);
+		return fail("delete undo reverted a newer unrelated Mixer edit");
+	}
+
 	psy_undoredo_redo(&machines->undoredo);
 	if (!topology_is_rewired(machines)) {
 		psy_audio_song_deallocate(song);
@@ -343,7 +397,15 @@ int main(void)
 		psy_audio_song_deallocate(song);
 		return fail("delete redo did not rebuild downstream temporary channel");
 	}
+	if (!newer_unaffected_return_edit_is_preserved(machines)) {
+		psy_audio_song_deallocate(song);
+		return fail("delete redo reverted the newer unrelated Mixer edit");
+	}
 	psy_undoredo_undo(&machines->undoredo);
+	if (psy_audio_machines_is_connect_as_mixersend(machines)) {
+		psy_audio_song_deallocate(song);
+		return fail("second delete undo changed the current mixer-input mode");
+	}
 	if (!topology_is_routed(machines)) {
 		psy_audio_song_deallocate(song);
 		return fail("second delete undo did not restore topology");
@@ -360,6 +422,47 @@ int main(void)
 	if (!downstream_return_state_is_preserved(machines)) {
 		psy_audio_song_deallocate(song);
 		return fail("second delete undo did not preserve downstream return settings");
+	}
+	if (!newer_unaffected_return_edit_is_preserved(machines)) {
+		psy_audio_song_deallocate(song);
+		return fail("second delete undo reverted the newer unrelated Mixer edit");
+	}
+
+	/* createwithoutproxy() is supported even in proxy-enabled builds. Exercise
+	** both insertion undo/redo and deletion undo with a raw Mixer so command
+	** snapshot code cannot safely assume every Mixer instance is a proxy. */
+	psy_audio_machinefactory_createwithoutproxy(&factory);
+	raw_mixer = psy_audio_machinefactory_make_machine_from_path(&factory,
+		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
+	psy_audio_machinefactory_createasproxy(&factory);
+	if (!raw_mixer) {
+		psy_audio_song_deallocate(song);
+		return fail("could not create raw Mixer");
+	}
+	psy_audio_machines_insert(machines, RAW_MIXER_SLOT, raw_mixer);
+	if (psy_audio_machines_at(machines, RAW_MIXER_SLOT) != raw_mixer) {
+		psy_audio_song_deallocate(song);
+		return fail("raw Mixer insert failed");
+	}
+	psy_undoredo_undo(&machines->undoredo);
+	if (psy_audio_machines_at(machines, RAW_MIXER_SLOT)) {
+		psy_audio_song_deallocate(song);
+		return fail("raw Mixer insert undo failed");
+	}
+	psy_undoredo_redo(&machines->undoredo);
+	if (psy_audio_machines_at(machines, RAW_MIXER_SLOT) != raw_mixer) {
+		psy_audio_song_deallocate(song);
+		return fail("raw Mixer insert redo failed");
+	}
+	psy_audio_machines_remove(machines, RAW_MIXER_SLOT, FALSE);
+	if (psy_audio_machines_at(machines, RAW_MIXER_SLOT)) {
+		psy_audio_song_deallocate(song);
+		return fail("raw Mixer delete failed");
+	}
+	psy_undoredo_undo(&machines->undoredo);
+	if (psy_audio_machines_at(machines, RAW_MIXER_SLOT) != raw_mixer) {
+		psy_audio_song_deallocate(song);
+		return fail("raw Mixer delete undo failed");
 	}
 
 	psy_audio_song_deallocate(song);
