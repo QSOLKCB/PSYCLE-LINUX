@@ -162,7 +162,7 @@ void psy_audio_player_start_curr_seq_pos(psy_audio_Player*);
 void psy_audio_player_stop(psy_audio_Player*);
 void psy_audio_player_pause(psy_audio_Player*);
 void psy_audio_player_resume(psy_audio_Player*);
-void psy_audio_player_fade_out(const psy_audio_Player*);
+void psy_audio_player_fade_out(psy_audio_Player*);
 
 INLINE int psy_audio_player_playing(const psy_audio_Player* self)
 {
