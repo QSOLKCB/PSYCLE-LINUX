@@ -31,9 +31,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Prepare APT download cache
-        run: |
-          mkdir -p "$HOME/.cache/apt/archives/partial"
-          sudo chown -R _apt:root "$HOME/.cache/apt/archives"
+        run: mkdir -p "$HOME/.cache/apt/archives/partial"
 
       - name: Restore APT downloads
         id: apt-cache
@@ -48,6 +46,7 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          sudo chown -R _apt:root "$HOME/.cache/apt/archives"
           sudo apt-get update
           sudo apt-get -o Dir::Cache::archives="$HOME/.cache/apt/archives/" install -y --no-install-recommends \
             build-essential \
