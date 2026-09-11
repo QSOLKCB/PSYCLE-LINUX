@@ -1,0 +1,48 @@
+name: Phase 4 audible sample workflow
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase4-sample-workflow-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sample-workflow:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install core build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run audible sample workflow regression
+        run: |
+          chmod +x scripts/phase4-sample-workflow-smoke.sh
+          scripts/phase4-sample-workflow-smoke.sh phase4-sample-workflow
+
+      - name: Upload generated workflow evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-audible-sample-workflow
+          path: phase4-sample-workflow/
+          if-no-files-found: warn
+          retention-days: 30
