@@ -52,20 +52,31 @@ See also [PROVENANCE.md](PROVENANCE.md), [THIRD_PARTY_INVENTORY.md](THIRD_PARTY_
 
 **Goal:** learn what actually breaks before redesigning anything.
 
-Initial reference platform: current Ubuntu x86-64 with a modern GCC toolchain.
+Reference audit platform: Ubuntu 24.04.5 LTS x86-64, GCC/G++ 13.3.0 and GNU Make 4.3.
 
-- [ ] Reproduce the original `make`-based build as closely as practical.
-- [ ] Inventory required development packages and `pkg-config` dependencies.
-- [ ] Build the core libraries independently before the full host.
-- [ ] Capture compiler errors and warnings without immediately suppressing them.
-- [ ] Identify obsolete C/C++ assumptions, removed APIs, 32-bit assumptions, path assumptions, and linker-order issues.
-- [ ] Verify X11/Xft UI compilation.
-- [ ] Verify ALSA, ALSA MIDI, JACK, SDL2, and event-joystick driver builds.
-- [ ] Verify Lua and Lilv/LV2 integration points.
-- [ ] Build `psyplayer` separately as a smaller audio-engine test target.
-- [ ] Add a reproducible development-build document.
+For Phase 2, **verified** means the target was exercised and its observed PASS/FAIL/BLOCKED state was recorded. A failed target is a completed audit result when its causal blocker is reproducible and documented.
 
-**Exit condition:** a clean machine can reproduce the known build state and every blocking failure is documented.
+- [x] Reproduce the original `make`-based build as closely as practical.
+- [x] Inventory required development packages and `pkg-config` dependencies.
+- [x] Build the core libraries independently before the full host.
+- [x] Capture compiler errors and warnings without immediately suppressing them.
+- [x] Identify obsolete C/C++ assumptions, removed APIs, 32-bit assumptions, path assumptions, and linker-order issues.
+- [x] Verify X11/Xft UI compilation.
+- [x] Verify ALSA, ALSA MIDI, JACK, SDL2, and event-joystick driver build state.
+- [x] Verify Lua and Lilv/LV2 integration points.
+- [x] Build `psyplayer` separately as a smaller audio-engine test target and record its blocking prerequisite.
+- [x] Add a reproducible development-build document.
+
+Phase 2 evidence and tooling:
+
+- [PHASE2_BUILD_AUDIT.md](PHASE2_BUILD_AUDIT.md) — reference environment, stage matrix, blockers and Phase 3 handoff;
+- [BUILDING.md](BUILDING.md) — reproducible development setup and commands;
+- `scripts/phase2-build-audit.sh` — multi-stage audit harness that does not hide later targets after an early failure;
+- `.github/workflows/phase2-linux-build-audit.yml` — Ubuntu 24.04 reference audit workflow and log artifact.
+
+Key result: the existing architecture remains a viable porting base. X11/Xft, thread, script, file and Lua UI layers compile; the first blockers are narrow declaration/type/feature-boundary issues in container, DSP and audio rather than evidence for a rewrite.
+
+**Exit condition:** satisfied — a clean Ubuntu reference runner reproduces the known build state and the blocking failures are documented in [PHASE2_BUILD_AUDIT.md](PHASE2_BUILD_AUDIT.md).
 
 ## Phase 3 — First Native Linux Host
 
