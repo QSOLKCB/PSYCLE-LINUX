@@ -12,7 +12,9 @@ fi
 rm -rf "$OUT"
 mkdir -p "$OUT"
 BIN="$OUT/phase4-interactive-editing"
+UNDO_BIN="$OUT/phase4-machine-undo"
 LOG="$OUT/phase4-interactive-editing.log"
+UNDO_LOG="$OUT/phase4-machine-undo.log"
 SUMMARY="$OUT/summary.md"
 
 # Exercise the same core library boundary used by the other Phase 4 workflow
@@ -26,30 +28,45 @@ make -C "$CPSYCLE/file/src"
 make -C "$CPSYCLE/dsp/src"
 make -C "$CPSYCLE/audio/src"
 
-gcc \
-    -std=gnu11 \
-    -Wall -Wextra -Werror=implicit-function-declaration \
-    -I"$CPSYCLE/audio/src" \
-    -I"$CPSYCLE/driver" \
-    -I"$CPSYCLE/thread/src" \
-    -I"$CPSYCLE/script/src" \
-    -I"$CPSYCLE/container/src" \
-    -I"$CPSYCLE/file/src" \
-    -I"$CPSYCLE/dsp/src" \
-    -I"$CPSYCLE/diversalis/src" \
-    $(pkg-config --cflags lua) \
+COMMON_CFLAGS=(
+    -std=gnu11
+    -Wall -Wextra -Werror=implicit-function-declaration
+    -I"$CPSYCLE/audio/src"
+    -I"$CPSYCLE/driver"
+    -I"$CPSYCLE/thread/src"
+    -I"$CPSYCLE/script/src"
+    -I"$CPSYCLE/container/src"
+    -I"$CPSYCLE/file/src"
+    -I"$CPSYCLE/dsp/src"
+    -I"$CPSYCLE/diversalis/src"
+)
+COMMON_LDFLAGS=(
+    -L"$CPSYCLE/thread/src"
+    -L"$CPSYCLE/script/src"
+    -L"$CPSYCLE/container/src"
+    -L"$CPSYCLE/dsp/src"
+    -L"$CPSYCLE/audio/src"
+    -L"$CPSYCLE/file/src"
+    -laudio -lthread -llilv-0 -ldsp -lscript -lfile -lm
+    -lpthread -ldl -lstdc++ -lcontainer
+)
+
+# shellcheck disable=SC2207
+LUA_CFLAGS=($(pkg-config --cflags lua))
+# shellcheck disable=SC2207
+LUA_LIBS=($(pkg-config --libs lua))
+
+gcc "${COMMON_CFLAGS[@]}" "${LUA_CFLAGS[@]}" \
+    "$ROOT/tests/phase4_machine_undo_regression.c" \
+    -o "$UNDO_BIN" \
+    "${COMMON_LDFLAGS[@]}" "${LUA_LIBS[@]}"
+
+gcc "${COMMON_CFLAGS[@]}" "${LUA_CFLAGS[@]}" \
     "$ROOT/tests/phase4_interactive_editing.c" \
     -o "$BIN" \
-    -L"$CPSYCLE/thread/src" \
-    -L"$CPSYCLE/script/src" \
-    -L"$CPSYCLE/container/src" \
-    -L"$CPSYCLE/dsp/src" \
-    -L"$CPSYCLE/audio/src" \
-    -L"$CPSYCLE/file/src" \
-    -laudio -lthread -llilv-0 -ldsp -lscript -lfile -lm \
-    $(pkg-config --libs lua) \
-    -lpthread -ldl -lstdc++ -lcontainer
+    "${COMMON_LDFLAGS[@]}" "${LUA_LIBS[@]}"
 
+"$UNDO_BIN" >"$UNDO_LOG" 2>&1
 "$BIN" "$OUT" >"$LOG" 2>&1
 
 PSY="$OUT/phase4-interactive-editing.psy"
@@ -59,6 +76,8 @@ PSY="$OUT/phase4-interactive-editing.psy"
 cat > "$SUMMARY" <<'EOF'
 # PSYCLE-LINUX Phase 4 Interactive Editing
 
+- Built-in Machine insert undo / redo without clone support: PASS
+- Built-in Machine delete / rewire / undo / redo ownership: PASS
 - Built-in Sampler creation through Machines command path: PASS
 - Built-in Mixer creation through Machines command path: PASS
 - Sampler → Mixer → Master wiring: PASS
@@ -74,6 +93,7 @@ cat > "$SUMMARY" <<'EOF'
 - Tracker note + command insertion through InsertCommand: PASS
 - Multi-track/effect-column edit: PASS
 - Tracker edit undo / redo: PASS
+- Fresh-load callback/factory isolation: PASS
 - PSY3 save and fresh reload: PASS
 - Edited machine topology/state survives reload: PASS
 - Edited tracker data survives reload: PASS
@@ -82,5 +102,6 @@ This is a command/model compatibility gate. Native X11 rendering and event-loop
 behaviour remain covered separately by the Phase 3 runtime smoke.
 EOF
 
+cat "$UNDO_LOG"
 cat "$LOG"
 cat "$SUMMARY"
