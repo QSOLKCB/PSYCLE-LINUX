@@ -146,11 +146,12 @@
 /* #define PSYCLE_USE_MIDI_FILE */
 
 /*
-** VST2 is opt-in. The public PSYCLE-LINUX baseline intentionally omits the
-** legacy Steinberg SDK-derived headers; builds may define PSYCLE_ENABLE_VST2
-** only when a locally supplied, legally usable VST2 SDK boundary is present.
+** VST2 remains a supported feature. Microsoft builds retain Psycle's
+** historical VST2 behavior. Unix/Linux builds are opt-in because the public
+** PSYCLE-LINUX baseline intentionally omits the legacy Steinberg SDK-derived
+** headers; define PSYCLE_ENABLE_VST2 only with a compatible local SDK boundary.
 */
-#if defined(PSYCLE_ENABLE_VST2)
+#if defined(DIVERSALIS__OS__MICROSOFT) || defined(PSYCLE_ENABLE_VST2)
 #define PSYCLE_USE_VST2
 #endif
 /* #define PSYCLE_DEBUG_VST2_OPCODES */

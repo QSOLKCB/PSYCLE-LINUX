@@ -14,6 +14,9 @@ LOG="$OUT/psycle.log"
 SUMMARY="$OUT/summary.md"
 STATE="$OUT/state"
 
+# A failed rerun must never leave a PASS summary from an earlier invocation.
+rm -f "$SUMMARY"
+
 if [ "${PSYCLE_SMOKE_INSIDE_XVFB:-0}" != "1" ]; then
     for command in xvfb-run xdotool; do
         if ! command -v "$command" >/dev/null 2>&1; then
@@ -56,6 +59,7 @@ export HOME="$STATE/home"
 export XDG_CONFIG_HOME="$STATE/config"
 export PSYCLE_AUDIO_DRIVER=sdl2
 export SDL_AUDIODRIVER=dummy
+export PSYCLE_RUNTIME_SMOKE=1
 
 cd "$CPSYCLE"
 "$PSYCLE" >"$LOG" 2>&1 &

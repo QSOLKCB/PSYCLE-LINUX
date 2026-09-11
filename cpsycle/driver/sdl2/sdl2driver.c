@@ -10,6 +10,7 @@
 
 
 #include <SDL2/SDL.h>  
+#include <stdlib.h>
 #include "../audiodriver.h"
 #include "../../detail/portable.h"
 
@@ -21,6 +22,7 @@ typedef struct {
 	SDL_AudioDeviceID audio_dev;	
 	bool running_;
 	bool callback_reported_;
+	bool callback_marker_enabled_;
 	int (*error)(int, const char*);	
 } Sdl2Driver;
 
@@ -149,6 +151,8 @@ int driver_init(psy_AudioDriver* driver)
 	self->driver.vtable = &vtable;
 	self->error = on_error;			
 	self->running_ = FALSE;	
+	self->callback_marker_enabled_ =
+		(getenv("PSYCLE_RUNTIME_SMOKE") != NULL);
 	psy_audiodriversettings_init(&self->settings);
 	psy_audiodriversettings_setblockcount(&self->settings, 1);
 	psy_audiodriversettings_setblockframes(&self->settings, 2048);
@@ -391,12 +395,12 @@ void driver_fill_soundcard_buffer(void* driver, uint8_t * stream, int len)
 	default:
 		break;
 	}
-	if (!self->callback_reported_) {
+	if (self->callback_marker_enabled_ && !self->callback_reported_) {
 		self->callback_reported_ = TRUE;
 		/*
-		** Runtime smoke marker: emit only after a complete callback invocation,
-		** including host work and buffer conversion. stderr + explicit flush
-		** makes the observation deterministic while the host remains running.
+		** Test-only runtime smoke marker. Normal Psycle sessions never perform
+		** stdio from the real-time callback; the smoke harness opts in through
+		** PSYCLE_RUNTIME_SMOKE after requesting SDL's dummy backend.
 		*/
 		fprintf(stderr, "psycle: sdl2 audio callback completed\n");
 		fflush(stderr);
