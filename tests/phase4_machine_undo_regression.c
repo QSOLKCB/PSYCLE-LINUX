@@ -9,7 +9,9 @@
 #include <stdio.h>
 
 #include <machinefactory.h>
+#include <machineproxy.h>
 #include <machines.h>
+#include <mixer.h>
 #include <player.h>
 #include <plugincatcher.h>
 #include <song.h>
@@ -18,6 +20,10 @@
 
 #define SAMPLER_SLOT 0
 #define MIXER_SLOT 1
+#define MIXER_INPUT_VOLUME 0.37
+#define MIXER_INPUT_PANNING 0.23
+#define MIXER_INPUT_GAIN 0.61
+#define MIXER_INPUT_DRYMIX 0.42
 
 static int fail(const char* message)
 {
@@ -43,6 +49,36 @@ static int topology_is_rewired(psy_audio_Machines* machines)
 			psy_audio_wire_make(SAMPLER_SLOT, psy_audio_MASTER_INDEX));
 }
 
+static psy_audio_InputChannel* mixer_input_channel(psy_audio_Machine* machine)
+{
+	psy_audio_MachineProxy* proxy;
+	psy_audio_Mixer* mixer;
+
+	if (!machine || psy_audio_machine_type(machine) != psy_audio_MIXER) {
+		return NULL;
+	}
+	/* MachineFactory wraps built-ins in MachineProxy; inspect the retained
+	** Mixer client so this regression can verify its internal channel state. */
+	proxy = (psy_audio_MachineProxy*)machine;
+	if (!proxy->client || psy_audio_machine_type(proxy->client) != psy_audio_MIXER) {
+		return NULL;
+	}
+	mixer = (psy_audio_Mixer*)proxy->client;
+	return psy_audio_mixer_channel(mixer, 0);
+}
+
+static int mixer_input_state_is_preserved(psy_audio_Machine* machine)
+{
+	psy_audio_InputChannel* input;
+
+	input = mixer_input_channel(machine);
+	return input && input->inputslot == SAMPLER_SLOT &&
+		input->volume == MIXER_INPUT_VOLUME &&
+		input->panning == MIXER_INPUT_PANNING &&
+		input->gain == MIXER_INPUT_GAIN &&
+		input->drymix == MIXER_INPUT_DRYMIX;
+}
+
 int main(void)
 {
 	psy_audio_MachineCallback callback;
@@ -52,6 +88,7 @@ int main(void)
 	psy_audio_Machines* machines;
 	psy_audio_Machine* sampler;
 	psy_audio_Machine* mixer;
+	psy_audio_InputChannel* input;
 
 	psy_audio_init();
 	psy_audio_machinecallback_init(&callback);
@@ -100,6 +137,18 @@ int main(void)
 		return fail("initial routed topology is invalid");
 	}
 
+	/* Give the Mixer's input channel non-default state. A reversible machine
+	** deletion must not let connection teardown destroy this channel object. */
+	input = mixer_input_channel(psy_audio_machines_at(machines, MIXER_SLOT));
+	if (!input || input->inputslot != SAMPLER_SLOT) {
+		psy_audio_song_deallocate(song);
+		return fail("mixer input channel was not created");
+	}
+	input->volume = MIXER_INPUT_VOLUME;
+	input->panning = MIXER_INPUT_PANNING;
+	input->gain = MIXER_INPUT_GAIN;
+	input->drymix = MIXER_INPUT_DRYMIX;
+
 	psy_audio_machines_remove(machines, MIXER_SLOT, TRUE);
 	if (!topology_is_rewired(machines)) {
 		psy_audio_song_deallocate(song);
@@ -110,6 +159,11 @@ int main(void)
 		psy_audio_song_deallocate(song);
 		return fail("delete undo did not restore mixer and connections");
 	}
+	if (!mixer_input_state_is_preserved(
+			psy_audio_machines_at(machines, MIXER_SLOT))) {
+		psy_audio_song_deallocate(song);
+		return fail("delete undo did not preserve mixer input-channel state");
+	}
 	psy_undoredo_redo(&machines->undoredo);
 	if (!topology_is_rewired(machines)) {
 		psy_audio_song_deallocate(song);
@@ -119,6 +173,11 @@ int main(void)
 	if (!topology_is_routed(machines)) {
 		psy_audio_song_deallocate(song);
 		return fail("second delete undo did not restore topology");
+	}
+	if (!mixer_input_state_is_preserved(
+			psy_audio_machines_at(machines, MIXER_SLOT))) {
+		psy_audio_song_deallocate(song);
+		return fail("second delete undo did not preserve mixer input-channel state");
 	}
 
 	psy_audio_song_deallocate(song);
