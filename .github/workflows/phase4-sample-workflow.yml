@@ -4,27 +4,7 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'cpsycle/audio/**'
-      - 'cpsycle/container/**'
-      - 'cpsycle/dsp/**'
-      - 'cpsycle/file/**'
-      - 'cpsycle/script/**'
-      - 'cpsycle/thread/**'
-      - 'tests/phase4_sample_workflow.c'
-      - 'scripts/phase4-sample-workflow-smoke.sh'
-      - '.github/workflows/phase4-sample-workflow.yml'
   pull_request:
-    paths:
-      - 'cpsycle/audio/**'
-      - 'cpsycle/container/**'
-      - 'cpsycle/dsp/**'
-      - 'cpsycle/file/**'
-      - 'cpsycle/script/**'
-      - 'cpsycle/thread/**'
-      - 'tests/phase4_sample_workflow.c'
-      - 'scripts/phase4-sample-workflow-smoke.sh'
-      - '.github/workflows/phase4-sample-workflow.yml'
   workflow_dispatch:
 
 permissions:
