@@ -33,15 +33,81 @@ static void machinecommand_mark_detached(psy_audio_Machine* machine)
 {
 	if (machine) {
 		/*
-		** A retained machine is no longer part of the live graph. Mark that on
-		** the machine before erase() emits connection teardown notifications.
-		** Connection-aware machines such as Mixer use their slot to decide
-		** whether a notification belongs to them; keeping the old slot here
-		** would make reversible undo detachment destructively discard internal
-		** channel state. machines_insert() restores the real slot on redo/undo.
+		** A retained machine is not part of the live connection graph while
+		** command undo/redo tears down or restores its wires. Connection-aware
+		** machines such as Mixer use their slot to decide whether a global
+		** connection notification belongs to them. The caller holds the audio
+		** exclusive lock across this temporary invalidation and graph mutation,
+		** so the realtime callback can never observe psy_INDEX_INVALID.
 		*/
 		psy_audio_machine_set_slot(machine, psy_INDEX_INVALID);
 	}
+}
+
+static void machinecommand_restore_connections(psy_audio_Connections* live,
+	psy_audio_Connections* saved)
+{
+	psy_audio_Connections before;
+	psy_TableIterator slot_it;
+
+	/*
+	** A raw connections_copy() restores the tables but deliberately emits no
+	** connection signals. First reconcile only the topology delta through the
+	** normal signal-emitting operations so Mixers and other connection-aware
+	** machines rebuild their internal routing state. Then copy the snapshot to
+	** restore exact socket metadata (pin mappings, wire volumes, sends, etc.).
+	*/
+	psy_audio_connections_init(&before);
+	psy_audio_connections_copy(&before, live);
+
+	for (slot_it = psy_table_begin(&before.container);
+			!psy_tableiterator_equal(&slot_it, psy_table_end());
+			psy_tableiterator_inc(&slot_it)) {
+		psy_audio_MachineSockets* sockets;
+		psy_TableIterator wire_it;
+		uintptr_t src;
+
+		src = psy_tableiterator_key(&slot_it);
+		sockets = (psy_audio_MachineSockets*)psy_tableiterator_value(&slot_it);
+		for (wire_it = psy_audio_wiresockets_begin(&sockets->outputs);
+				!psy_tableiterator_equal(&wire_it, psy_table_end());
+				psy_tableiterator_inc(&wire_it)) {
+			psy_audio_WireSocket* socket;
+			psy_audio_Wire wire;
+
+			socket = (psy_audio_WireSocket*)psy_tableiterator_value(&wire_it);
+			wire = psy_audio_wire_make(src, socket->slot);
+			if (!psy_audio_connections_connected(saved, wire)) {
+				psy_audio_connections_disconnect(live, wire);
+			}
+		}
+	}
+
+	for (slot_it = psy_table_begin(&saved->container);
+			!psy_tableiterator_equal(&slot_it, psy_table_end());
+			psy_tableiterator_inc(&slot_it)) {
+		psy_audio_MachineSockets* sockets;
+		psy_TableIterator wire_it;
+		uintptr_t src;
+
+		src = psy_tableiterator_key(&slot_it);
+		sockets = (psy_audio_MachineSockets*)psy_tableiterator_value(&slot_it);
+		for (wire_it = psy_audio_wiresockets_begin(&sockets->outputs);
+				!psy_tableiterator_equal(&wire_it, psy_table_end());
+				psy_tableiterator_inc(&wire_it)) {
+			psy_audio_WireSocket* socket;
+			psy_audio_Wire wire;
+
+			socket = (psy_audio_WireSocket*)psy_tableiterator_value(&wire_it);
+			wire = psy_audio_wire_make(src, socket->slot);
+			if (!psy_audio_connections_connected(live, wire)) {
+				psy_audio_connections_connect(live, wire);
+			}
+		}
+	}
+
+	psy_audio_connections_copy(live, saved);
+	psy_audio_connections_dispose(&before);
 }
 
 /* InsertMachineCommand */
@@ -98,16 +164,21 @@ void insertmachinecommand_execute(InsertMachineCommand* self,
 	uintptr_t param)
 {
 	self->machines->preventundoredo = TRUE;
+	psy_audio_exclusivelock_enter();
 	psy_audio_machines_insert(self->machines, self->slot,
 		self->machine);
 	self->machine_detached = FALSE;
 	if (self->restoreconnection) {
-		psy_audio_exclusivelock_enter();
-		psy_audio_connections_copy(&self->machines->connections,
+		/* Keep the retained machine from consuming its own synthetic restore
+		** notifications; its preserved internal state already represents those
+		** incident wires. Other machines still receive the topology delta. */
+		machinecommand_mark_detached(self->machine);
+		machinecommand_restore_connections(&self->machines->connections,
 			&self->connections);
+		psy_audio_machine_set_slot(self->machine, self->slot);
 		psy_audio_machines_updatepath(self->machines);
-		psy_audio_exclusivelock_leave();
 	}
+	psy_audio_exclusivelock_leave();
 	self->machines->preventundoredo = FALSE;
 }
 
@@ -115,6 +186,8 @@ void insertmachinecommand_revert(InsertMachineCommand* self)
 {
 	psy_audio_Machine* machine;
 
+	self->machines->preventundoredo = TRUE;
+	psy_audio_exclusivelock_enter();
 	machine = psy_audio_machines_at(self->machines, self->slot);
 	if (machine) {
 		psy_audio_connections_dispose(&self->connections);
@@ -122,12 +195,12 @@ void insertmachinecommand_revert(InsertMachineCommand* self)
 		psy_audio_connections_copy(&self->connections, &self->machines->connections);
 		self->restoreconnection = TRUE;
 		self->machine = machine;
-		self->machines->preventundoredo = TRUE;
 		machinecommand_mark_detached(machine);
 		psy_audio_machines_erase(self->machines, self->slot);
-		self->machines->preventundoredo = FALSE;
 		self->machine_detached = TRUE;
 	}	
+	psy_audio_exclusivelock_leave();
+	self->machines->preventundoredo = FALSE;
 }
 
 /* DeleteMachineCommand */
@@ -185,36 +258,43 @@ void deletemachinecommand_execute(DeleteMachineCommand* self,
 {
 	psy_audio_Machine* machine;
 
+	self->machines->preventundoredo = TRUE;
+	psy_audio_exclusivelock_enter();
 	machine = psy_audio_machines_at(self->machines, self->slot);
 	if (machine) {
 		psy_audio_connections_dispose(&self->connections);
 		psy_audio_connections_init(&self->connections);
 		psy_audio_connections_copy(&self->connections, &self->machines->connections);
 		self->machine = machine;
-		self->machines->preventundoredo = TRUE;
 		psy_audio_connections_rewire(&self->machines->connections,
 			psy_audio_connections_at(&self->machines->connections, self->slot));
 		machinecommand_mark_detached(machine);
 		psy_audio_machines_erase(self->machines, self->slot);
-		self->machines->preventundoredo = FALSE;
 		self->machine_detached = TRUE;
 	}
+	psy_audio_exclusivelock_leave();
+	self->machines->preventundoredo = FALSE;
 }
 
 void deletemachinecommand_revert(DeleteMachineCommand* self)
 {
+	self->machines->preventundoredo = TRUE;
+	psy_audio_exclusivelock_enter();
 	if (self->machine && self->machine_detached) {
-		self->machines->preventundoredo = TRUE;
 		psy_audio_machines_insert(self->machines, self->slot,
 			self->machine);
 		self->machine_detached = FALSE;
-		psy_audio_exclusivelock_enter();
-		psy_audio_connections_copy(&self->machines->connections,
+		/* The retained machine already owns the channel state for its original
+		** incident wires. Suppress only its own restore callbacks while the
+		** signal-emitting delta repairs downstream connection-aware machines. */
+		machinecommand_mark_detached(self->machine);
+		machinecommand_restore_connections(&self->machines->connections,
 			&self->connections);
+		psy_audio_machine_set_slot(self->machine, self->slot);
 		psy_audio_machines_updatepath(self->machines);
-		psy_audio_exclusivelock_leave();
-		self->machines->preventundoredo = FALSE;
 	}	
+	psy_audio_exclusivelock_leave();
+	self->machines->preventundoredo = FALSE;
 }
 
 
@@ -357,7 +437,7 @@ void disconnectmachinecommand_execute(DisconnectMachineCommand* self,
 	uintptr_t param)
 {
 	psy_audio_WireSocket* socket;
-
+		
 	self->machines->preventundoredo = TRUE;
 	self->volume = psy_audio_connections_wire_volume(
 		&self->machines->connections, self->wire);
