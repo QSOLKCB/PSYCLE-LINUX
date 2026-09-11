@@ -98,6 +98,22 @@ make player-debug
 
 Do not assume all of these targets are currently clean on a modern toolchain. Phase 2 exists specifically to document their current state before Phase 3 begins compatibility repair.
 
+## Optional VST2 hosting on Linux
+
+VST2 hosting remains a supported Psycle feature. It is **disabled by default** in the public Linux baseline only because Phase 1 intentionally omitted the legacy Steinberg SDK-derived headers from redistribution.
+
+If you have a compatible local VST2 SDK/header boundary that you are entitled to use, enable the existing VST2 host with:
+
+```bash
+cd cpsycle
+make clean
+make ENABLE_VST2=1 CPPFLAGS="-I/path/to/local/vst2/headers"
+```
+
+The supplied include directory must make the VST2 headers expected by the imported Psycle sources available locally. `ENABLE_VST2=1` propagates `PSYCLE_ENABLE_VST2`, which restores the VST2 machine factory, scanner and host sources on Linux. The SDK itself remains outside this repository.
+
+Windows retains the historical Psycle VST2 feature gate; PSYCLE-LINUX does not treat Windows as a release target, but Linux-port changes should not silently disable an existing upstream capability.
+
 ## Build layers
 
 The host makefile builds the principal libraries in this order:

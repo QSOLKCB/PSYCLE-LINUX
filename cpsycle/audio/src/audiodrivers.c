@@ -258,9 +258,42 @@ intptr_t psy_audio_audiodrivers_selected_guid(const psy_audio_AudioDrivers*
 	self)
 {
 	const psy_Property* drivers;
-	
+
 	assert(self);
-	
+
+#if defined(DIVERSALIS__OS__LINUX)
+	/*
+	** Keep the persisted/configured driver as the normal source of truth, but
+	** allow an explicit process-level override for deterministic headless tests
+	** and controlled sessions. Resolve it here, at the final GUID selection
+	** point, so loading psycle.ini cannot silently replace the requested driver.
+	*/
+	{
+		const char* requested_driver;
+
+		requested_driver = getenv("PSYCLE_AUDIO_DRIVER");
+		if (requested_driver && requested_driver[0] != '\0') {
+			if (strcmp(requested_driver, "silent") == 0) {
+				return PSY_AUDIODRIVER_SILENTDRIVER_GUID;
+			}
+			if (strcmp(requested_driver, "alsa") == 0) {
+				return PSY_AUDIODRIVER_ALSA_GUID;
+			}
+			if (strcmp(requested_driver, "jack") == 0) {
+				return PSY_AUDIODRIVER_JACK_GUID;
+			}
+#ifdef PSYCLE_USE_SDL2_AUDIO_DRIVER
+			if (strcmp(requested_driver, "sdl2") == 0) {
+				return PSY_AUDIODRIVER_SDL2_GUID;
+			}
+#endif
+			fprintf(stderr,
+				"psycle: unknown PSYCLE_AUDIO_DRIVER '%s'; using configured driver.\n",
+				requested_driver);
+		}
+	}
+#endif
+
 	drivers = psy_configuration_at(self->config_, "audiodrivers");
 	if (drivers) {
 		psy_Property* p;

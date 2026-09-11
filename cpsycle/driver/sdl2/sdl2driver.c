@@ -10,6 +10,7 @@
 
 
 #include <SDL2/SDL.h>  
+#include <stdlib.h>
 #include "../audiodriver.h"
 #include "../../detail/portable.h"
 
@@ -20,6 +21,8 @@ typedef struct {
 	psy_Property* configuration;
 	SDL_AudioDeviceID audio_dev;	
 	bool running_;
+	bool callback_reported_;
+	bool callback_marker_enabled_;
 	int (*error)(int, const char*);	
 } Sdl2Driver;
 
@@ -148,6 +151,8 @@ int driver_init(psy_AudioDriver* driver)
 	self->driver.vtable = &vtable;
 	self->error = on_error;			
 	self->running_ = FALSE;	
+	self->callback_marker_enabled_ =
+		(getenv("PSYCLE_RUNTIME_SMOKE") != NULL);
 	psy_audiodriversettings_init(&self->settings);
 	psy_audiodriversettings_setblockcount(&self->settings, 1);
 	psy_audiodriversettings_setblockframes(&self->settings, 2048);
@@ -231,7 +236,7 @@ void init_output_devices(Sdl2Driver* self)
 		}
 		psy_property_prevent_save(psy_property_preventtranslate(
 			psy_property_set_text(psy_property_append_str(
-			devices, key, name), name)));		
+				devices, key, name), name)));		
 	}	
 }
 
@@ -283,10 +288,12 @@ int driver_open(psy_AudioDriver* driver)
 		self->running_ = TRUE;		
 	} else {
 		self->running_ = FALSE;
-		printf("%s\n", SDL_GetError());
+		fprintf(stderr, "%s\n", SDL_GetError());
+		fflush(stderr);
 	}
 	if (self->audio_dev > 0) {
-		printf("sdl2 audio started\n");		
+		fprintf(stderr, "psycle: sdl2 audio device started\n");
+		fflush(stderr);
 		SDL_PauseAudioDevice(self->audio_dev, 0);
 	}
 	
@@ -387,6 +394,16 @@ void driver_fill_soundcard_buffer(void* driver, uint8_t * stream, int len)
 		break; }			
 	default:
 		break;
+	}
+	if (self->callback_marker_enabled_ && !self->callback_reported_) {
+		self->callback_reported_ = TRUE;
+		/*
+		** Test-only runtime smoke marker. Normal Psycle sessions never perform
+		** stdio from the real-time callback; the smoke harness opts in through
+		** PSYCLE_RUNTIME_SMOKE after requesting SDL's dummy backend.
+		*/
+		fprintf(stderr, "psycle: sdl2 audio callback completed\n");
+		fflush(stderr);
 	}	
 }
 
