@@ -1,4 +1,4 @@
-name: Linux build and runtime audit
+name: Linux build, runtime and workflow audit
 
 on:
   push:
@@ -6,14 +6,18 @@ on:
       - main
     paths:
       - 'cpsycle/**'
+      - 'tests/**'
       - 'scripts/phase2-build-audit.sh'
       - 'scripts/phase3-runtime-smoke.sh'
+      - 'scripts/phase4-core-workflow-smoke.sh'
       - '.github/workflows/phase2-linux-build-audit.yml'
   pull_request:
     paths:
       - 'cpsycle/**'
+      - 'tests/**'
       - 'scripts/phase2-build-audit.sh'
       - 'scripts/phase3-runtime-smoke.sh'
+      - 'scripts/phase4-core-workflow-smoke.sh'
       - '.github/workflows/phase2-linux-build-audit.yml'
   workflow_dispatch:
 
@@ -121,6 +125,19 @@ jobs:
           echo "exit_code=$runtime_rc" >> "$GITHUB_OUTPUT"
           exit 0
 
+      - name: Run Phase 4 core workflow compatibility smoke
+        id: phase4-run
+        if: steps.audit-run.outputs.exit_code == '0'
+        shell: bash
+        run: |
+          chmod +x scripts/phase4-core-workflow-smoke.sh
+          set +e
+          scripts/phase4-core-workflow-smoke.sh phase4-workflow
+          phase4_rc=$?
+          set -e
+          echo "exit_code=$phase4_rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
       - name: Upload complete build audit logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -139,6 +156,15 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+      - name: Upload Phase 4 workflow compatibility artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-core-workflow-compatibility
+          path: phase4-workflow/
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Save APT downloads
         if: always() && steps.apt-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -153,7 +179,7 @@ jobs:
           path: ~/.cache/ccache
           key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
 
-      - name: Propagate build/runtime result
+      - name: Propagate build/runtime/workflow result
         if: always()
         shell: bash
         run: |
@@ -171,4 +197,13 @@ jobs:
             echo 'Runtime smoke step did not produce an exit code.' >&2
             exit 3
           fi
-          exit "$runtime_rc"
+          if [ "$runtime_rc" -ne 0 ]; then
+            exit "$runtime_rc"
+          fi
+
+          phase4_rc='${{ steps.phase4-run.outputs.exit_code }}'
+          if [ -z "$phase4_rc" ]; then
+            echo 'Phase 4 workflow smoke did not produce an exit code.' >&2
+            exit 4
+          fi
+          exit "$phase4_rc"
