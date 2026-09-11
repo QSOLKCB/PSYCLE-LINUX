@@ -2,22 +2,29 @@
 
 This document records the first reproducible modern-Linux build state for the audited C-Psycle r12005 baseline.
 
-Phase 2 is an **audit**, not a redesign phase. A failed target is a useful result when the failure is reproducible, scoped and documented.
+Phase 2 is an **audit**, not a redesign phase. A failed target is a useful result when the failure is reproducible, scoped and documented. The audit harness nevertheless returns a nonzero process status when any build stage is `FAIL` or `BLOCKED`; collecting complete evidence and reporting build health are separate concerns.
 
 ## Reference run
 
 GitHub Actions workflow: `Phase 2 Linux build audit`
 
-- workflow run: `34607849986`;
+- first complete evidence run: `34607849986`;
 - branch at first audit: `phase-2/modern-linux-build-audit`;
 - Ubuntu: 24.04.5 LTS x86-64;
 - kernel: 6.17.0-1022-azure;
 - GCC/G++: 13.3.0;
 - GNU Make: 4.3;
 - pkg-config: 1.8.1;
-- audit artifact SHA-256 digest reported by GitHub: `df7228bf131e213fa03c37e60fd651c2c48c2af4a84ecba148dfbc39961324fd`.
+- first-run audit artifact SHA-256 digest reported by GitHub: `df7228bf131e213fa03c37e60fd651c2c48c2af4a84ecba148dfbc39961324fd`.
 
 The complete per-stage logs are produced by `scripts/phase2-build-audit.sh` and uploaded by `.github/workflows/phase2-linux-build-audit.yml`.
+
+Review hardening added two reproducibility guarantees after the first evidence run:
+
+1. both `make clean` and `make clean-drivers` must succeed before build stages run, and `driver/build/` is removed so a previous aggregate driver build cannot affect a rerun;
+2. the workflow uploads the partial or complete `build-audit/` directory with `if: always()` even when the audit command exits nonzero.
+
+The committed workflow runs on pull requests, manual dispatches, and pushes to the maintained `main` branch.
 
 ## Dependency result
 
@@ -41,13 +48,14 @@ The first audit resolved these modules:
 | `sdl2` | 2.30.0 |
 | `fluidsynth` | 2.3.4 |
 
-No missing development package was the first blocker in this run.
+No missing development package was the first blocker in this run. Audit report generation is shell-only and adds no Python runtime dependency.
 
 ## Stage matrix
 
 | Stage | Result | Interpretation |
 | --- | --- | --- |
 | top-level `make clean` | PASS | historical clean path is reproducible |
+| `make clean-drivers` | PASS | driver objects/shared libraries are explicitly cleaned before the independent audit |
 | `container/src` | FAIL | direct modern-C linkage conflict; primary blocker C-01 |
 | `thread/src` | PASS | static library builds |
 | `script/src` | PASS | Lua 5.4 headers resolve; builds with warnings |
@@ -56,18 +64,26 @@ No missing development package was the first blocker in this run.
 | `ui/src` X11/Xft | PASS | X11 UI implementation compiles on GCC 13.3 |
 | `luaui/src` | PASS | Lua UI static library builds |
 | `audio/src` | FAIL | player declaration mismatch plus intentional VST2-header boundary |
-| ALSA driver | BLOCKED AT LINK | source compiles; direct sub-build assumes `driver/build/`; core libraries are also unavailable |
-| ALSA MIDI driver | BLOCKED AT LINK | source compiles; `libcontainer` / `libdsp` unavailable |
-| JACK driver | BLOCKED AT LINK | source compiles; direct sub-build assumes `driver/build/`; core libraries unavailable |
-| SDL2 driver | BLOCKED AT LINK | source compiles; direct sub-build assumes `driver/build/`; core libraries unavailable |
-| event-joystick driver | BLOCKED AT LINK | source compiles; direct sub-build assumes `driver/build/`; core libraries unavailable |
-| `psyplayer` | BLOCKED | build hierarchy reaches failing container library before player link |
-| native X11 host | BLOCKED | build hierarchy reaches failing container library before host link |
-| native plugin set | BLOCKED/PARTIAL | many plugin sources compile; dependent links fail because `libcontainer` / `libdsp` are unavailable |
-| aggregate drivers | BLOCKED | output directory is created, then links fail on unavailable core libraries |
-| top-level `make all` | FAIL | reproduces C-01 as the first blocking error |
+| ALSA driver | BLOCKED | source compiles; core libraries are unavailable and clean direct sub-build also exposes the historical output-directory assumption |
+| ALSA MIDI driver | BLOCKED | source compiles; `libcontainer` / `libdsp` unavailable |
+| JACK driver | BLOCKED | source compiles; core libraries unavailable and direct sub-build assumes `driver/build/` |
+| SDL2 driver | BLOCKED | source compiles; core libraries unavailable and direct sub-build assumes `driver/build/` |
+| event-joystick driver | BLOCKED | source compiles; core libraries unavailable and direct sub-build assumes `driver/build/` |
+| `psyplayer` | BLOCKED | build hierarchy reaches failing core prerequisites before player link |
+| native X11 host | BLOCKED | build hierarchy reaches failing core prerequisites before host link |
+| native plugin set | BLOCKED | many plugin sources compile; dependent links fail because `libcontainer` / `libdsp` are unavailable |
+| aggregate drivers | BLOCKED | aggregate output directory is created, then links fail on unavailable core libraries |
+| top-level `make all` | BLOCKED | aggregate build reproduces the known core prerequisites rather than introducing a distinct top-level defect |
 
-`PASS` means the imported target completed without source changes. `BLOCKED` means the target could not be fully evaluated because a prerequisite Phase 2 blocker prevented its link or higher-level build.
+`PASS` means the imported target completed without source changes. `FAIL` means the stage itself returned nonzero after its declared prerequisites were available. `BLOCKED` means the target was still exercised but returned nonzero while one or more declared core prerequisites were unavailable. This distinction is generated directly by the harness rather than manually inferred afterward.
+
+## CI and exit-status semantics
+
+The audit runs every stage it can before deciding the process result. After `summary.md` is complete, any `FAIL` or `BLOCKED` build stage makes `scripts/phase2-build-audit.sh` exit nonzero.
+
+Therefore the current Phase 2 baseline is expected to produce a **failing build-audit check** until Phase 3 clears the documented blockers. This is intentional: a successful artifact upload means evidence was preserved; it does not mean Psycle currently builds end to end.
+
+The artifact upload step uses `if: always()` and `if-no-files-found: warn`, so unexpected harness/report failures do not discard logs that were already collected.
 
 ## Primary blocking failures
 
@@ -174,7 +190,7 @@ ALSA, JACK, SDL2 and event-joystick source compilation reached the link step, th
 cannot open output file ../build/<driver>.so: No such file or directory
 ```
 
-The aggregate `cpsycle/driver/makefile` creates `driver/build/`, but the individual driver makefiles do not. This is a build-order/path assumption exposed by the Phase 2 independent-target audit.
+The aggregate `cpsycle/driver/makefile` creates `driver/build/`, but the individual driver makefiles do not. The hardened audit explicitly removes `driver/build/` after `make clean-drivers`, ensuring repeated local runs continue to expose this clean-checkout build-order/path assumption instead of inheriting a directory from an earlier aggregate build.
 
 ### B-02 — downstream links assume core static libraries already succeeded
 
@@ -185,7 +201,7 @@ cannot find -lcontainer
 cannot find -ldsp
 ```
 
-These are downstream effects of C-01 and D-01. They should not be misclassified as ALSA/JACK/plugin API failures.
+These are downstream effects of C-01 and D-01. The generated summary records them as `BLOCKED` when the core prerequisite stages failed.
 
 ### B-03 — duplicate plugin aggregate entry
 
@@ -230,7 +246,7 @@ Full LV2 link/runtime verification remains blocked by the audio-library failures
 
 ## Linux driver result
 
-The first audit compiles driver source far enough to reach linking for:
+The audit compiles driver source far enough to reach linking for:
 
 - ALSA;
 - ALSA MIDI;
@@ -242,7 +258,7 @@ The observed failures are output-directory/core-library prerequisites described 
 
 ## `psyplayer` result
 
-The standalone player build is present and reproducible as a distinct target, but its build hierarchy depends on `container`, `dsp` and `audio`. It currently stops at C-01 before `psyplayer` can link.
+The standalone player build is present and reproducible as a distinct target, but its build hierarchy depends on `container`, `dsp` and `audio`. It currently stops at the known core prerequisites before `psyplayer` can link and is therefore reported as `BLOCKED`.
 
 This makes `psyplayer` a good Phase 3 smoke target once C-01, D-01, A-01 and the VST2 feature boundary are repaired.
 
@@ -268,6 +284,7 @@ Warnings that affect file parsing or function-pointer type safety deserve focuse
 5. Linux driver source reaches linking with modern ALSA/JACK/SDL2 headers.
 6. `psyplayer`, host and plugin failures are largely downstream of a small number of core blockers.
 7. The VST2 failure is an intentional licensing/build-feature boundary, not a reason to reintroduce omitted SDK-derived headers.
+8. The audit can be rerun without stale driver artifacts influencing results, and its generated summary preserves `PASS` / `FAIL` / `BLOCKED` causality.
 
 ## Handoff to Phase 3
 
