@@ -82,15 +82,16 @@ static void machinecommand_dispose_mixer_snapshots(psy_List** snapshots)
 
 static psy_audio_Mixer* machinecommand_mixer_client(psy_audio_Machine* machine)
 {
-	psy_audio_MachineFactory* factory;
-
 	if (!machine || psy_audio_machine_type(machine) != psy_audio_MIXER) {
 		return NULL;
 	}
-	factory = psy_audio_machine_machinefactory(machine);
-	if (factory && factory->createasproxy) {
+#ifdef PSYCLE_USE_MACHINEPROXY
+	{
 		psy_audio_MachineProxy* proxy;
 
+		/* MachineFactory wraps machines whenever machine-proxy support is
+		** compiled in. Do not infer proxy-ness through machinefactory(): the
+		** built-in client's base implementation may legitimately return NULL. */
 		proxy = (psy_audio_MachineProxy*)machine;
 		if (!proxy->client ||
 				psy_audio_machine_type(proxy->client) != psy_audio_MIXER) {
@@ -98,7 +99,9 @@ static psy_audio_Mixer* machinecommand_mixer_client(psy_audio_Machine* machine)
 		}
 		return (psy_audio_Mixer*)proxy->client;
 	}
+#else
 	return (psy_audio_Mixer*)machine;
+#endif
 }
 
 static uintptr_t machinecommand_input_id(psy_audio_Mixer* mixer,
@@ -331,7 +334,7 @@ static void machinecommand_restore_mixer_snapshots(psy_audio_Machines* machines,
 				return_id = machinecommand_return_id(mixer, route->fxslot);
 				if (return_id != psy_INDEX_INVALID) {
 					psy_table_insert(&channel->sendvols, return_id,
-						(void*)route->value);
+						(void*)(uintptr_t)route->value);
 				}
 			}
 		}
