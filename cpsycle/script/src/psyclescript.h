@@ -1,0 +1,88 @@
+/*
+** This source is free software ; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation ; either version 2, or (at your option) any later version.
+** copyright 2000-2023 members of the psycle project http://psycle.sourceforge.net
+*/
+
+#ifndef psy_PSYCLESCRIPT_H
+#define psy_PSYCLESCRIPT_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+#include <logger.h>
+
+#include "../../detail/psydef.h"
+
+typedef void (*psy_fp_gcptr_dispose)(void*);
+
+typedef struct psy_GCPtr {
+	void* ud;
+	psy_fp_gcptr_dispose dispose;
+} psy_GCPtr;
+
+void psy_gcptr_init(psy_GCPtr*, void* ud, psy_fp_gcptr_dispose);
+
+psy_GCPtr* psy_gcptr_alloc(void);
+psy_GCPtr* psy_gcptr_alloc_init(void* ud, psy_fp_gcptr_dispose);
+
+void psy_gcptr_deallocate(psy_GCPtr*);
+
+typedef struct psy_PsycleScript {
+	int id;
+	lua_State* L;
+	char* modulepath;
+	char* errstr;
+	psy_Logger* logger;
+} psy_PsycleScript;
+
+int psyclescript_init(psy_PsycleScript*, psy_Logger* logger);
+int psyclescript_load(psy_PsycleScript*, const char* path);
+int psyclescript_loadstring(psy_PsycleScript*, const char* script);
+int psyclescript_preparestate(psy_PsycleScript*, const luaL_Reg methods[],
+	void* host);
+int psyclescript_run(psy_PsycleScript*);
+int psyclescript_start(psy_PsycleScript*);
+int psyclescript_dispose(psy_PsycleScript*);
+
+INLINE bool psyclescript_empty(psy_PsycleScript* self)
+{
+	return self->L == NULL || self->modulepath == NULL;
+}
+
+INLINE const char* psyclescript_modulepath(psy_PsycleScript* self)
+{
+	return self->modulepath;
+}
+
+int psyclescript_open(lua_State*, const char* meta, const luaL_Reg methods[],
+	lua_CFunction gc, lua_CFunction tostring);
+void psyclescript_require(psy_PsycleScript*, const char* name, lua_CFunction openf);
+void psyclescript_register_weakuserdata(lua_State*, void* ud);
+psy_GCPtr* psyclescript_check(lua_State*, int index, const char* meta);
+int psyclescript_createuserdata(lua_State*, int index, const char* meta, void* ud,
+	psy_fp_gcptr_dispose);
+int psyclescript_deallocate_userdata(lua_State*, const char* meta);
+void psyclescript_requirenew(lua_State*, const char* name, void* ud,
+	lua_CFunction openf, const char* meta, psy_fp_gcptr_dispose);
+void* psyclescript_testudata(lua_State*, int index, const char* meta);
+int psyclescript_buildenum(lua_State*, const char* const e[], int len, int startidx);
+void find_weakuserdata(lua_State*, void* ud);
+INLINE int psyclescript_chaining(lua_State* L)
+{
+	lua_pushvalue(L, 1);
+	return 1;
+}
+void* psyclescript_host(lua_State*);
+psy_Logger* psyclescript_logger(lua_State*);
+
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* psy_PSYCLESCRIPT_H */
+

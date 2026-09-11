@@ -1,0 +1,566 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{40EC0FF3-1592-49D3-AC1B-3C5F85D268A9}</ProjectGuid>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='16.0'">v142</PlatformToolset>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='17.0'">v143</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='16.0'">v142</PlatformToolset>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='17.0'">v143</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='16.0'">v142</PlatformToolset>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='17.0'">v143</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='16.0'">v142</PlatformToolset>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='17.0'">v143</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(VCTargetsPath)Microsoft.CPP.UpgradeFromVC60.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(VCTargetsPath)Microsoft.CPP.UpgradeFromVC60.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(VCTargetsPath)Microsoft.CPP.UpgradeFromVC60.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(VCTargetsPath)Microsoft.CPP.UpgradeFromVC60.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>16.0.29511.113</_ProjectFileVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>.\Debug\</OutDir>
+    <IntDir>.\Debug\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>.\Debug\</OutDir>
+    <IntDir>.\Debug\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>.\Release\</OutDir>
+    <IntDir>.\Release\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>.\Release\</OutDir>
+    <IntDir>.\Release\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>$(SolutionDir)script\src;$(SolutionDir)ui\src;$(SolutionDir)luaui\src;$(SolutionDir)thread\src;$(SolutionDir)file\src;$(SolutionDir)container\src;$(SolutionDir)dsp\src;$(SolutionDir)lua54\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>true</MinimalRebuild>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PrecompiledHeaderOutputFile>$(IntDir)audio.pch</PrecompiledHeaderOutputFile>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <ProgramDataBaseFileName>$(IntDir)audio.pdb</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+      <CompileAs>Default</CompileAs>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0407</Culture>
+    </ResourceCompile>
+    <Lib>
+      <OutputFile>$(OutDir)audio.lib</OutputFile>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+    </Lib>
+    <Bscmake>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <OutputFile>$(OutDir)audio.bsc</OutputFile>
+    </Bscmake>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>$(SolutionDir)script\src;$(SolutionDir)ui\src;$(SolutionDir)luaui\src;$(SolutionDir)thread\src;$(SolutionDir)file\src;$(SolutionDir)container\src;$(SolutionDir)dsp\src;$(SolutionDir)lua54\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PrecompiledHeaderOutputFile>$(IntDir)audio.pch</PrecompiledHeaderOutputFile>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <ProgramDataBaseFileName>$(IntDir)audio.pdb</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <CompileAs>Default</CompileAs>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0407</Culture>
+    </ResourceCompile>
+    <Lib>
+      <OutputFile>$(OutDir)audio.lib</OutputFile>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+    </Lib>
+    <Bscmake>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <OutputFile>$(OutDir)audio.bsc</OutputFile>
+    </Bscmake>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <AdditionalIncludeDirectories>$(SolutionDir)script\src;$(SolutionDir)ui\src;$(SolutionDir)luaui\src;$(SolutionDir)thread\src;$(SolutionDir)file\src;$(SolutionDir)container\src;$(SolutionDir)dsp\src;$(SolutionDir)lua54\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <StringPooling>true</StringPooling>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <PrecompiledHeaderOutputFile>$(IntDir)audio.pch</PrecompiledHeaderOutputFile>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <ProgramDataBaseFileName>$(IntDir)audio.pdb</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <CompileAs>Default</CompileAs>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0407</Culture>
+    </ResourceCompile>
+    <Lib>
+      <OutputFile>$(OutDir)audio.lib</OutputFile>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+    </Lib>
+    <Bscmake>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <OutputFile>$(OutDir)audio.bsc</OutputFile>
+    </Bscmake>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <AdditionalIncludeDirectories>$(SolutionDir)script\src;$(SolutionDir)ui\src;$(SolutionDir)luaui\src;$(SolutionDir)thread\src;$(SolutionDir)file\src;$(SolutionDir)container\src;$(SolutionDir)dsp\src;$(SolutionDir)lua54\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <StringPooling>true</StringPooling>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <PrecompiledHeaderOutputFile>$(IntDir)audio.pch</PrecompiledHeaderOutputFile>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <ProgramDataBaseFileName>$(IntDir)audio.pdb</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <CompileAs>Default</CompileAs>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0407</Culture>
+    </ResourceCompile>
+    <Lib>
+      <OutputFile>$(OutDir)audio.lib</OutputFile>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
+    </Lib>
+    <Bscmake>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <OutputFile>$(OutDir)audio.bsc</OutputFile>
+    </Bscmake>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="$(SolutionDir)dsp\src\operations.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\activechannels.c" />
+    <ClCompile Include="src\array.c" />
+    <ClCompile Include="src\audioconfig.c" />
+    <ClCompile Include="src\audiodriverplugin.c" />
+    <ClCompile Include="src\audiodrivers.c" />
+    <ClCompile Include="src\audiorecorder.c" />
+    <ClCompile Include="src\blockselection.c" />
+    <ClCompile Include="src\buffer.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\buffercontext.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\connections.c" />
+    <ClCompile Include="src\cputimeclock.c" />
+    <ClCompile Include="src\custommachine.c" />
+    <ClCompile Include="src\driverregister.c" />
+    <ClCompile Include="src\dummy.c" />
+    <ClCompile Include="src\duplicator.c" />
+    <ClCompile Include="src\duplicator2.c" />
+    <ClCompile Include="src\duplicatormap.c" />
+    <ClCompile Include="src\eventdriverconfig.c" />
+    <ClCompile Include="src\eventdriverplugin.c" />
+    <ClCompile Include="src\eventdrivers.c" />
+    <ClCompile Include="src\exclusivelock.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\exs24loader.c" />
+    <ClCompile Include="src\fileoutdriver.c" />
+    <ClCompile Include="src\hostsequencertime.c" />
+    <ClCompile Include="src\instprev.c" />
+    <ClCompile Include="src\instrument.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\instruments.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\itmodule2.c" />
+    <ClCompile Include="src\jbridgeenabler.c" />
+    <ClCompile Include="src\kbddriver.c" />
+    <ClCompile Include="src\ladspainterface.c" />
+    <ClCompile Include="src\ladspaparam.c" />
+    <ClCompile Include="src\ladspaplugin.c" />
+    <ClCompile Include="src\library.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\logicalchannels.c" />
+    <ClCompile Include="src\luaarray.c" />
+    <ClCompile Include="src\luadspmath.c" />
+    <ClCompile Include="src\luaenvelope.c" />
+    <ClCompile Include="src\luafilter.c" />
+    <ClCompile Include="src\luamachine.c" />
+    <ClCompile Include="src\luamidinotes.c" />
+    <ClCompile Include="src\luaplayer.c" />
+    <ClCompile Include="src\luaplugin.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\luaresampler.c" />
+    <ClCompile Include="src\luawavedata.c" />
+    <ClCompile Include="src\luawaveosc.c" />
+    <ClCompile Include="src\lv2param.c" />
+    <ClCompile Include="src\lv2plugin.c" />
+    <ClCompile Include="src\lysongexport.c" />
+    <ClCompile Include="src\machine.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\machinefactory.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\machineinfo.c" />
+    <ClCompile Include="src\machineparam.c" />
+    <ClCompile Include="src\machineproxy.c" />
+    <ClCompile Include="src\machines.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\machinescmds.c" />
+    <ClCompile Include="src\machineselection.c" />
+    <ClCompile Include="src\master.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\midiconfig.c" />
+    <ClCompile Include="src\midiinput.c" />
+    <ClCompile Include="src\midiloader.c" />
+    <ClCompile Include="src\midisongexport.c" />
+    <ClCompile Include="src\mixer.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\paramtranslator.c" />
+    <ClCompile Include="src\pattern.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\patternentry.c" />
+    <ClCompile Include="src\patternevent.c" />
+    <ClCompile Include="src\patternio.c" />
+    <ClCompile Include="src\patterns.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\player.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\plugin.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\plugincatcher.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\plugins.c" />
+    <ClCompile Include="src\plugin_interface.cpp">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\preset.c" />
+    <ClCompile Include="src\presetio.c" />
+    <ClCompile Include="src\presets.c" />
+    <ClCompile Include="src\psy2converter.c" />
+    <ClCompile Include="src\psy2loader.c" />
+    <ClCompile Include="src\psy3loader.c" />
+    <ClCompile Include="src\psy3saver.c" />
+    <ClCompile Include="src\psyconvert.c" />
+    <ClCompile Include="src\sample.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\sampleiterator.c" />
+    <ClCompile Include="src\sampler.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\samplerdefs.c" />
+    <ClCompile Include="src\samples.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\sequence.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\sequencecmds.c" />
+    <ClCompile Include="src\sequencecursor.c" />
+    <ClCompile Include="src\sequenceentry.c" />
+    <ClCompile Include="src\sequencer.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\sequencertime.c" />
+    <ClCompile Include="src\sequenceselection.c" />
+    <ClCompile Include="src\silentdriver.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\song.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\songio.c" />
+    <ClCompile Include="src\ticktimer.c" />
+    <ClCompile Include="src\trackstate.c" />
+    <ClCompile Include="src\virtualgenerator.c" />
+    <ClCompile Include="src\vstevents.c" />
+    <ClCompile Include="src\vstplugin.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\vstplugininterface.c" />
+    <ClCompile Include="src\vstpluginparam.c" />
+    <ClCompile Include="src\waveio.c">
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</RuntimeTypeInfo>
+      <RuntimeTypeInfo Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</RuntimeTypeInfo>
+    </ClCompile>
+    <ClCompile Include="src\waveosc.c" />
+    <ClCompile Include="src\waveosctables.c" />
+    <ClCompile Include="src\wavsongio.c" />
+    <ClCompile Include="src\wire.c" />
+    <ClCompile Include="src\xmsampler.c" />
+    <ClCompile Include="src\xmsamplerchannel.c" />
+    <ClCompile Include="src\xmsamplervoice.c" />
+    <ClCompile Include="src\xmsongexport.c" />
+    <ClCompile Include="src\xmsongloader.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\activechannels.h" />
+    <ClInclude Include="src\array.h" />
+    <ClInclude Include="src\audioconfig.h" />
+    <ClInclude Include="src\audiodriverplugin.h" />
+    <ClInclude Include="src\audiodrivers.h" />
+    <ClInclude Include="src\audiorecorder.h" />
+    <ClInclude Include="src\blockselection.h" />
+    <ClInclude Include="src\buffer.h" />
+    <ClInclude Include="src\buffercontext.h" />
+    <ClInclude Include="src\cmdsnotes.h" />
+    <ClInclude Include="src\connections.h" />
+    <ClInclude Include="src\constants.h" />
+    <ClInclude Include="src\cputimeclock.h" />
+    <ClInclude Include="src\custommachine.h" />
+    <ClInclude Include="src\driverregister.h" />
+    <ClInclude Include="src\dummy.h" />
+    <ClInclude Include="src\duplicator.h" />
+    <ClInclude Include="src\duplicator2.h" />
+    <ClInclude Include="src\duplicatormap.h" />
+    <ClInclude Include="src\eventdriverconfig.h" />
+    <ClInclude Include="src\eventdriverplugin.h" />
+    <ClInclude Include="src\eventdrivers.h" />
+    <ClInclude Include="src\exclusivelock.h" />
+    <ClInclude Include="src\exs24loader.h" />
+    <ClInclude Include="src\fileoutdriver.h" />
+    <ClInclude Include="src\hostsequencertime.h" />
+    <ClInclude Include="src\instprev.h" />
+    <ClInclude Include="src\instrument.h" />
+    <ClInclude Include="src\instruments.h" />
+    <ClInclude Include="src\itmodule2.h" />
+    <ClInclude Include="src\jbridgeenabler.h" />
+    <ClInclude Include="src\kbddriver.h" />
+    <ClInclude Include="src\ladspainterface.h" />
+    <ClInclude Include="src\ladspaparam.h" />
+    <ClInclude Include="src\ladspaplugin.h" />
+    <ClInclude Include="src\library.h" />
+    <ClInclude Include="src\logicalchannels.h" />
+    <ClInclude Include="src\luaarray.h" />
+    <ClInclude Include="src\luadspmath.h" />
+    <ClInclude Include="src\luaenvelope.h" />
+    <ClInclude Include="src\luafilter.h" />
+    <ClInclude Include="src\luamachine.h" />
+    <ClInclude Include="src\luamidinotes.h" />
+    <ClInclude Include="src\luaplayer.h" />
+    <ClInclude Include="src\luaplugin.h" />
+    <ClInclude Include="src\luaresampler.h" />
+    <ClInclude Include="src\luawavedata.h" />
+    <ClInclude Include="src\luawaveosc.h" />
+    <ClInclude Include="src\lv2param.h" />
+    <ClInclude Include="src\lv2plugin.h" />
+    <ClInclude Include="src\lysongexport.h" />
+    <ClInclude Include="src\machine.h" />
+    <ClInclude Include="src\machinedefs.h" />
+    <ClInclude Include="src\machinefactory.h" />
+    <ClInclude Include="src\machineinfo.h" />
+    <ClInclude Include="src\machineparam.h" />
+    <ClInclude Include="src\machineproxy.h" />
+    <ClInclude Include="src\machines.h" />
+    <ClInclude Include="src\machinescmds.h" />
+    <ClInclude Include="src\machineselection.h" />
+    <ClInclude Include="src\master.h" />
+    <ClInclude Include="src\midiconfig.h" />
+    <ClInclude Include="src\midiinput.h" />
+    <ClInclude Include="src\midiloader.h" />
+    <ClInclude Include="src\midisongexport.h" />
+    <ClInclude Include="src\mixer.h" />
+    <ClInclude Include="src\paramtranslator.h" />
+    <ClInclude Include="src\pattern.h" />
+    <ClInclude Include="src\patternentry.h" />
+    <ClInclude Include="src\patternevent.h" />
+    <ClInclude Include="src\patternio.h" />
+    <ClInclude Include="src\patterns.h" />
+    <ClInclude Include="src\player.h" />
+    <ClInclude Include="src\plugin.h" />
+    <ClInclude Include="src\plugincatcher.h" />
+    <ClInclude Include="src\plugins.h" />
+    <ClInclude Include="src\plugin_interface.h" />
+    <ClInclude Include="src\preset.h" />
+    <ClInclude Include="src\presetio.h" />
+    <ClInclude Include="src\presets.h" />
+    <ClInclude Include="src\psy2converter.h" />
+    <ClInclude Include="src\psy2loader.h" />
+    <ClInclude Include="src\psy3loader.h" />
+    <ClInclude Include="src\psy3saver.h" />
+    <ClInclude Include="src\psyconvert.h" />
+    <ClInclude Include="src\sample.h" />
+    <ClInclude Include="src\sampleiterator.h" />
+    <ClInclude Include="src\sampler.h" />
+    <ClInclude Include="src\samplerdefs.h" />
+    <ClInclude Include="src\samples.h" />
+    <ClInclude Include="src\sequence.h" />
+    <ClInclude Include="src\sequencecmds.h" />
+    <ClInclude Include="src\sequencecursor.h" />
+    <ClInclude Include="src\sequenceentry.h" />
+    <ClInclude Include="src\sequencer.h" />
+    <ClInclude Include="src\sequencertime.h" />
+    <ClInclude Include="src\sequenceselection.h" />
+    <ClInclude Include="src\silentdriver.h" />
+    <ClInclude Include="src\song.h" />
+    <ClInclude Include="src\songio.h" />
+    <ClInclude Include="src\ticktimer.h" />
+    <ClInclude Include="src\trackstate.h" />
+    <ClInclude Include="src\virtualgenerator.h" />
+    <ClInclude Include="src\vstevents.h" />
+    <ClInclude Include="src\vstplugin.h" />
+    <ClInclude Include="src\vstplugininterface.h" />
+    <ClInclude Include="src\vstpluginparam.h" />
+    <ClInclude Include="src\waveio.h" />
+    <ClInclude Include="src\waveosc.h" />
+    <ClInclude Include="src\waveosctables.h" />
+    <ClInclude Include="src\wavsongio.h" />
+    <ClInclude Include="src\wire.h" />
+    <ClInclude Include="src\xmdefs.h" />
+    <ClInclude Include="src\xmsampler.h" />
+    <ClInclude Include="src\xmsamplerchannel.h" />
+    <ClInclude Include="src\xmsamplervoice.h" />
+    <ClInclude Include="src\xmsongexport.h" />
+    <ClInclude Include="src\xmsongloader.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(SolutionDir)container\container.vcxproj">
+      <Project>{8ceb65bd-4b67-416c-9dde-03f395cc522f}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <ProjectReference Include="$(SolutionDir)dsp\dsp.vcxproj">
+      <Project>{b03d2a93-90c0-4fd7-9e41-d72cc990fa3b}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <ProjectReference Include="$(SolutionDir)file\file.vcxproj">
+      <Project>{205ce71c-faa1-4310-89f5-f29a9b023433}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

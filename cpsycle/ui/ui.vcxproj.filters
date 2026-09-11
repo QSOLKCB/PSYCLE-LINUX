@@ -1,0 +1,757 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{c86cd1ab-1586-4851-83c7-7ae412e6e24c}</UniqueIdentifier>
+      <Extensions>cpp;c;cxx;rc;def;r;odl;idl;hpj;bat</Extensions>
+    </Filter>
+    <Filter Include="imps">
+      <UniqueIdentifier>{4dedb712-3ffe-4a6b-b81a-5837cd16ff5b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\win32">
+      <UniqueIdentifier>{e0e669fd-2fd7-4711-8664-695d8261b780}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dialogs">
+      <UniqueIdentifier>{37fc5767-a9af-41c1-b939-821f80b8766e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="configuration">
+      <UniqueIdentifier>{736250c9-7c60-42de-a302-1f8509f11a19}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="graphics">
+      <UniqueIdentifier>{019df39e-66c8-451d-b06d-db0a1a7d5d88}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="common">
+      <UniqueIdentifier>{ccaf32a1-7751-4ad3-b15d-15e2f1c5d979}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="aligner">
+      <UniqueIdentifier>{a102b3ac-7317-418f-9243-580490031b94}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\win32\graphics">
+      <UniqueIdentifier>{a199075b-4b54-43b9-a309-fa3506b5a3f5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\win32\comps">
+      <UniqueIdentifier>{cfc53821-2132-4567-9aa9-81e1c00f46af}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\win32\dialogs">
+      <UniqueIdentifier>{63835a57-9f38-4b78-931e-271f399c8ab3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\win32\common">
+      <UniqueIdentifier>{f178195e-1039-4153-b810-6d0e6e5430c1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\x11">
+      <UniqueIdentifier>{f2ae487f-907c-4a70-993d-5a629735e40c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\x11\common">
+      <UniqueIdentifier>{61a024ee-6e08-45e3-b1a0-5e003425b439}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\x11\comps">
+      <UniqueIdentifier>{dff34753-cfe6-4eb2-90fb-e232502567a6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\x11\dialogs">
+      <UniqueIdentifier>{aaaf2ef2-3c93-494e-8596-98f4d49cc932}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\x11\graphics">
+      <UniqueIdentifier>{e2886743-3e29-41b0-9235-fb931b4cb99b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="components">
+      <UniqueIdentifier>{5713747d-7657-4e70-a30a-c189d855f15d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\empty">
+      <UniqueIdentifier>{6733ddf9-cc02-47a8-a30f-c0f9886ff1ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\empty\common">
+      <UniqueIdentifier>{ce8fe916-8fde-4f18-9092-082461cfd435}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\empty\comps">
+      <UniqueIdentifier>{05eec76a-3005-45f4-878e-4641ad913495}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\empty\dialogs">
+      <UniqueIdentifier>{53b1e9fc-77c3-40e1-928d-90938cb3a438}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imps\empty\graphics">
+      <UniqueIdentifier>{1a2a1beb-901c-46e5-ac7e-2b919b7e7517}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\uibutton.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uicolordialog.c">
+      <Filter>dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uicheckbox.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uicombobox.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uicomponent.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uifolderdialog.c">
+      <Filter>dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uifontdialog.c">
+      <Filter>dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uilistbox.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uilabel.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiscrollbar.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiprogressbar.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uisavedialog.c">
+      <Filter>dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiopendialog.c">
+      <Filter>dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uislider.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiscroller.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uinotebook.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiterminal.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uisplitbar.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uieditor.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiimage.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiframe.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uidefaults.c">
+      <Filter>configuration</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uibitmap.c">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uigraphics.c">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiimpfactory.c">
+      <Filter>configuration</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uievents.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uidef.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uifont.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uistyle.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uicolour.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiborder.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uivalue.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uigeometry.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiviewcomponentimp.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uicomponentstyle.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uitabbar.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uicomponentscroll.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uicomponentsizehints.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uialigner.c">
+      <Filter>aligner</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uilclaligner.c">
+      <Filter>aligner</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uigridaligner.c">
+      <Filter>aligner</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiappstyles.c">
+      <Filter>configuration</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uimaterial.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwinbitmapimp.c">
+      <Filter>imps\win32\graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwincolordialogimp.c">
+      <Filter>imps\win32\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwincomponentimp.c">
+      <Filter>imps\win32\comps</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwinfolderdialogimp.c">
+      <Filter>imps\win32\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwinapp.c">
+      <Filter>imps\win32\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwinfontimp.c">
+      <Filter>imps\win32\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwinfontdialogimp.c">
+      <Filter>imps\win32\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwingraphicsimp.c">
+      <Filter>imps\win32\graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwinimpfactory.c">
+      <Filter>imps\win32\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwinsavedialogimp.c">
+      <Filter>imps\win32\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwinopendialogimp.c">
+      <Filter>imps\win32\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\timers.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uidropdownbox.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11colordialogimp.c">
+      <Filter>imps\x11\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11bitmapimp.c">
+      <Filter>imps\x11\graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11app.c">
+      <Filter>imps\x11\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11colours.c">
+      <Filter>imps\x11\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11folderdialogimp.c">
+      <Filter>imps\x11\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11fontdialogimp.c">
+      <Filter>imps\x11\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11impfactory.c">
+      <Filter>imps\x11\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11graphicsimp.c">
+      <Filter>imps\x11\graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11opendialogimp.c">
+      <Filter>imps\x11\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11savedialogimp.c">
+      <Filter>imps\x11\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11componentimp.c">
+      <Filter>imps\x11\comps</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11keyboardevent.c">
+      <Filter>imps\x11\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11fontimp.c">
+      <Filter>imps\x11\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uibmpreader.c">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uieventdispatch.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiapp.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uistyles.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uitextarea.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uitextformat.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uicomponentbackground.c">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uitextdraw.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uibitmaps.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11cursors.c">
+      <Filter>imps\x11\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uistyleproperty.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiclipboard.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uitext.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uitextsource.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uinumberedit.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\empty\uiemptyapp.c">
+      <Filter>imps\empty\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\empty\uiemptyfontimp.c">
+      <Filter>imps\empty\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\empty\uiemptyimpfactory.c">
+      <Filter>imps\empty\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\empty\uiemptycomponentimp.c">
+      <Filter>imps\empty\comps</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\empty\uiemptycolordialogimp.c">
+      <Filter>imps\empty\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\empty\uiemptyfolderdialogimp.c">
+      <Filter>imps\empty\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\empty\uiemptyfontdialogimp.c">
+      <Filter>imps\empty\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\empty\uiemptyopendialogimp.c">
+      <Filter>imps\empty\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\empty\uiemptysavedialogimp.c">
+      <Filter>imps\empty\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\empty\uiemptybitmapimp.c">
+      <Filter>imps\empty\graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\empty\uiemptygraphicsimp.c">
+      <Filter>imps\empty\graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiicons.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiglyph.c">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwinclipboardimp.c">
+      <Filter>imps\win32\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11clipboardimp.c">
+      <Filter>imps\x11\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\empty\uiemptyclipboardimp.c">
+      <Filter>imps\empty\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uisizer.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiscreen.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\win32\uiwinscreenimp.c">
+      <Filter>imps\win32\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\imps\x11\uix11screenimp.c">
+      <Filter>imps\x11\common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uialignment.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uipath.c">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uisvg.c">
+      <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiresources.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uiviewframe.c">
+      <Filter>components</Filter>
+    </ClCompile>
+    <ClCompile Include="src\inputhandler.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\uinavhandler.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\trackercmds.c">
+      <Filter>common</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\uibutton.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uieditor.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uicolordialog.h">
+      <Filter>dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uicombobox.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uicomponent.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uicheckbox.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uifolderdialog.h">
+      <Filter>dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uifontdialog.h">
+      <Filter>dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uilistbox.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiopendialog.h">
+      <Filter>dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiprogressbar.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uinotebook.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiscrollbar.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uilabel.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiscroller.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uisavedialog.h">
+      <Filter>dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uislider.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uisplitbar.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiterminal.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiframe.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uidefaults.h">
+      <Filter>configuration</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uibitmap.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uigraphics.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiimage.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiimpfactory.h">
+      <Filter>configuration</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uievents.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uidef.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uifont.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uistyle.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uicolour.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiborder.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uivalue.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uigeometry.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiviewcomponentimp.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uicomponentstyle.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uitabbar.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uicolours.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uicomponentscroll.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uicomponentsizehints.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uialigner.h">
+      <Filter>aligner</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uilclaligner.h">
+      <Filter>aligner</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uigridaligner.h">
+      <Filter>aligner</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiappstyles.h">
+      <Filter>configuration</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uimaterial.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwinbitmapimp.h">
+      <Filter>imps\win32\graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwincolordialogimp.h">
+      <Filter>imps\win32\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwincomponentimp.h">
+      <Filter>imps\win32\comps</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwinfolderdialogimp.h">
+      <Filter>imps\win32\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwinapp.h">
+      <Filter>imps\win32\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwinfontimp.h">
+      <Filter>imps\win32\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwinfontdialogimp.h">
+      <Filter>imps\win32\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwingraphicsimp.h">
+      <Filter>imps\win32\graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwinimpfactory.h">
+      <Filter>imps\win32\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwinsavedialogimp.h">
+      <Filter>imps\win32\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwinopendialogimp.h">
+      <Filter>imps\win32\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\timers.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uidropdownbox.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11colordialogimp.h">
+      <Filter>imps\x11\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11bitmapimp.h">
+      <Filter>imps\x11\graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11app.h">
+      <Filter>imps\x11\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11colours.h">
+      <Filter>imps\x11\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11folderdialogimp.h">
+      <Filter>imps\x11\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11fontdialogimp.h">
+      <Filter>imps\x11\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11impfactory.h">
+      <Filter>imps\x11\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11graphicsimp.h">
+      <Filter>imps\x11\graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11opendialogimp.h">
+      <Filter>imps\x11\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11savedialogimp.h">
+      <Filter>imps\x11\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11componentimp.h">
+      <Filter>imps\x11\comps</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11keyboardevent.h">
+      <Filter>imps\x11\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11fontimp.h">
+      <Filter>imps\x11\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uibmpreader.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uieventdispatch.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiapp.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uistyles.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uitextarea.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uitextformat.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uicomponentbackground.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uitextdraw.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uikeys.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uibitmaps.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11cursors.h">
+      <Filter>imps\x11\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uistyleproperty.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiclipboard.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uitext.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uitextsource.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uinumberedit.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\empty\uiemptyapp.h">
+      <Filter>imps\empty\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\empty\uiemptyfontimp.h">
+      <Filter>imps\empty\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\empty\uiemptyimpfactory.h">
+      <Filter>imps\empty\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\empty\uiemptycomponentimp.h">
+      <Filter>imps\empty\comps</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\empty\uiemptycolordialogimp.h">
+      <Filter>imps\empty\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\empty\uiemptyfolderdialogimp.h">
+      <Filter>imps\empty\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\empty\uiemptyfontdialogimp.h">
+      <Filter>imps\empty\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\empty\uiemptyopendialogimp.h">
+      <Filter>imps\empty\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\empty\uiemptysavedialogimp.h">
+      <Filter>imps\empty\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\empty\uiemptybitmapimp.h">
+      <Filter>imps\empty\graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\empty\uiemptygraphicsimp.h">
+      <Filter>imps\empty\graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiicons.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiglyph.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwinclipboardimp.h">
+      <Filter>imps\win32\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11clipboardimp.h">
+      <Filter>imps\x11\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\empty\uiemptyclipboardimp.h">
+      <Filter>imps\empty\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uisizer.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiscreen.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\win32\uiwinscreenimp.h">
+      <Filter>imps\win32\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\imps\x11\uix11screenimp.h">
+      <Filter>imps\x11\common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uialignment.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uipath.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uisvg.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiresources.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uiviewframe.h">
+      <Filter>components</Filter>
+    </ClInclude>
+    <ClInclude Include="src\inputhandler.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\uinavhandler.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\trackercmds.h">
+      <Filter>common</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
