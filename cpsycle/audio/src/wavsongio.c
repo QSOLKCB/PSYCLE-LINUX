@@ -36,6 +36,14 @@ void psy_audio_wav_songio_load(psy_audio_SongFile* self)
 
 		psy_audio_patternevent_clear(&patternevent);
 		patternevent.note = 48;
+		/*
+		** A WAV imported as a song creates its sample/instrument and sampler in
+		** slot 0. Keep the generated trigger self-contained as well: an empty
+		** instrument or machine field leaves the pattern dependent on prior
+		** sampler/host state and can make a freshly imported song silent.
+		*/
+		patternevent.inst = (uint16_t)index.slot;
+		patternevent.mach = 0;
 		pattern = psy_audio_pattern_alloc_init();
 		psy_audio_patternentry_init(&entry);
 		psy_audio_patternentry_set_event(&entry, patternevent, 0);
@@ -71,5 +79,4 @@ void psy_audio_wav_songio_save(psy_audio_SongFile* self)
 {
 
 }
-
 
