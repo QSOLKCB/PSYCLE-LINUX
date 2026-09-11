@@ -79,25 +79,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-visible_x11_windows() {
-    local root_window="$1"
-    local id
-
-    xwininfo -tree -id "$root_window" 2>/dev/null |
-        awk '{
-            for (i = 1; i <= NF; ++i) {
-                if ($i ~ /^0x[0-9A-Fa-f]+$/) {
-                    print $i
-                }
-            }
-        }' |
-        sort -u |
-        while IFS= read -r id; do
-            if xwininfo -id "$id" 2>/dev/null |
-                    grep -q 'Map State: IsViewable'; then
-                printf '%s\n' "$id"
-            fi
-        done |
+top_level_x11_windows() {
+    xwininfo -root -children 2>/dev/null |
+        awk '$1 ~ /^0x[0-9A-Fa-f]+$/ { print $1 }' |
         sort -u
 }
 
@@ -124,65 +108,6 @@ done
 if [ -z "$window_id" ]; then
     echo 'Psycle stayed alive but did not expose a visible X11 window.' >&2
     tail -n 120 "$LOG" >&2 || true
-    exit 1
-fi
-
-# Wait for the initial X11 component mapping to settle. This gives the keyboard
-# assertion a stable observable baseline rather than allowing unrelated startup
-# mapping to masquerade as a response to the injected command.
-before_windows="$OUT/x11-visible-before.txt"
-probe_windows="$OUT/x11-visible-probe.txt"
-after_windows="$OUT/x11-visible-after.txt"
-visible_x11_windows "$window_id" > "$before_windows"
-x11_stable=0
-for _ in $(seq 1 20); do
-    sleep 0.1
-    visible_x11_windows "$window_id" > "$probe_windows"
-    if cmp -s "$before_windows" "$probe_windows"; then
-        x11_stable=1
-        break
-    fi
-    mv "$probe_windows" "$before_windows"
-done
-
-if [ "$x11_stable" -ne 1 ]; then
-    echo 'Psycle X11 component mapping did not stabilize before input testing.' >&2
-    exit 1
-fi
-
-# Alt+S is Psycle's default Settings command. The Settings command selects a
-# different notebook page, which maps the selected X11 component and unmaps the
-# previous page. Require that externally observable viewable-window set to
-# change; xdotool success plus process survival alone would not prove dispatch.
-if ! xdotool key --clearmodifiers --window "$window_id" alt+s; then
-    echo 'xdotool could not inject Psycle Settings shortcut (Alt+S).' >&2
-    exit 1
-fi
-
-keyboard_transition=0
-for _ in $(seq 1 40); do
-    if ! kill -0 "$psycle_pid" >/dev/null 2>&1; then
-        rc=0
-        wait "$psycle_pid" || rc=$?
-        echo "Psycle exited after the X11 Settings shortcut (exit $rc)." >&2
-        tail -n 120 "$LOG" >&2 || true
-        exit 1
-    fi
-
-    sleep 0.1
-    visible_x11_windows "$window_id" > "$after_windows"
-    if ! cmp -s "$before_windows" "$after_windows"; then
-        keyboard_transition=1
-        break
-    fi
-done
-
-if [ "$keyboard_transition" -ne 1 ]; then
-    echo 'Alt+S was injected, but no Settings-view X11 mapping change was observed.' >&2
-    echo 'Visible X11 windows before:' >&2
-    cat "$before_windows" >&2 || true
-    echo 'Visible X11 windows after:' >&2
-    cat "$after_windows" >&2 || true
     exit 1
 fi
 
@@ -225,21 +150,83 @@ if [ "$audio_callback_completed" -ne 1 ]; then
     exit 1
 fi
 
+# Shift+Enter is Psycle's default Machine Info command. For the selected machine
+# it creates a psy_ui_toolframe, which is a separate native X11 top-level frame.
+# Observe that concrete application result rather than treating successful key
+# injection or process survival as proof that keyboard dispatch worked.
+before_windows="$OUT/x11-toplevel-before.txt"
+probe_windows="$OUT/x11-toplevel-probe.txt"
+after_windows="$OUT/x11-toplevel-after.txt"
+new_windows="$OUT/x11-toplevel-new.txt"
+top_level_x11_windows > "$before_windows"
+x11_stable=0
+for _ in $(seq 1 20); do
+    sleep 0.1
+    top_level_x11_windows > "$probe_windows"
+    if cmp -s "$before_windows" "$probe_windows"; then
+        x11_stable=1
+        break
+    fi
+    mv "$probe_windows" "$before_windows"
+done
+
+if [ "$x11_stable" -ne 1 ]; then
+    echo 'X11 top-level window set did not stabilize before input testing.' >&2
+    exit 1
+fi
+
+if ! xdotool key --clearmodifiers --window "$window_id" shift+Return; then
+    echo 'xdotool could not inject Psycle Machine Info shortcut (Shift+Enter).' >&2
+    exit 1
+fi
+
+machine_frame_id=''
+machine_frame_name=''
+for _ in $(seq 1 40); do
+    if ! kill -0 "$psycle_pid" >/dev/null 2>&1; then
+        rc=0
+        wait "$psycle_pid" || rc=$?
+        echo "Psycle exited after the Machine Info shortcut (exit $rc)." >&2
+        tail -n 120 "$LOG" >&2 || true
+        exit 1
+    fi
+
+    sleep 0.1
+    top_level_x11_windows > "$after_windows"
+    comm -13 "$before_windows" "$after_windows" > "$new_windows"
+    machine_frame_id="$(head -n 1 "$new_windows" || true)"
+    if [ -n "$machine_frame_id" ]; then
+        machine_frame_name="$(xdotool getwindowname "$machine_frame_id" 2>/dev/null || true)"
+        break
+    fi
+done
+
+if [ -z "$machine_frame_id" ]; then
+    echo 'Shift+Enter was injected, but no new Machine Info toolframe appeared.' >&2
+    echo 'Top-level X11 windows before:' >&2
+    cat "$before_windows" >&2 || true
+    echo 'Top-level X11 windows after:' >&2
+    cat "$after_windows" >&2 || true
+    exit 1
+fi
+
 cat > "$SUMMARY" <<EOF
 # PSYCLE-LINUX Phase 3 Runtime Smoke
 
 - Native executable: PASS
 - X11 window creation: PASS
 - X11 event loop survival: PASS
-- Alt+S Settings-view keyboard dispatch with observable X11 mapping change: PASS
 - Dynamic SDL2 driver selection/load: PASS
 - SDL2 dummy audio device open: PASS
 - Completed SDL2 audio callback including Psycle host work: PASS
-- Window: \`${window_name:-Psycle}\`
+- Shift+Enter Machine Info keyboard dispatch: PASS
+- Observable native Machine Info toolframe creation: PASS
+- Main window: \`${window_name:-Psycle}\`
+- Machine frame: \`${machine_frame_name:-$machine_frame_id}\`
 - Audio override: \`PSYCLE_AUDIO_DRIVER=sdl2\`
 - SDL backend: \`SDL_AUDIODRIVER=dummy\`
 
-This smoke test validates native X11 startup, an observable Psycle keyboard-command state transition, and a completed real audio-driver callback without claiming physical ALSA/JACK hardware coverage on the GitHub-hosted runner.
+This smoke test validates native X11 startup, a completed real audio-driver callback, and a keyboard command whose successful dispatch is evidenced by creation of a separate native Psycle toolframe. It does not claim physical ALSA/JACK hardware coverage on the GitHub-hosted runner.
 EOF
 
 cat "$SUMMARY"
