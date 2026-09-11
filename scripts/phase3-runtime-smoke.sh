@@ -15,7 +15,7 @@ SUMMARY="$OUT/summary.md"
 STATE="$OUT/state"
 
 if [ "${PSYCLE_SMOKE_INSIDE_XVFB:-0}" != "1" ]; then
-    for command in xvfb-run xdotool xwininfo; do
+    for command in xvfb-run xdotool; do
         if ! command -v "$command" >/dev/null 2>&1; then
             echo "Missing runtime-smoke dependency: $command" >&2
             exit 2
@@ -41,6 +41,7 @@ CPSYCLE="$ROOT/cpsycle"
 LOG="$OUT/psycle.log"
 SUMMARY="$OUT/summary.md"
 PSYCLE="$CPSYCLE/psycle"
+CONFIG_FILE="$STATE/config/psycle.ini"
 
 if [ ! -x "$PSYCLE" ]; then
     echo "Native host binary not found: $PSYCLE" >&2
@@ -78,12 +79,6 @@ cleanup() {
     wait "$psycle_pid" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
-
-top_level_x11_windows() {
-    xwininfo -root -children 2>/dev/null |
-        awk '$1 ~ /^0x[0-9A-Fa-f]+$/ { print $1 }' |
-        sort -u
-}
 
 # Give the native X11 host a bounded window in which to initialize its UI,
 # scan/load runtime modules and enter the event loop. Fail immediately if the
@@ -150,63 +145,67 @@ if [ "$audio_callback_completed" -ne 1 ]; then
     exit 1
 fi
 
-# Shift+Enter is Psycle's default Machine Info command. For the selected machine
-# it creates a psy_ui_toolframe, which is a separate native X11 top-level frame.
-# Observe that concrete application result rather than treating successful key
-# injection or process survival as proof that keyboard dispatch worked.
-before_windows="$OUT/x11-toplevel-before.txt"
-probe_windows="$OUT/x11-toplevel-probe.txt"
-after_windows="$OUT/x11-toplevel-after.txt"
-new_windows="$OUT/x11-toplevel-new.txt"
-top_level_x11_windows > "$before_windows"
-x11_stable=0
-for _ in $(seq 1 20); do
-    sleep 0.1
-    top_level_x11_windows > "$probe_windows"
-    if cmp -s "$before_windows" "$probe_windows"; then
-        x11_stable=1
-        break
-    fi
-    mv "$probe_windows" "$before_windows"
-done
-
-if [ "$x11_stable" -ne 1 ]; then
-    echo 'X11 top-level window set did not stabilize before input testing.' >&2
+# Alt+A is Psycle's default CMD_IMM_ENABLEAUDIO shortcut. It toggles the real
+# global `enableaudio` configuration property. Start from a fresh isolated
+# config directory (default = enabled), inject the command, then close Psycle
+# through the X11 WM_DELETE path so workspace_dispose() persists configuration.
+# Requiring enableaudio=0 in the resulting psycle.ini proves an observable
+# keyboard -> command dispatch -> application state mutation -> save round trip.
+if [ -e "$CONFIG_FILE" ]; then
+    echo "Runtime smoke expected a fresh config, but $CONFIG_FILE already exists." >&2
     exit 1
 fi
 
-if ! xdotool key --clearmodifiers --window "$window_id" shift+Return; then
-    echo 'xdotool could not inject Psycle Machine Info shortcut (Shift+Enter).' >&2
+if ! xdotool key --clearmodifiers --window "$window_id" alt+a; then
+    echo 'xdotool could not inject Psycle Enable Audio shortcut (Alt+A).' >&2
     exit 1
 fi
 
-machine_frame_id=''
-machine_frame_name=''
-for _ in $(seq 1 40); do
+sleep 0.5
+if ! kill -0 "$psycle_pid" >/dev/null 2>&1; then
+    rc=0
+    wait "$psycle_pid" || rc=$?
+    echo "Psycle exited after Alt+A before the persistence check (exit $rc)." >&2
+    tail -n 120 "$LOG" >&2 || true
+    exit 1
+fi
+
+if ! xdotool windowclose "$window_id"; then
+    echo 'Could not request a normal X11 close for Psycle.' >&2
+    exit 1
+fi
+
+clean_shutdown=0
+for _ in $(seq 1 80); do
     if ! kill -0 "$psycle_pid" >/dev/null 2>&1; then
-        rc=0
-        wait "$psycle_pid" || rc=$?
-        echo "Psycle exited after the Machine Info shortcut (exit $rc)." >&2
-        tail -n 120 "$LOG" >&2 || true
-        exit 1
-    fi
-
-    sleep 0.1
-    top_level_x11_windows > "$after_windows"
-    comm -13 "$before_windows" "$after_windows" > "$new_windows"
-    machine_frame_id="$(head -n 1 "$new_windows" || true)"
-    if [ -n "$machine_frame_id" ]; then
-        machine_frame_name="$(xdotool getwindowname "$machine_frame_id" 2>/dev/null || true)"
+        clean_shutdown=1
         break
     fi
+    sleep 0.1
 done
 
-if [ -z "$machine_frame_id" ]; then
-    echo 'Shift+Enter was injected, but no new Machine Info toolframe appeared.' >&2
-    echo 'Top-level X11 windows before:' >&2
-    cat "$before_windows" >&2 || true
-    echo 'Top-level X11 windows after:' >&2
-    cat "$after_windows" >&2 || true
+if [ "$clean_shutdown" -ne 1 ]; then
+    echo 'Psycle did not shut down after its X11 close request.' >&2
+    exit 1
+fi
+
+psycle_rc=0
+wait "$psycle_pid" || psycle_rc=$?
+if [ "$psycle_rc" -ne 0 ]; then
+    echo "Psycle returned nonzero from normal X11 shutdown: $psycle_rc" >&2
+    tail -n 120 "$LOG" >&2 || true
+    exit 1
+fi
+
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Psycle shut down cleanly but did not save $CONFIG_FILE." >&2
+    exit 1
+fi
+
+if ! grep -Eq '^[[:space:]]*enableaudio[[:space:]]*=[[:space:]]*(0|false)[[:space:]]*$' "$CONFIG_FILE"; then
+    echo 'Alt+A was injected, but the persisted enableaudio state was not disabled.' >&2
+    echo 'Saved configuration evidence:' >&2
+    grep -n -i 'enableaudio' "$CONFIG_FILE" >&2 || true
     exit 1
 fi
 
@@ -219,14 +218,16 @@ cat > "$SUMMARY" <<EOF
 - Dynamic SDL2 driver selection/load: PASS
 - SDL2 dummy audio device open: PASS
 - Completed SDL2 audio callback including Psycle host work: PASS
-- Shift+Enter Machine Info keyboard dispatch: PASS
-- Observable native Machine Info toolframe creation: PASS
+- Alt+A Enable Audio keyboard command dispatch: PASS
+- Persisted application state mutation (\`enableaudio=0\`): PASS
+- Clean X11 shutdown and configuration save: PASS
 - Main window: \`${window_name:-Psycle}\`
-- Machine frame: \`${machine_frame_name:-$machine_frame_id}\`
 - Audio override: \`PSYCLE_AUDIO_DRIVER=sdl2\`
 - SDL backend: \`SDL_AUDIODRIVER=dummy\`
+- Config evidence: \`${CONFIG_FILE}\`
 
-This smoke test validates native X11 startup, a completed real audio-driver callback, and a keyboard command whose successful dispatch is evidenced by creation of a separate native Psycle toolframe. It does not claim physical ALSA/JACK hardware coverage on the GitHub-hosted runner.
+This smoke test validates native X11 startup, a completed real audio-driver callback, and a keyboard command whose successful dispatch is evidenced by a persisted Psycle configuration state change after normal shutdown. It does not claim physical ALSA/JACK hardware coverage on the GitHub-hosted runner.
 EOF
 
+trap - EXIT
 cat "$SUMMARY"
