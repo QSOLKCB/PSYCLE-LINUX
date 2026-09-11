@@ -31,12 +31,26 @@
 #define FIXTURE_FREQ 440.0
 #define FIXTURE_BPM 135.0
 #define FIXTURE_LPB 4
+#define FIXTURE_NOTE 48
+#define FIXTURE_INSTRUMENT 0
+#define FIXTURE_MACHINE 0
+#define FIXTURE_AMPLITUDE 12000.0
+#define FIXTURE_PCM_TOLERANCE 0.5
 #define FIXTURE_TITLE "PSYCLE-LINUX Phase 4 audible sample fixture"
 
 static int fail(const char* message)
 {
 	fprintf(stderr, "phase4-sample-workflow: FAIL: %s\n", message);
 	return 1;
+}
+
+static int16_t fixture_pcm_value(uintptr_t frame)
+{
+	double phase;
+
+	phase = 2.0 * M_PI * FIXTURE_FREQ * (double)frame /
+		(double)FIXTURE_RATE;
+	return (int16_t)lrint(sin(phase) * FIXTURE_AMPLITUDE);
 }
 
 static int write_bytes(FILE* file, const void* data, size_t size)
@@ -89,12 +103,7 @@ static int write_fixture_wav(const char* path)
 	failed |= write_bytes(file, "data", 4);
 	failed |= write_u32_le(file, data_bytes);
 	for (i = 0; i < FIXTURE_FRAMES && !failed; ++i) {
-		double phase;
-		int16_t sample;
-
-		phase = 2.0 * M_PI * FIXTURE_FREQ * (double)i / (double)FIXTURE_RATE;
-		sample = (int16_t)lrint(sin(phase) * 12000.0);
-		failed |= write_u16_le(file, (uint16_t)sample);
+		failed |= write_u16_le(file, (uint16_t)fixture_pcm_value(i));
 	}
 	if (failed || ferror(file)) {
 		fclose(file);
@@ -118,22 +127,30 @@ static psy_audio_SequenceCursor fixture_cursor(psy_audio_Song* song)
 	return cursor;
 }
 
-static double sample_energy(const psy_audio_Sample* sample)
+static int verify_sample_pcm(const psy_audio_Sample* sample)
 {
-	uintptr_t i;
-	double energy;
-	float* channel;
+	uintptr_t frame;
+	const float* channel;
 
-	if (!sample || sample->channels.numchannels == 0 ||
+	if (!sample || sample->channels.numchannels != 1 ||
 		!sample->channels.samples || !sample->channels.samples[0]) {
-		return 0.0;
+		return fail("expected mono sample PCM is missing");
 	}
 	channel = sample->channels.samples[0];
-	energy = 0.0;
-	for (i = 0; i < sample->numframes; ++i) {
-		energy += fabs((double)channel[i]);
+	for (frame = 0; frame < FIXTURE_FRAMES; ++frame) {
+		double expected;
+		double actual;
+
+		expected = (double)fixture_pcm_value(frame);
+		actual = (double)channel[frame];
+		if (fabs(actual - expected) > FIXTURE_PCM_TOLERANCE) {
+			fprintf(stderr,
+				"phase4-sample-workflow: FAIL: PCM mismatch at frame %lu: expected %.1f, got %.3f\n",
+				(unsigned long)frame, expected, actual);
+			return 1;
+		}
 	}
-	return energy;
+	return 0;
 }
 
 static int verify_sample_song(psy_audio_Song* song, int verify_metadata)
@@ -157,22 +174,23 @@ static int verify_sample_song(psy_audio_Song* song, int verify_metadata)
 	if (fabs(sample->samplerate - (double)FIXTURE_RATE) > 0.5) {
 		return fail("sample rate changed");
 	}
-	if (sample_energy(sample) < 1000.0) {
-		return fail("sample PCM is silent or missing");
+	if (verify_sample_pcm(sample) != 0) {
+		return 1;
 	}
 
 	instrument = psy_audio_instruments_at(psy_audio_song_instruments(song),
-		psy_audio_instrumentindex_make(0, 0));
+		psy_audio_instrumentindex_make(0, FIXTURE_INSTRUMENT));
 	if (!instrument) {
 		return fail("sample instrument 0:0 is missing");
 	}
 
-	machine = psy_audio_machines_at(psy_audio_song_machines(song), 0);
+	machine = psy_audio_machines_at(psy_audio_song_machines(song),
+		FIXTURE_MACHINE);
 	if (!machine || psy_audio_machine_type(machine) != psy_audio_SAMPLER) {
 		return fail("WAV import did not create the built-in sampler");
 	}
 	if (!psy_audio_machines_connected(psy_audio_song_machines(song),
-			psy_audio_wire_make(0, psy_audio_MASTER_INDEX))) {
+			psy_audio_wire_make(FIXTURE_MACHINE, psy_audio_MASTER_INDEX))) {
 		return fail("sampler-to-master wire is missing");
 	}
 
@@ -192,8 +210,14 @@ static int verify_sample_song(psy_audio_Song* song, int verify_metadata)
 
 	cursor = fixture_cursor(song);
 	event = psy_audio_pattern_event_at_cursor(pattern, cursor);
-	if (event.note != 48) {
+	if (event.note != FIXTURE_NOTE) {
 		return fail("WAV import trigger note changed");
+	}
+	if (event.inst != FIXTURE_INSTRUMENT) {
+		return fail("WAV import trigger does not select instrument 0");
+	}
+	if (event.mach != FIXTURE_MACHINE) {
+		return fail("WAV import trigger does not target sampler machine 0");
 	}
 
 	if (verify_metadata) {
