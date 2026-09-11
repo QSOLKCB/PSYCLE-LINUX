@@ -21,10 +21,14 @@
 #define SAMPLER_SLOT 0
 #define MIXER_SLOT 1
 #define DOWNSTREAM_MIXER_SLOT 2
+#define ROUTE_MIXER_SLOT 3
 #define MIXER_INPUT_VOLUME 0.37
 #define MIXER_INPUT_PANNING 0.23
 #define MIXER_INPUT_GAIN 0.61
 #define MIXER_INPUT_DRYMIX 0.42
+#define DOWNSTREAM_RETURN_VOLUME 0.44
+#define DOWNSTREAM_RETURN_PANNING 0.71
+#define DOWNSTREAM_RETURN_INPUTCONVOL 0.58
 
 static int fail(const char* message)
 {
@@ -36,10 +40,13 @@ static int topology_is_routed(psy_audio_Machines* machines)
 {
 	return psy_audio_machines_at(machines, MIXER_SLOT) &&
 		psy_audio_machines_at(machines, DOWNSTREAM_MIXER_SLOT) &&
+		psy_audio_machines_at(machines, ROUTE_MIXER_SLOT) &&
 		psy_audio_machines_connected(machines,
 			psy_audio_wire_make(SAMPLER_SLOT, MIXER_SLOT)) &&
 		psy_audio_machines_connected(machines,
 			psy_audio_wire_make(MIXER_SLOT, DOWNSTREAM_MIXER_SLOT)) &&
+		psy_audio_machines_connected(machines,
+			psy_audio_wire_make(ROUTE_MIXER_SLOT, DOWNSTREAM_MIXER_SLOT)) &&
 		psy_audio_machines_connected(machines,
 			psy_audio_wire_make(DOWNSTREAM_MIXER_SLOT,
 				psy_audio_MASTER_INDEX)) &&
@@ -53,8 +60,11 @@ static int topology_is_rewired(psy_audio_Machines* machines)
 {
 	return !psy_audio_machines_at(machines, MIXER_SLOT) &&
 		psy_audio_machines_at(machines, DOWNSTREAM_MIXER_SLOT) &&
+		psy_audio_machines_at(machines, ROUTE_MIXER_SLOT) &&
 		psy_audio_machines_connected(machines,
 			psy_audio_wire_make(SAMPLER_SLOT, DOWNSTREAM_MIXER_SLOT)) &&
+		psy_audio_machines_connected(machines,
+			psy_audio_wire_make(ROUTE_MIXER_SLOT, DOWNSTREAM_MIXER_SLOT)) &&
 		psy_audio_machines_connected(machines,
 			psy_audio_wire_make(DOWNSTREAM_MIXER_SLOT,
 				psy_audio_MASTER_INDEX));
@@ -84,6 +94,24 @@ static psy_audio_InputChannel* mixer_input_channel(psy_audio_Machine* machine)
 	return mixer ? psy_audio_mixer_channel(mixer, 0) : NULL;
 }
 
+static uintptr_t mixer_return_id_for_slot(psy_audio_Mixer* mixer,
+	uintptr_t fxslot)
+{
+	psy_TableIterator it;
+
+	for (it = psy_table_begin(&mixer->returns);
+			!psy_tableiterator_equal(&it, psy_table_end());
+			psy_tableiterator_inc(&it)) {
+		psy_audio_ReturnChannel* ret;
+
+		ret = (psy_audio_ReturnChannel*)psy_tableiterator_value(&it);
+		if (ret && ret->fxslot == fxslot) {
+			return psy_tableiterator_key(&it);
+		}
+	}
+	return psy_INDEX_INVALID;
+}
+
 static int mixer_input_state_is_preserved(psy_audio_Machine* machine)
 {
 	psy_audio_InputChannel* input;
@@ -99,24 +127,25 @@ static int mixer_input_state_is_preserved(psy_audio_Machine* machine)
 static int downstream_mixer_is_routed(psy_audio_Machines* machines)
 {
 	psy_audio_Mixer* mixer;
-	psy_audio_InputChannel* input;
-	psy_audio_ReturnChannel* ret;
+	uintptr_t deleted_return_id;
+	uintptr_t route_return_id;
 
 	mixer = mixer_client(psy_audio_machines_at(machines,
 		DOWNSTREAM_MIXER_SLOT));
 	if (!mixer) {
 		return FALSE;
 	}
-	input = psy_audio_mixer_channel(mixer, 0);
-	ret = psy_audio_mixer_return(mixer, 0);
-	return !input && ret && ret->fxslot == MIXER_SLOT;
+	deleted_return_id = mixer_return_id_for_slot(mixer, MIXER_SLOT);
+	route_return_id = mixer_return_id_for_slot(mixer, ROUTE_MIXER_SLOT);
+	return deleted_return_id != psy_INDEX_INVALID &&
+		route_return_id != psy_INDEX_INVALID &&
+		!psy_audio_mixer_channel(mixer, 0);
 }
 
 static int downstream_mixer_is_rewired(psy_audio_Machines* machines)
 {
 	psy_audio_Mixer* mixer;
 	psy_audio_InputChannel* input;
-	psy_audio_ReturnChannel* ret;
 
 	mixer = mixer_client(psy_audio_machines_at(machines,
 		DOWNSTREAM_MIXER_SLOT));
@@ -124,8 +153,39 @@ static int downstream_mixer_is_rewired(psy_audio_Machines* machines)
 		return FALSE;
 	}
 	input = psy_audio_mixer_channel(mixer, 0);
-	ret = psy_audio_mixer_return(mixer, 0);
-	return input && input->inputslot == SAMPLER_SLOT && !ret;
+	return input && input->inputslot == SAMPLER_SLOT &&
+		mixer_return_id_for_slot(mixer, MIXER_SLOT) == psy_INDEX_INVALID &&
+		mixer_return_id_for_slot(mixer, ROUTE_MIXER_SLOT) != psy_INDEX_INVALID;
+}
+
+static int downstream_return_state_is_preserved(psy_audio_Machines* machines)
+{
+	psy_audio_Mixer* mixer;
+	uintptr_t deleted_return_id;
+	uintptr_t route_return_id;
+	psy_audio_ReturnChannel* ret;
+	psy_audio_MixerSend* send;
+
+	mixer = mixer_client(psy_audio_machines_at(machines,
+		DOWNSTREAM_MIXER_SLOT));
+	if (!mixer) {
+		return FALSE;
+	}
+	deleted_return_id = mixer_return_id_for_slot(mixer, MIXER_SLOT);
+	route_return_id = mixer_return_id_for_slot(mixer, ROUTE_MIXER_SLOT);
+	if (deleted_return_id == psy_INDEX_INVALID ||
+			route_return_id == psy_INDEX_INVALID) {
+		return FALSE;
+	}
+	ret = psy_audio_mixer_return(mixer, deleted_return_id);
+	send = psy_audio_mixer_Send(mixer, deleted_return_id);
+	return ret && send &&
+		ret->volume == DOWNSTREAM_RETURN_VOLUME &&
+		ret->panning == DOWNSTREAM_RETURN_PANNING &&
+		ret->mute == 1 &&
+		ret->mastersend == 0 &&
+		send->inputconvol == DOWNSTREAM_RETURN_INPUTCONVOL &&
+		psy_table_exists(&ret->sendsto, route_return_id);
 }
 
 int main(void)
@@ -138,7 +198,13 @@ int main(void)
 	psy_audio_Machine* sampler;
 	psy_audio_Machine* mixer;
 	psy_audio_Machine* downstream_mixer;
+	psy_audio_Machine* route_mixer;
 	psy_audio_InputChannel* input;
+	psy_audio_Mixer* downstream;
+	uintptr_t deleted_return_id;
+	uintptr_t route_return_id;
+	psy_audio_ReturnChannel* downstream_return;
+	psy_audio_MixerSend* downstream_send;
 
 	psy_audio_init();
 	psy_audio_machinecallback_init(&callback);
@@ -156,7 +222,9 @@ int main(void)
 		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
 	downstream_mixer = psy_audio_machinefactory_make_machine_from_path(&factory,
 		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
-	if (!sampler || !mixer || !downstream_mixer) {
+	route_mixer = psy_audio_machinefactory_make_machine_from_path(&factory,
+		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
+	if (!sampler || !mixer || !downstream_mixer || !route_mixer) {
 		psy_audio_song_deallocate(song);
 		return fail("could not create built-in machines");
 	}
@@ -182,10 +250,13 @@ int main(void)
 
 	psy_audio_machines_insert(machines, DOWNSTREAM_MIXER_SLOT,
 		downstream_mixer);
+	psy_audio_machines_insert(machines, ROUTE_MIXER_SLOT, route_mixer);
 	psy_audio_machines_connect(machines,
 		psy_audio_wire_make(SAMPLER_SLOT, MIXER_SLOT));
 	psy_audio_machines_connect(machines,
 		psy_audio_wire_make(MIXER_SLOT, DOWNSTREAM_MIXER_SLOT));
+	psy_audio_machines_connect(machines,
+		psy_audio_wire_make(ROUTE_MIXER_SLOT, DOWNSTREAM_MIXER_SLOT));
 	psy_audio_machines_connect(machines,
 		psy_audio_wire_make(DOWNSTREAM_MIXER_SLOT, psy_audio_MASTER_INDEX));
 	if (!topology_is_routed(machines)) {
@@ -194,7 +265,7 @@ int main(void)
 	}
 	if (!downstream_mixer_is_routed(machines)) {
 		psy_audio_song_deallocate(song);
-		return fail("downstream mixer did not create routed return channel");
+		return fail("downstream mixer did not create routed return channels");
 	}
 
 	/* Give the deleted Mixer's input channel non-default state. A reversible
@@ -208,6 +279,33 @@ int main(void)
 	input->panning = MIXER_INPUT_PANNING;
 	input->gain = MIXER_INPUT_GAIN;
 	input->drymix = MIXER_INPUT_DRYMIX;
+
+	/* Mixer A and the route Mixer occupy two return columns in downstream B.
+	** Removing A leaves the other return behind, so reconnecting A naturally
+	** gives it a different column id. State restoration must therefore follow
+	** endpoint identity rather than blindly copying an old return-table index. */
+	downstream = mixer_client(psy_audio_machines_at(machines,
+		DOWNSTREAM_MIXER_SLOT));
+	deleted_return_id = mixer_return_id_for_slot(downstream, MIXER_SLOT);
+	route_return_id = mixer_return_id_for_slot(downstream, ROUTE_MIXER_SLOT);
+	if (deleted_return_id == psy_INDEX_INVALID ||
+			route_return_id == psy_INDEX_INVALID) {
+		psy_audio_song_deallocate(song);
+		return fail("downstream return channels were not created");
+	}
+	downstream_return = psy_audio_mixer_return(downstream, deleted_return_id);
+	downstream_send = psy_audio_mixer_Send(downstream, deleted_return_id);
+	if (!downstream_return || !downstream_send) {
+		psy_audio_song_deallocate(song);
+		return fail("downstream return/send pair is missing");
+	}
+	downstream_return->volume = DOWNSTREAM_RETURN_VOLUME;
+	downstream_return->panning = DOWNSTREAM_RETURN_PANNING;
+	downstream_return->mute = 1;
+	downstream_return->mastersend = 0;
+	downstream_send->inputconvol = DOWNSTREAM_RETURN_INPUTCONVOL;
+	psy_table_insert(&downstream_return->sendsto, route_return_id,
+		(void*)(uintptr_t)TRUE);
 
 	psy_audio_machines_remove(machines, MIXER_SLOT, TRUE);
 	if (!topology_is_rewired(machines)) {
@@ -232,6 +330,10 @@ int main(void)
 		psy_audio_song_deallocate(song);
 		return fail("delete undo did not reconcile downstream mixer state");
 	}
+	if (!downstream_return_state_is_preserved(machines)) {
+		psy_audio_song_deallocate(song);
+		return fail("delete undo did not preserve downstream return settings");
+	}
 	psy_undoredo_redo(&machines->undoredo);
 	if (!topology_is_rewired(machines)) {
 		psy_audio_song_deallocate(song);
@@ -254,6 +356,10 @@ int main(void)
 	if (!downstream_mixer_is_routed(machines)) {
 		psy_audio_song_deallocate(song);
 		return fail("second delete undo did not reconcile downstream mixer state");
+	}
+	if (!downstream_return_state_is_preserved(machines)) {
+		psy_audio_song_deallocate(song);
+		return fail("second delete undo did not preserve downstream return settings");
 	}
 
 	psy_audio_song_deallocate(song);
