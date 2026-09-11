@@ -160,12 +160,14 @@ static int downstream_mixer_is_rewired(psy_audio_Machines* machines)
 		mixer_return_id_for_slot(mixer, ROUTE_MIXER_SLOT) != psy_INDEX_INVALID;
 }
 
-static int downstream_return_state_is_preserved(psy_audio_Machines* machines)
+static int downstream_return_state_is_preserved(psy_audio_Machines* machines,
+	uintptr_t expected_return_id)
 {
 	psy_audio_Mixer* mixer;
 	uintptr_t deleted_return_id;
 	uintptr_t route_return_id;
 	psy_audio_ReturnChannel* ret;
+	psy_audio_ReturnChannel* route_ret;
 	psy_audio_MixerSend* send;
 
 	mixer = mixer_client(psy_audio_machines_at(machines,
@@ -176,18 +178,23 @@ static int downstream_return_state_is_preserved(psy_audio_Machines* machines)
 	deleted_return_id = mixer_return_id_for_slot(mixer, MIXER_SLOT);
 	route_return_id = mixer_return_id_for_slot(mixer, ROUTE_MIXER_SLOT);
 	if (deleted_return_id == psy_INDEX_INVALID ||
-			route_return_id == psy_INDEX_INVALID) {
+			route_return_id == psy_INDEX_INVALID ||
+			deleted_return_id != expected_return_id) {
 		return FALSE;
 	}
 	ret = psy_audio_mixer_return(mixer, deleted_return_id);
+	route_ret = psy_audio_mixer_return(mixer, route_return_id);
 	send = psy_audio_mixer_Send(mixer, deleted_return_id);
-	return ret && send &&
+	return ret && route_ret && send &&
+		ret->id == expected_return_id &&
 		ret->volume == DOWNSTREAM_RETURN_VOLUME &&
 		ret->panning == DOWNSTREAM_RETURN_PANNING &&
 		ret->mute == 1 &&
 		ret->mastersend == 0 &&
 		send->inputconvol == DOWNSTREAM_RETURN_INPUTCONVOL &&
-		psy_table_exists(&ret->sendsto, route_return_id);
+		psy_table_exists(&ret->sendsto, route_return_id) &&
+		psy_table_exists(&route_ret->sendsto, deleted_return_id) &&
+		mixer->returnsolo == expected_return_id;
 }
 
 static int newer_unaffected_return_edit_is_preserved(
@@ -306,21 +313,22 @@ int main(void)
 	input->drymix = MIXER_INPUT_DRYMIX;
 
 	/* Mixer A and the route Mixer occupy two return columns in downstream B.
-	** Removing A leaves the other return behind, so reconnecting A naturally
-	** gives it a different column id. State restoration must therefore follow
-	** endpoint identity rather than blindly copying an old return-table index. */
+	** A is deliberately the non-highest return, so reconnecting it would append
+	** at a new id unless undo explicitly restores the original column identity. */
 	downstream = mixer_client(psy_audio_machines_at(machines,
 		DOWNSTREAM_MIXER_SLOT));
 	deleted_return_id = mixer_return_id_for_slot(downstream, MIXER_SLOT);
 	route_return_id = mixer_return_id_for_slot(downstream, ROUTE_MIXER_SLOT);
 	if (deleted_return_id == psy_INDEX_INVALID ||
-			route_return_id == psy_INDEX_INVALID) {
+			route_return_id == psy_INDEX_INVALID ||
+			deleted_return_id >= route_return_id) {
 		psy_audio_song_deallocate(song);
-		return fail("downstream return channels were not created");
+		return fail("downstream return ids do not exercise the non-highest case");
 	}
 	downstream_return = psy_audio_mixer_return(downstream, deleted_return_id);
+	route_return = psy_audio_mixer_return(downstream, route_return_id);
 	downstream_send = psy_audio_mixer_Send(downstream, deleted_return_id);
-	if (!downstream_return || !downstream_send) {
+	if (!downstream_return || !route_return || !downstream_send) {
 		psy_audio_song_deallocate(song);
 		return fail("downstream return/send pair is missing");
 	}
@@ -329,8 +337,17 @@ int main(void)
 	downstream_return->mute = 1;
 	downstream_return->mastersend = 0;
 	downstream_send->inputconvol = DOWNSTREAM_RETURN_INPUTCONVOL;
+	/* Exercise both directions. A->C belongs to A's destroyed object, while
+	** C->A is stored on a surviving return and is explicitly removed by
+	** mixer.c::ondisconnected() when A disappears. */
 	psy_table_insert(&downstream_return->sendsto, route_return_id,
 		(void*)(uintptr_t)TRUE);
+	psy_table_insert(&route_return->sendsto, deleted_return_id,
+		(void*)(uintptr_t)TRUE);
+	/* A solo index survives deletion as an integer. Restoring A at the same id
+	** is what makes that solo state meaningful again without rolling back any
+	** newer solo choice the user might make while A is absent. */
+	downstream->returnsolo = deleted_return_id;
 
 	psy_audio_machines_remove(machines, MIXER_SLOT, TRUE);
 	if (!topology_is_rewired(machines)) {
@@ -341,18 +358,19 @@ int main(void)
 		psy_audio_song_deallocate(song);
 		return fail("delete did not rebuild downstream mixer for temporary wire");
 	}
-
-	/* Mixer parameter tweaks are independent of Machines undo. Change the
-	** persistent route return after deletion; undo must not roll this newer,
-	** unrelated edit back to the deletion-time snapshot. */
 	downstream = mixer_client(psy_audio_machines_at(machines,
 		DOWNSTREAM_MIXER_SLOT));
 	route_return_id = mixer_return_id_for_slot(downstream, ROUTE_MIXER_SLOT);
 	route_return = psy_audio_mixer_return(downstream, route_return_id);
-	if (!route_return) {
+	if (!route_return || psy_table_exists(&route_return->sendsto,
+			deleted_return_id)) {
 		psy_audio_song_deallocate(song);
-		return fail("persistent route return disappeared after delete");
+		return fail("delete did not remove incoming route to deleted return");
 	}
+
+	/* Mixer parameter tweaks are independent of Machines undo. Change the
+	** persistent route return after deletion; undo must not roll this newer,
+	** unrelated edit back to the deletion-time snapshot. */
 	route_return->volume = NEWER_ROUTE_RETURN_VOLUME;
 	route_return->panning = NEWER_ROUTE_RETURN_PANNING;
 	route_return->mute = 1;
@@ -379,9 +397,9 @@ int main(void)
 		psy_audio_song_deallocate(song);
 		return fail("delete undo did not restore saved Mixer-return classification");
 	}
-	if (!downstream_return_state_is_preserved(machines)) {
+	if (!downstream_return_state_is_preserved(machines, deleted_return_id)) {
 		psy_audio_song_deallocate(song);
-		return fail("delete undo did not preserve downstream return settings");
+		return fail("delete undo did not preserve return id/routes/settings");
 	}
 	if (!newer_unaffected_return_edit_is_preserved(machines)) {
 		psy_audio_song_deallocate(song);
@@ -419,9 +437,9 @@ int main(void)
 		psy_audio_song_deallocate(song);
 		return fail("second delete undo did not reconcile downstream mixer state");
 	}
-	if (!downstream_return_state_is_preserved(machines)) {
+	if (!downstream_return_state_is_preserved(machines, deleted_return_id)) {
 		psy_audio_song_deallocate(song);
-		return fail("second delete undo did not preserve downstream return settings");
+		return fail("second undo did not preserve return id/routes/settings");
 	}
 	if (!newer_unaffected_return_edit_is_preserved(machines)) {
 		psy_audio_song_deallocate(song);
