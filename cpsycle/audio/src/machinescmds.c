@@ -38,6 +38,7 @@ typedef struct MachineCommandInputState {
 } MachineCommandInputState;
 
 typedef struct MachineCommandReturnState {
+	uintptr_t id;
 	uintptr_t fxslot;
 	double volume;
 	double panning;
@@ -45,6 +46,7 @@ typedef struct MachineCommandReturnState {
 	unsigned char mastersend;
 	double inputconvol;
 	psy_List* sendsto;
+	psy_List* incoming_from;
 } MachineCommandReturnState;
 
 typedef struct MachineCommandMixerState {
@@ -61,6 +63,7 @@ static void machinecommand_inputstate_dispose(MachineCommandInputState* self)
 static void machinecommand_returnstate_dispose(MachineCommandReturnState* self)
 {
 	psy_list_deallocate(&self->sendsto, NULL);
+	psy_list_deallocate(&self->incoming_from, NULL);
 }
 
 static void machinecommand_mixerstate_dispose(MachineCommandMixerState* self)
@@ -214,6 +217,7 @@ static MachineCommandReturnState* machinecommand_capture_return(
 	if (!ret) {
 		return NULL;
 	}
+	ret->id = id;
 	ret->fxslot = channel->fxslot;
 	ret->volume = channel->volume;
 	ret->panning = channel->panning;
@@ -222,6 +226,7 @@ static MachineCommandReturnState* machinecommand_capture_return(
 	send = psy_audio_mixer_Send(mixer, id);
 	ret->inputconvol = send ? send->inputconvol : 1.0;
 	ret->sendsto = NULL;
+	ret->incoming_from = NULL;
 	for (route_it = psy_table_begin(&channel->sendsto);
 			!psy_tableiterator_equal(&route_it, psy_table_end());
 			psy_tableiterator_inc(&route_it)) {
@@ -241,6 +246,34 @@ static MachineCommandReturnState* machinecommand_capture_return(
 		route->fxslot = target->fxslot;
 		route->value = TRUE;
 		psy_list_append(&ret->sendsto, route);
+	}
+	/*
+	** ondisconnected() also removes routes from surviving returns that target
+	** this return. Capture those edges separately so undo can add back only the
+	** entries teardown destroyed without rolling back any newer state on the
+	** surviving source return.
+	*/
+	for (route_it = psy_table_begin(&mixer->returns);
+			!psy_tableiterator_equal(&route_it, psy_table_end());
+			psy_tableiterator_inc(&route_it)) {
+		uintptr_t source_id;
+		psy_audio_ReturnChannel* source;
+		MachineCommandRouteState* route;
+
+		source_id = psy_tableiterator_key(&route_it);
+		source = (psy_audio_ReturnChannel*)psy_tableiterator_value(&route_it);
+		if (!source || source_id == id ||
+				!psy_table_exists(&source->sendsto, id)) {
+			continue;
+		}
+		route = (MachineCommandRouteState*)malloc(
+			sizeof(MachineCommandRouteState));
+		if (!route) {
+			continue;
+		}
+		route->fxslot = source->fxslot;
+		route->value = TRUE;
+		psy_list_append(&ret->incoming_from, route);
 	}
 	return ret;
 }
@@ -317,6 +350,40 @@ static void machinecommand_capture_mixer_snapshots(psy_audio_Machines* machines,
 	}
 }
 
+static uintptr_t machinecommand_restore_return_id(psy_audio_Mixer* mixer,
+	const MachineCommandReturnState* ret)
+{
+	uintptr_t current_id;
+	psy_audio_ReturnChannel* channel;
+	psy_audio_MixerSend* send;
+
+	current_id = machinecommand_return_id(mixer, ret->fxslot);
+	if (current_id == psy_INDEX_INVALID || current_id == ret->id) {
+		return current_id;
+	}
+	/* The original return id is a hole left by teardown. Do not replace an
+	** unrelated return if a future editing path has legitimately occupied it. */
+	if (psy_audio_mixer_return(mixer, ret->id) ||
+			psy_audio_mixer_Send(mixer, ret->id)) {
+		return current_id;
+	}
+	channel = psy_audio_mixer_return(mixer, current_id);
+	send = psy_audio_mixer_Send(mixer, current_id);
+	if (!channel) {
+		return psy_INDEX_INVALID;
+	}
+	psy_table_remove(&mixer->returns, current_id);
+	if (send) {
+		psy_table_remove(&mixer->sends, current_id);
+	}
+	channel->id = ret->id;
+	psy_audio_mixer_insertreturn(mixer, ret->id, channel);
+	if (send) {
+		psy_audio_mixer_insertsend(mixer, ret->id, send);
+	}
+	return ret->id;
+}
+
 static void machinecommand_restore_mixer_snapshots(psy_audio_Machines* machines,
 	psy_List* snapshots)
 {
@@ -378,7 +445,7 @@ static void machinecommand_restore_mixer_snapshots(psy_audio_Machines* machines,
 			psy_List* r;
 
 			ret = (MachineCommandReturnState*)q->entry;
-			id = machinecommand_return_id(mixer, ret->fxslot);
+			id = machinecommand_restore_return_id(mixer, ret);
 			if (id == psy_INDEX_INVALID) {
 				continue;
 			}
@@ -404,6 +471,22 @@ static void machinecommand_restore_mixer_snapshots(psy_audio_Machines* machines,
 				return_id = machinecommand_return_id(mixer, route->fxslot);
 				if (return_id != psy_INDEX_INVALID) {
 					psy_table_insert(&channel->sendsto, return_id,
+						(void*)(uintptr_t)TRUE);
+				}
+			}
+			for (r = ret->incoming_from; r != NULL; r = r->next) {
+				MachineCommandRouteState* route;
+				uintptr_t source_id;
+				psy_audio_ReturnChannel* source;
+
+				route = (MachineCommandRouteState*)r->entry;
+				source_id = machinecommand_return_id(mixer, route->fxslot);
+				if (source_id == psy_INDEX_INVALID || source_id == id) {
+					continue;
+				}
+				source = psy_audio_mixer_return(mixer, source_id);
+				if (source) {
+					psy_table_insert(&source->sendsto, id,
 						(void*)(uintptr_t)TRUE);
 				}
 			}
