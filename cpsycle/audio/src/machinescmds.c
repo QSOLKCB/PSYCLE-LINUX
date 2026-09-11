@@ -29,6 +29,21 @@ static void machinecommand_dispose_detached(psy_audio_Machine** machine,
 	}
 }
 
+static void machinecommand_mark_detached(psy_audio_Machine* machine)
+{
+	if (machine) {
+		/*
+		** A retained machine is no longer part of the live graph. Mark that on
+		** the machine before erase() emits connection teardown notifications.
+		** Connection-aware machines such as Mixer use their slot to decide
+		** whether a notification belongs to them; keeping the old slot here
+		** would make reversible undo detachment destructively discard internal
+		** channel state. machines_insert() restores the real slot on redo/undo.
+		*/
+		psy_audio_machine_set_slot(machine, psy_INDEX_INVALID);
+	}
+}
+
 /* InsertMachineCommand */
 
 /* vtable */
@@ -108,6 +123,7 @@ void insertmachinecommand_revert(InsertMachineCommand* self)
 		self->restoreconnection = TRUE;
 		self->machine = machine;
 		self->machines->preventundoredo = TRUE;
+		machinecommand_mark_detached(machine);
 		psy_audio_machines_erase(self->machines, self->slot);
 		self->machines->preventundoredo = FALSE;
 		self->machine_detached = TRUE;
@@ -178,6 +194,7 @@ void deletemachinecommand_execute(DeleteMachineCommand* self,
 		self->machines->preventundoredo = TRUE;
 		psy_audio_connections_rewire(&self->machines->connections,
 			psy_audio_connections_at(&self->machines->connections, self->slot));
+		machinecommand_mark_detached(machine);
 		psy_audio_machines_erase(self->machines, self->slot);
 		self->machines->preventundoredo = FALSE;
 		self->machine_detached = TRUE;
@@ -309,6 +326,7 @@ static void disconnectmachinecommand_vtable_init(DisconnectMachineCommand* self)
 			disconnectmachinecommand_revert;
 		disconnectmachinecommand_vtable_initialized = TRUE;
 	}
+	self->command.vtable = &disconnectmachinecommand_vtable;
 }
 
 /* implementation */
@@ -320,7 +338,7 @@ DisconnectMachineCommand* disconnectmachinecommand_alloc_init(psy_audio_Machines
 	rv = malloc(sizeof(DisconnectMachineCommand));
 	if (rv) {
 		psy_command_init(&rv->command);
-		disconnectmachinecommand_vtable_init(rv);
+		disconnectmachinecommand_vtable_init(rv);		
 		rv->command.vtable = &disconnectmachinecommand_vtable;
 		rv->machines = machines;
 		rv->wire = wire;
