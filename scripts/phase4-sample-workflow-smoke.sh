@@ -62,18 +62,20 @@ PSY="$OUT/phase4-sample-workflow.psy"
 cat > "$SUMMARY" <<'EOF'
 # PSYCLE-LINUX Phase 4 Audible Sample Workflow
 
-- Project-owned synthetic PCM generation: PASS
+- Project-owned deterministic PCM generation: PASS
 - WAV import through Psycle song reader: PASS
 - Sample pool population: PASS
-- Non-silent PCM availability: PASS
 - Instrument/sample workflow construction: PASS
-- Pattern trigger creation: PASS
-- Sequencer entry creation: PASS
+- Pattern trigger explicitly selects instrument 0: PASS
+- Pattern trigger explicitly targets sampler machine 0: PASS
+- Sequencer order 0:0 → pattern 0: PASS
 - Built-in sampler creation: PASS
 - Sampler → Master wiring: PASS
 - PSY3 save with embedded sample: PASS
 - Fresh PSY3 reload: PASS
-- Embedded sample frame/rate/audio-data preservation: PASS
+- Embedded sample frame count / rate preservation: PASS
+- Embedded PCM frame-by-frame preservation: PASS
+- Playable trigger instrument/machine routing after reload: PASS
 - Song BPM / LPB / metadata preservation: PASS
 
 The WAV and PSY files are generated test artifacts only. No demo song or third-party audio asset is committed.
