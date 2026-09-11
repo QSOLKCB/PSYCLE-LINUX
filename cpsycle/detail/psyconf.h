@@ -16,8 +16,14 @@
 #include "os.h"
 
 #if defined(DIVERSALIS__CPU__X86__SSE)
-	/* enable support for SSE */
-	#define PSYCLE_USE_SSE
+	/*
+	** The imported Unix SSE2 implementation currently has a signedness mismatch
+	** in its movmul contract on modern x86-64. Keep the scalar implementation as
+	** the Linux Phase 3 baseline until that optimized path is repaired directly.
+	*/
+	#if !defined(DIVERSALIS__OS__UNIX)
+		#define PSYCLE_USE_SSE
+	#endif
 #endif
 
 #define PSYCLE_TK_WIN32 1
@@ -139,7 +145,14 @@
 #define PSYCLE_USE_XM
 /* #define PSYCLE_USE_MIDI_FILE */
 
+/*
+** VST2 is opt-in. The public PSYCLE-LINUX baseline intentionally omits the
+** legacy Steinberg SDK-derived headers; builds may define PSYCLE_ENABLE_VST2
+** only when a locally supplied, legally usable VST2 SDK boundary is present.
+*/
+#if defined(PSYCLE_ENABLE_VST2)
 #define PSYCLE_USE_VST2
+#endif
 /* #define PSYCLE_DEBUG_VST2_OPCODES */
 
 #define PSYCLE_USE_LADSPA
