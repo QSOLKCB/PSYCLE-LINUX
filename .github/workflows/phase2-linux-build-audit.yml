@@ -18,6 +18,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: phase2-linux-build-audit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   audit:
     runs-on: ubuntu-24.04
@@ -26,11 +30,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare APT download cache
+        run: mkdir -p "$HOME/.cache/apt/archives/partial"
+
+      - name: Cache APT downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/apt/archives
+          key: apt-${{ runner.os }}-24.04-psycle-${{ hashFiles('.github/workflows/phase2-linux-build-audit.yml') }}
+          restore-keys: |
+            apt-${{ runner.os }}-24.04-psycle-
+
       - name: Install documented Linux development dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt-get -o Dir::Cache::archives="$HOME/.cache/apt/archives/" install -y --no-install-recommends \
             build-essential \
+            ccache \
             pkg-config \
             liblilv-dev \
             liblua5.4-dev \
@@ -47,6 +65,22 @@ jobs:
             libsdl2-dev \
             libfluidsynth-dev
 
+      - name: Cache C/C++ compilation
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ runner.os }}-gcc-psycle-${{ hashFiles('cpsycle/**/*.c', 'cpsycle/**/*.cpp', 'cpsycle/**/*.cc', 'cpsycle/**/*.h', 'cpsycle/**/*.hpp', 'cpsycle/**/makefile') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-gcc-psycle-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir="$HOME/.cache/ccache"
+          ccache --set-config=compiler_check=content
+          ccache --set-config=max_size=512M
+          ccache --zero-stats
+          echo /usr/lib/ccache >> "$GITHUB_PATH"
+
       - name: Run build audit
         shell: bash
         run: |
@@ -60,6 +94,7 @@ jobs:
             cat build-audit/summary.md
           fi
 
+          ccache --show-stats || true
           exit "$audit_rc"
 
       - name: Upload complete audit logs
