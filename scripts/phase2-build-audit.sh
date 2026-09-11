@@ -179,14 +179,14 @@ run_stage_with_prereqs driver-jack 'Driver: JACK' 'core-container,core-dsp' make
 run_stage_with_prereqs driver-sdl2 'Driver: SDL2' 'core-container,core-dsp' make -C driver/sdl2
 run_stage_with_prereqs driver-evjoystick 'Driver: event joystick' 'core-container,core-dsp' make -C driver/evjoystick
 
-# Smaller executable first, then the host and native machines. They are still
-# exercised even when prerequisites failed, but nonzero downstream results are
-# classified as BLOCKED to preserve the causal distinction in summary.md.
-run_stage_with_prereqs player 'psyplayer' 'core-container,core-dsp,core-audio' make player
-run_stage_with_prereqs host 'Native X11 host' 'core-container,core-dsp,core-audio,ui-x11,core-luaui' make host
+# Aggregate targets are still executed for evidence, but their prerequisite
+# lists mirror the imported makefiles so a failed library is reported as the
+# causal blocker rather than creating a misleading independent FAIL.
+run_stage_with_prereqs player 'psyplayer' 'core-script,core-thread,core-container,core-file,core-dsp,core-audio' make player
+run_stage_with_prereqs host 'Native X11 host' 'core-script,core-thread,core-container,core-file,ui-x11,core-luaui,core-dsp,core-audio' make host
 run_stage_with_prereqs plugins 'Native plugin set' 'core-container,core-dsp' make plugins
 run_stage_with_prereqs drivers-aggregate 'Aggregate Linux drivers' 'core-container,core-dsp' make drivers
-run_stage_with_prereqs full-build 'Top-level make all' 'core-container,core-dsp,core-audio' make all
+run_stage_with_prereqs full-build 'Top-level make all' 'core-script,core-thread,core-container,core-file,ui-x11,core-luaui,core-dsp,core-audio' make all
 
 finalize_report
 
