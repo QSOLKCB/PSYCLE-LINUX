@@ -62,20 +62,25 @@ See [PORTING.md](PORTING.md) for the engineering rules used by the project.
 
 ## Project Status
 
-**Phase 1 — upstream baseline import complete.**
+**Phase 2 — Modern Linux Build Audit complete.**
 
-The auditable C-Psycle r12005 baseline is imported under [`cpsycle/`](cpsycle/) and frozen before Linux compatibility changes begin.
+The audited r12005 baseline has now been exercised on Ubuntu 24.04 x86-64 with GCC 13.3 using the existing make-based architecture.
 
-- Audited upstream identity: SourceForge SVN `r12005` plus the recorded ZIP SHA-256
-- Sanitized archival import ref: `archive/cpsycle-r12005-sanitized-import`
-- Canonical audited baseline tag: `cpsycle-r12005-baseline`
-- Upstream r12005 files: 2,415
-- Upstream files retained after audit omissions: 2,349
-- Upstream files intentionally omitted: 66
-- Phase 1 licensing/provenance files added: 14
-- Canonical files under `cpsycle/`: 2,363
+What already builds on the reference runner:
 
-The next milestone is **Phase 2 — Modern Linux Build Audit**: reproduce the existing make-based build on current Ubuntu x86-64, capture what actually breaks, and fix nothing broader than necessary.
+- X11/Xft UI layer;
+- thread library;
+- script/Lua layer;
+- file library;
+- Lua UI library.
+
+The first blocking failures are documented rather than hidden: a container linkage conflict, a DSP signed/unsigned size-type mismatch, an audio player declaration mismatch, and the expected need to make legacy VST2 compilation conditional because the SDK-derived headers are intentionally absent from the public baseline.
+
+Linux ALSA, ALSA MIDI, JACK, SDL2 and event-joystick driver source reaches linking; their remaining audit failures are downstream core-library/output-path prerequisites rather than missing Linux API headers.
+
+See [PHASE2_BUILD_AUDIT.md](PHASE2_BUILD_AUDIT.md) for the evidence and [BUILDING.md](BUILDING.md) for reproducible development commands.
+
+The next milestone is **Phase 3 — First Native Linux Host**: make the smallest compatibility fixes necessary to clear the documented blockers, build `psyplayer`, build the existing X11 host, then launch Psycle and validate real ALSA/JACK/MIDI behaviour.
 
 See [ROADMAP.md](ROADMAP.md) for the milestone plan.
 

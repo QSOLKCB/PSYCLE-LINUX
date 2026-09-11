@@ -1,0 +1,138 @@
+name: Phase 2 Linux build audit
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'cpsycle/**'
+      - 'scripts/phase2-build-audit.sh'
+      - '.github/workflows/phase2-linux-build-audit.yml'
+  pull_request:
+    paths:
+      - 'cpsycle/**'
+      - 'scripts/phase2-build-audit.sh'
+      - '.github/workflows/phase2-linux-build-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase2-linux-build-audit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare APT download cache
+        run: mkdir -p "$HOME/.cache/apt/archives/partial"
+
+      - name: Restore APT downloads
+        id: apt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/apt/archives
+          key: apt-${{ runner.os }}-24.04-psycle-v1
+          restore-keys: |
+            apt-${{ runner.os }}-24.04-psycle-
+
+      - name: Install documented Linux development dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo chown -R _apt:root "$HOME/.cache/apt/archives"
+          sudo apt-get update
+          sudo apt-get -o Dir::Cache::archives="$HOME/.cache/apt/archives/" install -y --no-install-recommends \
+            build-essential \
+            ccache \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev \
+            libfreetype-dev \
+            libfontconfig-dev \
+            libgl-dev \
+            libx11-dev \
+            libxft-dev \
+            libxext-dev \
+            libxmu-dev \
+            libasound2-dev \
+            libjack-jackd2-dev \
+            libstk-dev \
+            libsdl2-dev \
+            libfluidsynth-dev
+          sudo chown -R runner:runner "$HOME/.cache/apt/archives"
+
+      - name: Restore C/C++ compilation cache
+        id: ccache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ runner.os }}-gcc-psycle-${{ hashFiles('cpsycle/**/*.c', 'cpsycle/**/*.cpp', 'cpsycle/**/*.cc', 'cpsycle/**/*.h', 'cpsycle/**/*.hpp', 'cpsycle/**/makefile') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-gcc-psycle-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=cache_dir="$HOME/.cache/ccache"
+          ccache --set-config=compiler_check=content
+          ccache --set-config=max_size=512M
+          ccache --zero-stats
+          echo /usr/lib/ccache >> "$GITHUB_PATH"
+
+      - name: Run build audit
+        id: audit-run
+        shell: bash
+        run: |
+          chmod +x scripts/phase2-build-audit.sh
+          set +e
+          scripts/phase2-build-audit.sh build-audit
+          audit_rc=$?
+          set -e
+
+          if [ -f build-audit/summary.md ]; then
+            cat build-audit/summary.md
+          fi
+
+          ccache --show-stats || true
+          echo "exit_code=$audit_rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload complete audit logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-linux-build-audit
+          path: build-audit/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Save APT downloads
+        if: always() && steps.apt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/apt/archives
+          key: ${{ steps.apt-cache.outputs.cache-primary-key }}
+
+      - name: Save C/C++ compilation cache
+        if: always() && steps.ccache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ccache
+          key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
+
+      - name: Propagate audit result
+        if: always()
+        shell: bash
+        run: |
+          audit_rc='${{ steps.audit-run.outputs.exit_code }}'
+          if [ -z "$audit_rc" ]; then
+            echo 'Audit step did not produce an exit code.' >&2
+            exit 2
+          fi
+          exit "$audit_rc"
