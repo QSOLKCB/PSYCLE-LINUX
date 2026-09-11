@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -u
+set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CPSYCLE="$ROOT/cpsycle"
@@ -7,34 +7,87 @@ OUT="${1:-$ROOT/build-audit}"
 mkdir -p "$OUT/logs"
 
 REPORT="$OUT/summary.md"
-: > "$REPORT"
+HEADER="$OUT/header.md"
+DETAILS="$OUT/details.md"
+: > "$HEADER"
+: > "$DETAILS"
 
-status_rows=()
+declare -a status_rows=()
+declare -a build_stage_ids=()
+declare -A stage_results=()
+declare -A stage_exit_codes=()
 
-run_stage() {
+record_stage() {
     local id="$1"
     local label="$2"
-    shift 2
-    local log="$OUT/logs/${id}.log"
+    local result="$3"
+    local rc="$4"
+    local log="$5"
 
-    printf '## %s\n\n' "$label" >> "$REPORT"
-    printf 'Command: `%s`\n\n' "$*" >> "$REPORT"
+    stage_results["$id"]="$result"
+    stage_exit_codes["$id"]="$rc"
+    status_rows+=("| ${label} | ${result} | ${rc} | logs/${log} |")
+
+    case "$id" in
+        clean-*) ;;
+        *) build_stage_ids+=("$id") ;;
+    esac
+}
+
+run_stage_with_prereqs() {
+    local id="$1"
+    local label="$2"
+    local prereqs="$3"
+    shift 3
+    local log_name="${id}.log"
+    local log="$OUT/logs/$log_name"
+    local prerequisite_blocked=0
+
+    if [ -n "$prereqs" ]; then
+        local prerequisite
+        IFS=',' read -r -a prerequisite_list <<< "$prereqs"
+        for prerequisite in "${prerequisite_list[@]}"; do
+            if [ "${stage_results[$prerequisite]:-NOT_RUN}" != "PASS" ]; then
+                prerequisite_blocked=1
+                break
+            fi
+        done
+    fi
+
+    printf '## %s\n\n' "$label" >> "$DETAILS"
+    printf 'Command: `%s`\n\n' "$*" >> "$DETAILS"
+    if [ -n "$prereqs" ]; then
+        printf 'Prerequisites: `%s`\n\n' "$prereqs" >> "$DETAILS"
+    fi
 
     set +e
     (cd "$CPSYCLE" && "$@") >"$log" 2>&1
     local rc=$?
     set -e
 
+    local result
     if [ "$rc" -eq 0 ]; then
-        status_rows+=("| ${label} | PASS | ${rc} | logs/${id}.log |")
+        result="PASS"
+    elif [ "$prerequisite_blocked" -eq 1 ]; then
+        result="BLOCKED"
     else
-        status_rows+=("| ${label} | FAIL | ${rc} | logs/${id}.log |")
+        result="FAIL"
     fi
 
-    printf 'Exit code: `%s`\n\n' "$rc" >> "$REPORT"
-    printf 'Last 80 log lines:\n\n```text\n' >> "$REPORT"
-    tail -n 80 "$log" >> "$REPORT" || true
-    printf '\n```\n\n' >> "$REPORT"
+    record_stage "$id" "$label" "$result" "$rc" "$log_name"
+
+    printf 'Result: `%s`\n\n' "$result" >> "$DETAILS"
+    printf 'Exit code: `%s`\n\n' "$rc" >> "$DETAILS"
+    printf 'Last 80 log lines:\n\n```text\n' >> "$DETAILS"
+    tail -n 80 "$log" >> "$DETAILS" || true
+    printf '\n```\n\n' >> "$DETAILS"
+}
+
+run_stage() {
+    local id="$1"
+    local label="$2"
+    shift 2
+    run_stage_with_prereqs "$id" "$label" "" "$@"
 }
 
 record_environment() {
@@ -60,25 +113,52 @@ record_environment() {
         echo
         echo '| module | version | cflags | libs |'
         echo '| --- | --- | --- | --- |'
-    } >> "$REPORT"
+    } >> "$HEADER"
 
+    local module version cflags libs
     for module in lua lua5.4 lilv-0 freetype2 fontconfig x11 xft xext xmu alsa jack sdl2 fluidsynth; do
-        local version cflags libs
         version="$(pkg-config --modversion "$module" 2>/dev/null || true)"
         cflags="$(pkg-config --cflags "$module" 2>/dev/null || true)"
         libs="$(pkg-config --libs "$module" 2>/dev/null || true)"
         [ -n "$version" ] || version='MISSING'
-        printf '| `%s` | `%s` | `%s` | `%s` |\n' "$module" "$version" "$cflags" "$libs" >> "$REPORT"
+        printf '| `%s` | `%s` | `%s` | `%s` |\n' "$module" "$version" "$cflags" "$libs" >> "$HEADER"
     done
-    echo >> "$REPORT"
+    echo >> "$HEADER"
 }
 
-set -e
+finalize_report() {
+    {
+        cat "$HEADER"
+        echo '## Stage status'
+        echo
+        echo '| stage | result | exit | log |'
+        echo '| --- | --- | ---: | --- |'
+        printf '%s\n' "${status_rows[@]}"
+        echo
+        cat "$DETAILS"
+    } > "$REPORT"
+}
+
 record_environment
 
-# Start from a repeatable source-tree state. Historical makefiles have imperfect
-# clean targets, so cleaning is evidence too but must not abort the audit.
+# A repeatable audit must not reuse stale outputs. The historical top-level
+# clean target does not clean drivers, so audit both clean paths explicitly.
 run_stage clean-top-level 'Top-level clean' make clean
+run_stage clean-drivers 'Driver clean' make clean-drivers
+
+# If either cleanup fails, stop before any build stage can mistake stale outputs
+# for current results. The workflow uploads the partial report with if: always().
+if [ "${stage_results[clean-top-level]}" != "PASS" ] || \
+   [ "${stage_results[clean-drivers]}" != "PASS" ]; then
+    finalize_report
+    echo 'Cleanup failed; refusing to audit potentially stale build artifacts.' >&2
+    exit 2
+fi
+
+# driver/makefile clean removes objects and shared libraries but intentionally
+# leaves driver/build/. Remove it so individual driver stages always start from
+# the same state and cannot inherit an output directory from an earlier run.
+rm -rf "$CPSYCLE/driver/build"
 
 # Build libraries in dependency order so each layer has an independent result.
 run_stage core-container 'Core: container' make -C container/src
@@ -90,59 +170,39 @@ run_stage ui-x11 'UI: X11/Xft' make -C ui/src
 run_stage core-luaui 'Core: Lua UI' make -C luaui/src
 run_stage core-audio 'Core: audio engine' make -C audio/src
 
-# Linux drivers are checked independently.
-run_stage driver-alsa 'Driver: ALSA' make -C driver/alsa
-run_stage driver-alsamidi 'Driver: ALSA MIDI' make -C driver/alsamidi
-run_stage driver-jack 'Driver: JACK' make -C driver/jack
-run_stage driver-sdl2 'Driver: SDL2' make -C driver/sdl2
-run_stage driver-evjoystick 'Driver: event joystick' make -C driver/evjoystick
+# Linux drivers are still executed independently. If they return nonzero while
+# core prerequisites are unavailable, report BLOCKED rather than mislabelling
+# the downstream failure as a driver-specific FAIL.
+run_stage_with_prereqs driver-alsa 'Driver: ALSA' 'core-container,core-dsp' make -C driver/alsa
+run_stage_with_prereqs driver-alsamidi 'Driver: ALSA MIDI' 'core-container,core-dsp' make -C driver/alsamidi
+run_stage_with_prereqs driver-jack 'Driver: JACK' 'core-container,core-dsp' make -C driver/jack
+run_stage_with_prereqs driver-sdl2 'Driver: SDL2' 'core-container,core-dsp' make -C driver/sdl2
+run_stage_with_prereqs driver-evjoystick 'Driver: event joystick' 'core-container,core-dsp' make -C driver/evjoystick
 
-# Smaller executable first, then the host and native machines.
-run_stage player 'psyplayer' make player
-run_stage host 'Native X11 host' make host
-run_stage plugins 'Native plugin set' make plugins
-run_stage drivers-aggregate 'Aggregate Linux drivers' make drivers
-run_stage full-build 'Top-level make all' make all
+# Smaller executable first, then the host and native machines. They are still
+# exercised even when prerequisites failed, but nonzero downstream results are
+# classified as BLOCKED to preserve the causal distinction in summary.md.
+run_stage_with_prereqs player 'psyplayer' 'core-container,core-dsp,core-audio' make player
+run_stage_with_prereqs host 'Native X11 host' 'core-container,core-dsp,core-audio,ui-x11,core-luaui' make host
+run_stage_with_prereqs plugins 'Native plugin set' 'core-container,core-dsp' make plugins
+run_stage_with_prereqs drivers-aggregate 'Aggregate Linux drivers' 'core-container,core-dsp' make drivers
+run_stage_with_prereqs full-build 'Top-level make all' 'core-container,core-dsp,core-audio' make all
 
-# Prepend the compact status table so the report is readable without opening logs.
-TMP="$OUT/summary.tmp"
-{
-    sed -n '1,/## pkg-config integration points/p' "$REPORT"
-    # Environment table already follows the heading; include through its blank line.
-} > /dev/null
+finalize_report
 
-TABLE="$OUT/status-table.md"
-{
-    echo '## Stage status'
-    echo
-    echo '| stage | result | exit | log |'
-    echo '| --- | --- | ---: | --- |'
-    printf '%s\n' "${status_rows[@]}"
-    echo
-} > "$TABLE"
+# The harness deliberately runs every stage before deciding success. Unlike the
+# original audit script, it does not unconditionally return zero: any FAIL or
+# BLOCKED build stage makes the command fail after the complete report exists.
+audit_rc=0
+for id in "${build_stage_ids[@]}"; do
+    if [ "${stage_results[$id]}" != "PASS" ]; then
+        audit_rc=1
+        break
+    fi
+done
 
-python3 - "$REPORT" "$TABLE" <<'PY'
-from pathlib import Path
-import sys
-report = Path(sys.argv[1])
-table = Path(sys.argv[2]).read_text()
-text = report.read_text()
-needle = '## Environment\n'
-pos = text.find(needle)
-if pos == -1:
-    raise SystemExit('Environment heading missing')
-# Put stage status after the pkg-config table, before stage details. A simple
-# marker at the first stage heading is deterministic for this script.
-first_stage = text.find('## Top-level clean')
-if first_stage == -1:
-    raise SystemExit('First stage heading missing')
-text = text[:first_stage] + table + text[first_stage:]
-report.write_text(text)
-PY
+if [ "$audit_rc" -ne 0 ]; then
+    echo 'Build audit completed with failing or blocked stages; see summary.md.' >&2
+fi
 
-rm -f "$TABLE" "$TMP"
-
-# The audit intentionally exits success even when build stages fail. Individual
-# exit codes are the evidence Phase 2 is collecting; CI failure would hide later
-# stages and make the report less useful.
-exit 0
+exit "$audit_rc"
