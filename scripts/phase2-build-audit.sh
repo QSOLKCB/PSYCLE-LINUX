@@ -90,6 +90,67 @@ run_stage() {
     run_stage_with_prereqs "$id" "$label" "" "$@"
 }
 
+purge_untracked_native_artifacts() {
+    local artifact rel
+    local tracked_match=0
+
+    while IFS= read -r -d '' artifact; do
+        rel="${artifact#$ROOT/}"
+        if git -C "$ROOT" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1; then
+            printf 'Refusing to remove Git-tracked native artifact: %s\n' "$rel" >&2
+            tracked_match=1
+            continue
+        fi
+        rm -f -- "$artifact"
+        printf 'Removed stale native artifact: %s\n' "$rel"
+    done < <(
+        find "$CPSYCLE" -type f \
+            \( -name '*.o' -o -name '*.a' -o -name '*.so' -o -name '*.lo' -o -name '*.gch' \
+               -o -name 'psycle' -o -name 'psyplayer' \) \
+            -print0
+    )
+
+    # The historical driver clean removes files inside this generated directory
+    # but leaves the directory itself behind. Preserve a tracked directory tree
+    # if one is ever introduced; otherwise remove it to reproduce a fresh clone.
+    if git -C "$ROOT" ls-files -- 'cpsycle/driver/build/*' | grep -q .; then
+        printf 'Refusing to remove cpsycle/driver/build because it contains Git-tracked files.\n' >&2
+        tracked_match=1
+    else
+        rm -rf "$CPSYCLE/driver/build"
+        printf 'Removed generated directory: cpsycle/driver/build\n'
+    fi
+
+    return "$tracked_match"
+}
+
+run_artifact_purge_stage() {
+    local id='clean-artifacts'
+    local label='Generated artifact purge'
+    local log_name="${id}.log"
+    local log="$OUT/logs/$log_name"
+
+    printf '## %s\n\n' "$label" >> "$DETAILS"
+    printf 'Command: `%s`\n\n' 'purge untracked native build artifacts' >> "$DETAILS"
+
+    set +e
+    purge_untracked_native_artifacts >"$log" 2>&1
+    local rc=$?
+    set -e
+
+    local result='PASS'
+    if [ "$rc" -ne 0 ]; then
+        result='FAIL'
+    fi
+    record_stage "$id" "$label" "$result" "$rc" "$log_name"
+
+    printf 'Result: `%s`\n\n' "$result" >> "$DETAILS"
+    printf 'Exit code: `%s`\n\n' "$rc" >> "$DETAILS"
+    printf 'Last 80 log lines:\n\n```text\n' >> "$DETAILS"
+    tail -n 80 "$log" >> "$DETAILS" || true
+    printf '\n```\n\n' >> "$DETAILS"
+}
+
 record_environment() {
     {
         echo '# PSYCLE-LINUX Phase 2 Build Audit'
@@ -141,24 +202,22 @@ finalize_report() {
 
 record_environment
 
-# A repeatable audit must not reuse stale outputs. The historical top-level
-# clean target does not clean drivers, so audit both clean paths explicitly.
+# A repeatable audit must not reuse stale outputs. Run the historical clean
+# targets first, then purge generated native artifacts those makefiles miss
+# (including nested plugin objects and flattened X11 UI objects).
 run_stage clean-top-level 'Top-level clean' make clean
 run_stage clean-drivers 'Driver clean' make clean-drivers
+run_artifact_purge_stage
 
-# If either cleanup fails, stop before any build stage can mistake stale outputs
-# for current results. The workflow uploads the partial report with if: always().
+# If any cleanup stage fails, stop before a build stage can mistake stale output
+# for current evidence. The workflow uploads the partial report with if: always().
 if [ "${stage_results[clean-top-level]}" != "PASS" ] || \
-   [ "${stage_results[clean-drivers]}" != "PASS" ]; then
+   [ "${stage_results[clean-drivers]}" != "PASS" ] || \
+   [ "${stage_results[clean-artifacts]}" != "PASS" ]; then
     finalize_report
     echo 'Cleanup failed; refusing to audit potentially stale build artifacts.' >&2
     exit 2
 fi
-
-# driver/makefile clean removes objects and shared libraries but intentionally
-# leaves driver/build/. Remove it so individual driver stages always start from
-# the same state and cannot inherit an output directory from an earlier run.
-rm -rf "$CPSYCLE/driver/build"
 
 # Build libraries in dependency order so each layer has an independent result.
 run_stage core-container 'Core: container' make -C container/src
