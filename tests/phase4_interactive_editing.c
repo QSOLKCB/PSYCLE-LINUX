@@ -16,6 +16,7 @@
 #include <machines.h>
 #include <pattern.h>
 #include <patterns.h>
+#include <player.h>
 #include <plugincatcher.h>
 #include <sequencecmds.h>
 #include <song.h>
