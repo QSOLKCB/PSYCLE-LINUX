@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <instruments.h>
 #include <machine.h>
 #include <machinefactory.h>
 #include <pattern.h>
@@ -19,6 +20,8 @@
 #include <plugincatcher.h>
 #include <sample.h>
 #include <samples.h>
+#include <sequence.h>
+#include <sequenceentry.h>
 #include <song.h>
 #include <songio.h>
 #include <wire.h>
@@ -36,22 +39,27 @@ static int fail(const char* message)
 	return 1;
 }
 
-static void write_u16_le(FILE* file, uint16_t value)
+static int write_bytes(FILE* file, const void* data, size_t size)
+{
+	return fwrite(data, 1, size, file) == size ? 0 : -1;
+}
+
+static int write_u16_le(FILE* file, uint16_t value)
 {
 	unsigned char bytes[2];
 	bytes[0] = (unsigned char)(value & 0xffu);
 	bytes[1] = (unsigned char)((value >> 8) & 0xffu);
-	fwrite(bytes, 1, sizeof(bytes), file);
+	return write_bytes(file, bytes, sizeof(bytes));
 }
 
-static void write_u32_le(FILE* file, uint32_t value)
+static int write_u32_le(FILE* file, uint32_t value)
 {
 	unsigned char bytes[4];
 	bytes[0] = (unsigned char)(value & 0xffu);
 	bytes[1] = (unsigned char)((value >> 8) & 0xffu);
 	bytes[2] = (unsigned char)((value >> 16) & 0xffu);
 	bytes[3] = (unsigned char)((value >> 24) & 0xffu);
-	fwrite(bytes, 1, sizeof(bytes), file);
+	return write_bytes(file, bytes, sizeof(bytes));
 }
 
 static int write_fixture_wav(const char* path)
@@ -59,32 +67,38 @@ static int write_fixture_wav(const char* path)
 	FILE* file;
 	uint32_t data_bytes;
 	uint32_t i;
+	int failed;
 
 	file = fopen(path, "wb");
 	if (!file) {
 		return fail("could not create generated WAV fixture");
 	}
 	data_bytes = FIXTURE_FRAMES * 2u;
-	fwrite("RIFF", 1, 4, file);
-	write_u32_le(file, 36u + data_bytes);
-	fwrite("WAVE", 1, 4, file);
-	fwrite("fmt ", 1, 4, file);
-	write_u32_le(file, 16u);
-	write_u16_le(file, 1u);
-	write_u16_le(file, 1u);
-	write_u32_le(file, FIXTURE_RATE);
-	write_u32_le(file, FIXTURE_RATE * 2u);
-	write_u16_le(file, 2u);
-	write_u16_le(file, 16u);
-	fwrite("data", 1, 4, file);
-	write_u32_le(file, data_bytes);
-	for (i = 0; i < FIXTURE_FRAMES; ++i) {
+	failed = 0;
+	failed |= write_bytes(file, "RIFF", 4);
+	failed |= write_u32_le(file, 36u + data_bytes);
+	failed |= write_bytes(file, "WAVE", 4);
+	failed |= write_bytes(file, "fmt ", 4);
+	failed |= write_u32_le(file, 16u);
+	failed |= write_u16_le(file, 1u);
+	failed |= write_u16_le(file, 1u);
+	failed |= write_u32_le(file, FIXTURE_RATE);
+	failed |= write_u32_le(file, FIXTURE_RATE * 2u);
+	failed |= write_u16_le(file, 2u);
+	failed |= write_u16_le(file, 16u);
+	failed |= write_bytes(file, "data", 4);
+	failed |= write_u32_le(file, data_bytes);
+	for (i = 0; i < FIXTURE_FRAMES && !failed; ++i) {
 		double phase;
 		int16_t sample;
 
 		phase = 2.0 * M_PI * FIXTURE_FREQ * (double)i / (double)FIXTURE_RATE;
 		sample = (int16_t)lrint(sin(phase) * 12000.0);
-		write_u16_le(file, (uint16_t)sample);
+		failed |= write_u16_le(file, (uint16_t)sample);
+	}
+	if (failed || ferror(file)) {
+		fclose(file);
+		return fail("short write while generating WAV fixture");
 	}
 	if (fclose(file) != 0) {
 		return fail("could not finalize generated WAV fixture");
@@ -125,10 +139,12 @@ static double sample_energy(const psy_audio_Sample* sample)
 static int verify_sample_song(psy_audio_Song* song, int verify_metadata)
 {
 	psy_audio_Sample* sample;
+	psy_audio_Instrument* instrument;
 	psy_audio_Machine* machine;
 	psy_audio_Pattern* pattern;
 	psy_audio_PatternEvent event;
 	psy_audio_SequenceCursor cursor;
+	psy_audio_SequenceEntry* sequence_entry;
 
 	sample = psy_audio_samples_at(psy_audio_song_samples(song),
 		psy_audio_sampleindex_make(0, 0));
@@ -145,6 +161,12 @@ static int verify_sample_song(psy_audio_Song* song, int verify_metadata)
 		return fail("sample PCM is silent or missing");
 	}
 
+	instrument = psy_audio_instruments_at(psy_audio_song_instruments(song),
+		psy_audio_instrumentindex_make(0, 0));
+	if (!instrument) {
+		return fail("sample instrument 0:0 is missing");
+	}
+
 	machine = psy_audio_machines_at(psy_audio_song_machines(song), 0);
 	if (!machine || psy_audio_machine_type(machine) != psy_audio_SAMPLER) {
 		return fail("WAV import did not create the built-in sampler");
@@ -158,6 +180,16 @@ static int verify_sample_song(psy_audio_Song* song, int verify_metadata)
 	if (!pattern) {
 		return fail("WAV import did not create pattern 0");
 	}
+	sequence_entry = psy_audio_sequence_entry(psy_audio_song_sequence(song),
+		psy_audio_orderindex_make(0, 0));
+	if (!sequence_entry || sequence_entry->type != psy_audio_SEQUENCEENTRY_PATTERN) {
+		return fail("sequence order 0:0 is not a pattern entry");
+	}
+	if (psy_audio_sequencepatternentry_patternslot(
+			(const psy_audio_SequencePatternEntry*)sequence_entry) != 0) {
+		return fail("sequence order 0:0 does not reference pattern 0");
+	}
+
 	cursor = fixture_cursor(song);
 	event = psy_audio_pattern_event_at_cursor(pattern, cursor);
 	if (event.note != 48) {
@@ -232,8 +264,16 @@ int main(int argc, char** argv)
 		fprintf(stderr, "usage: %s OUTPUT_DIRECTORY\n", argv[0]);
 		return 2;
 	}
-	snprintf(wav_path, sizeof(wav_path), "%s/phase4-generated-sine.wav", argv[1]);
-	snprintf(psy_path, sizeof(psy_path), "%s/phase4-sample-workflow.psy", argv[1]);
+	rc = snprintf(wav_path, sizeof(wav_path), "%s/phase4-generated-sine.wav",
+		argv[1]);
+	if (rc < 0 || rc >= (int)sizeof(wav_path)) {
+		return fail("output WAV path is too long");
+	}
+	rc = snprintf(psy_path, sizeof(psy_path), "%s/phase4-sample-workflow.psy",
+		argv[1]);
+	if (rc < 0 || rc >= (int)sizeof(psy_path)) {
+		return fail("output PSY path is too long");
+	}
 
 	if (write_fixture_wav(wav_path) != 0) {
 		return 1;
