@@ -73,6 +73,9 @@ void dsp_mul(float *dst, uintptr_t num, float mul)
 
 void dsp_movmul(float *src, float *dst, intptr_t num, float mul)
 {
+	if (num <= 0) {
+		return;
+	}
 	--src;
 	--dst;
 	do
