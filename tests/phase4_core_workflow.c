@@ -13,11 +13,13 @@
 
 #include <machine.h>
 #include <machinefactory.h>
+#include <midiconfig.h>
 #include <midiinput.h>
 #include <pattern.h>
 #include <patterns.h>
 #include <player.h>
 #include <plugincatcher.h>
+#include <properties.h>
 #include <song.h>
 #include <songio.h>
 #include <wire.h>
@@ -146,6 +148,14 @@ static psy_audio_Song* load_song(psy_audio_MachineFactory* factory,
 	return song;
 }
 
+static void dispose_midi_fixture(psy_audio_MidiInput* midiinput,
+	psy_audio_MidiViewConfig* view_config, psy_Property* config_root)
+{
+	psy_audio_midiinput_dispose(midiinput);
+	psy_audio_midiviewconfig_dispose(view_config);
+	psy_property_deallocate(config_root);
+}
+
 int main(int argc, char** argv)
 {
 	char first_path[4096];
@@ -154,6 +164,8 @@ int main(int argc, char** argv)
 	psy_audio_PluginCatcher catcher;
 	psy_audio_MachineFactory factory;
 	psy_audio_MidiInput midiinput;
+	psy_audio_MidiViewConfig midi_view_config;
+	psy_Property* midi_config_root;
 	psy_audio_Machine* sampler;
 	psy_audio_Song* song;
 	psy_audio_Song* loaded;
@@ -201,39 +213,48 @@ int main(int argc, char** argv)
 
 	/*
 	** Exercise the same MIDI translator used by trackergrid_on_midi_cmds().
+	** The real host gives MidiInput a MidiViewConfig; construct the same
+	** configuration boundary here instead of using a test-only shortcut.
 	** A MIDI Note On on channel 1 is converted into Psycle pattern data using
 	** the selected sampler as the generator. The harness then performs the
 	** pattern insertion directly so this core test does not require X11 widgets.
 	*/
-	psy_audio_midiinput_init(&midiinput, song, NULL);
+	midi_config_root = psy_property_allocinit_key(NULL);
+	if (!midi_config_root) {
+		psy_audio_song_deallocate(song);
+		return fail("could not allocate MIDI configuration root");
+	}
+	psy_audio_midiviewconfig_init(&midi_view_config, midi_config_root);
+	psy_audio_midiinput_init(&midiinput, song,
+		psy_audio_midiviewconfig_base(&midi_view_config));
 	midi.byte0 = 0x90;
 	midi.byte1 = FIXTURE_NOTE;
 	midi.byte2 = FIXTURE_VELOCITY;
 	psy_audio_patternevent_clear(&event);
 	if (!psy_audio_midiinput_work_input(&midiinput, midi,
 			psy_audio_song_machines(song), &event)) {
-		psy_audio_midiinput_dispose(&midiinput);
+		dispose_midi_fixture(&midiinput, &midi_view_config, midi_config_root);
 		psy_audio_song_deallocate(song);
 		return fail("MIDI Note On was not translated to a Psycle pattern event");
 	}
 	if (event.note != FIXTURE_NOTE || event.mach != FIXTURE_MACHINE) {
-		psy_audio_midiinput_dispose(&midiinput);
+		dispose_midi_fixture(&midiinput, &midi_view_config, midi_config_root);
 		psy_audio_song_deallocate(song);
 		return fail("MIDI translator returned unexpected pattern data");
 	}
 	pattern = psy_audio_patterns_at(psy_audio_song_patterns(song), 0);
 	if (!pattern) {
-		psy_audio_midiinput_dispose(&midiinput);
+		dispose_midi_fixture(&midiinput, &midi_view_config, midi_config_root);
 		psy_audio_song_deallocate(song);
 		return fail("synthetic song has no default pattern");
 	}
 	cursor = fixture_cursor(song);
 	if (!psy_audio_pattern_set_event_at_cursor(pattern, cursor, event)) {
-		psy_audio_midiinput_dispose(&midiinput);
+		dispose_midi_fixture(&midiinput, &midi_view_config, midi_config_root);
 		psy_audio_song_deallocate(song);
 		return fail("could not insert MIDI-derived event into pattern 0");
 	}
-	psy_audio_midiinput_dispose(&midiinput);
+	dispose_midi_fixture(&midiinput, &midi_view_config, midi_config_root);
 
 	if (verify_song(song) != 0 || save_song(song, first_path) != 0) {
 		psy_audio_song_deallocate(song);
