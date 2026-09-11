@@ -18,6 +18,17 @@
 #include "../../detail/trace.h"
 
 
+static void machinecommand_dispose_detached(psy_audio_Machine** machine,
+	bool* detached)
+{
+	if (*detached && *machine) {
+		psy_audio_machine_dispose(*machine);
+		free(*machine);
+		*machine = NULL;
+		*detached = FALSE;
+	}
+}
+
 /* InsertMachineCommand */
 
 /* vtable */
@@ -56,13 +67,15 @@ InsertMachineCommand* insertmachinecommand_allocinit(psy_audio_Machines*
 		rv->machine = machine;
 		rv->slot = slot;
 		rv->restoreconnection = FALSE;
+		rv->machine_detached = TRUE;
 		psy_audio_connections_init(&rv->connections);
 	}
 	return rv;
 }
 
 void insertmachinecommand_dispose(InsertMachineCommand* self)
-{		
+{
+	machinecommand_dispose_detached(&self->machine, &self->machine_detached);
 	psy_audio_connections_dispose(&self->connections);
 }
 
@@ -72,6 +85,7 @@ void insertmachinecommand_execute(InsertMachineCommand* self,
 	self->machines->preventundoredo = TRUE;
 	psy_audio_machines_insert(self->machines, self->slot,
 		self->machine);
+	self->machine_detached = FALSE;
 	if (self->restoreconnection) {
 		psy_audio_exclusivelock_enter();
 		psy_audio_connections_copy(&self->machines->connections,
@@ -92,10 +106,11 @@ void insertmachinecommand_revert(InsertMachineCommand* self)
 		psy_audio_connections_init(&self->connections);
 		psy_audio_connections_copy(&self->connections, &self->machines->connections);
 		self->restoreconnection = TRUE;
-		self->machine = psy_audio_machine_clone(machine);
+		self->machine = machine;
 		self->machines->preventundoredo = TRUE;
-		psy_audio_machines_remove(self->machines, self->slot, FALSE);
+		psy_audio_machines_erase(self->machines, self->slot);
 		self->machines->preventundoredo = FALSE;
+		self->machine_detached = TRUE;
 	}	
 }
 
@@ -137,13 +152,15 @@ DeleteMachineCommand* deletemachinecommand_allocinit(
 		rv->machines = machines;
 		rv->machine = NULL;
 		rv->slot = slot;
+		rv->machine_detached = FALSE;
 		psy_audio_connections_init(&rv->connections);
 	}
 	return rv;
 }
 
 void deletemachinecommand_dispose(DeleteMachineCommand* self)
-{	
+{
+	machinecommand_dispose_detached(&self->machine, &self->machine_detached);
 	psy_audio_connections_dispose(&self->connections);
 }
 
@@ -156,20 +173,24 @@ void deletemachinecommand_execute(DeleteMachineCommand* self,
 	if (machine) {
 		psy_audio_connections_dispose(&self->connections);
 		psy_audio_connections_init(&self->connections);
-		psy_audio_connections_copy(&self->connections, &self->machines->connections);		
-		self->machine = psy_audio_machine_clone(machine);
+		psy_audio_connections_copy(&self->connections, &self->machines->connections);
+		self->machine = machine;
 		self->machines->preventundoredo = TRUE;
-		psy_audio_machines_remove(self->machines, self->slot, TRUE);
+		psy_audio_connections_rewire(&self->machines->connections,
+			psy_audio_connections_at(&self->machines->connections, self->slot));
+		psy_audio_machines_erase(self->machines, self->slot);
 		self->machines->preventundoredo = FALSE;
+		self->machine_detached = TRUE;
 	}
 }
 
 void deletemachinecommand_revert(DeleteMachineCommand* self)
 {
-	if (self->machine) {
+	if (self->machine && self->machine_detached) {
 		self->machines->preventundoredo = TRUE;
 		psy_audio_machines_insert(self->machines, self->slot,
 			self->machine);
+		self->machine_detached = FALSE;
 		psy_audio_exclusivelock_enter();
 		psy_audio_connections_copy(&self->machines->connections,
 			&self->connections);
