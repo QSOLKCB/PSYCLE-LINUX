@@ -3,7 +3,7 @@ name: Phase 2 Linux build audit
 on:
   push:
     branches:
-      - phase-2/modern-linux-build-audit
+      - main
     paths:
       - 'cpsycle/**'
       - 'scripts/phase2-build-audit.sh'
@@ -48,15 +48,25 @@ jobs:
             libfluidsynth-dev
 
       - name: Run build audit
+        shell: bash
         run: |
           chmod +x scripts/phase2-build-audit.sh
+          set +e
           scripts/phase2-build-audit.sh build-audit
-          cat build-audit/summary.md
+          audit_rc=$?
+          set -e
+
+          if [ -f build-audit/summary.md ]; then
+            cat build-audit/summary.md
+          fi
+
+          exit "$audit_rc"
 
       - name: Upload complete audit logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: phase2-linux-build-audit
           path: build-audit/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
