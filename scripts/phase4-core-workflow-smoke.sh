@@ -19,8 +19,11 @@ SUMMARY="$OUT/summary.md"
 # Phase 4 builds on the already-audited Phase 3 libraries. Keep this command
 # deliberately close to cpsycle/player/src/makefile so it exercises the same
 # static-library boundary rather than inventing a parallel test build system.
+# GNU11 is intentional: the imported Linux code uses POSIX/GNU interfaces such
+# as strdup and the production makefiles build in GNU C mode rather than strict
+# ISO C11 mode.
 gcc \
-    -std=c11 \
+    -std=gnu11 \
     -Wall -Wextra -Werror=implicit-function-declaration \
     -I"$CPSYCLE/audio/src" \
     -I"$CPSYCLE/driver" \
