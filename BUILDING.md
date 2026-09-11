@@ -160,7 +160,7 @@ The imported makefiles do not use all of those names consistently. Phase 2 recor
 
 ## Cleaning
 
-A repeatable audit must start without stale outputs. The imported top-level `make clean` target does **not** clean the driver tree, so the audit performs both cleanup paths:
+A repeatable audit must start without stale outputs. The imported top-level `make clean` target does **not** clean the driver tree, so the audit first performs both historical cleanup paths:
 
 ```bash
 cd cpsycle
@@ -168,9 +168,13 @@ make clean
 make clean-drivers
 ```
 
-After a successful driver clean, the audit also removes `cpsycle/driver/build/`. The historical driver clean target removes objects and shared libraries but leaves that directory itself behind; retaining it would hide the clean-checkout output-directory failure on subsequent runs.
+Those historical rules are not complete enough for a repeatability claim. Some generated objects can survive in nested plugin directories or under output names the makefiles no longer enumerate. After both clean targets pass, the audit therefore runs a separate **Generated artifact purge** stage.
 
-If either required clean command fails, the audit writes the partial report and exits before running build stages. It will not treat possibly stale artifacts as fresh evidence.
+That purge scans `cpsycle/` for untracked native build outputs (`*.o`, `*.a`, `*.so`, `*.lo`, `*.gch`, plus generated `psycle`/`psyplayer` executables) and removes them regardless of directory depth. It also removes the generated `cpsycle/driver/build/` directory so an earlier run cannot hide the clean-checkout driver output-path failure.
+
+The purge is deliberately Git-aware: if any matching artifact is tracked by the repository, the audit refuses to delete it and treats cleanup as failed. This prevents the repeatability step from silently removing baseline content.
+
+If either historical clean command or the generated-artifact purge fails, the audit writes the partial report and exits before running build stages. It will not treat possibly stale artifacts as fresh evidence.
 
 ## PASS, FAIL, and BLOCKED
 
