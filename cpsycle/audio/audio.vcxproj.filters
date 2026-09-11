@@ -1,0 +1,744 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="file">
+      <UniqueIdentifier>{38b5d67c-aaa1-4bce-8c62-793b7e62ba2b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="machine">
+      <UniqueIdentifier>{d7cc8b22-df41-43a2-9f9d-a511e57e37aa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="machine\instrument">
+      <UniqueIdentifier>{7959ad80-f848-4e30-a2ed-f47b7f16a992}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="pattern">
+      <UniqueIdentifier>{6c767622-9bbe-439a-bf6b-a8fc1d4b0b2b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="player">
+      <UniqueIdentifier>{fbfc47be-ce8d-4eab-a02c-bb73aa617bd5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="machine\internal">
+      <UniqueIdentifier>{03cd3d0f-9989-41ca-b548-726ef480b1ef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="machine\internal\sampler">
+      <UniqueIdentifier>{24bafd94-fdf3-49f7-bf79-ac0ef85c9687}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="machine\plugins">
+      <UniqueIdentifier>{5baabc81-91bd-49e9-9ef3-e6ce933b52a3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="machine\plugins\lua">
+      <UniqueIdentifier>{1bd43181-d256-4ba9-9a44-38f425f3293e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sequence">
+      <UniqueIdentifier>{d563655f-0d94-4128-a342-680e1db86d6b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="configuration">
+      <UniqueIdentifier>{b967568f-9381-4f89-bc77-c33933cf5cc4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="common">
+      <UniqueIdentifier>{be461cd4-a728-43fb-b338-daa183829159}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\library.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\waveio.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\songio.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\machine.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\machinefactory.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\machineinfo.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\machineparam.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\machineproxy.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\machines.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\instrument.c">
+      <Filter>machine\instrument</Filter>
+    </ClCompile>
+    <ClCompile Include="src\instruments.c">
+      <Filter>machine\instrument</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sample.c">
+      <Filter>machine\instrument</Filter>
+    </ClCompile>
+    <ClCompile Include="src\samples.c">
+      <Filter>machine\instrument</Filter>
+    </ClCompile>
+    <ClCompile Include="src\pattern.c">
+      <Filter>pattern</Filter>
+    </ClCompile>
+    <ClCompile Include="src\patternentry.c">
+      <Filter>pattern</Filter>
+    </ClCompile>
+    <ClCompile Include="src\patternevent.c">
+      <Filter>pattern</Filter>
+    </ClCompile>
+    <ClCompile Include="src\patterns.c">
+      <Filter>pattern</Filter>
+    </ClCompile>
+    <ClCompile Include="src\presetio.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\preset.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\presets.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\plugincatcher.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\patternio.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\psy2converter.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\psy3loader.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\psy3saver.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\kbddriver.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\eventdrivers.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\player.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\silentdriver.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\midiinput.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\midiconfig.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\connections.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\exclusivelock.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ticktimer.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\waveosc.c">
+      <Filter>machine\instrument</Filter>
+    </ClCompile>
+    <ClCompile Include="src\waveosctables.c">
+      <Filter>machine\instrument</Filter>
+    </ClCompile>
+    <ClCompile Include="src\wavsongio.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\wire.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\logicalchannels.c">
+      <Filter>pattern</Filter>
+    </ClCompile>
+    <ClCompile Include="src\custommachine.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\cputimeclock.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sequencer.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\buffer.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\buffercontext.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\activechannels.c">
+      <Filter>pattern</Filter>
+    </ClCompile>
+    <ClCompile Include="$(SolutionDir)dsp\src\operations.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\luaarray.c">
+      <Filter>machine\plugins\lua</Filter>
+    </ClCompile>
+    <ClCompile Include="src\luadspmath.c">
+      <Filter>machine\plugins\lua</Filter>
+    </ClCompile>
+    <ClCompile Include="src\luafilter.c">
+      <Filter>machine\plugins\lua</Filter>
+    </ClCompile>
+    <ClCompile Include="src\luamidinotes.c">
+      <Filter>machine\plugins\lua</Filter>
+    </ClCompile>
+    <ClCompile Include="src\luaplugin.c">
+      <Filter>machine\plugins\lua</Filter>
+    </ClCompile>
+    <ClCompile Include="src\luawaveosc.c">
+      <Filter>machine\plugins\lua</Filter>
+    </ClCompile>
+    <ClCompile Include="src\luaenvelope.c">
+      <Filter>machine\plugins\lua</Filter>
+    </ClCompile>
+    <ClCompile Include="src\array.c">
+      <Filter>machine\plugins\lua</Filter>
+    </ClCompile>
+    <ClCompile Include="src\xmsampler.c">
+      <Filter>machine\internal\sampler</Filter>
+    </ClCompile>
+    <ClCompile Include="src\xmsamplerchannel.c">
+      <Filter>machine\internal\sampler</Filter>
+    </ClCompile>
+    <ClCompile Include="src\xmsamplervoice.c">
+      <Filter>machine\internal\sampler</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sampler.c">
+      <Filter>machine\internal\sampler</Filter>
+    </ClCompile>
+    <ClCompile Include="src\dummy.c">
+      <Filter>machine\internal</Filter>
+    </ClCompile>
+    <ClCompile Include="src\duplicator.c">
+      <Filter>machine\internal</Filter>
+    </ClCompile>
+    <ClCompile Include="src\duplicator2.c">
+      <Filter>machine\internal</Filter>
+    </ClCompile>
+    <ClCompile Include="src\duplicatormap.c">
+      <Filter>machine\internal</Filter>
+    </ClCompile>
+    <ClCompile Include="src\mixer.c">
+      <Filter>machine\internal</Filter>
+    </ClCompile>
+    <ClCompile Include="src\master.c">
+      <Filter>machine\internal</Filter>
+    </ClCompile>
+    <ClCompile Include="src\audiorecorder.c">
+      <Filter>machine\internal</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ladspaplugin.c">
+      <Filter>machine\plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="src\plugin.c">
+      <Filter>machine\plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vstplugin.c">
+      <Filter>machine\plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="src\plugin_interface.cpp">
+      <Filter>machine\plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="src\virtualgenerator.c">
+      <Filter>machine\internal\sampler</Filter>
+    </ClCompile>
+    <ClCompile Include="src\xmsongloader.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\itmodule2.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vstplugininterface.c">
+      <Filter>machine\plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vstpluginparam.c">
+      <Filter>machine\plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vstevents.c">
+      <Filter>machine\plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="src\samplerdefs.c">
+      <Filter>machine\internal\sampler</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sampleiterator.c">
+      <Filter>machine\internal\sampler</Filter>
+    </ClCompile>
+    <ClCompile Include="src\xmsongexport.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\psyconvert.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\midiloader.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\midisongexport.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sequence.c">
+      <Filter>sequence</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sequencecmds.c">
+      <Filter>sequence</Filter>
+    </ClCompile>
+    <ClCompile Include="src\trackstate.c">
+      <Filter>pattern</Filter>
+    </ClCompile>
+    <ClCompile Include="src\machinescmds.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\exs24loader.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\audioconfig.c">
+      <Filter>configuration</Filter>
+    </ClCompile>
+    <ClCompile Include="src\paramtranslator.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\psy2loader.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sequenceentry.c">
+      <Filter>sequence</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lysongexport.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sequenceselection.c">
+      <Filter>sequence</Filter>
+    </ClCompile>
+    <ClCompile Include="src\machineselection.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\luaplayer.c">
+      <Filter>machine\plugins\lua</Filter>
+    </ClCompile>
+    <ClCompile Include="src\blockselection.c">
+      <Filter>sequence</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sequencecursor.c">
+      <Filter>sequence</Filter>
+    </ClCompile>
+    <ClCompile Include="src\song.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="src\luaresampler.c">
+      <Filter>machine\plugins\lua</Filter>
+    </ClCompile>
+    <ClCompile Include="src\luawavedata.c">
+      <Filter>machine\plugins\lua</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ladspaparam.c">
+      <Filter>machine\plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ladspainterface.c">
+      <Filter>machine\plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="src\audiodriverplugin.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\eventdriverconfig.c">
+      <Filter>configuration</Filter>
+    </ClCompile>
+    <ClCompile Include="src\eventdriverplugin.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\driverregister.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\audiodrivers.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lv2param.c">
+      <Filter>machine\plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lv2plugin.c">
+      <Filter>machine\plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="src\instprev.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\luamachine.c">
+      <Filter>machine\plugins\lua</Filter>
+    </ClCompile>
+    <ClCompile Include="src\sequencertime.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\fileoutdriver.c">
+      <Filter>file</Filter>
+    </ClCompile>
+    <ClCompile Include="src\plugins.c">
+      <Filter>machine</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hostsequencertime.c">
+      <Filter>player</Filter>
+    </ClCompile>
+    <ClCompile Include="src\jbridgeenabler.c">
+      <Filter>machine\plugins</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\library.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\waveio.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\wavsongio.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\songio.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\psy3saver.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\psy3loader.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\psy2converter.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\presetio.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\machine.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\machinedefs.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\machinefactory.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\machineinfo.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\machineparam.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\machineproxy.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\machines.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\instrument.h">
+      <Filter>machine\instrument</Filter>
+    </ClInclude>
+    <ClInclude Include="src\instruments.h">
+      <Filter>machine\instrument</Filter>
+    </ClInclude>
+    <ClInclude Include="src\samples.h">
+      <Filter>machine\instrument</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sample.h">
+      <Filter>machine\instrument</Filter>
+    </ClInclude>
+    <ClInclude Include="src\pattern.h">
+      <Filter>pattern</Filter>
+    </ClInclude>
+    <ClInclude Include="src\patternentry.h">
+      <Filter>pattern</Filter>
+    </ClInclude>
+    <ClInclude Include="src\patternevent.h">
+      <Filter>pattern</Filter>
+    </ClInclude>
+    <ClInclude Include="src\patterns.h">
+      <Filter>pattern</Filter>
+    </ClInclude>
+    <ClInclude Include="src\presets.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\preset.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\xmdefs.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\xmsongexport.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\wire.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ticktimer.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\silentdriver.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\plugincatcher.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\patternio.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\midiinput.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\midiconfig.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\kbddriver.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\exclusivelock.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\eventdrivers.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\custommachine.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\player.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cputimeclock.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\connections.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\activechannels.h">
+      <Filter>pattern</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sequencer.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\logicalchannels.h">
+      <Filter>pattern</Filter>
+    </ClInclude>
+    <ClInclude Include="src\waveosc.h">
+      <Filter>machine\instrument</Filter>
+    </ClInclude>
+    <ClInclude Include="src\waveosctables.h">
+      <Filter>machine\instrument</Filter>
+    </ClInclude>
+    <ClInclude Include="src\buffer.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\buffercontext.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\cmdsnotes.h">
+      <Filter>pattern</Filter>
+    </ClInclude>
+    <ClInclude Include="src\luaarray.h">
+      <Filter>machine\plugins\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="src\luadspmath.h">
+      <Filter>machine\plugins\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="src\luaenvelope.h">
+      <Filter>machine\plugins\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="src\luafilter.h">
+      <Filter>machine\plugins\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="src\luamidinotes.h">
+      <Filter>machine\plugins\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="src\luaplugin.h">
+      <Filter>machine\plugins\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="src\luawaveosc.h">
+      <Filter>machine\plugins\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="src\array.h">
+      <Filter>machine\plugins\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="src\xmsampler.h">
+      <Filter>machine\internal\sampler</Filter>
+    </ClInclude>
+    <ClInclude Include="src\xmsamplerchannel.h">
+      <Filter>machine\internal\sampler</Filter>
+    </ClInclude>
+    <ClInclude Include="src\xmsamplervoice.h">
+      <Filter>machine\internal\sampler</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sampler.h">
+      <Filter>machine\internal\sampler</Filter>
+    </ClInclude>
+    <ClInclude Include="src\dummy.h">
+      <Filter>machine\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="src\duplicator.h">
+      <Filter>machine\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="src\duplicator2.h">
+      <Filter>machine\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="src\duplicatormap.h">
+      <Filter>machine\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="src\master.h">
+      <Filter>machine\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="src\mixer.h">
+      <Filter>machine\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="src\audiorecorder.h">
+      <Filter>machine\internal</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ladspaplugin.h">
+      <Filter>machine\plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="src\plugin.h">
+      <Filter>machine\plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vstplugin.h">
+      <Filter>machine\plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="src\plugin_interface.h">
+      <Filter>machine\plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="src\virtualgenerator.h">
+      <Filter>machine\internal\sampler</Filter>
+    </ClInclude>
+    <ClInclude Include="src\xmsongloader.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\itmodule2.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vstplugininterface.h">
+      <Filter>machine\plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vstpluginparam.h">
+      <Filter>machine\plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vstevents.h">
+      <Filter>machine\plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="src\samplerdefs.h">
+      <Filter>machine\internal\sampler</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sampleiterator.h">
+      <Filter>machine\internal\sampler</Filter>
+    </ClInclude>
+    <ClInclude Include="src\psyconvert.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\midiloader.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\midisongexport.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sequence.h">
+      <Filter>sequence</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sequencecmds.h">
+      <Filter>sequence</Filter>
+    </ClInclude>
+    <ClInclude Include="src\trackstate.h">
+      <Filter>pattern</Filter>
+    </ClInclude>
+    <ClInclude Include="src\machinescmds.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\exs24loader.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\audioconfig.h">
+      <Filter>configuration</Filter>
+    </ClInclude>
+    <ClInclude Include="src\paramtranslator.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\psy2loader.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sequenceentry.h">
+      <Filter>sequence</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lysongexport.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sequenceselection.h">
+      <Filter>sequence</Filter>
+    </ClInclude>
+    <ClInclude Include="src\machineselection.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\luaplayer.h">
+      <Filter>machine\plugins\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="src\blockselection.h">
+      <Filter>sequence</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sequencecursor.h">
+      <Filter>sequence</Filter>
+    </ClInclude>
+    <ClInclude Include="src\song.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\constants.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="src\luaresampler.h">
+      <Filter>machine\plugins\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="src\luawavedata.h">
+      <Filter>machine\plugins\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ladspaparam.h">
+      <Filter>machine\plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ladspainterface.h">
+      <Filter>machine\plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="src\audiodriverplugin.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\eventdriverconfig.h">
+      <Filter>configuration</Filter>
+    </ClInclude>
+    <ClInclude Include="src\eventdriverplugin.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\driverregister.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\audiodrivers.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lv2param.h">
+      <Filter>machine\plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lv2plugin.h">
+      <Filter>machine\plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="src\instprev.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\luamachine.h">
+      <Filter>machine\plugins\lua</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sequencertime.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\fileoutdriver.h">
+      <Filter>file</Filter>
+    </ClInclude>
+    <ClInclude Include="src\plugins.h">
+      <Filter>machine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hostsequencertime.h">
+      <Filter>player</Filter>
+    </ClInclude>
+    <ClInclude Include="src\jbridgeenabler.h">
+      <Filter>machine\plugins</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

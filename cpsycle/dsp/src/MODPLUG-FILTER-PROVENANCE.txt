@@ -1,0 +1,16 @@
+ModPlug filter source provenance notice
+
+`cpsycle/dsp/src/filter.c` explicitly marks the IT-filter implementation with `Code from Modplug`.
+
+Historical ModPlug/libmodplug documentation records that Olivier Lapicque, the author of ModPlug, placed his sound-rendering code in the public domain. libmodplug was subsequently based on that code. This provenance record preserves that redistribution history beside the copied filter implementation instead of treating the code as solely Psycle-authored.
+
+Recorded source lineage:
+- ModPlug / Olivier Lapicque sound-rendering code
+- copied/adapted IT-filter implementation in `cpsycle/dsp/src/filter.c`
+
+Historical reference wording preserved by libmodplug distributions:
+`Olivier Lapicque, author of Modplug ... has placed his sound rendering code in the public domain.`
+
+The surrounding Psycle source remains governed by its own notices. This file documents only the separately attributed ModPlug-derived filter code and does not make a broader licensing claim about unrelated OpenMPT or later ModPlug-derived projects.
+
+This is a provenance record only; no filter or DSP behaviour is changed.

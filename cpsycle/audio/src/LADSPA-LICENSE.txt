@@ -1,0 +1,18 @@
+LADSPA 1.1 API header licensing
+
+Component: Linux Audio Developer's Simple Plugin API (LADSPA) Version 1.1
+File: ladspa.h
+Copyright: Copyright (C) 2000-2002 Richard W.E. Furse, Paul Barton-Davis, Psycledelics Westerfeld.
+License: GNU Lesser General Public License, version 2.1 or (at your option) any later version (LGPL-2.1-or-later).
+
+The authoritative component notice is retained at the top of ladspa.h. This file exists to make the component/license boundary explicit in the PSYCLE-LINUX public baseline.
+
+The complete GNU LGPL version 2.1 text is available from the Free Software Foundation at:
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
+
+A verbatim copy of the GNU LGPL version 2.1 text is also present elsewhere in this historical source tree at:
+cpsycle/external-packages/7za/copying.txt
+
+That existing copy belongs to the historical 7-Zip package; this component-local notice is what associates ladspa.h specifically with LGPL-2.1-or-later.
+
+No change to the license or copyright notice in ladspa.h is intended by this file.
