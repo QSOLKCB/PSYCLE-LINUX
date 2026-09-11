@@ -70,8 +70,7 @@ jobs:
             libfluidsynth-dev \
             xvfb \
             xauth \
-            xdotool \
-            x11-utils
+            xdotool
           sudo chown -R runner:runner "$HOME/.cache/apt/archives"
 
       - name: Restore C/C++ compilation cache
