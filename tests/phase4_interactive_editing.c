@@ -181,6 +181,9 @@ int main(int argc, char** argv)
 	psy_audio_MachineCallback callback;
 	psy_audio_PluginCatcher catcher;
 	psy_audio_MachineFactory factory;
+	psy_audio_MachineCallback loaded_callback;
+	psy_audio_PluginCatcher loaded_catcher;
+	psy_audio_MachineFactory loaded_factory;
 	psy_audio_Song* song;
 	psy_audio_Song* loaded;
 	psy_audio_Machines* machines;
@@ -332,16 +335,36 @@ int main(int argc, char** argv)
 		psy_audio_song_deallocate(song);
 		return 1;
 	}
-	loaded = load_song(&factory, path);
+
+	/*
+	** A MachineCallback has a single owning Song pointer. Keep the fresh-load
+	** verification on an independent callback/factory so destructors for the
+	** original Mixer can never observe the loaded song (or vice versa).
+	*/
+	psy_audio_machinecallback_init(&loaded_callback);
+	psy_audio_plugincatcher_init(&loaded_catcher, NULL);
+	psy_audio_machinefactory_init(&loaded_factory, &loaded_callback,
+		&loaded_catcher, NULL);
+	loaded = load_song(&loaded_factory, path);
 	if (!loaded) {
+		psy_audio_machinefactory_dispose(&loaded_factory);
+		psy_audio_plugincatcher_dispose(&loaded_catcher);
 		psy_audio_song_deallocate(song);
+		psy_audio_machinefactory_dispose(&factory);
+		psy_audio_plugincatcher_dispose(&catcher);
+		psy_audio_dispose();
 		return 1;
 	}
 	if (strcmp(psy_audio_song_title(loaded), SONG_TITLE) != 0 ||
 			fabs(psy_audio_song_bpm(loaded) - SONG_BPM) > 0.001 ||
 			psy_audio_song_lpb(loaded) != SONG_LPB) {
 		psy_audio_song_deallocate(loaded);
+		psy_audio_machinefactory_dispose(&loaded_factory);
+		psy_audio_plugincatcher_dispose(&loaded_catcher);
 		psy_audio_song_deallocate(song);
+		psy_audio_machinefactory_dispose(&factory);
+		psy_audio_plugincatcher_dispose(&catcher);
+		psy_audio_dispose();
 		return fail("song metadata did not survive reload");
 	}
 	rc = verify_machine_state(loaded);
@@ -350,6 +373,8 @@ int main(int argc, char** argv)
 	}
 
 	psy_audio_song_deallocate(loaded);
+	psy_audio_machinefactory_dispose(&loaded_factory);
+	psy_audio_plugincatcher_dispose(&loaded_catcher);
 	psy_audio_song_deallocate(song);
 	psy_audio_machinefactory_dispose(&factory);
 	psy_audio_plugincatcher_dispose(&catcher);
