@@ -111,36 +111,6 @@ void audioconfig_register_drivers(psy_audio_AudioConfig* self)
 		PSYCLE_AUDIO_DRIVER_DIR"/build/libpsysdl2.so", "Sdl2");
 #endif
 
-#if defined(DIVERSALIS__OS__LINUX)
-	/*
-	** Keep ALSA as the normal Linux default, but allow deterministic runtime
-	** smoke tests and headless sessions to select another already-registered
-	** driver without writing a machine-specific psycle.ini first.
-	*/
-	{
-		const char* requested_driver;
-
-		requested_driver = getenv("PSYCLE_AUDIO_DRIVER");
-		if (requested_driver) {
-			if (strcmp(requested_driver, "silent") == 0) {
-				default_index = 0;
-			} else if (strcmp(requested_driver, "alsa") == 0) {
-				default_index = 1;
-			} else if (strcmp(requested_driver, "jack") == 0) {
-				default_index = 2;
-#ifdef PSYCLE_USE_SDL2_AUDIO_DRIVER
-			} else if (strcmp(requested_driver, "sdl2") == 0) {
-				default_index = 3;
-#endif
-			} else {
-				fprintf(stderr,
-					"psycle: unknown PSYCLE_AUDIO_DRIVER '%s'; using Linux default.\n",
-					requested_driver);
-			}
-		}
-	}
-#endif
-
 	psy_property_set_item_int(self->driver_choice, default_index);		
 }
 
