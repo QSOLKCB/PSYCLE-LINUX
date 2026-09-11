@@ -15,7 +15,7 @@
 
 /* psy_ConfigurationHints */
 
-INLINE psy_ConfigurationHints psy_configurationhints_make(const char* svg)
+psy_ConfigurationHints psy_configurationhints_make(const char* svg)
 {
 	psy_ConfigurationHints rv;
 
