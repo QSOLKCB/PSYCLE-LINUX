@@ -26,6 +26,7 @@ typedef struct InsertMachineCommand {
 	struct psy_audio_Machine* machine;
 	uintptr_t slot;
 	bool restoreconnection;
+	bool machine_detached;
 	psy_audio_Connections connections;
 } InsertMachineCommand;
 
@@ -42,6 +43,7 @@ typedef struct {
 	psy_audio_Machines* machines;
 	struct psy_audio_Machine* machine;
 	uintptr_t slot;
+	bool machine_detached;
 	psy_audio_Connections connections;
 } DeleteMachineCommand;
 
