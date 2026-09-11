@@ -65,6 +65,8 @@ build-audit/summary.md
 build-audit/logs/*.log
 ```
 
+The generated `build-audit/` tree is ignored by Git so local environment/compiler evidence cannot be accidentally committed.
+
 The script does **not** stop at the first failed build target. Each build stage is run and its result is recorded so one failure cannot conceal the rest of the Linux build state.
 
 The exit status is nevertheless meaningful: after the complete report has been generated, the script exits nonzero if any audited build stage is `FAIL` or `BLOCKED`. This means the Phase 2 reference baseline currently produces a nonzero audit result because the blockers documented in `PHASE2_BUILD_AUDIT.md` are real. The report is evidence; a green process exit is reserved for an all-PASS build state.
@@ -106,8 +108,8 @@ thread/src
 container/src
 file/src
 ui/src
-dsp/src
 luaui/src
+dsp/src
 audio/src
 host/src
 ```
