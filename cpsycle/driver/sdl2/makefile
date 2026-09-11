@@ -15,12 +15,15 @@ all: $(OUTPUTFILE)
 debug: CFLAGS += -DDEBUG -g3
 debug: $(OUTPUTFILE)
 
-$(OUTPUTFILE): $(obj)
+$(OUTPUTFILE): $(obj) | $(OUTPUTDIR)
 	$(CC) $(CFLAGS) $(LIBDIRS) $(INC) -o $(OUTPUTDIR)$@ $^ $(LDFLAGS)
+
+$(OUTPUTDIR):
+	mkdir -p $(OUTPUTDIR)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -fPIC $(src)
 
 .PHONY: clean	
 clean:
-	rm -f $(obj) libpsysdl2.so
+	rm -f $(obj) $(OUTPUTDIR)$(OUTPUTFILE)
