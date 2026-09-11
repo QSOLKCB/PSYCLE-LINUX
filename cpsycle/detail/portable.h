@@ -23,6 +23,11 @@
 #include <stdarg.h>
 #include <ctype.h>
 
+#if !defined(_WIN32)
+#include <strings.h>
+#define stricmp strcasecmp
+#endif
+
 /*
 ** Windows stuff
 */
