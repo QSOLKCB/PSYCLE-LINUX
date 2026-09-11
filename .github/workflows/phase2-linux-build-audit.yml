@@ -40,7 +40,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/apt/archives
-          key: apt-${{ runner.os }}-24.04-psycle-v2
+          key: apt-${{ runner.os }}-24.04-psycle-v3
           restore-keys: |
             apt-${{ runner.os }}-24.04-psycle-
 
@@ -70,7 +70,8 @@ jobs:
             libfluidsynth-dev \
             xvfb \
             xauth \
-            xdotool
+            xdotool \
+            x11-utils
           sudo chown -R runner:runner "$HOME/.cache/apt/archives"
 
       - name: Restore C/C++ compilation cache
