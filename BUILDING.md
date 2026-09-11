@@ -47,6 +47,8 @@ sudo apt-get install -y \
 
 This intentionally follows the imported C-Psycle `readme.txt` closely. If Phase 2 discovers an additional required package, it must be documented with the source file or build target that requires it.
 
+The audit summary is generated entirely by POSIX/GNU shell tooling already supplied by the development environment; Python is not required.
+
 ## Run the Phase 2 audit
 
 From the repository root:
@@ -63,9 +65,11 @@ build-audit/summary.md
 build-audit/logs/*.log
 ```
 
-The script does **not** stop at the first failed target. Each build stage is run independently and its exit code is recorded so one failure cannot conceal the rest of the Linux build state.
+The script does **not** stop at the first failed build target. Each build stage is run and its result is recorded so one failure cannot conceal the rest of the Linux build state.
 
-The same audit runs in GitHub Actions through `.github/workflows/phase2-linux-build-audit.yml`.
+The exit status is nevertheless meaningful: after the complete report has been generated, the script exits nonzero if any audited build stage is `FAIL` or `BLOCKED`. This means the Phase 2 reference baseline currently produces a nonzero audit result because the blockers documented in `PHASE2_BUILD_AUDIT.md` are real. The report is evidence; a green process exit is reserved for an all-PASS build state.
+
+The same audit runs in GitHub Actions through `.github/workflows/phase2-linux-build-audit.yml`. The workflow uploads `build-audit/` with `if: always()`, so logs remain available even when the audit step fails as expected on the current baseline.
 
 ## Direct upstream-style build
 
@@ -154,14 +158,27 @@ The imported makefiles do not use all of those names consistently. Phase 2 recor
 
 ## Cleaning
 
-The imported top-level clean target can be exercised with:
+A repeatable audit must start without stale outputs. The imported top-level `make clean` target does **not** clean the driver tree, so the audit performs both cleanup paths:
 
 ```bash
 cd cpsycle
 make clean
+make clean-drivers
 ```
 
-Because historical clean rules can themselves contain stale assumptions, the audit records clean-target failures instead of treating them as unrelated noise.
+After a successful driver clean, the audit also removes `cpsycle/driver/build/`. The historical driver clean target removes objects and shared libraries but leaves that directory itself behind; retaining it would hide the clean-checkout output-directory failure on subsequent runs.
+
+If either required clean command fails, the audit writes the partial report and exits before running build stages. It will not treat possibly stale artifacts as fresh evidence.
+
+## PASS, FAIL, and BLOCKED
+
+The generated summary distinguishes three states:
+
+- **PASS** — the stage completed successfully;
+- **FAIL** — the stage itself returned nonzero and its declared prerequisites had passed;
+- **BLOCKED** — the stage returned nonzero while one or more declared core prerequisites were unavailable.
+
+Blocked targets are still executed. The label records causal status rather than skipping the command, so their logs can show how far the target progressed without misrepresenting a downstream prerequisite failure as a new independent defect.
 
 ## Evidence rule
 
