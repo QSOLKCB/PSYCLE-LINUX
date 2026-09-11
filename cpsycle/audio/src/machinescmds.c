@@ -10,6 +10,9 @@
 /* local */
 #include "exclusivelock.h"
 #include "machine.h"
+#include "machinefactory.h"
+#include "machineproxy.h"
+#include "mixer.h"
 /* std */
 #include <assert.h>
 #include <stdlib.h>
@@ -17,6 +20,368 @@
 /* platform */
 #include "../../detail/trace.h"
 
+
+typedef struct MachineCommandRouteState {
+	uintptr_t fxslot;
+	uintptr_t value;
+} MachineCommandRouteState;
+
+typedef struct MachineCommandInputState {
+	uintptr_t inputslot;
+	double volume;
+	double panning;
+	double drymix;
+	double gain;
+	int mute;
+	int dryonly;
+	int wetonly;
+	psy_List* sendvols;
+} MachineCommandInputState;
+
+typedef struct MachineCommandReturnState {
+	uintptr_t fxslot;
+	double volume;
+	double panning;
+	int mute;
+	unsigned char mastersend;
+	double inputconvol;
+	psy_List* sendsto;
+} MachineCommandReturnState;
+
+typedef struct MachineCommandMixerState {
+	uintptr_t slot;
+	uintptr_t inputsolo_slot;
+	uintptr_t returnsolo_fxslot;
+	psy_List* inputs;
+	psy_List* returns;
+} MachineCommandMixerState;
+
+static void machinecommand_inputstate_dispose(MachineCommandInputState* self)
+{
+	psy_list_deallocate(&self->sendvols, NULL);
+}
+
+static void machinecommand_returnstate_dispose(MachineCommandReturnState* self)
+{
+	psy_list_deallocate(&self->sendsto, NULL);
+}
+
+static void machinecommand_mixerstate_dispose(MachineCommandMixerState* self)
+{
+	psy_list_deallocate(&self->inputs,
+		(psy_fp_disposefunc)machinecommand_inputstate_dispose);
+	psy_list_deallocate(&self->returns,
+		(psy_fp_disposefunc)machinecommand_returnstate_dispose);
+}
+
+static void machinecommand_dispose_mixer_snapshots(psy_List** snapshots)
+{
+	psy_list_deallocate(snapshots,
+		(psy_fp_disposefunc)machinecommand_mixerstate_dispose);
+}
+
+static psy_audio_Mixer* machinecommand_mixer_client(psy_audio_Machine* machine)
+{
+	psy_audio_MachineFactory* factory;
+
+	if (!machine || psy_audio_machine_type(machine) != psy_audio_MIXER) {
+		return NULL;
+	}
+	factory = psy_audio_machine_machinefactory(machine);
+	if (factory && factory->createasproxy) {
+		psy_audio_MachineProxy* proxy;
+
+		proxy = (psy_audio_MachineProxy*)machine;
+		if (!proxy->client ||
+				psy_audio_machine_type(proxy->client) != psy_audio_MIXER) {
+			return NULL;
+		}
+		return (psy_audio_Mixer*)proxy->client;
+	}
+	return (psy_audio_Mixer*)machine;
+}
+
+static uintptr_t machinecommand_input_id(psy_audio_Mixer* mixer,
+	uintptr_t inputslot)
+{
+	psy_TableIterator it;
+
+	for (it = psy_table_begin(&mixer->inputs);
+			!psy_tableiterator_equal(&it, psy_table_end());
+			psy_tableiterator_inc(&it)) {
+		psy_audio_InputChannel* channel;
+
+		channel = (psy_audio_InputChannel*)psy_tableiterator_value(&it);
+		if (channel && channel->inputslot == inputslot) {
+			return psy_tableiterator_key(&it);
+		}
+	}
+	return psy_INDEX_INVALID;
+}
+
+static uintptr_t machinecommand_return_id(psy_audio_Mixer* mixer,
+	uintptr_t fxslot)
+{
+	psy_TableIterator it;
+
+	for (it = psy_table_begin(&mixer->returns);
+			!psy_tableiterator_equal(&it, psy_table_end());
+			psy_tableiterator_inc(&it)) {
+		psy_audio_ReturnChannel* channel;
+
+		channel = (psy_audio_ReturnChannel*)psy_tableiterator_value(&it);
+		if (channel && channel->fxslot == fxslot) {
+			return psy_tableiterator_key(&it);
+		}
+	}
+	return psy_INDEX_INVALID;
+}
+
+static void machinecommand_capture_mixer_snapshots(psy_audio_Machines* machines,
+	psy_List** snapshots)
+{
+	psy_TableIterator machine_it;
+
+	machinecommand_dispose_mixer_snapshots(snapshots);
+	for (machine_it = psy_audio_machines_begin(machines);
+			!psy_tableiterator_equal(&machine_it, psy_table_end());
+			psy_tableiterator_inc(&machine_it)) {
+		psy_audio_Machine* machine;
+		psy_audio_Mixer* mixer;
+		MachineCommandMixerState* state;
+		psy_TableIterator it;
+
+		machine = (psy_audio_Machine*)psy_tableiterator_value(&machine_it);
+		mixer = machinecommand_mixer_client(machine);
+		if (!mixer) {
+			continue;
+		}
+		state = (MachineCommandMixerState*)malloc(
+			sizeof(MachineCommandMixerState));
+		if (!state) {
+			continue;
+		}
+		state->slot = psy_tableiterator_key(&machine_it);
+		state->inputsolo_slot = psy_INDEX_INVALID;
+		state->returnsolo_fxslot = psy_INDEX_INVALID;
+		state->inputs = NULL;
+		state->returns = NULL;
+		if (mixer->inputsolo != psy_INDEX_INVALID) {
+			psy_audio_InputChannel* solo;
+
+			solo = psy_audio_mixer_channel(mixer, mixer->inputsolo);
+			if (solo) {
+				state->inputsolo_slot = solo->inputslot;
+			}
+		}
+		if (mixer->returnsolo != psy_INDEX_INVALID) {
+			psy_audio_ReturnChannel* solo;
+
+			solo = psy_audio_mixer_return(mixer, mixer->returnsolo);
+			if (solo) {
+				state->returnsolo_fxslot = solo->fxslot;
+			}
+		}
+		for (it = psy_table_begin(&mixer->inputs);
+				!psy_tableiterator_equal(&it, psy_table_end());
+				psy_tableiterator_inc(&it)) {
+			psy_audio_InputChannel* channel;
+			MachineCommandInputState* input;
+			psy_TableIterator route_it;
+
+			channel = (psy_audio_InputChannel*)psy_tableiterator_value(&it);
+			if (!channel) {
+				continue;
+			}
+			input = (MachineCommandInputState*)malloc(
+				sizeof(MachineCommandInputState));
+			if (!input) {
+				continue;
+			}
+			input->inputslot = channel->inputslot;
+			input->volume = channel->volume;
+			input->panning = channel->panning;
+			input->drymix = channel->drymix;
+			input->gain = channel->gain;
+			input->mute = channel->mute;
+			input->dryonly = channel->dryonly;
+			input->wetonly = channel->wetonly;
+			input->sendvols = NULL;
+			for (route_it = psy_table_begin(&channel->sendvols);
+					!psy_tableiterator_equal(&route_it, psy_table_end());
+					psy_tableiterator_inc(&route_it)) {
+				psy_audio_ReturnChannel* target;
+				MachineCommandRouteState* route;
+
+				target = psy_audio_mixer_return(mixer,
+					psy_tableiterator_key(&route_it));
+				if (!target) {
+					continue;
+				}
+				route = (MachineCommandRouteState*)malloc(
+					sizeof(MachineCommandRouteState));
+				if (!route) {
+					continue;
+				}
+				route->fxslot = target->fxslot;
+				route->value = (uintptr_t)psy_tableiterator_value(&route_it);
+				psy_list_append(&input->sendvols, route);
+			}
+			psy_list_append(&state->inputs, input);
+		}
+		for (it = psy_table_begin(&mixer->returns);
+				!psy_tableiterator_equal(&it, psy_table_end());
+				psy_tableiterator_inc(&it)) {
+			uintptr_t id;
+			psy_audio_ReturnChannel* channel;
+			psy_audio_MixerSend* send;
+			MachineCommandReturnState* ret;
+			psy_TableIterator route_it;
+
+			id = psy_tableiterator_key(&it);
+			channel = (psy_audio_ReturnChannel*)psy_tableiterator_value(&it);
+			if (!channel) {
+				continue;
+			}
+			ret = (MachineCommandReturnState*)malloc(
+				sizeof(MachineCommandReturnState));
+			if (!ret) {
+				continue;
+			}
+			ret->fxslot = channel->fxslot;
+			ret->volume = channel->volume;
+			ret->panning = channel->panning;
+			ret->mute = channel->mute;
+			ret->mastersend = channel->mastersend;
+			send = psy_audio_mixer_Send(mixer, id);
+			ret->inputconvol = send ? send->inputconvol : 1.0;
+			ret->sendsto = NULL;
+			for (route_it = psy_table_begin(&channel->sendsto);
+					!psy_tableiterator_equal(&route_it, psy_table_end());
+					psy_tableiterator_inc(&route_it)) {
+				psy_audio_ReturnChannel* target;
+				MachineCommandRouteState* route;
+
+				target = psy_audio_mixer_return(mixer,
+					psy_tableiterator_key(&route_it));
+				if (!target) {
+					continue;
+				}
+				route = (MachineCommandRouteState*)malloc(
+					sizeof(MachineCommandRouteState));
+				if (!route) {
+					continue;
+				}
+				route->fxslot = target->fxslot;
+				route->value = TRUE;
+				psy_list_append(&ret->sendsto, route);
+			}
+			psy_list_append(&state->returns, ret);
+		}
+		psy_list_append(snapshots, state);
+	}
+}
+
+static void machinecommand_restore_mixer_snapshots(psy_audio_Machines* machines,
+	psy_List* snapshots)
+{
+	psy_List* p;
+
+	for (p = snapshots; p != NULL; p = p->next) {
+		MachineCommandMixerState* state;
+		psy_audio_Machine* machine;
+		psy_audio_Mixer* mixer;
+		psy_List* q;
+
+		state = (MachineCommandMixerState*)p->entry;
+		machine = psy_audio_machines_at(machines, state->slot);
+		mixer = machinecommand_mixer_client(machine);
+		if (!mixer) {
+			continue;
+		}
+		for (q = state->inputs; q != NULL; q = q->next) {
+			MachineCommandInputState* input;
+			uintptr_t id;
+			psy_audio_InputChannel* channel;
+			psy_List* r;
+
+			input = (MachineCommandInputState*)q->entry;
+			id = machinecommand_input_id(mixer, input->inputslot);
+			if (id == psy_INDEX_INVALID) {
+				continue;
+			}
+			channel = psy_audio_mixer_channel(mixer, id);
+			if (!channel) {
+				continue;
+			}
+			channel->volume = input->volume;
+			channel->panning = input->panning;
+			channel->drymix = input->drymix;
+			channel->gain = input->gain;
+			channel->mute = input->mute;
+			channel->dryonly = input->dryonly;
+			channel->wetonly = input->wetonly;
+			psy_table_dispose(&channel->sendvols);
+			psy_table_init(&channel->sendvols);
+			for (r = input->sendvols; r != NULL; r = r->next) {
+				MachineCommandRouteState* route;
+				uintptr_t return_id;
+
+				route = (MachineCommandRouteState*)r->entry;
+				return_id = machinecommand_return_id(mixer, route->fxslot);
+				if (return_id != psy_INDEX_INVALID) {
+					psy_table_insert(&channel->sendvols, return_id,
+						(void*)route->value);
+				}
+			}
+		}
+		for (q = state->returns; q != NULL; q = q->next) {
+			MachineCommandReturnState* ret;
+			uintptr_t id;
+			psy_audio_ReturnChannel* channel;
+			psy_audio_MixerSend* send;
+			psy_List* r;
+
+			ret = (MachineCommandReturnState*)q->entry;
+			id = machinecommand_return_id(mixer, ret->fxslot);
+			if (id == psy_INDEX_INVALID) {
+				continue;
+			}
+			channel = psy_audio_mixer_return(mixer, id);
+			if (!channel) {
+				continue;
+			}
+			channel->volume = ret->volume;
+			channel->panning = ret->panning;
+			channel->mute = ret->mute;
+			channel->mastersend = ret->mastersend;
+			send = psy_audio_mixer_Send(mixer, id);
+			if (send) {
+				send->inputconvol = ret->inputconvol;
+			}
+			psy_table_dispose(&channel->sendsto);
+			psy_table_init(&channel->sendsto);
+			for (r = ret->sendsto; r != NULL; r = r->next) {
+				MachineCommandRouteState* route;
+				uintptr_t return_id;
+
+				route = (MachineCommandRouteState*)r->entry;
+				return_id = machinecommand_return_id(mixer, route->fxslot);
+				if (return_id != psy_INDEX_INVALID) {
+					psy_table_insert(&channel->sendsto, return_id,
+						(void*)(uintptr_t)TRUE);
+				}
+			}
+		}
+		mixer->inputsolo = (state->inputsolo_slot == psy_INDEX_INVALID)
+			? psy_INDEX_INVALID
+			: machinecommand_input_id(mixer, state->inputsolo_slot);
+		mixer->returnsolo = (state->returnsolo_fxslot == psy_INDEX_INVALID)
+			? psy_INDEX_INVALID
+			: machinecommand_return_id(mixer, state->returnsolo_fxslot);
+		++mixer->strobe;
+	}
+}
 
 static void machinecommand_dispose_detached(psy_audio_Machine** machine,
 	bool* detached)
@@ -149,6 +514,7 @@ InsertMachineCommand* insertmachinecommand_allocinit(psy_audio_Machines*
 		rv->slot = slot;
 		rv->restoreconnection = FALSE;
 		rv->machine_detached = TRUE;
+		rv->mixer_snapshots = NULL;
 		psy_audio_connections_init(&rv->connections);
 	}
 	return rv;
@@ -157,6 +523,7 @@ InsertMachineCommand* insertmachinecommand_allocinit(psy_audio_Machines*
 void insertmachinecommand_dispose(InsertMachineCommand* self)
 {
 	machinecommand_dispose_detached(&self->machine, &self->machine_detached);
+	machinecommand_dispose_mixer_snapshots(&self->mixer_snapshots);
 	psy_audio_connections_dispose(&self->connections);
 }
 
@@ -175,6 +542,8 @@ void insertmachinecommand_execute(InsertMachineCommand* self,
 		machinecommand_mark_detached(self->machine);
 		machinecommand_restore_connections(&self->machines->connections,
 			&self->connections);
+		machinecommand_restore_mixer_snapshots(self->machines,
+			self->mixer_snapshots);
 		psy_audio_machine_set_slot(self->machine, self->slot);
 		psy_audio_machines_updatepath(self->machines);
 	}
@@ -193,6 +562,8 @@ void insertmachinecommand_revert(InsertMachineCommand* self)
 		psy_audio_connections_dispose(&self->connections);
 		psy_audio_connections_init(&self->connections);
 		psy_audio_connections_copy(&self->connections, &self->machines->connections);
+		machinecommand_capture_mixer_snapshots(self->machines,
+			&self->mixer_snapshots);
 		self->restoreconnection = TRUE;
 		self->machine = machine;
 		machinecommand_mark_detached(machine);
@@ -242,6 +613,7 @@ DeleteMachineCommand* deletemachinecommand_allocinit(
 		rv->machine = NULL;
 		rv->slot = slot;
 		rv->machine_detached = FALSE;
+		rv->mixer_snapshots = NULL;
 		psy_audio_connections_init(&rv->connections);
 	}
 	return rv;
@@ -250,6 +622,7 @@ DeleteMachineCommand* deletemachinecommand_allocinit(
 void deletemachinecommand_dispose(DeleteMachineCommand* self)
 {
 	machinecommand_dispose_detached(&self->machine, &self->machine_detached);
+	machinecommand_dispose_mixer_snapshots(&self->mixer_snapshots);
 	psy_audio_connections_dispose(&self->connections);
 }
 
@@ -265,6 +638,8 @@ void deletemachinecommand_execute(DeleteMachineCommand* self,
 		psy_audio_connections_dispose(&self->connections);
 		psy_audio_connections_init(&self->connections);
 		psy_audio_connections_copy(&self->connections, &self->machines->connections);
+		machinecommand_capture_mixer_snapshots(self->machines,
+			&self->mixer_snapshots);
 		self->machine = machine;
 		psy_audio_connections_rewire(&self->machines->connections,
 			psy_audio_connections_at(&self->machines->connections, self->slot));
@@ -290,6 +665,8 @@ void deletemachinecommand_revert(DeleteMachineCommand* self)
 		machinecommand_mark_detached(self->machine);
 		machinecommand_restore_connections(&self->machines->connections,
 			&self->connections);
+		machinecommand_restore_mixer_snapshots(self->machines,
+			self->mixer_snapshots);
 		psy_audio_machine_set_slot(self->machine, self->slot);
 		psy_audio_machines_updatepath(self->machines);
 	}	
