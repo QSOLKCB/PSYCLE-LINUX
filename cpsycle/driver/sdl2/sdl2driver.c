@@ -20,6 +20,7 @@ typedef struct {
 	psy_Property* configuration;
 	SDL_AudioDeviceID audio_dev;	
 	bool running_;
+	bool callback_reported_;
 	int (*error)(int, const char*);	
 } Sdl2Driver;
 
@@ -231,7 +232,7 @@ void init_output_devices(Sdl2Driver* self)
 		}
 		psy_property_prevent_save(psy_property_preventtranslate(
 			psy_property_set_text(psy_property_append_str(
-			devices, key, name), name)));		
+				devices, key, name), name)));		
 	}	
 }
 
@@ -283,10 +284,12 @@ int driver_open(psy_AudioDriver* driver)
 		self->running_ = TRUE;		
 	} else {
 		self->running_ = FALSE;
-		printf("%s\n", SDL_GetError());
+		fprintf(stderr, "%s\n", SDL_GetError());
+		fflush(stderr);
 	}
 	if (self->audio_dev > 0) {
-		printf("sdl2 audio started\n");		
+		fprintf(stderr, "psycle: sdl2 audio device started\n");
+		fflush(stderr);
 		SDL_PauseAudioDevice(self->audio_dev, 0);
 	}
 	
@@ -387,6 +390,16 @@ void driver_fill_soundcard_buffer(void* driver, uint8_t * stream, int len)
 		break; }			
 	default:
 		break;
+	}
+	if (!self->callback_reported_) {
+		self->callback_reported_ = TRUE;
+		/*
+		** Runtime smoke marker: emit only after a complete callback invocation,
+		** including host work and buffer conversion. stderr + explicit flush
+		** makes the observation deterministic while the host remains running.
+		*/
+		fprintf(stderr, "psycle: sdl2 audio callback completed\n");
+		fflush(stderr);
 	}	
 }
 
