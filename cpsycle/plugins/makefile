@@ -54,7 +54,6 @@ PLUGDIRS :=\
 			zephod_super_fm/src\
 			flanger/src\
 			filter_2_poles/src\
-			legasynth/src\
 			druttis_sublime/src\
 			fluid_synth_sf2_player/src
 SUBDIRS := $(HELPERDIRS) $(PLUGDIRS)
