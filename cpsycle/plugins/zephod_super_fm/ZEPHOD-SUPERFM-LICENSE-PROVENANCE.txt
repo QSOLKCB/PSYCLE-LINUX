@@ -1,0 +1,19 @@
+Zephod SuperFM license and provenance record
+
+`cpsycle/plugins/zephod_super_fm/src/zephod_superfm.cpp` records:
+- Original code by Zephod (Buzz SuperFM)
+- Code remixed/adapted by Arguru for Psycle
+
+The upstream Psycle end-user plugin licensing document classifies the Arguru plugin set, explicitly including "Zephod SuperFM", under:
+
+Open source, Public Domain
+
+The upstream entry reads in relevant part:
+"Arguru plugins (Compressor, CrossDelay, Distortion, Goaslicer, Reverb, Synth, Zephod SuperFM)"
+
+This file preserves that upstream Psycle licensing statement beside the imported source so the derivative plugin is not left without a redistribution/provenance record.
+
+Upstream Psycle licensing reference:
+https://github.com/jpaquim/psycle/blob/7ac6d2c3553e2ee8dda55814d8e689919c345478/psycle/doc/for-end-users/license_plugins.txt
+
+This provenance record does not claim authorship of Zephod's original Buzz source or Arguru's adaptation. Their historical attribution in the source remains authoritative.

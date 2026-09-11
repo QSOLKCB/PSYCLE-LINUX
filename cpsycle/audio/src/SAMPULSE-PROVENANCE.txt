@@ -1,0 +1,57 @@
+Sampulse / XMSampler provenance record
+
+Scope
+-----
+This record applies to the C-Psycle Sampulse / XMSampler implementation under
+`cpsycle/audio/src/xmsampler*.c` and `cpsycle/audio/src/xmsampler*.h`.
+
+Psycle distribution terms
+-------------------------
+The imported C-Psycle XMSampler source and headers carry the Psycle project
+notice permitting redistribution and modification under the GNU General Public
+License, version 2 or (at your option) any later version (`GPL-2.0-or-later`).
+The complete GPL version 2 text is shipped at `cpsycle/COPYING`.
+
+Satoshi Fujiwara / XMSampler lineage
+------------------------------------
+The imported source explicitly states that Sampulse is "Partially based on
+Satoshi Fujiwara 'XMSampler'". Upstream `cpsycle/AUTHORS` separately records
+Satoshi Fujiwara <sfpg@users.sourceforge.jp> among authors whose source code or
+modifications are used by Psycle.
+
+Historical Psycle XMSampler source in the upstream project lineage also carries
+the Psycle `GPL-2.0-or-later` project notice. Satoshi Fujiwara has publicly
+written that his XMSampler work was subsequently continued by other Psycle
+developers and became the Sampulse machine:
+
+https://www.sfpgmr.net/blog/entry/aodix-tracker-%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6%E5%B0%91%E3%81%97%E8%AA%9E%E3%82%8B.html
+
+This record preserves Satoshi Fujiwara's attribution and the distribution terms
+carried by the Psycle implementation; it does not erase or replace any earlier
+independent authorship.
+
+OpenMPT IT-filter lineage
+-------------------------
+The imported source also states: "IT Filtering from OpenMPT."
+
+OpenMPT's official project history records that the full ModPlug Tracker source
+was opened in 2004 and that OpenMPT used `GPL-2.0-or-later` during the historical
+period from which this Psycle implementation was developed, before OpenMPT was
+later relicensed under BSD terms. See:
+
+https://openmpt.org/legacy_software
+
+The OpenMPT-derived filtering lineage is therefore recorded here as historical
+`GPL-2.0-or-later` source provenance. The complete GPL version 2 text is already
+shipped at `cpsycle/COPYING`.
+
+Packaging rule
+--------------
+Source and binary distributions that include Sampulse must preserve:
+
+- the existing GPL notice in the XMSampler source/header files;
+- Satoshi Fujiwara's XMSampler attribution;
+- the OpenMPT IT-filter attribution; and
+- this provenance record or equivalent third-party attribution documentation.
+
+No DSP or sampler behaviour is modified by this Phase 1 provenance restoration.

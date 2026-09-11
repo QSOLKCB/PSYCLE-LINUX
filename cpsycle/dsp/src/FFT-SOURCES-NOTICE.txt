@@ -1,0 +1,28 @@
+FFT source provenance notice
+
+This notice documents third-party source lineage explicitly recorded by `cpsycle/dsp/src/fft.c`.
+
+1. Dominic Mazzoni FFT implementation
+
+`fft.c` identifies its function-based FFT implementation as originating from Dominic Mazzoni's `FFT.cpp` (September 2000). The corresponding Audacity source retains that attribution and states that parts of the implementation were based on an earlier FFT by Don Cross.
+
+Audacity's source licensing documentation records GPL version 2 or later as the default license for source files where no different license is specified. PSYCLE-LINUX therefore treats the Mazzoni-derived portion retained here as GPL-2.0-or-later. The repository already carries the GNU GPL version 2 text at `cpsycle/COPYING`.
+
+Reference lineage:
+- Audacity `au3/libraries/au3-fft/FFT.cpp`
+- Audacity `LICENSE.txt`
+
+2. Schism Tracker-derived FFTClass implementation
+
+`fft.c` identifies its class-based FFT implementation as made from Schism Tracker sources. Schism Tracker's corresponding FFT/waterfall implementation carries copyright attribution to Storlek and Mrs. Brisby and is distributed under GNU GPL version 2 or later.
+
+PSYCLE-LINUX therefore treats the Schism-derived portion retained here as GPL-2.0-or-later. The GNU GPL version 2 text is available at `cpsycle/COPYING`.
+
+Reference lineage:
+- Schism Tracker `schism/page_waterfall.c`
+
+3. Don Cross attribution
+
+The Mazzoni source comment further records that some of its FFT code was based on a freely available implementation by Don Cross. This is preserved as source provenance; PSYCLE-LINUX does not erase or replace that historical attribution.
+
+This file is a provenance/license-boundary record only. It does not alter DSP code or assert PSYCLE-LINUX authorship over any of the attributed implementations.

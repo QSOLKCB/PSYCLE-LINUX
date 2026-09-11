@@ -1,0 +1,84 @@
+/*
+** This source is free software; you can redistribute itand /or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2, or (at your option) any later version.
+** copyright 2000-2024 members of the psycle project http://psycle.sourceforge.net
+*/
+
+#include "../../detail/prefix.h"
+
+
+#include "octavebar.h"
+
+/* platform */
+#include "../../detail/portable.h"
+
+
+/* prototypes */
+static void octavebar_build_octave_box(OctaveBar*);
+static void octavebar_on_octavebox_selected(OctaveBar*,
+	psy_ui_ComboBox* sender);
+static void octavebar_on_octave_changed(OctaveBar*, psy_audio_Player*,
+	uintptr_t octave);
+static void octavebar_on_song_changed(OctaveBar*, psy_audio_Player* sender);
+
+/* implementation */
+void octavebar_init(OctaveBar* self, psy_ui_Component* parent,
+	psy_audio_Player* player)
+{	
+	assert(self);
+	assert(player);
+
+	psy_ui_component_init(octavebar_base(self), parent, NULL);
+	self->player = player;
+	psy_ui_component_set_default_align(&self->component, psy_ui_ALIGN_LEFT,
+		psy_ui_defaults_hmargin(psy_ui_defaults()));
+	psy_ui_component_set_align_expand(octavebar_base(self),
+		psy_ui_HEXPAND);	
+	psy_ui_label_init_text(&self->desc, octavebar_base(self),
+		"octavebar.octave");
+	psy_ui_combobox_init(&self->octavebox, octavebar_base(self));
+	psy_ui_combobox_set_char_number(&self->octavebox, 3.0);	
+	psy_ui_component_set_tab_index(psy_ui_combobox_base(&self->octavebox), 0);
+	octavebar_build_octave_box(self);
+	psy_signal_connect(&self->octavebox.signal_selchanged, self,
+		octavebar_on_octavebox_selected);
+	psy_signal_connect(&player->signal_octavechanged, self,
+		octavebar_on_octave_changed);
+	psy_signal_connect(&player->signal_song_changed, self,
+		octavebar_on_song_changed);	
+}
+
+void octavebar_build_octave_box(OctaveBar* self)
+{
+	int octave;
+	char text[20];
+
+	for (octave = 0; octave < 9; ++octave) {
+		psy_snprintf(text, 20, "%d", octave);		
+		psy_ui_combobox_add_text(&self->octavebox, text);
+	}
+	psy_ui_combobox_select(&self->octavebox,
+		psy_audio_player_octave(self->player));
+}
+
+void octavebar_on_octavebox_selected(OctaveBar* self, psy_ui_ComboBox* sender)
+{	
+	uintptr_t index;
+	
+	assert(self);
+
+	index = psy_ui_combobox_cur_sel(sender);
+	if (index <= 8) {
+		psy_audio_player_set_octave(self->player, (uint8_t)index);
+	}
+}
+
+void octavebar_on_octave_changed(OctaveBar* self, psy_audio_Player* sender,
+	uintptr_t octave)
+{
+	psy_ui_combobox_select(&self->octavebox, psy_audio_player_octave(sender));
+}
+
+void octavebar_on_song_changed(OctaveBar* self, psy_audio_Player* sender)
+{	
+	psy_ui_combobox_select(&self->octavebox, psy_audio_player_octave(sender));
+}

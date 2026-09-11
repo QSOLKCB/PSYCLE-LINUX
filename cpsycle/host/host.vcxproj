@@ -1,0 +1,766 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{740AAC0D-1FAC-4D4A-9045-62E0EF74578E}</ProjectGuid>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='16.0'">v142</PlatformToolset>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='17.0'">v143</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='16.0'">v142</PlatformToolset>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='17.0'">v143</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='16.0'">v142</PlatformToolset>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='17.0'">v143</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='16.0'">v142</PlatformToolset>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='17.0'">v143</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(VCTargetsPath)Microsoft.CPP.UpgradeFromVC60.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(VCTargetsPath)Microsoft.CPP.UpgradeFromVC60.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(VCTargetsPath)Microsoft.CPP.UpgradeFromVC60.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(VCTargetsPath)Microsoft.CPP.UpgradeFromVC60.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>16.0.29511.113</_ProjectFileVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>$(SolutionDir)output\$(PlatformName)\$(Configuration)\bin\</OutDir>
+    <IntDir>.\Debug\</IntDir>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <OutDir>$(SolutionDir)output\$(PlatformName)\$(Configuration)\bin\</OutDir>
+    <IntDir>.\Debug\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>$(SolutionDir)output\$(PlatformName)\$(Configuration)\bin\</OutDir>
+    <IntDir>.\Release\</IntDir>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(SolutionDir)output\$(PlatformName)\$(Configuration)\bin\</OutDir>
+    <IntDir>.\Release\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Midl>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MkTypLibCompatible>true</MkTypLibCompatible>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TargetEnvironment>Win32</TargetEnvironment>
+      <TypeLibraryName>$(IntDir)host.tlb</TypeLibraryName>
+      <HeaderFileName />
+    </Midl>
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>$(SolutionDir)luaui\src;$(SolutionDir)script\src;$(SolutionDir)thread\src;$(SolutionDir)lua54\src\;$(SolutionDir)ui\src;$(SolutionDir)audio\src;$(SolutionDir)file\src;$(SolutionDir)container\src;$(SolutionDir)dsp\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>true</MinimalRebuild>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PrecompiledHeaderOutputFile>$(IntDir)host.pch</PrecompiledHeaderOutputFile>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BrowseInformation>true</BrowseInformation>
+      <WarningLevel>Level3</WarningLevel>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+      <CompileAs>Default</CompileAs>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0407</Culture>
+    </ResourceCompile>
+    <Link>
+      <AdditionalDependencies>luaui.lib;audio.lib;thread.lib;script.lib;zlib.lib;lua54.lib;ui.lib;odbc32.lib;odbccp32.lib;comctl32.lib;file.lib;winmm.lib;container.lib;dsp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>$(OutDir)host.exe</OutputFile>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <AdditionalLibraryDirectories>$(SolutionDir)luaui\Release;$(SolutionDir)luaui\Debug;$(SolutionDir)audio\Debug;$(SolutionDir)script\Debug;$(SolutionDir)thread\Debug;$(SolutionDir)zlib\Debug;$(SolutionDir)lua54\Debug;$(SolutionDir)ui\Debug;$(SolutionDir)audio\Debug;$(SolutionDir)file\Debug;$(SolutionDir)container\Debug;$(SolutionDir)dsp\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ProgramDatabaseFile>$(IntDir)host.pdb</ProgramDatabaseFile>
+      <SubSystem>Windows</SubSystem>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention />
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+    <Bscmake>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <OutputFile>$(OutDir)host.bsc</OutputFile>
+    </Bscmake>
+    <PostBuildEvent>
+      <Command>xcopy /Y /I /E /F $(SolutionDir)\doc\for-end-users\*.txt $(SolutionDir)output\$(PlatformName)\$(Configuration)\bin\docs
+xcopy /Y /I /E /F $(SolutionDir)\host\*.ini $(SolutionDir)output\$(PlatformName)\$(Configuration)\bin\</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Midl>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MkTypLibCompatible>true</MkTypLibCompatible>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TypeLibraryName>$(IntDir)host.tlb</TypeLibraryName>
+      <HeaderFileName>
+      </HeaderFileName>
+    </Midl>
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>$(SolutionDir)luaui\src;$(SolutionDir)script\src;$(SolutionDir)thread\src;$(SolutionDir)lua54\src\;$(SolutionDir)ui\src;$(SolutionDir)audio\src;$(SolutionDir)file\src;$(SolutionDir)container\src;$(SolutionDir)dsp\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PrecompiledHeaderOutputFile>$(IntDir)host.pch</PrecompiledHeaderOutputFile>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BrowseInformation>true</BrowseInformation>
+      <WarningLevel>Level3</WarningLevel>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <CompileAs>Default</CompileAs>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0407</Culture>
+    </ResourceCompile>
+    <Link>
+      <AdditionalDependencies>luaui.lib;audio.lib;thread.lib;script.lib;zlib.lib;lua54.lib;ui.lib;odbc32.lib;odbccp32.lib;comctl32.lib;file.lib;winmm.lib;container.lib;dsp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>$(OutDir)host.exe</OutputFile>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <AdditionalLibraryDirectories>$(SolutionDir)luaui\Debug;$(SolutionDir)audio\Debug;$(SolutionDir)script\Debug;$(SolutionDir)thread\Debug;$(SolutionDir)zlib\Debug;$(SolutionDir)lua54\Debug;$(SolutionDir)ui\Debug;$(SolutionDir)file\Debug;$(SolutionDir)container\Debug;$(SolutionDir)dsp\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ProgramDatabaseFile>$(IntDir)host.pdb</ProgramDatabaseFile>
+      <SubSystem>Windows</SubSystem>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <StackReserveSize>
+      </StackReserveSize>
+    </Link>
+    <Bscmake>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <OutputFile>$(OutDir)host.bsc</OutputFile>
+    </Bscmake>
+    <PostBuildEvent>
+      <Command>xcopy /Y /I /E /F $(SolutionDir)\doc\for-end-users\*.txt $(SolutionDir)output\$(PlatformName)\$(Configuration)\bin\docs 
+xcopy /Y /I /E /F $(SolutionDir)\host\*.ini $(SolutionDir)output\$(PlatformName)\$(Configuration)\bin\</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Midl>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MkTypLibCompatible>true</MkTypLibCompatible>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TargetEnvironment>Win32</TargetEnvironment>
+      <TypeLibraryName>$(IntDir)host.tlb</TypeLibraryName>
+      <HeaderFileName />
+    </Midl>
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <AdditionalIncludeDirectories>$(SolutionDir)luaui\src;$(SolutionDir)script\src;$(SolutionDir)thread\src;$(SolutionDir)lua54\src\;$(SolutionDir)ui\src;$(SolutionDir)audio\src;$(SolutionDir)file\src;$(SolutionDir)container\src;$(SolutionDir)dsp\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <StringPooling>true</StringPooling>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PrecompiledHeaderOutputFile>$(IntDir)host.pch</PrecompiledHeaderOutputFile>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BrowseInformation>true</BrowseInformation>
+      <WarningLevel>Level3</WarningLevel>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <CompileAs>Default</CompileAs>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0407</Culture>
+    </ResourceCompile>
+    <Link>
+      <AdditionalDependencies>luaui.lib;audio.lib;thread.lib;script.lib;zlib.lib;lua54.lib;ui.lib;odbc32.lib;odbccp32.lib;comctl32.lib;file.lib;winmm.lib;container.lib;dsp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>$(OutDir)host.exe</OutputFile>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <AdditionalLibraryDirectories>$(SolutionDir)luaui\Release;$(SolutionDir)audio\Release;$(SolutionDir)script\Release;$(SolutionDir)thread\Release;$(SolutionDir)zlib\Release;$(SolutionDir)lua54\Release;$(SolutionDir)ui\Release;$(SolutionDir)audio\Release;$(SolutionDir)file\Release;$(SolutionDir)container\Release;$(SolutionDir)dsp\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ProgramDatabaseFile>$(IntDir)host.pdb</ProgramDatabaseFile>
+      <SubSystem>Windows</SubSystem>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention />
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+    <Bscmake>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <OutputFile>$(OutDir)host.bsc</OutputFile>
+    </Bscmake>
+    <PostBuildEvent>
+      <Command>xcopy /Y /I /E /F $(SolutionDir)\doc\for-end-users\*.txt $(SolutionDir)output\$(PlatformName)\$(Configuration)\bin\docs
+xcopy /Y /I /E /F $(SolutionDir)\host\*.ini $(SolutionDir)output\$(PlatformName)\$(Configuration)\bin\</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Midl>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MkTypLibCompatible>true</MkTypLibCompatible>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TypeLibraryName>$(IntDir)host.tlb</TypeLibraryName>
+      <HeaderFileName>
+      </HeaderFileName>
+    </Midl>
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <AdditionalIncludeDirectories>$(SolutionDir)luaui\src;$(SolutionDir)script\src;$(SolutionDir)thread\src;$(SolutionDir)lua54\src\;$(SolutionDir)ui\src;$(SolutionDir)audio\src;$(SolutionDir)file\src;$(SolutionDir)container\src;$(SolutionDir)dsp\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <StringPooling>true</StringPooling>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PrecompiledHeaderOutputFile>$(IntDir)host.pch</PrecompiledHeaderOutputFile>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BrowseInformation>true</BrowseInformation>
+      <WarningLevel>Level3</WarningLevel>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <CompileAs>Default</CompileAs>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0407</Culture>
+    </ResourceCompile>
+    <Link>
+      <AdditionalDependencies>luaui.lib;audio.lib;thread.lib;script.lib;zlib.lib;lua54.lib;ui.lib;odbc32.lib;odbccp32.lib;comctl32.lib;file.lib;winmm.lib;container.lib;dsp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>$(OutDir)host.exe</OutputFile>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <AdditionalLibraryDirectories>$(SolutionDir)luaui\Release;$(SolutionDir)audio\Release;$(SolutionDir)script\Release;$(SolutionDir)thread\Release;$(SolutionDir)zlib\Release;$(SolutionDir)lua54\Release;$(SolutionDir)ui\Release;$(SolutionDir)audio\Release;$(SolutionDir)file\Release;$(SolutionDir)container\Release;$(SolutionDir)dsp\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ProgramDatabaseFile>$(IntDir)host.pdb</ProgramDatabaseFile>
+      <SubSystem>Windows</SubSystem>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+    </Link>
+    <Bscmake>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <OutputFile>$(OutDir)host.bsc</OutputFile>
+    </Bscmake>
+    <PostBuildEvent>
+      <Command>xcopy /Y /I /E /F $(SolutionDir)\doc\for-end-users\*.txt $(SolutionDir)output\$(PlatformName)\$(Configuration)\bin\docs 
+xcopy /Y /I /E /F $(SolutionDir)\host\*.ini $(SolutionDir)output\$(PlatformName)\$(Configuration)\bin\</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\about.c" />
+    <ClCompile Include="src\adsrsliders.c" />
+    <ClCompile Include="src\arrowui.c" />
+    <ClCompile Include="src\beatconvert.c" />
+    <ClCompile Include="src\bitmaps.c" />
+    <ClCompile Include="src\channelmappingview.c" />
+    <ClCompile Include="src\clipbox.c" />
+    <ClCompile Include="src\clockbar.c" />
+    <ClCompile Include="src\closebar.c" />
+    <ClCompile Include="src\cmddef.c" />
+    <ClCompile Include="src\cmdproperties.c" />
+    <ClCompile Include="src\colourbox.c" />
+    <ClCompile Include="src\compatconfig.c" />
+    <ClCompile Include="src\config.c" />
+    <ClCompile Include="src\configimport.c" />
+    <ClCompile Include="src\confirmbox.c" />
+    <ClCompile Include="src\cpuview.c" />
+    <ClCompile Include="src\defaultlang.c" />
+    <ClCompile Include="src\effectui.c" />
+    <ClCompile Include="src\envelopeview.c" />
+    <ClCompile Include="src\filebar.c" />
+    <ClCompile Include="src\filebox.c" />
+    <ClCompile Include="src\filechooser.c" />
+    <ClCompile Include="src\fileedit.c" />
+    <ClCompile Include="src\fileview.c" />
+    <ClCompile Include="src\fontbox.c" />
+    <ClCompile Include="src\gear.c" />
+    <ClCompile Include="src\generalconfig.c" />
+    <ClCompile Include="src\generatorui.c" />
+    <ClCompile Include="src\globalconfig.c" />
+    <ClCompile Include="src\greet.c" />
+    <ClCompile Include="src\headerui.c" />
+    <ClCompile Include="src\help.c" />
+    <ClCompile Include="src\helpview.c" />
+    <ClCompile Include="src\hostmachinecallback.c" />
+    <ClCompile Include="src\inputdefiner.c" />
+    <ClCompile Include="src\instnotemapview.c" />
+    <ClCompile Include="src\instrumentampview.c" />
+    <ClCompile Include="src\instrumentfilterview.c" />
+    <ClCompile Include="src\instrumentgenview.c" />
+    <ClCompile Include="src\instrumentpanview.c" />
+    <ClCompile Include="src\instrumentpitchview.c" />
+    <ClCompile Include="src\instrumentsbox.c" />
+    <ClCompile Include="src\instrumentview.c" />
+    <ClCompile Include="src\interpolatecurveview.c" />
+    <ClCompile Include="src\interpreter.c" />
+    <ClCompile Include="src\kbdbox.c" />
+    <ClCompile Include="src\kbdhelp.c" />
+    <ClCompile Include="src\keyboardmiscconfig.c" />
+    <ClCompile Include="src\keyboardview.c" />
+    <ClCompile Include="src\knobui.c" />
+    <ClCompile Include="src\labeledit.c" />
+    <ClCompile Include="src\labelpair.c" />
+    <ClCompile Include="src\labelui.c" />
+    <ClCompile Include="src\languageconfig.c" />
+    <ClCompile Include="src\levelui.c" />
+    <ClCompile Include="src\linesperbeatbar.c" />
+    <ClCompile Include="src\machinebar.c" />
+    <ClCompile Include="src\machinecombobox.c" />
+    <ClCompile Include="src\machineeditorview.c" />
+    <ClCompile Include="src\machineframe.c" />
+    <ClCompile Include="src\machineparamconfig.c" />
+    <ClCompile Include="src\machinesbox.c" />
+    <ClCompile Include="src\machinestackview.c" />
+    <ClCompile Include="src\machineui.c" />
+    <ClCompile Include="src\machineview.c" />
+    <ClCompile Include="src\machineviewbar.c" />
+    <ClCompile Include="src\machineviewconfig.c" />
+    <ClCompile Include="src\machineviewmenu.c" />
+    <ClCompile Include="src\machineviewstyles.c" />
+    <ClCompile Include="src\machinewireview.c" />
+    <ClCompile Include="src\mainframe.c" />
+    <ClCompile Include="src\mainstatusbar.c" />
+    <ClCompile Include="src\mainviewbar.c" />
+    <ClCompile Include="src\mainviews.c" />
+    <ClCompile Include="src\masterui.c" />
+    <ClCompile Include="src\messageview.c" />
+    <ClCompile Include="src\metronomebar.c" />
+    <ClCompile Include="src\metronomeconfig.c" />
+    <ClCompile Include="src\midimonitor.c" />
+    <ClCompile Include="src\minmaximize.c" />
+    <ClCompile Include="src\navigation.c" />
+    <ClCompile Include="src\newmachine.c" />
+    <ClCompile Include="src\newmachinedetail.c" />
+    <ClCompile Include="src\newval.c" />
+    <ClCompile Include="src\noteselect.c" />
+    <ClCompile Include="src\octavebar.c" />
+    <ClCompile Include="src\oscilloscope.c" />
+    <ClCompile Include="src\paramgear.c" />
+    <ClCompile Include="src\paramlistbox.c" />
+    <ClCompile Include="src\parammap.c" />
+    <ClCompile Include="src\paramroll.c" />
+    <ClCompile Include="src\paramtweak.c" />
+    <ClCompile Include="src\paramview.c" />
+    <ClCompile Include="src\paramviews.c" />
+    <ClCompile Include="src\paramviewstyles.c" />
+    <ClCompile Include="src\patterndefaultline.c" />
+    <ClCompile Include="src\patterneditbar.c" />
+    <ClCompile Include="src\patternheader.c" />
+    <ClCompile Include="src\patternhostcmds.c" />
+    <ClCompile Include="src\patternnavigator.c" />
+    <ClCompile Include="src\patternproperties.c" />
+    <ClCompile Include="src\patternselection.c" />
+    <ClCompile Include="src\patternview.c" />
+    <ClCompile Include="src\patternviewbar.c" />
+    <ClCompile Include="src\patternviewconfig.c" />
+    <ClCompile Include="src\patternviewmenu.c" />
+    <ClCompile Include="src\patternviewstate.c" />
+    <ClCompile Include="src\patternviewstyles.c" />
+    <ClCompile Include="src\patternviewtabbar.c" />
+    <ClCompile Include="src\patternviewtheme.c" />
+    <ClCompile Include="src\pianogrid.c" />
+    <ClCompile Include="src\pianogriddraw.c" />
+    <ClCompile Include="src\pianogridstate.c" />
+    <ClCompile Include="src\pianokeyboard.c" />
+    <ClCompile Include="src\pianokeyboardstate.c" />
+    <ClCompile Include="src\pianoruler.c" />
+    <ClCompile Include="src\pionoroll.c" />
+    <ClCompile Include="src\playbar.c" />
+    <ClCompile Include="src\playlist.c" />
+    <ClCompile Include="src\playposbar.c" />
+    <ClCompile Include="src\plugineditor.c" />
+    <ClCompile Include="src\plugineditorbar.c" />
+    <ClCompile Include="src\pluginscanthread.c" />
+    <ClCompile Include="src\pluginscanview.c" />
+    <ClCompile Include="src\pluginsview.c" />
+    <ClCompile Include="src\predefsconfig.c" />
+    <ClCompile Include="src\presetsbar.c" />
+    <ClCompile Include="src\presetsview.c" />
+    <ClCompile Include="src\propertiesview.c" />
+    <ClCompile Include="src\psycle.c" />
+    <ClCompile Include="src\psycmdline.c" />
+    <ClCompile Include="src\rangeedit.c" />
+    <ClCompile Include="src\renderprogressview.c" />
+    <ClCompile Include="src\renderview.c" />
+    <ClCompile Include="src\sampleeditor.c" />
+    <ClCompile Include="src\samplesbox.c" />
+    <ClCompile Include="src\samplesimportview.c" />
+    <ClCompile Include="src\samplesloopedit.c" />
+    <ClCompile Include="src\samplesview.c" />
+    <ClCompile Include="src\samplesviewgeneral.c" />
+    <ClCompile Include="src\samplesviewheader.c" />
+    <ClCompile Include="src\samplesviewvibrato.c" />
+    <ClCompile Include="src\scrollzoom.c" />
+    <ClCompile Include="src\searchfield.c" />
+    <ClCompile Include="src\seqeditconfig.c" />
+    <ClCompile Include="src\seqeditheader.c" />
+    <ClCompile Include="src\seqeditheaderdesc.c" />
+    <ClCompile Include="src\seqeditline.c" />
+    <ClCompile Include="src\seqeditloops.c" />
+    <ClCompile Include="src\seqeditor.c" />
+    <ClCompile Include="src\seqeditorentry.c" />
+    <ClCompile Include="src\seqeditorstate.c" />
+    <ClCompile Include="src\seqeditproperties.c" />
+    <ClCompile Include="src\seqeditruler.c" />
+    <ClCompile Include="src\seqedittimesig.c" />
+    <ClCompile Include="src\seqedittoolbar.c" />
+    <ClCompile Include="src\seqedittrack.c" />
+    <ClCompile Include="src\seqedittrackdesc.c" />
+    <ClCompile Include="src\seqedittracks.c" />
+    <ClCompile Include="src\seqlistview.c" />
+    <ClCompile Include="src\sequencebuttons.c" />
+    <ClCompile Include="src\sequencehostcmds.c" />
+    <ClCompile Include="src\sequencerbar.c" />
+    <ClCompile Include="src\sequencetrackbox.c" />
+    <ClCompile Include="src\sequenceview.c" />
+    <ClCompile Include="src\seqviewduration.c" />
+    <ClCompile Include="src\seqviewstate.c" />
+    <ClCompile Include="src\seqviewtrackheaders.c" />
+    <ClCompile Include="src\skinio.c" />
+    <ClCompile Include="src\slidergroupui.c" />
+    <ClCompile Include="src\sliderui.c" />
+    <ClCompile Include="src\songbar.c" />
+    <ClCompile Include="src\songproperties.c" />
+    <ClCompile Include="src\songtrackbar.c" />
+    <ClCompile Include="src\spectrumanalyzer.c" />
+    <ClCompile Include="src\startscript.c" />
+    <ClCompile Include="src\stepbox.c" />
+    <ClCompile Include="src\stepsequencerview.c" />
+    <ClCompile Include="src\stereophase.c" />
+    <ClCompile Include="src\styles.c" />
+    <ClCompile Include="src\styleview.c" />
+    <ClCompile Include="src\svgs.c" />
+    <ClCompile Include="src\swingfillview.c" />
+    <ClCompile Include="src\switchui.c" />
+    <ClCompile Include="src\timebar.c" />
+    <ClCompile Include="src\titlebar.c" />
+    <ClCompile Include="src\trackbox.c" />
+    <ClCompile Include="src\trackercolumn.c" />
+    <ClCompile Include="src\trackergrid.c" />
+    <ClCompile Include="src\trackergridstate.c" />
+    <ClCompile Include="src\trackerheaderstyles.c" />
+    <ClCompile Include="src\trackerlinenumbers.c" />
+    <ClCompile Include="src\trackerview.c" />
+    <ClCompile Include="src\tracknameedit.c" />
+    <ClCompile Include="src\trackscopeview.c" />
+    <ClCompile Include="src\transformpatternview.c" />
+    <ClCompile Include="src\undoredobar.c" />
+    <ClCompile Include="src\valueui.c" />
+    <ClCompile Include="src\viewframe.c" />
+    <ClCompile Include="src\viewhistory.c" />
+    <ClCompile Include="src\viewindex.c" />
+    <ClCompile Include="src\visualconfig.c" />
+    <ClCompile Include="src\volslider.c" />
+    <ClCompile Include="src\vubar.c" />
+    <ClCompile Include="src\vumeter.c" />
+    <ClCompile Include="src\vuscope.c" />
+    <ClCompile Include="src\wavebox.c" />
+    <ClCompile Include="src\wireframes.c" />
+    <ClCompile Include="src\wireview.c" />
+    <ClCompile Include="src\workspace.c" />
+    <ClCompile Include="src\zoombox.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\resources\resource.rc">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">src\resources;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">src\resources;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">src\resources;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">src\resources;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\about.h" />
+    <ClInclude Include="src\adsrsliders.h" />
+    <ClInclude Include="src\arrowui.h" />
+    <ClInclude Include="src\beatconvert.h" />
+    <ClInclude Include="src\bitmaps.h" />
+    <ClInclude Include="src\channelmappingview.h" />
+    <ClInclude Include="src\clipbox.h" />
+    <ClInclude Include="src\clockbar.h" />
+    <ClInclude Include="src\closebar.h" />
+    <ClInclude Include="src\cmddef.h" />
+    <ClInclude Include="src\cmdproperties.h" />
+    <ClInclude Include="src\cmdsgeneral.h" />
+    <ClInclude Include="src\colourbox.h" />
+    <ClInclude Include="src\compatconfig.h" />
+    <ClInclude Include="src\config.h" />
+    <ClInclude Include="src\configimport.h" />
+    <ClInclude Include="src\confirmbox.h" />
+    <ClInclude Include="src\cpuview.h" />
+    <ClInclude Include="src\defaultlang.h" />
+    <ClInclude Include="src\effectui.h" />
+    <ClInclude Include="src\envelopeview.h" />
+    <ClInclude Include="src\filebar.h" />
+    <ClInclude Include="src\filebox.h" />
+    <ClInclude Include="src\filechooser.h" />
+    <ClInclude Include="src\fileedit.h" />
+    <ClInclude Include="src\fileview.h" />
+    <ClInclude Include="src\fontbox.h" />
+    <ClInclude Include="src\gear.h" />
+    <ClInclude Include="src\generalconfig.h" />
+    <ClInclude Include="src\generatorui.h" />
+    <ClInclude Include="src\globalconfig.h" />
+    <ClInclude Include="src\greet.h" />
+    <ClInclude Include="src\headerui.h" />
+    <ClInclude Include="src\help.h" />
+    <ClInclude Include="src\helpview.h" />
+    <ClInclude Include="src\hostmachinecallback.h" />
+    <ClInclude Include="src\inputdefiner.h" />
+    <ClInclude Include="src\instnotemapview.h" />
+    <ClInclude Include="src\instrumentampview.h" />
+    <ClInclude Include="src\instrumentfilterview.h" />
+    <ClInclude Include="src\instrumentgenview.h" />
+    <ClInclude Include="src\instrumentpanview.h" />
+    <ClInclude Include="src\instrumentpitchview.h" />
+    <ClInclude Include="src\instrumentsbox.h" />
+    <ClInclude Include="src\instrumentview.h" />
+    <ClInclude Include="src\interpolatecurveview.h" />
+    <ClInclude Include="src\interpreter.h" />
+    <ClInclude Include="src\kbdbox.h" />
+    <ClInclude Include="src\kbdhelp.h" />
+    <ClInclude Include="src\keyboardmiscconfig.h" />
+    <ClInclude Include="src\keyboardview.h" />
+    <ClInclude Include="src\knobui.h" />
+    <ClInclude Include="src\labeledit.h" />
+    <ClInclude Include="src\labelpair.h" />
+    <ClInclude Include="src\labelui.h" />
+    <ClInclude Include="src\languageconfig.h" />
+    <ClInclude Include="src\levelui.h" />
+    <ClInclude Include="src\linesperbeatbar.h" />
+    <ClInclude Include="src\machinebar.h" />
+    <ClInclude Include="src\machinecombobox.h" />
+    <ClInclude Include="src\machineeditorview.h" />
+    <ClInclude Include="src\machineframe.h" />
+    <ClInclude Include="src\machineparamconfig.h" />
+    <ClInclude Include="src\machinesbox.h" />
+    <ClInclude Include="src\machinestackview.h" />
+    <ClInclude Include="src\machineui.h" />
+    <ClInclude Include="src\machineview.h" />
+    <ClInclude Include="src\machineviewbar.h" />
+    <ClInclude Include="src\machineviewconfig.h" />
+    <ClInclude Include="src\machineviewmenu.h" />
+    <ClInclude Include="src\machineviewstyles.h" />
+    <ClInclude Include="src\machinewireview.h" />
+    <ClInclude Include="src\mainframe.h" />
+    <ClInclude Include="src\mainstatusbar.h" />
+    <ClInclude Include="src\mainviewbar.h" />
+    <ClInclude Include="src\mainviews.h" />
+    <ClInclude Include="src\masterui.h" />
+    <ClInclude Include="src\messageview.h" />
+    <ClInclude Include="src\metronomebar.h" />
+    <ClInclude Include="src\metronomeconfig.h" />
+    <ClInclude Include="src\midimonitor.h" />
+    <ClInclude Include="src\minmaximize.h" />
+    <ClInclude Include="src\navigation.h" />
+    <ClInclude Include="src\newmachine.h" />
+    <ClInclude Include="src\newmachinedetail.h" />
+    <ClInclude Include="src\newval.h" />
+    <ClInclude Include="src\noteselect.h" />
+    <ClInclude Include="src\octavebar.h" />
+    <ClInclude Include="src\oscilloscope.h" />
+    <ClInclude Include="src\paramgear.h" />
+    <ClInclude Include="src\paramlistbox.h" />
+    <ClInclude Include="src\parammap.h" />
+    <ClInclude Include="src\paramroll.h" />
+    <ClInclude Include="src\paramtweak.h" />
+    <ClInclude Include="src\paramview.h" />
+    <ClInclude Include="src\paramviews.h" />
+    <ClInclude Include="src\paramviewstyles.h" />
+    <ClInclude Include="src\patterndefaultline.h" />
+    <ClInclude Include="src\patterneditbar.h" />
+    <ClInclude Include="src\patternheader.h" />
+    <ClInclude Include="src\patternhostcmds.h" />
+    <ClInclude Include="src\patternnavigator.h" />
+    <ClInclude Include="src\patternproperties.h" />
+    <ClInclude Include="src\patternselection.h" />
+    <ClInclude Include="src\patternview.h" />
+    <ClInclude Include="src\patternviewbar.h" />
+    <ClInclude Include="src\patternviewconfig.h" />
+    <ClInclude Include="src\patternviewmenu.h" />
+    <ClInclude Include="src\patternviewstate.h" />
+    <ClInclude Include="src\patternviewstyles.h" />
+    <ClInclude Include="src\patternviewtabbar.h" />
+    <ClInclude Include="src\patternviewtheme.h" />
+    <ClInclude Include="src\pianogrid.h" />
+    <ClInclude Include="src\pianogriddraw.h" />
+    <ClInclude Include="src\pianogridstate.h" />
+    <ClInclude Include="src\pianokeyboard.h" />
+    <ClInclude Include="src\pianokeyboardstate.h" />
+    <ClInclude Include="src\pianoroll.h" />
+    <ClInclude Include="src\pianoruler.h" />
+    <ClInclude Include="src\playbar.h" />
+    <ClInclude Include="src\playlist.h" />
+    <ClInclude Include="src\playposbar.h" />
+    <ClInclude Include="src\plugineditor.h" />
+    <ClInclude Include="src\plugineditorbar.h" />
+    <ClInclude Include="src\pluginscanthread.h" />
+    <ClInclude Include="src\pluginscanview.h" />
+    <ClInclude Include="src\pluginsview.h" />
+    <ClInclude Include="src\predefsconfig.h" />
+    <ClInclude Include="src\presetsbar.h" />
+    <ClInclude Include="src\presetsview.h" />
+    <ClInclude Include="src\propertiesview.h" />
+    <ClInclude Include="src\psycmdline.h" />
+    <ClInclude Include="src\rangeedit.h" />
+    <ClInclude Include="src\renderprogressview.h" />
+    <ClInclude Include="src\renderview.h" />
+    <ClInclude Include="src\resources\resource.h" />
+    <ClInclude Include="src\sampleeditor.h" />
+    <ClInclude Include="src\samplesbox.h" />
+    <ClInclude Include="src\samplesimportview.h" />
+    <ClInclude Include="src\samplesloopedit.h" />
+    <ClInclude Include="src\samplesview.h" />
+    <ClInclude Include="src\samplesviewgeneral.h" />
+    <ClInclude Include="src\samplesviewheader.h" />
+    <ClInclude Include="src\samplesviewvibrato.h" />
+    <ClInclude Include="src\scrollzoom.h" />
+    <ClInclude Include="src\searchfield.h" />
+    <ClInclude Include="src\seqeditconfig.h" />
+    <ClInclude Include="src\seqeditheader.h" />
+    <ClInclude Include="src\seqeditheaderdesc.h" />
+    <ClInclude Include="src\seqeditline.h" />
+    <ClInclude Include="src\seqeditloops.h" />
+    <ClInclude Include="src\seqeditor.h" />
+    <ClInclude Include="src\seqeditorentry.h" />
+    <ClInclude Include="src\seqeditorstate.h" />
+    <ClInclude Include="src\seqeditproperties.h" />
+    <ClInclude Include="src\seqeditruler.h" />
+    <ClInclude Include="src\seqedittimesig.h" />
+    <ClInclude Include="src\seqedittoolbar.h" />
+    <ClInclude Include="src\seqedittrack.h" />
+    <ClInclude Include="src\seqedittrackdesc.h" />
+    <ClInclude Include="src\seqedittracks.h" />
+    <ClInclude Include="src\seqlistview.h" />
+    <ClInclude Include="src\sequencebuttons.h" />
+    <ClInclude Include="src\sequencehostcmds.h" />
+    <ClInclude Include="src\sequencerbar.h" />
+    <ClInclude Include="src\sequencetrackbox.h" />
+    <ClInclude Include="src\sequenceview.h" />
+    <ClInclude Include="src\seqviewduration.h" />
+    <ClInclude Include="src\seqviewstate.h" />
+    <ClInclude Include="src\seqviewtrackheaders.h" />
+    <ClInclude Include="src\skinio.h" />
+    <ClInclude Include="src\slidergroupui.h" />
+    <ClInclude Include="src\sliderui.h" />
+    <ClInclude Include="src\songbar.h" />
+    <ClInclude Include="src\songproperties.h" />
+    <ClInclude Include="src\songtrackbar.h" />
+    <ClInclude Include="src\spectrumanalyzer.h" />
+    <ClInclude Include="src\startscript.h" />
+    <ClInclude Include="src\stepbox.h" />
+    <ClInclude Include="src\stepsequencerview.h" />
+    <ClInclude Include="src\stereophase.h" />
+    <ClInclude Include="src\styles.h" />
+    <ClInclude Include="src\styleview.h" />
+    <ClInclude Include="src\svgs.h" />
+    <ClInclude Include="src\swingfillview.h" />
+    <ClInclude Include="src\switchui.h" />
+    <ClInclude Include="src\timebar.h" />
+    <ClInclude Include="src\titlebar.h" />
+    <ClInclude Include="src\trackbox.h" />
+    <ClInclude Include="src\trackercolumn.h" />
+    <ClInclude Include="src\trackergrid.h" />
+    <ClInclude Include="src\trackergridstate.h" />
+    <ClInclude Include="src\trackerheaderstyles.h" />
+    <ClInclude Include="src\trackerlinenumbers.h" />
+    <ClInclude Include="src\trackerview.h" />
+    <ClInclude Include="src\tracknameedit.h" />
+    <ClInclude Include="src\trackscopeview.h" />
+    <ClInclude Include="src\transformpatternview.h" />
+    <ClInclude Include="src\undoredobar.h" />
+    <ClInclude Include="src\valueui.h" />
+    <ClInclude Include="src\viewframe.h" />
+    <ClInclude Include="src\viewhistory.h" />
+    <ClInclude Include="src\viewindex.h" />
+    <ClInclude Include="src\visualconfig.h" />
+    <ClInclude Include="src\volslider.h" />
+    <ClInclude Include="src\vubar.h" />
+    <ClInclude Include="src\vumeter.h" />
+    <ClInclude Include="src\vuscope.h" />
+    <ClInclude Include="src\wavebox.h" />
+    <ClInclude Include="src\wireframes.h" />
+    <ClInclude Include="src\wireview.h" />
+    <ClInclude Include="src\workspace.h" />
+    <ClInclude Include="src\zoombox.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="src\resources\bgmain-1.bmp" />
+    <Image Include="src\resources\bgmain.bmp" />
+    <Image Include="src\resources\bgtop.bmp" />
+    <Image Include="src\resources\icon1.ico" />
+    <Image Include="src\resources\machine_skin.bmp" />
+    <Image Include="src\resources\macparam.ico" />
+    <Image Include="src\resources\mixer_skin.bmp" />
+    <Image Include="src\resources\pattern_header_skin.bmp" />
+    <Image Include="src\resources\Project3.ico" />
+    <Image Include="src\resources\sampulse.bmp" />
+    <Image Include="src\resources\splash_screen.bmp" />
+    <Image Include="src\resources\TbMainKnob.bmp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(SolutionDir)container\container.vcxproj">
+      <Project>{8ceb65bd-4b67-416c-9dde-03f395cc522f}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <ProjectReference Include="$(SolutionDir)file\file.vcxproj">
+      <Project>{205ce71c-faa1-4310-89f5-f29a9b023433}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <ProjectReference Include="$(SolutionDir)ui\ui.vcxproj">
+      <Project>{4f983ea4-b43d-49fe-a4e8-8bcfdd4a1277}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="en.ini" />
+    <None Include="es.ini" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

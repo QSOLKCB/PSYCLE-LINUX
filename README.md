@@ -45,7 +45,7 @@ The selected upstream baseline is the SourceForge **C-Psycle r12005 trunk snapsh
 - Lilv/LV2-related integration points;
 - a standalone `psyplayer`;
 - native Psycle plugins and presets;
-- Psycle documentation and example `.psy` songs.
+- Psycle documentation; the pinned r12005 source identifies historical `.psy` examples, but those files are absent from all public repository refs until their redistribution permissions are established.
 
 That existing work is the foundation. We will extend and repair it rather than replacing working architecture without a demonstrated need.
 
@@ -62,27 +62,40 @@ See [PORTING.md](PORTING.md) for the engineering rules used by the project.
 
 ## Project Status
 
-**Phase 0 — project foundation.**
+**Phase 1 — upstream baseline import complete.**
 
-PR #1 establishes scope, provenance, licensing boundaries, contribution rules, and the project roadmap. The upstream source import and first modern Linux build audit follow as separate work so that the historical baseline remains easy to inspect.
+The auditable C-Psycle r12005 baseline is imported under [`cpsycle/`](cpsycle/) and frozen before Linux compatibility changes begin.
+
+- Audited upstream identity: SourceForge SVN `r12005` plus the recorded ZIP SHA-256
+- Sanitized archival import ref: `archive/cpsycle-r12005-sanitized-import`
+- Canonical audited baseline tag: `cpsycle-r12005-baseline`
+- Upstream r12005 files: 2,415
+- Upstream files retained after audit omissions: 2,349
+- Upstream files intentionally omitted: 66
+- Phase 1 licensing/provenance files added: 14
+- Canonical files under `cpsycle/`: 2,363
+
+The next milestone is **Phase 2 — Modern Linux Build Audit**: reproduce the existing make-based build on current Ubuntu x86-64, capture what actually breaks, and fix nothing broader than necessary.
 
 See [ROADMAP.md](ROADMAP.md) for the milestone plan.
 
 ## Upstream Baseline
 
-Planned initial source baseline:
+Initial source baseline:
 
 - Source: Psycle / C-Psycle SourceForge repository
+- Revision: `r12005`
 - Snapshot: `r12005-trunk-cpsycle`
 - Archive SHA-256: `2f70d86e64ab8be3755cf449fa5dc757e3c005d8aecd59f3890f2d222089dabc`
+- Imported source: [`cpsycle/`](cpsycle/)
 
-See [PROVENANCE.md](PROVENANCE.md) before importing or modifying upstream source.
+See [PROVENANCE.md](PROVENANCE.md) for the exact import record, [UPSTREAM_OMISSIONS.md](UPSTREAM_OMISSIONS.md) for material that was not mirrored, [THIRD_PARTY_INVENTORY.md](THIRD_PARTY_INVENTORY.md) for bundled components and licenses, and [SOURCE_TREE.md](SOURCE_TREE.md) for the maintainer-oriented tree map.
 
 ## Licensing
 
-The current PSYCLE-LINUX repository scaffolding and original project material are provided under the **Apache License 2.0** as stated in [LICENSE](LICENSE).
+The PSYCLE-LINUX repository scaffolding and original project material are provided under the **Apache License 2.0** as stated in [LICENSE](LICENSE), unless a file or directory states otherwise.
 
-The selected upstream C-Psycle r12005 snapshot contains its own **GNU GPL version 2** licensing material and third-party notices. Importing upstream source does **not** relicense that source under Apache-2.0. Applicable upstream and third-party terms must be preserved and reviewed before redistribution.
+The imported C-Psycle r12005 source contains its own **GNU GPL version 2** licensing material and component-specific third-party notices. Importing upstream source does **not** relicense that source under Apache-2.0.
 
 See [LICENSING.md](LICENSING.md) for the project policy.
 
@@ -96,4 +109,4 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening implementation PRs
 
 Psycle exists because of a long-running community effort. PSYCLE-LINUX does not claim authorship of that history.
 
-See [CREDITS.md](CREDITS.md) and the upstream `AUTHORS` file that will accompany the imported source.
+See [CREDITS.md](CREDITS.md) and the imported upstream [`cpsycle/AUTHORS`](cpsycle/AUTHORS) file.

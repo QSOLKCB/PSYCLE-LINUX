@@ -24,13 +24,27 @@ The roadmap is deliberately compatibility-first. New technology is useful only w
 
 **Goal:** import C-Psycle r12005 in a way that remains auditable.
 
-- [ ] Import the `r12005-trunk-cpsycle` source with upstream structure and notices intact.
-- [ ] Preserve upstream `AUTHORS`, `COPYING`, plugin notices, and third-party attribution.
-- [ ] Keep the first import mechanically close to upstream; do not mix it with broad refactors.
-- [ ] Record the exact import commit and tag it as the project baseline.
-- [ ] Inventory bundled third-party code and per-component licenses.
-- [ ] Identify generated files, vendored libraries, obsolete binaries, and build-only artifacts.
-- [ ] Add an initial source-tree map for maintainers.
+- [x] Import the `r12005-trunk-cpsycle` source with upstream structure and notices intact, except explicitly documented restricted third-party SDK material.
+- [x] Preserve upstream `AUTHORS`, `COPYING`, plugin notices, and third-party attribution.
+- [x] Keep the first import mechanically close to upstream; do not mix it with broad refactors.
+- [x] Record the exact import commit and tag it as the project baseline.
+- [x] Inventory bundled third-party code and per-component licenses.
+- [x] Identify generated files, vendored libraries, obsolete binaries, and build-only artifacts.
+- [x] Add an initial source-tree map for maintainers.
+
+Baseline record:
+
+- upstream identity: SourceForge SVN `r12005` plus the recorded ZIP SHA-256;
+- sanitized archival import ref: `archive/cpsycle-r12005-sanitized-import`;
+- canonical audited tag: `cpsycle-r12005-baseline`;
+- imported tree: `cpsycle/`;
+- upstream r12005 files: 2,415;
+- retained upstream files after exclusions: 2,349;
+- Phase 1 licensing/provenance files added: 14;
+- canonical files under `cpsycle/`: 2,363;
+- upstream omissions: 66, documented in [UPSTREAM_OMISSIONS.md](UPSTREAM_OMISSIONS.md).
+
+See also [PROVENANCE.md](PROVENANCE.md), [THIRD_PARTY_INVENTORY.md](THIRD_PARTY_INVENTORY.md), and [SOURCE_TREE.md](SOURCE_TREE.md).
 
 **Exit condition:** the repository contains a traceable source baseline that can be compared back to r12005.
 
