@@ -97,13 +97,15 @@ cat > "$SUMMARY" <<'EOF'
 - Real Psycle Player playback through FileOutDriver: PASS
 - RIFF/WAVE header and data-size integrity: PASS
 - FileOut data size derived from actual payload bytes: PASS
+- Render duration bounded to one final FileOut block: PASS
 - 44.1 kHz stereo 16-bit PCM render format: PASS
 - Non-silent rendered PCM: PASS
 - Psycle-rendered WAV re-import to built-in Sampler: PASS
+- Full rendered-WAV ↔ Sampler PCM equality: PASS
 - Rendered frame/channel/sample-rate preservation on import: PASS
 - Bounce song PSY3 save: PASS
 - Fresh PSY3 reload of bounced Sampler song: PASS
-- Bounced PCM preservation across PSY3 reload: PASS
+- Full bounced PCM preservation across PSY3 reload: PASS
 
 This is the automated historical bounce-to-sampler acceptance slice. UI file-dialog
 interaction and physical audio-device rendering remain separate runtime targets.
