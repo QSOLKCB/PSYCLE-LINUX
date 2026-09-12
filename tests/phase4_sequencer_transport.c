@@ -161,13 +161,21 @@ static int verify_transport(psy_audio_Song* song)
 		return fail("transport did not enter playing state");
 	}
 	frames = psy_audio_sequencer_frames(&sequencer, ADVANCE_BEATS);
+	/* Psycle advances by the previously processed window: the first block
+	** primes self->window and the next block advances position by that width. */
+	psy_audio_sequencer_frame_tick(&sequencer, frames);
+	if (!close_enough(psy_audio_sequencer_position(&sequencer),
+			START_POSITION, 0.0001)) {
+		psy_audio_sequencer_dispose(&sequencer);
+		return fail("first transport frame window did not preserve pipeline position");
+	}
 	psy_audio_sequencer_frame_tick(&sequencer, frames);
 	expected_position = START_POSITION +
 		psy_audio_sequencer_frame_to_offset(&sequencer, frames);
 	if (!close_enough(psy_audio_sequencer_position(&sequencer),
 			expected_position, 0.0001)) {
 		psy_audio_sequencer_dispose(&sequencer);
-		return fail("transport position did not advance by frame timing");
+		return fail("transport position did not advance by the previous frame window");
 	}
 	psy_audio_sequencer_stop(&sequencer);
 	if (psy_audio_sequencer_playing(&sequencer)) {
