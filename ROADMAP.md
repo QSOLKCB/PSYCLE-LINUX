@@ -136,20 +136,23 @@ Current automated runtime evidence also covers SDL2 selection, an opened SDL dum
 
 ### Remaining/expanding user workflow
 
-- [ ] Machine View creation, deletion, wiring, rewiring, mute, bypass, parameter access and editor opening.
-- [ ] Pattern editor note entry plus representative tracker commands/effect columns across multiple tracks.
+- [x] Machine View command/model path: creation, deletion, wiring, rewiring, mute, bypass, parameter access and persisted machine positions.
+- [ ] Live Machine View editor opening and embedded editor interaction.
+- [x] Tracker Grid command/model path: note entry plus representative tracker/effect commands across multiple tracks, including undo/redo and PSY3 reload.
 - [ ] Keyboard shortcuts, navigation and focus behaviour required for tracker use.
 - [x] Sequencer editing and playback.
 - [x] Tempo, LPB/line timing, transport, loop and position behaviour.
 - [ ] Normal UI sampler/sample loading workflow.
-- [ ] Preset loading/saving.
+- [x] Preset loading/saving, including integer parameters and opaque plugin-state payloads.
 - [ ] Representative historical `.psy` song load using redistributable or user-supplied fixtures.
 - [x] WAV/audio render through Psycle's existing `FileOutDriver` path.
 - [x] Psycle-generated WAV → Psycle Sampler compatibility regression.
 
-Automated evidence for the completed sequencer/transport rows is provided by
-`.github/workflows/phase4-sequencer-transport.yml`; automated evidence for the
-render/bounce rows is provided by `.github/workflows/phase4-render-bounce-sampler.yml`.
+Automated evidence for Machine View/Tracker command-model compatibility is provided
+by `.github/workflows/phase4-interactive-editing.yml`; sequencer/transport evidence
+is provided by `.github/workflows/phase4-sequencer-transport.yml`; render/bounce
+evidence is provided by `.github/workflows/phase4-render-bounce-sampler.yml`; and
+preset serialization evidence is provided by `.github/workflows/phase4-preset-roundtrip.yml`.
 These gates complement rather than replace the remaining UI and real-device work.
 
 ### Historical bounce-to-sampler acceptance workflow
