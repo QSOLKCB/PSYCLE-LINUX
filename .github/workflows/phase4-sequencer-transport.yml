@@ -1,0 +1,48 @@
+name: Phase 4 sequencer and transport
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase4-sequencer-transport-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sequencer-transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install core build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run sequencer and transport regression
+        run: |
+          chmod +x scripts/phase4-sequencer-transport-smoke.sh
+          scripts/phase4-sequencer-transport-smoke.sh phase4-sequencer-transport
+
+      - name: Upload sequencer transport evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-sequencer-transport
+          path: phase4-sequencer-transport/
+          if-no-files-found: warn
+          retention-days: 30
