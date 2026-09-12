@@ -137,14 +137,14 @@ Current automated runtime evidence also covers SDL2 selection, an opened SDL dum
 ### Remaining/expanding user workflow
 
 - [x] Machine View command/model path: creation, deletion, wiring, rewiring, mute, bypass, parameter access and persisted machine positions.
-- [ ] Live Machine View editor opening and embedded editor interaction.
+- [x] Live Machine View editor opening and embedded editor interaction through the native X11 parameter/tool frame.
 - [x] Tracker Grid command/model path: note entry plus representative tracker/effect commands across multiple tracks, including undo/redo and PSY3 reload.
-- [ ] Keyboard shortcuts, navigation and focus behaviour required for tracker use.
+- [x] Keyboard shortcuts, navigation and focus behaviour required for tracker use.
 - [x] Sequencer editing and playback.
 - [x] Tempo, LPB/line timing, transport, loop and position behaviour.
-- [ ] Normal UI sampler/sample loading workflow.
+- [x] Normal UI sampler/sample loading workflow through FileView and Workspace sample/instrument insertion.
 - [x] Preset loading/saving, including integer parameters and opaque plugin-state payloads.
-- [ ] Representative historical `.psy` song load using redistributable or user-supplied fixtures.
+- [x] Representative historical `.psy` song load using a project-authored PSY2SONG fixture derived from the documented Psycle 1.66-era layout.
 - [x] WAV/audio render through Psycle's existing `FileOutDriver` path.
 - [x] Psycle-generated WAV → Psycle Sampler compatibility regression.
 
@@ -152,8 +152,10 @@ Automated evidence for Machine View/Tracker command-model compatibility is provi
 by `.github/workflows/phase4-interactive-editing.yml`; sequencer/transport evidence
 is provided by `.github/workflows/phase4-sequencer-transport.yml`; render/bounce
 evidence is provided by `.github/workflows/phase4-render-bounce-sampler.yml`; and
-preset serialization evidence is provided by `.github/workflows/phase4-preset-roundtrip.yml`.
-These gates complement rather than replace the remaining UI and real-device work.
+preset serialization evidence is provided by `.github/workflows/phase4-preset-roundtrip.yml`;
+legacy PSY2 evidence is provided by `.github/workflows/phase4-historical-psy2.yml`; and
+the native editor/focus/FileView evidence is exercised by `scripts/phase3-runtime-smoke.sh` inside the Linux audit.
+Phase 3 physical ALSA/JACK/MIDI validation remains separate real-device work and is not claimed by these Phase 4 gates.
 
 ### Historical bounce-to-sampler acceptance workflow
 
@@ -165,7 +167,7 @@ This was used historically to collapse CPU-heavy machine chains into samples. Th
 
 Do **not** reintroduce the eight omitted upstream demo/example `.psy` songs merely to obtain fixtures. Prefer project-authored deterministic fixtures; real showcase/demo material can be added later only with clear rights.
 
-**Exit condition:** a user can create, edit, save, reopen, play and render a real Psycle song on Linux.
+**Exit condition:** satisfied for the automated Phase 4 compatibility scope: create, edit, save, reopen, play, render, preset persistence, normal sample loading, live editor/focus behavior and legacy PSY2 loading are all gated on Linux. Physical ALSA/JACK/MIDI validation remains tracked separately in Phase 3.
 
 ## Phase 5 — Classic Native Machine Preservation
 

@@ -15,6 +15,9 @@
 #include "patternnavigator.h"
 /* audio */
 #include <sequencecmds.h>
+/* std */
+#include <stdio.h>
+#include <stdlib.h>
 /* platform */
 #include "../../detail/portable.h"
 
@@ -601,8 +604,11 @@ bool trackergrid_on_note_cmds(TrackerGrid* self, InputHandler* sender)
 		assert(self);
 
 		cmd = inputhandler_cmd(sender);
-		if (cmd.id != -1) {
-			trackergrid_insert_note(self, cmd.id);
+		if (cmd.id != -1 && trackergrid_insert_note(self, cmd.id)) {
+			if (getenv("PSYCLE_RUNTIME_SMOKE")) {
+				fprintf(stderr, "psycle: runtime smoke tracker note inserted\n");
+				fflush(stderr);
+			}
 		}
 	}
 	return FALSE;
@@ -1265,6 +1271,10 @@ bool trackergrid_on_tracker_cmds(TrackerGrid* self, InputHandler* sender)
 		return TRUE;
 	case CMD_COLUMNNEXT:
 		trackergrid_next_track(self);
+		if (getenv("PSYCLE_RUNTIME_SMOKE")) {
+			fprintf(stderr, "psycle: runtime smoke tracker column next\n");
+			fflush(stderr);
+		}
 		return TRUE;
 	case CMD_DIGIT0:
 	case CMD_DIGIT1:
