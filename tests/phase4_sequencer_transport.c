@@ -23,7 +23,9 @@
 
 #define SONG_TITLE "PSYCLE-LINUX Phase 4 sequencer fixture"
 #define PATTERN_B_NAME "Bridge"
-#define SONG_BPM 137.5
+/* Legacy PSY3 stores BPM as an int32; keep the persisted compatibility
+** fixture integer-valued while testing exact sequencer timing at 48 kHz. */
+#define SONG_BPM 137.0
 #define SONG_LPB 8
 #define SAMPLE_RATE 48000.0
 #define PATTERN_A_BEATS 4.0
@@ -291,6 +293,45 @@ int main(int argc, char** argv)
 		psy_undoredo_dispose(&sequence_undo);
 		psy_audio_song_deallocate(song);
 		return fail("sequence insert redo did not restore pattern B");
+	}
+	psy_undoredo_dispose(&sequence_undo);
+
+	/* Sequence View deletion uses SequenceRemoveCommand, whose snapshot must
+	** restore the actual source tracks across undo/redo. */
+	psy_audio_sequenceselection_select_first(&sequence->selection,
+		psy_audio_orderindex_make(0, 1));
+	psy_undoredo_init(&sequence_undo);
+	psy_undoredo_execute(&sequence_undo,
+		&psy_audio_sequenceremovecommand_alloc(sequence,
+			&sequence->selection)->command);
+	if (psy_audio_sequence_track_size(sequence, 0) != 1 ||
+			psy_audio_sequence_patternindex(sequence,
+				psy_audio_orderindex_make(0, 0)) != 0) {
+		psy_undoredo_dispose(&sequence_undo);
+		psy_audio_song_deallocate(song);
+		return fail("sequence remove command did not remove pattern B");
+	}
+	psy_undoredo_undo(&sequence_undo);
+	if (psy_audio_sequence_track_size(sequence, 0) != 2 ||
+			psy_audio_sequence_patternindex(sequence,
+				psy_audio_orderindex_make(0, 1)) != 1) {
+		psy_undoredo_dispose(&sequence_undo);
+		psy_audio_song_deallocate(song);
+		return fail("sequence remove undo did not restore pattern B");
+	}
+	psy_undoredo_redo(&sequence_undo);
+	if (psy_audio_sequence_track_size(sequence, 0) != 1) {
+		psy_undoredo_dispose(&sequence_undo);
+		psy_audio_song_deallocate(song);
+		return fail("sequence remove redo did not remove pattern B again");
+	}
+	psy_undoredo_undo(&sequence_undo);
+	if (psy_audio_sequence_track_size(sequence, 0) != 2 ||
+			psy_audio_sequence_patternindex(sequence,
+				psy_audio_orderindex_make(0, 1)) != 1) {
+		psy_undoredo_dispose(&sequence_undo);
+		psy_audio_song_deallocate(song);
+		return fail("second sequence remove undo did not restore pattern B");
 	}
 	psy_undoredo_dispose(&sequence_undo);
 
