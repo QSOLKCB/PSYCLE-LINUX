@@ -1,0 +1,83 @@
+name: One-shot FileOut WAV size repair
+
+on:
+  push:
+    branches:
+      - phase-4/render-bounce-sampler
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-4/render-bounce-sampler
+          fetch-depth: 0
+
+      - name: Repair FileOut WAV data-size bookkeeping
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('cpsycle/audio/src/fileoutdriver.c')
+          text = path.read_text()
+
+          old = '''\t\tfileoutdriver_writebuffer(self, pBuf, blocksize);
+          \t\tself->filecontext.numsamples += blocksize;
+          \t\tif (self->poll_sleep_ > 0) {
+          '''
+          new = '''\t\tfileoutdriver_writebuffer(self, pBuf, blocksize);
+          \t\tif (self->poll_sleep_ > 0) {
+          '''
+          if old not in text:
+              raise SystemExit('poller counter block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''\tself->filecontext.numsamples += (uint32_t)amount;
+          }
+
+          void fileoutdriver_closefile(psy_audio_FileOutDriver* self)
+          '''
+          new = '''}
+
+          void fileoutdriver_closefile(psy_audio_FileOutDriver* self)
+          '''
+          if old not in text:
+              raise SystemExit('writebuffer counter block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''\t\tpos2 = psyfile_getpos(file);
+          \t\tpsyfile_seek(file, self->filecontext.numsamplesbegin);
+          \t\ttemp32 = self->filecontext.numsamples;
+          \t\tpsyfile_write(file, &temp32, sizeof(temp32));
+          \t\tpsyfile_seek(file, pos2);\t
+          '''
+          new = '''\t\tpos2 = psyfile_getpos(file);
+          \t\tpsyfile_seek(file, self->filecontext.numsamplesbegin);
+          \t\tif (pos2 >= self->filecontext.numsamplesbegin + sizeof(temp32)) {
+          \t\t\ttemp32 = pos2 - self->filecontext.numsamplesbegin - sizeof(temp32);
+          \t\t} else {
+          \t\t\ttemp32 = 0;
+          \t\t}
+          \t\tpsyfile_write(file, &temp32, sizeof(temp32));
+          \t\tpsyfile_seek(file, pos2);\t
+          '''
+          if old not in text:
+              raise SystemExit('closefile data-size block not found')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Commit repair and remove one-shot workflow
+        run: |
+          rm .github/workflows/one-shot-fileout-wav-size-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cpsycle/audio/src/fileoutdriver.c .github/workflows/one-shot-fileout-wav-size-fix.yml
+          git commit -m "fix: write actual FileOut WAV data size"
+          git push origin HEAD:phase-4/render-bounce-sampler
