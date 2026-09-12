@@ -106,6 +106,7 @@ cat > "$SUMMARY" <<'EOF'
 - Bounce song PSY3 save: PASS
 - Fresh PSY3 reload of bounced Sampler song: PASS
 - Full bounced PCM preservation across PSY3 reload: PASS
+- Phase 4 roadmap evidence recorded for sequencer/transport and render/bounce: PASS
 
 This is the automated historical bounce-to-sampler acceptance slice. UI file-dialog
 interaction and physical audio-device rendering remain separate runtime targets.
