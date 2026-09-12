@@ -1,0 +1,78 @@
+name: One-shot sequence copy repair
+
+on:
+  push:
+    branches:
+      - phase-4/sequencer-transport
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-4/sequencer-transport
+          fetch-depth: 0
+
+      - name: Repair psy_audio_sequence_copy
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('cpsycle/audio/src/sequence.c')
+          text = path.read_text()
+          old = '''void psy_audio_sequence_copy(psy_audio_Sequence* self,
+          \tpsy_audio_Sequence* other)
+          {\t
+          \tuintptr_t t;
+
+          \tpsy_audio_sequence_clear(self);
+          \tfor (t = 0; t < psy_audio_sequence_num_tracks(self); ++t) {
+          \t\tpsy_audio_SequenceTrack* src_track;
+
+          \t\tsrc_track = psy_audio_sequence_track_at(self, t);
+          \t\tif (src_track) {
+          \t\t\tpsy_audio_sequence_append_track(self,
+          \t\t\t\tpsy_audio_sequencetrack_clone(src_track));
+          \t\t}
+          \t}
+          \tpsy_audio_trackstate_copy(&self->trackstate, &other->trackstate);\t
+          \tself->patterns = other->patterns;\t
+          }
+          '''
+          new = '''void psy_audio_sequence_copy(psy_audio_Sequence* self,
+          \tpsy_audio_Sequence* other)
+          {\t
+          \tuintptr_t t;
+
+          \tpsy_audio_sequence_clear(self);
+          \tself->patterns = other->patterns;
+          \tself->samples = other->samples;
+          \tfor (t = 0; t < psy_audio_sequence_num_tracks(other); ++t) {
+          \t\tpsy_audio_SequenceTrack* src_track;
+
+          \t\tsrc_track = psy_audio_sequence_track_at(other, t);
+          \t\tif (src_track) {
+          \t\t\tpsy_audio_sequence_append_track(self,
+          \t\t\t\tpsy_audio_sequencetrack_clone(src_track));
+          \t\t}
+          \t}
+          \tpsy_audio_trackstate_copy(&self->trackstate, &other->trackstate);\t
+          }
+          '''
+          if old not in text:
+              raise SystemExit('expected psy_audio_sequence_copy block not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Commit repair and remove one-shot workflow
+        run: |
+          git config user.name "EmergentMonk Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/one-shot-sequence-copy-repair.yml
+          git add cpsycle/audio/src/sequence.c
+          git commit -m "fix: copy sequence tracks from the source"
+          git push origin HEAD:phase-4/sequencer-transport
