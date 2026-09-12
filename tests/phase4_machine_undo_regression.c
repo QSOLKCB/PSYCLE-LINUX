@@ -28,6 +28,9 @@
 #define INPUT_TARGET_SLOT 7
 #define FX_INPUT_SOURCE_SLOT 8
 #define FX_INPUT_MIXER_SLOT 9
+#define FX_SEND_MIXER_SLOT 10
+#define SEND_MARKER_SOURCE_SLOT 11
+#define SEND_MARKER_MIXER_SLOT 12
 #define MIXER_INPUT_VOLUME 0.37
 #define MIXER_INPUT_PANNING 0.23
 #define MIXER_INPUT_GAIN 0.61
@@ -37,9 +40,14 @@
 #define DOWNSTREAM_RETURN_INPUTCONVOL 0.58
 #define NEWER_ROUTE_RETURN_VOLUME 0.29
 #define NEWER_ROUTE_RETURN_PANNING 0.18
+#define NEWER_UNRELATED_WIRE_VOLUME 0.34
 #define TARGET_INPUT_VOLUME 0.36
 #define TARGET_INPUT_GAIN 0.63
 #define FX_NORMAL_INPUT_VOLUME 0.52
+#define NEWER_FX_INPUT_VOLUME 0.27
+#define NEWER_FX_INPUT_PANNING 0.66
+#define NEWER_FX_INPUT_GAIN 0.41
+#define NEWER_FX_INPUT_DRYMIX 0.38
 
 static int fail(const char* message)
 {
@@ -264,6 +272,13 @@ static int newer_unaffected_return_edit_is_preserved(
 		ret->panning == NEWER_ROUTE_RETURN_PANNING && ret->mute == 1;
 }
 
+static int newer_unrelated_wire_edit_is_preserved(psy_audio_Machines* machines)
+{
+	return psy_audio_connections_wire_volume(&machines->connections,
+		psy_audio_wire_make(ROUTE_MIXER_SLOT, DOWNSTREAM_MIXER_SLOT)) ==
+		NEWER_UNRELATED_WIRE_VOLUME;
+}
+
 int main(void)
 {
 	psy_audio_MachineCallback callback;
@@ -281,12 +296,16 @@ int main(void)
 	psy_audio_Machine* input_target_sampler;
 	psy_audio_Machine* fx_input_source;
 	psy_audio_Machine* fx_input_mixer_machine;
+	psy_audio_Machine* fx_send_mixer_machine;
+	psy_audio_Machine* send_marker_source;
+	psy_audio_Machine* send_marker_mixer_machine;
 	psy_audio_InputChannel* input;
 	psy_audio_InputChannel* target_input;
 	psy_audio_InputChannel* fx_input;
 	psy_audio_Mixer* downstream;
 	psy_audio_Mixer* input_mixer;
 	psy_audio_Mixer* fx_input_mixer;
+	psy_audio_Mixer* fx_send_mixer;
 	uintptr_t deleted_return_id;
 	uintptr_t route_return_id;
 	uintptr_t target_input_id;
@@ -358,8 +377,6 @@ int main(void)
 		return fail("downstream mixer did not create routed return channels");
 	}
 
-	/* Give the deleted Mixer's input channel non-default state. A reversible
-	** machine deletion must not let connection teardown destroy this object. */
 	input = mixer_input_channel(psy_audio_machines_at(machines, MIXER_SLOT));
 	if (!input || input->inputslot != SAMPLER_SLOT) {
 		psy_audio_song_deallocate(song);
@@ -370,9 +387,6 @@ int main(void)
 	input->gain = MIXER_INPUT_GAIN;
 	input->drymix = MIXER_INPUT_DRYMIX;
 
-	/* Mixer A and the route Mixer occupy two return columns in downstream B.
-	** A is deliberately the non-highest return, so reconnecting it would append
-	** at a new id unless undo explicitly restores the original column identity. */
 	downstream = mixer_client(psy_audio_machines_at(machines,
 		DOWNSTREAM_MIXER_SLOT));
 	deleted_return_id = mixer_return_id_for_slot(downstream, MIXER_SLOT);
@@ -395,16 +409,10 @@ int main(void)
 	downstream_return->mute = 1;
 	downstream_return->mastersend = 0;
 	downstream_send->inputconvol = DOWNSTREAM_RETURN_INPUTCONVOL;
-	/* Exercise both directions. A->C belongs to A's destroyed object, while
-	** C->A is stored on a surviving return and is explicitly removed by
-	** mixer.c::ondisconnected() when A disappears. */
 	psy_table_insert(&downstream_return->sendsto, route_return_id,
 		(void*)(uintptr_t)TRUE);
 	psy_table_insert(&route_return->sendsto, deleted_return_id,
 		(void*)(uintptr_t)TRUE);
-	/* A solo index survives deletion as an integer. Restoring A at the same id
-	** is what makes that solo state meaningful again without rolling back any
-	** newer solo choice the user might make while A is absent. */
 	downstream->returnsolo = deleted_return_id;
 
 	psy_audio_machines_remove(machines, MIXER_SLOT, TRUE);
@@ -425,17 +433,13 @@ int main(void)
 		psy_audio_song_deallocate(song);
 		return fail("delete did not remove incoming route to deleted return");
 	}
-
-	/* Mixer parameter tweaks are independent of Machines undo. Change the
-	** persistent route return after deletion; undo must not roll this newer,
-	** unrelated edit back to the deletion-time snapshot. */
 	route_return->volume = NEWER_ROUTE_RETURN_VOLUME;
 	route_return->panning = NEWER_ROUTE_RETURN_PANNING;
 	route_return->mute = 1;
+	psy_audio_connections_set_wire_volume(&machines->connections,
+		psy_audio_wire_make(ROUTE_MIXER_SLOT, DOWNSTREAM_MIXER_SLOT),
+		NEWER_UNRELATED_WIRE_VOLUME);
 
-	/* The saved A->B wire is a Mixer return. Deliberately switch the current
-	** toolbar mode to normal Mixer input before undo; restoration must replay
-	** the saved return classification without changing this current preference. */
 	psy_audio_machines_connect_as_mixerinput(machines);
 	psy_undoredo_undo(&machines->undoredo);
 	if (psy_audio_machines_is_connect_as_mixersend(machines)) {
@@ -463,6 +467,10 @@ int main(void)
 		psy_audio_song_deallocate(song);
 		return fail("delete undo reverted a newer unrelated Mixer edit");
 	}
+	if (!newer_unrelated_wire_edit_is_preserved(machines)) {
+		psy_audio_song_deallocate(song);
+		return fail("delete undo reverted newer metadata on an unrelated wire");
+	}
 
 	psy_undoredo_redo(&machines->undoredo);
 	if (!topology_is_rewired(machines)) {
@@ -473,9 +481,10 @@ int main(void)
 		psy_audio_song_deallocate(song);
 		return fail("delete redo did not rebuild downstream temporary channel");
 	}
-	if (!newer_unaffected_return_edit_is_preserved(machines)) {
+	if (!newer_unaffected_return_edit_is_preserved(machines) ||
+			!newer_unrelated_wire_edit_is_preserved(machines)) {
 		psy_audio_song_deallocate(song);
-		return fail("delete redo reverted the newer unrelated Mixer edit");
+		return fail("delete redo reverted newer unrelated mix state");
 	}
 	psy_undoredo_undo(&machines->undoredo);
 	if (psy_audio_machines_is_connect_as_mixersend(machines)) {
@@ -499,14 +508,12 @@ int main(void)
 		psy_audio_song_deallocate(song);
 		return fail("second undo did not preserve return id/routes/settings");
 	}
-	if (!newer_unaffected_return_edit_is_preserved(machines)) {
+	if (!newer_unaffected_return_edit_is_preserved(machines) ||
+			!newer_unrelated_wire_edit_is_preserved(machines)) {
 		psy_audio_song_deallocate(song);
-		return fail("second delete undo reverted the newer unrelated Mixer edit");
+		return fail("second undo reverted newer unrelated mix state");
 	}
 
-	/* createwithoutproxy() is supported even in proxy-enabled builds. Exercise
-	** both insertion undo/redo and deletion undo with a raw Mixer so command
-	** snapshot code cannot safely assume every Mixer instance is a proxy. */
 	psy_audio_machinefactory_createwithoutproxy(&factory);
 	raw_mixer = psy_audio_machinefactory_make_machine_from_path(&factory,
 		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
@@ -541,9 +548,6 @@ int main(void)
 		return fail("raw Mixer delete undo failed");
 	}
 
-	/* A generator occupying input ID 1 must return to that exact column after
-	** deletion even when input ID 0 is vacant. Otherwise inputsolo and the
-	** gain parameter's ID-dependent metadata point at the wrong column. */
 	input_mixer_machine = psy_audio_machinefactory_make_machine_from_path(&factory,
 		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
 	input_low_sampler = psy_audio_machinefactory_make_machine_from_path(&factory,
@@ -607,29 +611,41 @@ int main(void)
 		return fail("generator delete undo did not restore the original input ID");
 	}
 
-	/* Non-generator FX normal inputs survive mixer.c::ondisconnected(). Undo
-	** must reuse that surviving channel while restoring the wire, not allocate a
-	** second InputChannel for the same source. */
+	/* One FX feeds two Mixers with different destination-local classifications:
+	** a return in FX_SEND_MIXER and a normal input in FX_INPUT_MIXER. */
 	fx_input_source = psy_audio_machinefactory_make_machine_from_path(&factory,
 		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
 	fx_input_mixer_machine = psy_audio_machinefactory_make_machine_from_path(&factory,
 		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
-	if (!fx_input_source || !fx_input_mixer_machine) {
+	fx_send_mixer_machine = psy_audio_machinefactory_make_machine_from_path(&factory,
+		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
+	if (!fx_input_source || !fx_input_mixer_machine || !fx_send_mixer_machine) {
 		psy_audio_song_deallocate(song);
-		return fail("could not create normal-FX-input regression machines");
+		return fail("could not create mixed FX classification machines");
 	}
 	psy_audio_machines_insert(machines, FX_INPUT_SOURCE_SLOT, fx_input_source);
 	psy_audio_machines_insert(machines, FX_INPUT_MIXER_SLOT,
 		fx_input_mixer_machine);
+	psy_audio_machines_insert(machines, FX_SEND_MIXER_SLOT,
+		fx_send_mixer_machine);
+	psy_audio_machines_connect_as_mixersend(machines);
+	psy_audio_machines_connect(machines,
+		psy_audio_wire_make(FX_INPUT_SOURCE_SLOT, FX_SEND_MIXER_SLOT));
 	psy_audio_machines_connect_as_mixerinput(machines);
 	psy_audio_machines_connect(machines,
 		psy_audio_wire_make(FX_INPUT_SOURCE_SLOT, FX_INPUT_MIXER_SLOT));
 	fx_input_mixer = mixer_client(psy_audio_machines_at(machines,
 		FX_INPUT_MIXER_SLOT));
-	if (!fx_input_mixer ||
-			mixer_input_count_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT) != 1) {
+	fx_send_mixer = mixer_client(psy_audio_machines_at(machines,
+		FX_SEND_MIXER_SLOT));
+	if (!fx_input_mixer || !fx_send_mixer ||
+			mixer_input_count_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT) != 1 ||
+			mixer_return_id_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT) !=
+				psy_INDEX_INVALID ||
+			mixer_return_id_for_slot(fx_send_mixer, FX_INPUT_SOURCE_SLOT) ==
+				psy_INDEX_INVALID) {
 		psy_audio_song_deallocate(song);
-		return fail("normal FX input did not create exactly one Mixer channel");
+		return fail("mixed FX classification setup is invalid");
 	}
 	fx_input_id = mixer_input_id_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT);
 	fx_input = psy_audio_mixer_channel(fx_input_mixer, fx_input_id);
@@ -640,22 +656,75 @@ int main(void)
 	fx_input->volume = FX_NORMAL_INPUT_VOLUME;
 	psy_audio_machines_remove(machines, FX_INPUT_SOURCE_SLOT, FALSE);
 	if (mixer_input_count_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT) != 1 ||
+			mixer_return_id_for_slot(fx_send_mixer, FX_INPUT_SOURCE_SLOT) !=
+				psy_INDEX_INVALID ||
 			psy_audio_machines_connected(machines,
 				psy_audio_wire_make(FX_INPUT_SOURCE_SLOT, FX_INPUT_MIXER_SLOT))) {
 		psy_audio_song_deallocate(song);
-		return fail("normal FX delete did not leave the expected surviving input");
+		return fail("mixed FX deletion did not leave only the normal input object");
 	}
+	/* Edit the surviving normal InputChannel after deletion. Undo must reuse it
+	** without restoring deletion-time channel values. */
+	fx_input = psy_audio_mixer_channel(fx_input_mixer,
+		mixer_input_id_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT));
+	fx_input->volume = NEWER_FX_INPUT_VOLUME;
+	fx_input->panning = NEWER_FX_INPUT_PANNING;
+	fx_input->gain = NEWER_FX_INPUT_GAIN;
+	fx_input->drymix = NEWER_FX_INPUT_DRYMIX;
+	fx_input->mute = 1;
 	psy_undoredo_undo(&machines->undoredo);
 	fx_input_id = mixer_input_id_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT);
 	fx_input = (fx_input_id == psy_INDEX_INVALID)
 		? NULL : psy_audio_mixer_channel(fx_input_mixer, fx_input_id);
 	if (!fx_input ||
 			mixer_input_count_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT) != 1 ||
+			mixer_return_id_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT) !=
+				psy_INDEX_INVALID ||
+			mixer_return_id_for_slot(fx_send_mixer, FX_INPUT_SOURCE_SLOT) ==
+				psy_INDEX_INVALID ||
 			!psy_audio_machines_connected(machines,
 				psy_audio_wire_make(FX_INPUT_SOURCE_SLOT, FX_INPUT_MIXER_SLOT)) ||
-			fx_input->volume != FX_NORMAL_INPUT_VOLUME) {
+			!psy_audio_machines_connected(machines,
+				psy_audio_wire_make(FX_INPUT_SOURCE_SLOT, FX_SEND_MIXER_SLOT)) ||
+			fx_input->volume != NEWER_FX_INPUT_VOLUME ||
+			fx_input->panning != NEWER_FX_INPUT_PANNING ||
+			fx_input->gain != NEWER_FX_INPUT_GAIN ||
+			fx_input->drymix != NEWER_FX_INPUT_DRYMIX || fx_input->mute != 1) {
 		psy_audio_song_deallocate(song);
-		return fail("normal FX delete undo duplicated or reset its Mixer input");
+		return fail("mixed FX undo misclassified or reset the surviving input");
+	}
+
+	/* Deleting a destination Mixer suppresses its teardown callbacks to preserve
+	** channel objects. The global Mixer-send markers must still reflect only the
+	** live Mixers after deletion and be rebuilt when the destination returns. */
+	send_marker_source = psy_audio_machinefactory_make_machine_from_path(&factory,
+		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
+	send_marker_mixer_machine = psy_audio_machinefactory_make_machine_from_path(
+		&factory, psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
+	if (!send_marker_source || !send_marker_mixer_machine) {
+		psy_audio_song_deallocate(song);
+		return fail("could not create send-marker regression machines");
+	}
+	psy_audio_machines_insert(machines, SEND_MARKER_SOURCE_SLOT,
+		send_marker_source);
+	psy_audio_machines_insert(machines, SEND_MARKER_MIXER_SLOT,
+		send_marker_mixer_machine);
+	psy_audio_machines_connect_as_mixersend(machines);
+	psy_audio_machines_connect(machines,
+		psy_audio_wire_make(SEND_MARKER_SOURCE_SLOT, SEND_MARKER_MIXER_SLOT));
+	if (!psy_audio_machines_is_mixer_send(machines, SEND_MARKER_SOURCE_SLOT)) {
+		psy_audio_song_deallocate(song);
+		return fail("send-marker setup did not mark the FX source");
+	}
+	psy_audio_machines_remove(machines, SEND_MARKER_MIXER_SLOT, FALSE);
+	if (psy_audio_machines_is_mixer_send(machines, SEND_MARKER_SOURCE_SLOT)) {
+		psy_audio_song_deallocate(song);
+		return fail("destination Mixer deletion left a stale send marker");
+	}
+	psy_undoredo_undo(&machines->undoredo);
+	if (!psy_audio_machines_is_mixer_send(machines, SEND_MARKER_SOURCE_SLOT)) {
+		psy_audio_song_deallocate(song);
+		return fail("destination Mixer undo did not rebuild the send marker");
 	}
 
 	psy_audio_song_deallocate(song);
