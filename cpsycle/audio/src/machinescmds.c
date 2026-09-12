@@ -35,6 +35,7 @@ typedef struct MachineCommandInputState {
 	int mute;
 	int dryonly;
 	int wetonly;
+	bool survived;
 	psy_List* sendvols;
 } MachineCommandInputState;
 
@@ -55,6 +56,12 @@ typedef struct MachineCommandMixerState {
 	psy_List* inputs;
 	psy_List* returns;
 } MachineCommandMixerState;
+
+typedef enum MachineCommandMixerWireKind {
+	MACHINECOMMAND_MIXER_WIRE_UNKNOWN = 0,
+	MACHINECOMMAND_MIXER_WIRE_INPUT,
+	MACHINECOMMAND_MIXER_WIRE_RETURN
+} MachineCommandMixerWireKind;
 
 static void machinecommand_inputstate_dispose(MachineCommandInputState* self)
 {
@@ -184,6 +191,7 @@ static MachineCommandInputState* machinecommand_capture_input(
 	input->mute = channel->mute;
 	input->dryonly = channel->dryonly;
 	input->wetonly = channel->wetonly;
+	input->survived = FALSE;
 	input->sendvols = NULL;
 	for (route_it = psy_table_begin(&channel->sendvols);
 			!psy_tableiterator_equal(&route_it, psy_table_end());
@@ -352,6 +360,93 @@ static void machinecommand_capture_mixer_snapshots(psy_audio_Machines* machines,
 	}
 }
 
+static MachineCommandMixerState* machinecommand_mixer_snapshot(
+	psy_List* snapshots, uintptr_t slot)
+{
+	psy_List* p;
+
+	for (p = snapshots; p != NULL; p = p->next) {
+		MachineCommandMixerState* state;
+
+		state = (MachineCommandMixerState*)p->entry;
+		if (state && state->slot == slot) {
+			return state;
+		}
+	}
+	return NULL;
+}
+
+static MachineCommandMixerWireKind machinecommand_saved_mixer_wire_kind(
+	psy_audio_Machines* machines, psy_List* snapshots, psy_audio_Wire wire)
+{
+	psy_audio_Machine* dst;
+	psy_audio_Mixer* mixer;
+	MachineCommandMixerState* state;
+	psy_List* p;
+
+	dst = psy_audio_machines_at(machines, wire.dst);
+	mixer = machinecommand_mixer_client(dst);
+	if (!mixer) {
+		return MACHINECOMMAND_MIXER_WIRE_UNKNOWN;
+	}
+	/* A retained destination Mixer already knows the historical classification
+	** for its preserved incident channel objects. */
+	if (machinecommand_input_id(mixer, wire.src) != psy_INDEX_INVALID) {
+		return MACHINECOMMAND_MIXER_WIRE_INPUT;
+	}
+	if (machinecommand_return_id(mixer, wire.src) != psy_INDEX_INVALID) {
+		return MACHINECOMMAND_MIXER_WIRE_RETURN;
+	}
+	/* Otherwise use the destination-specific snapshot. Connections.sends is
+	** global per source and cannot distinguish one source feeding two Mixers in
+	** different modes. */
+	state = machinecommand_mixer_snapshot(snapshots, wire.dst);
+	if (!state) {
+		return MACHINECOMMAND_MIXER_WIRE_UNKNOWN;
+	}
+	for (p = state->inputs; p != NULL; p = p->next) {
+		MachineCommandInputState* input;
+
+		input = (MachineCommandInputState*)p->entry;
+		if (input && input->inputslot == wire.src) {
+			return MACHINECOMMAND_MIXER_WIRE_INPUT;
+		}
+	}
+	for (p = state->returns; p != NULL; p = p->next) {
+		MachineCommandReturnState* ret;
+
+		ret = (MachineCommandReturnState*)p->entry;
+		if (ret && ret->fxslot == wire.src) {
+			return MACHINECOMMAND_MIXER_WIRE_RETURN;
+		}
+	}
+	return MACHINECOMMAND_MIXER_WIRE_UNKNOWN;
+}
+
+static void machinecommand_prepare_mixer_restore(psy_audio_Machines* machines,
+	psy_List* snapshots)
+{
+	psy_List* p;
+
+	for (p = snapshots; p != NULL; p = p->next) {
+		MachineCommandMixerState* state;
+		psy_audio_Machine* machine;
+		psy_audio_Mixer* mixer;
+		psy_List* q;
+
+		state = (MachineCommandMixerState*)p->entry;
+		machine = state ? psy_audio_machines_at(machines, state->slot) : NULL;
+		mixer = machinecommand_mixer_client(machine);
+		for (q = state ? state->inputs : NULL; q != NULL; q = q->next) {
+			MachineCommandInputState* input;
+
+			input = (MachineCommandInputState*)q->entry;
+			input->survived = mixer && machinecommand_input_id(mixer,
+				input->inputslot) != psy_INDEX_INVALID;
+		}
+	}
+}
+
 static uintptr_t machinecommand_restore_input_id(psy_audio_Mixer* mixer,
 	const MachineCommandInputState* input)
 {
@@ -435,6 +530,12 @@ static void machinecommand_restore_mixer_snapshots(psy_audio_Machines* machines,
 			psy_List* r;
 
 			input = (MachineCommandInputState*)q->entry;
+			/* A normal FX input can survive teardown. Its controls remain live and
+			** may have been edited after the machine command, so never roll that
+			** surviving object back to the deletion-time snapshot. */
+			if (input->survived) {
+				continue;
+			}
 			id = machinecommand_restore_input_id(mixer, input);
 			if (id == psy_INDEX_INVALID) {
 				continue;
@@ -548,39 +649,100 @@ static void machinecommand_mark_detached(psy_audio_Machine* machine)
 	}
 }
 
-static void machinecommand_connect_saved(psy_audio_Machines* machines,
+static void machinecommand_rebuild_mixer_send_markers(psy_audio_Machines* machines)
+{
+	psy_TableIterator machine_it;
+
+	/* Retained Mixers suppress their own teardown/reconnect callbacks to keep
+	** channel objects alive. Rebuild the global send-marker set from the actual
+	** live Mixer return channels so suppression cannot leave stale markers, and
+	** multiple destination Mixers remain correctly represented. */
+	psy_table_clear(&machines->connections.sends);
+	for (machine_it = psy_audio_machines_begin(machines);
+			!psy_tableiterator_equal(&machine_it, psy_table_end());
+			psy_tableiterator_inc(&machine_it)) {
+		psy_audio_Machine* machine;
+		psy_audio_Mixer* mixer;
+		psy_TableIterator return_it;
+
+		machine = (psy_audio_Machine*)psy_tableiterator_value(&machine_it);
+		mixer = machinecommand_mixer_client(machine);
+		if (!mixer) {
+			continue;
+		}
+		for (return_it = psy_table_begin(&mixer->returns);
+				!psy_tableiterator_equal(&return_it, psy_table_end());
+				psy_tableiterator_inc(&return_it)) {
+			psy_audio_ReturnChannel* channel;
+			MachineList* path;
+			MachineList* p;
+
+			channel = (psy_audio_ReturnChannel*)psy_tableiterator_value(&return_it);
+			if (!channel) {
+				continue;
+			}
+			path = psy_audio_compute_path(machines, channel->fxslot, FALSE);
+			for (p = path; p != NULL; p = p->next) {
+				uintptr_t slot;
+
+				slot = (uintptr_t)p->entry;
+				if (slot != psy_INDEX_INVALID) {
+					psy_audio_machines_addmixersend(machines, slot);
+				}
+			}
+			psy_list_free(path);
+		}
+	}
+}
+
+static void machinecommand_restore_wire_metadata(psy_audio_Connections* live,
 	psy_audio_Connections* saved, psy_audio_Wire wire)
+{
+	const psy_audio_WireSocket* saved_input;
+	psy_audio_WireSocket* live_input;
+
+	saved_input = psy_audio_connections_input_const(saved, wire);
+	live_input = psy_audio_connections_input(live, wire);
+	if (!saved_input || !live_input) {
+		return;
+	}
+	psy_audio_connections_set_wire_volume(live, wire, saved_input->volume);
+	psy_audio_connections_setpinmapping(live, wire, &saved_input->mapping);
+	live_input = psy_audio_connections_input(live, wire);
+	if (live_input) {
+		live_input->mute = saved_input->mute;
+	}
+}
+
+static void machinecommand_connect_saved(psy_audio_Machines* machines,
+	psy_audio_Connections* saved, psy_List* snapshots, psy_audio_Wire wire)
 {
 	bool previous_mode;
 	bool suppress_existing_input;
 	uintptr_t dst_slot;
 	psy_audio_Machine* src;
 	psy_audio_Machine* dst;
+	MachineCommandMixerWireKind kind;
 
 	previous_mode = psy_audio_machines_is_connect_as_mixersend(machines);
 	suppress_existing_input = FALSE;
 	dst_slot = psy_INDEX_INVALID;
 	src = psy_audio_machines_at(machines, wire.src);
 	dst = psy_audio_machines_at(machines, wire.dst);
+	kind = MACHINECOMMAND_MIXER_WIRE_UNKNOWN;
 	if (src && dst && psy_audio_machine_type(dst) == psy_audio_MIXER &&
 			psy_audio_machine_mode(src) != psy_audio_MACHMODE_GENERATOR) {
 		psy_audio_Mixer* mixer;
 
-		/*
-		** Mixer decides input-vs-return classification at signal_connected time.
-		** Replay the mode encoded by the saved graph, not the user's current
-		** toolbar choice, then restore that choice immediately afterward.
-		*/
-		if (psy_table_exists(&saved->sends, wire.src)) {
+		kind = machinecommand_saved_mixer_wire_kind(machines, snapshots, wire);
+		if (kind == MACHINECOMMAND_MIXER_WIRE_RETURN) {
 			psy_audio_machines_connect_as_mixersend(machines);
-		} else {
+		} else if (kind == MACHINECOMMAND_MIXER_WIRE_INPUT) {
 			psy_audio_machines_connect_as_mixerinput(machines);
 			/* mixer.c::ondisconnected() classifies every non-generator as a
-			** return, so an FX that was actually a normal Mixer input can leave
-			** its InputChannel alive while the wire is absent. Suppress only this
-			** destination Mixer's reconnect callback and reuse that channel rather
-			** than allocating a duplicate for the same source. Other listeners
-			** still receive signal_connected from the connection operation. */
+			** return, so a normal FX input can leave its InputChannel alive while
+			** the wire is absent. Suppress only this destination Mixer's synthetic
+			** reconnect callback and reuse that live object. */
 			mixer = machinecommand_mixer_client(dst);
 			if (mixer && machinecommand_input_id(mixer, wire.src) !=
 					psy_INDEX_INVALID && psy_audio_machine_slot(dst) == wire.dst) {
@@ -599,23 +761,21 @@ static void machinecommand_connect_saved(psy_audio_Machines* machines,
 	} else {
 		psy_audio_machines_connect_as_mixerinput(machines);
 	}
+	machinecommand_restore_wire_metadata(&machines->connections, saved, wire);
 }
 
 static void machinecommand_restore_connections(psy_audio_Machines* machines,
-	psy_audio_Connections* saved)
+	psy_audio_Connections* saved, psy_List* snapshots)
 {
 	psy_audio_Connections* live;
 	psy_audio_Connections before;
 	psy_TableIterator slot_it;
 
 	live = &machines->connections;
-	/*
-	** A raw connections_copy() restores the tables but deliberately emits no
-	** connection signals. First reconcile only the topology delta through the
-	** normal signal-emitting operations so Mixers and other connection-aware
-	** machines rebuild their internal routing state. Then copy the snapshot to
-	** restore exact socket metadata (pin mappings, wire volumes, sends, etc.).
-	*/
+	/* Reconcile the topology delta through signal-emitting operations so
+	** connection-aware machines rebuild internal state. Metadata is restored
+	** only on wires that are actually recreated; unaffected live wires keep any
+	** newer volume/pin/mute edits made after the machine command. */
 	psy_audio_connections_init(&before);
 	psy_audio_connections_copy(&before, live);
 
@@ -655,17 +815,24 @@ static void machinecommand_restore_connections(psy_audio_Machines* machines,
 				!psy_tableiterator_equal(&wire_it, psy_table_end());
 				psy_tableiterator_inc(&wire_it)) {
 			psy_audio_WireSocket* socket;
+			psy_audio_MachineSockets* dst_sockets;
+			uintptr_t src_id;
+			uintptr_t dst_id;
 			psy_audio_Wire wire;
 
 			socket = (psy_audio_WireSocket*)psy_tableiterator_value(&wire_it);
-			wire = psy_audio_wire_make(srcslot, socket->slot);
+			src_id = psy_tableiterator_key(&wire_it);
+			dst_sockets = psy_audio_connections_at(saved, socket->slot);
+			dst_id = dst_sockets
+				? psy_audio_connection_id(&dst_sockets->inputs, srcslot)
+				: psy_INDEX_INVALID;
+			wire = psy_audio_wire_makeall(srcslot, src_id, socket->slot, dst_id);
 			if (!psy_audio_connections_connected(live, wire)) {
-				machinecommand_connect_saved(machines, saved, wire);
+				machinecommand_connect_saved(machines, saved, snapshots, wire);
 			}
 		}
 	}
 
-	psy_audio_connections_copy(live, saved);
 	psy_audio_connections_dispose(&before);
 }
 
@@ -730,14 +897,18 @@ void insertmachinecommand_execute(InsertMachineCommand* self,
 		self->machine);
 	self->machine_detached = FALSE;
 	if (self->restoreconnection) {
+		machinecommand_prepare_mixer_restore(self->machines,
+			self->mixer_snapshots);
 		/* Keep the retained machine from consuming its own synthetic restore
 		** notifications; its preserved internal state already represents those
 		** incident wires. Other machines still receive the topology delta. */
 		machinecommand_mark_detached(self->machine);
-		machinecommand_restore_connections(self->machines, &self->connections);
+		machinecommand_restore_connections(self->machines, &self->connections,
+			self->mixer_snapshots);
 		machinecommand_restore_mixer_snapshots(self->machines,
 			self->mixer_snapshots);
 		psy_audio_machine_set_slot(self->machine, self->slot);
+		machinecommand_rebuild_mixer_send_markers(self->machines);
 		psy_audio_machines_updatepath(self->machines);
 	}
 	psy_audio_exclusivelock_leave();
@@ -762,6 +933,7 @@ void insertmachinecommand_revert(InsertMachineCommand* self)
 		machinecommand_mark_detached(machine);
 		psy_audio_machines_erase(self->machines, self->slot);
 		self->machine_detached = TRUE;
+		machinecommand_rebuild_mixer_send_markers(self->machines);
 	}	
 	psy_audio_exclusivelock_leave();
 	self->machines->preventundoredo = FALSE;
@@ -839,6 +1011,7 @@ void deletemachinecommand_execute(DeleteMachineCommand* self,
 		machinecommand_mark_detached(machine);
 		psy_audio_machines_erase(self->machines, self->slot);
 		self->machine_detached = TRUE;
+		machinecommand_rebuild_mixer_send_markers(self->machines);
 	}
 	psy_audio_exclusivelock_leave();
 	self->machines->preventundoredo = FALSE;
@@ -852,14 +1025,18 @@ void deletemachinecommand_revert(DeleteMachineCommand* self)
 		psy_audio_machines_insert(self->machines, self->slot,
 			self->machine);
 		self->machine_detached = FALSE;
+		machinecommand_prepare_mixer_restore(self->machines,
+			self->mixer_snapshots);
 		/* The retained machine already owns the channel state for its original
 		** incident wires. Suppress only its own restore callbacks while the
 		** signal-emitting delta repairs downstream connection-aware machines. */
 		machinecommand_mark_detached(self->machine);
-		machinecommand_restore_connections(self->machines, &self->connections);
+		machinecommand_restore_connections(self->machines, &self->connections,
+			self->mixer_snapshots);
 		machinecommand_restore_mixer_snapshots(self->machines,
 			self->mixer_snapshots);
 		psy_audio_machine_set_slot(self->machine, self->slot);
+		machinecommand_rebuild_mixer_send_markers(self->machines);
 		psy_audio_machines_updatepath(self->machines);
 	}	
 	psy_audio_exclusivelock_leave();
