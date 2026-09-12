@@ -95,11 +95,14 @@ cat > "$SUMMARY" <<'EOF'
 - Source WAV import through Psycle historical WAV song path: PASS
 - Player startup without optional MIDI configuration: PASS
 - Real Psycle Player playback through FileOutDriver: PASS
+- C11 atomic render-completion synchronization: PASS
+- FileOut close joins worker before driver/plugin teardown: PASS
 - RIFF/WAVE header and data-size integrity: PASS
 - FileOut data size derived from actual payload bytes: PASS
 - Render duration bounded to one final FileOut block: PASS
 - 44.1 kHz stereo 16-bit PCM render format: PASS
-- Non-silent rendered PCM: PASS
+- Rendered PCM matches deterministic source pitch/gain/attack model: PASS
+- Deterministic mono source renders identically to both stereo channels: PASS
 - Psycle-rendered WAV re-import to built-in Sampler: PASS
 - Full rendered-WAV ↔ Sampler PCM equality: PASS
 - Rendered frame/channel/sample-rate preservation on import: PASS
