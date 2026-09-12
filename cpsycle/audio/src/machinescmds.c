@@ -26,6 +26,7 @@ typedef struct MachineCommandRouteState {
 } MachineCommandRouteState;
 
 typedef struct MachineCommandInputState {
+	uintptr_t id;
 	uintptr_t inputslot;
 	double volume;
 	double panning;
@@ -174,6 +175,7 @@ static MachineCommandInputState* machinecommand_capture_input(
 	if (!input) {
 		return NULL;
 	}
+	input->id = channel->id;
 	input->inputslot = channel->inputslot;
 	input->volume = channel->volume;
 	input->panning = channel->panning;
@@ -350,6 +352,31 @@ static void machinecommand_capture_mixer_snapshots(psy_audio_Machines* machines,
 	}
 }
 
+static uintptr_t machinecommand_restore_input_id(psy_audio_Mixer* mixer,
+	const MachineCommandInputState* input)
+{
+	uintptr_t current_id;
+	psy_audio_InputChannel* channel;
+
+	current_id = machinecommand_input_id(mixer, input->inputslot);
+	if (current_id == psy_INDEX_INVALID || current_id == input->id) {
+		return current_id;
+	}
+	/* Keep a newer channel that legitimately occupied the old column. */
+	if (psy_audio_mixer_channel(mixer, input->id)) {
+		return current_id;
+	}
+	channel = psy_audio_mixer_channel(mixer, current_id);
+	if (!channel) {
+		return psy_INDEX_INVALID;
+	}
+	psy_table_remove(&mixer->inputs, current_id);
+	channel->id = input->id;
+	channel->gain_param.index = input->id;
+	psy_audio_mixer_insertchannel(mixer, input->id, channel);
+	return input->id;
+}
+
 static uintptr_t machinecommand_restore_return_id(psy_audio_Mixer* mixer,
 	const MachineCommandReturnState* ret)
 {
@@ -408,7 +435,7 @@ static void machinecommand_restore_mixer_snapshots(psy_audio_Machines* machines,
 			psy_List* r;
 
 			input = (MachineCommandInputState*)q->entry;
-			id = machinecommand_input_id(mixer, input->inputslot);
+			id = machinecommand_restore_input_id(mixer, input);
 			if (id == psy_INDEX_INVALID) {
 				continue;
 			}
@@ -525,14 +552,20 @@ static void machinecommand_connect_saved(psy_audio_Machines* machines,
 	psy_audio_Connections* saved, psy_audio_Wire wire)
 {
 	bool previous_mode;
+	bool suppress_existing_input;
+	uintptr_t dst_slot;
 	psy_audio_Machine* src;
 	psy_audio_Machine* dst;
 
 	previous_mode = psy_audio_machines_is_connect_as_mixersend(machines);
+	suppress_existing_input = FALSE;
+	dst_slot = psy_INDEX_INVALID;
 	src = psy_audio_machines_at(machines, wire.src);
 	dst = psy_audio_machines_at(machines, wire.dst);
 	if (src && dst && psy_audio_machine_type(dst) == psy_audio_MIXER &&
 			psy_audio_machine_mode(src) != psy_audio_MACHMODE_GENERATOR) {
+		psy_audio_Mixer* mixer;
+
 		/*
 		** Mixer decides input-vs-return classification at signal_connected time.
 		** Replay the mode encoded by the saved graph, not the user's current
@@ -542,9 +575,25 @@ static void machinecommand_connect_saved(psy_audio_Machines* machines,
 			psy_audio_machines_connect_as_mixersend(machines);
 		} else {
 			psy_audio_machines_connect_as_mixerinput(machines);
+			/* mixer.c::ondisconnected() classifies every non-generator as a
+			** return, so an FX that was actually a normal Mixer input can leave
+			** its InputChannel alive while the wire is absent. Suppress only this
+			** destination Mixer's reconnect callback and reuse that channel rather
+			** than allocating a duplicate for the same source. Other listeners
+			** still receive signal_connected from the connection operation. */
+			mixer = machinecommand_mixer_client(dst);
+			if (mixer && machinecommand_input_id(mixer, wire.src) !=
+					psy_INDEX_INVALID && psy_audio_machine_slot(dst) == wire.dst) {
+				dst_slot = wire.dst;
+				psy_audio_machine_set_slot(dst, psy_INDEX_INVALID);
+				suppress_existing_input = TRUE;
+			}
 		}
 	}
 	psy_audio_connections_connect(&machines->connections, wire);
+	if (suppress_existing_input) {
+		psy_audio_machine_set_slot(dst, dst_slot);
+	}
 	if (previous_mode) {
 		psy_audio_machines_connect_as_mixersend(machines);
 	} else {
