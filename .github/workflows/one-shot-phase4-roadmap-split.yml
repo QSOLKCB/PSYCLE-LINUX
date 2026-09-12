@@ -1,0 +1,51 @@
+name: One-shot Phase 4 roadmap split
+
+on:
+  push:
+    branches:
+      - phase-4/render-bounce-sampler
+    paths:
+      - .github/workflows/one-shot-phase4-roadmap-split.yml
+
+permissions:
+  contents: write
+
+jobs:
+  roadmap:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-4/render-bounce-sampler
+          fetch-depth: 0
+
+      - name: Record precise Phase 4 evidence
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('ROADMAP.md')
+          s = p.read_text()
+          s = s.replace(
+              '- [ ] Machine View creation, deletion, wiring, rewiring, mute, bypass, parameter access and editor opening.\n'
+              '- [ ] Pattern editor note entry plus representative tracker commands/effect columns across multiple tracks.\n',
+              '- [x] Machine View command/model path: creation, deletion, wiring, rewiring, mute, bypass, parameter access and persisted machine positions.\n'
+              '- [ ] Live Machine View editor opening and embedded editor interaction.\n'
+              '- [x] Tracker Grid command/model path: note entry plus representative tracker/effect commands across multiple tracks, including undo/redo and PSY3 reload.\n')
+          s = s.replace('- [ ] Preset loading/saving.\n', '- [x] Preset loading/saving, including integer parameters and opaque plugin-state payloads.\n')
+          old = '''Automated evidence for the completed sequencer/transport rows is provided by\n`.github/workflows/phase4-sequencer-transport.yml`; automated evidence for the\nrender/bounce rows is provided by `.github/workflows/phase4-render-bounce-sampler.yml`.\nThese gates complement rather than replace the remaining UI and real-device work.\n'''
+          new = '''Automated evidence for Machine View/Tracker command-model compatibility is provided\nby `.github/workflows/phase4-interactive-editing.yml`; sequencer/transport evidence\nis provided by `.github/workflows/phase4-sequencer-transport.yml`; render/bounce\nevidence is provided by `.github/workflows/phase4-render-bounce-sampler.yml`; and\npreset serialization evidence is provided by `.github/workflows/phase4-preset-roundtrip.yml`.\nThese gates complement rather than replace the remaining UI and real-device work.\n'''
+          if old not in s:
+              raise SystemExit('roadmap evidence paragraph not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+
+      - name: Commit roadmap and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/one-shot-phase4-roadmap-split.yml
+          git config user.name "EmergentMonk"
+          git config user.email "73952179+EmergentMonk@users.noreply.github.com"
+          git add ROADMAP.md .github/workflows/one-shot-phase4-roadmap-split.yml
+          git commit -m "docs: distinguish automated Phase 4 evidence from UI work"
+          git push origin HEAD:phase-4/render-bounce-sampler
