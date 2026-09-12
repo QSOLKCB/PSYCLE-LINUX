@@ -66,16 +66,18 @@ cat > "$SUMMARY" <<'EOF'
 
 - Sequence order insertion through SequenceInsertCommand: PASS
 - Sequence insert undo / redo: PASS
+- Sequence removal through SequenceRemoveCommand: PASS
+- Sequence remove undo / redo / second undo: PASS
 - Multi-sequence-track layout: PASS
 - Pattern-length-driven order offsets: PASS
 - Sequence duration calculation: PASS
 - Play-selection marking / clearing: PASS
 - BPM to samples timing: PASS
 - LPB / beats-per-line timing: PASS
-- Transport position set / deterministic frame advance: PASS
+- Transport position set / deterministic windowed frame advance: PASS
 - Transport start / stop: PASS
 - Bounded loop range setup: PASS
-- Song BPM / LPB PSY3 persistence: PASS
+- Legacy-compatible integer BPM / LPB PSY3 persistence: PASS
 - Multi-track sequence PSY3 persistence: PASS
 - Fresh-load transport semantics: PASS
 
