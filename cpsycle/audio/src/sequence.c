@@ -408,17 +408,18 @@ void psy_audio_sequence_copy(psy_audio_Sequence* self,
 	uintptr_t t;
 
 	psy_audio_sequence_clear(self);
-	for (t = 0; t < psy_audio_sequence_num_tracks(self); ++t) {
+	self->patterns = other->patterns;
+	self->samples = other->samples;
+	for (t = 0; t < psy_audio_sequence_num_tracks(other); ++t) {
 		psy_audio_SequenceTrack* src_track;
 
-		src_track = psy_audio_sequence_track_at(self, t);
+		src_track = psy_audio_sequence_track_at(other, t);
 		if (src_track) {
 			psy_audio_sequence_append_track(self,
 				psy_audio_sequencetrack_clone(src_track));
 		}
 	}
 	psy_audio_trackstate_copy(&self->trackstate, &other->trackstate);	
-	self->patterns = other->patterns;	
 }
 
 void psy_audio_sequence_clear(psy_audio_Sequence* self)
