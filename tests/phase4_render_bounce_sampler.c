@@ -37,7 +37,7 @@
 #define RENDER_TIMEOUT_TICKS 500u
 #define RENDER_WAIT_US 10000u
 #define MIN_RENDER_PEAK 100.0
-#define PCM_COMPARE_FRAMES 512u
+#define FILEOUT_BLOCK_FRAMES 1024u
 #define PCM_TOLERANCE 0.5
 
 
@@ -226,6 +226,13 @@ static int inspect_rendered_wav(const char* path, WavInfo* info)
 		fclose(file);
 		return fail("rendered WAV contains no audio frames");
 	}
+	/* FileOut renders fixed 1,024-frame blocks. The deterministic source
+	** is 11,025 frames, so only the final block may extend the file. */
+	if (info->frames < SOURCE_FRAMES ||
+			info->frames >= SOURCE_FRAMES + FILEOUT_BLOCK_FRAMES) {
+		fclose(file);
+		return fail("rendered WAV duration falls outside the final-buffer tolerance");
+	}
 	if (fseek(file, 44, SEEK_SET) != 0) {
 		fclose(file);
 		return fail("could not seek to rendered PCM data");
@@ -352,6 +359,54 @@ static int verify_bounced_song(psy_audio_Song* song, const WavInfo* info)
 	return 0;
 }
 
+static int compare_imported_pcm_with_wav(psy_audio_Song* song,
+	const char* path, const WavInfo* info)
+{
+	psy_audio_Sample* sample;
+	FILE* file;
+	uintptr_t frame;
+	uintptr_t channel;
+
+	sample = psy_audio_samples_at(psy_audio_song_samples(song),
+		psy_audio_sampleindex_make(0, 0));
+	if (!sample || sample->channels.numchannels != info->channels ||
+			psy_audio_sample_num_frames(sample) != info->frames) {
+		return fail("cannot compare rendered WAV with imported Sampler PCM");
+	}
+	file = fopen(path, "rb");
+	if (!file) {
+		return fail("could not reopen rendered WAV for PCM comparison");
+	}
+	if (fseek(file, 44, SEEK_SET) != 0) {
+		fclose(file);
+		return fail("could not seek to rendered WAV PCM for comparison");
+	}
+	for (frame = 0; frame < info->frames; ++frame) {
+		for (channel = 0; channel < info->channels; ++channel) {
+			unsigned char bytes[2];
+			int16_t expected;
+			double actual;
+
+			if (fread(bytes, 1, 2, file) != 2) {
+				fclose(file);
+				return fail("rendered WAV ended during Sampler PCM comparison");
+			}
+			expected = (int16_t)read_u16_le(bytes);
+			actual = (double)sample->channels.samples[channel][frame];
+			if (fabs(actual - (double)expected) > PCM_TOLERANCE) {
+				fprintf(stderr,
+					"phase4-render-bounce-sampler: FAIL: WAV/Sampler PCM mismatch at frame %lu channel %lu: expected %d, got %.3f\n",
+					(unsigned long)frame, (unsigned long)channel,
+					(int)expected, actual);
+				fclose(file);
+				return 1;
+			}
+		}
+	}
+	fclose(file);
+	return 0;
+}
+
 static int compare_bounced_pcm(psy_audio_Song* before, psy_audio_Song* after)
 {
 	psy_audio_Sample* lhs;
@@ -375,9 +430,6 @@ static int compare_bounced_pcm(psy_audio_Song* before, psy_audio_Song* after)
 	}
 	channels = lhs->channels.numchannels;
 	frames = psy_audio_sample_num_frames(lhs);
-	if (frames > PCM_COMPARE_FRAMES) {
-		frames = PCM_COMPARE_FRAMES;
-	}
 	for (channel = 0; channel < channels; ++channel) {
 		for (frame = 0; frame < frames; ++frame) {
 			double delta;
@@ -516,6 +568,10 @@ int main(int argc, char** argv)
 		} else {
 			psy_audio_machinecallback_set_song(&import_callback, bounced_song);
 			rc = verify_bounced_song(bounced_song, &wav_info);
+			if (rc == 0) {
+				rc = compare_imported_pcm_with_wav(bounced_song,
+					render_path, &wav_info);
+			}
 		}
 	}
 	if (rc == 0) {
@@ -534,6 +590,10 @@ int main(int argc, char** argv)
 		} else {
 			psy_audio_machinecallback_set_song(&reload_callback, reloaded_song);
 			rc = verify_bounced_song(reloaded_song, &wav_info);
+			if (rc == 0) {
+				rc = compare_imported_pcm_with_wav(reloaded_song,
+					render_path, &wav_info);
+			}
 			if (rc == 0) {
 				rc = compare_bounced_pcm(bounced_song, reloaded_song);
 			}
