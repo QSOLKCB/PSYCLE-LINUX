@@ -559,6 +559,10 @@ void cmdproperties_make_general(psy_Property* self)
 			psy_audio_encodeinput(psy_ui_KEY_O, 0, 1, 0, 0), 0, 0), CMD_IMM_LOADSONG),
 		"loadsong"), "cmds.loadsong");
 	psy_property_set_text(psy_property_set_short_text(
+		psy_property_set_id(psy_property_append_int(general, "cmd_loadsample",
+			psy_audio_encodeinput(psy_ui_KEY_O, 1, 1, 0, 0), 0, 0), CMD_IMM_LOAD_SAMPLE),
+		"loadsample"), "file.load");
+	psy_property_set_text(psy_property_set_short_text(
 		psy_property_set_id(psy_property_append_int(general, "cmd_savesong",
 			psy_audio_encodeinput(psy_ui_KEY_S, 0, 1, 0, 0), 0, 0), CMD_IMM_SAVESONG),
 		"savesong"), "cmds.savesong");

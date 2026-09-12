@@ -1,0 +1,41 @@
+name: Phase 4 render bounce sampler
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  render-bounce-sampler:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install core build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run render bounce sampler regression
+        run: |
+          chmod +x scripts/phase4-render-bounce-sampler-smoke.sh
+          scripts/phase4-render-bounce-sampler-smoke.sh phase4-render-bounce-sampler
+
+      - name: Upload render bounce sampler evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-render-bounce-sampler
+          path: phase4-render-bounce-sampler/
+          if-no-files-found: warn
+          retention-days: 30

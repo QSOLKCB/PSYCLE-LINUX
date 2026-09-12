@@ -26,8 +26,39 @@ if [ "${PSYCLE_SMOKE_INSIDE_XVFB:-0}" != "1" ]; then
     done
 
     rm -rf "$STATE"
-    mkdir -p "$STATE/home" "$STATE/config"
+    mkdir -p "$STATE/home" "$STATE/config" "$STATE/samples" "$STATE/songs"
     : > "$LOG"
+
+    python3 - "$STATE/samples/zzzz-phase4-ui-sample.wav" <<'PYWAV'
+import math
+import struct
+import sys
+import wave
+path = sys.argv[1]
+rate = 44100
+frames = 2205
+with wave.open(path, "wb") as out:
+    out.setnchannels(1)
+    out.setsampwidth(2)
+    out.setframerate(rate)
+    pcm = bytearray()
+    for i in range(frames):
+        sample = int(round(12000.0 * math.sin(2.0 * math.pi * 440.0 * i / rate)))
+        pcm += struct.pack("<h", sample)
+    out.writeframes(pcm)
+PYWAV
+
+    cat > "$STATE/config/psycle.ini" <<EOF
+[global]
+enableaudio=1
+[inputhandling]
+savereminder=0
+ft2fileexplorer=1
+[directories]
+songs=$STATE/songs
+samples=$STATE/samples
+doc=$CPSYCLE/doc
+EOF
 
     exec xvfb-run -a -s '-screen 0 1280x720x24 -nolisten tcp' \
         env PSYCLE_SMOKE_INSIDE_XVFB=1 \
@@ -149,17 +180,92 @@ if [ "$audio_callback_completed" -ne 1 ]; then
     exit 1
 fi
 
-# Alt+A is Psycle's default CMD_IMM_ENABLEAUDIO shortcut. It toggles the real
-# global `enableaudio` configuration property. Start from a fresh isolated
-# config directory (default = enabled), inject the command, then close Psycle
-# through the X11 WM_DELETE path so workspace_dispose() persists configuration.
-# Requiring enableaudio=0 in the resulting psycle.ini proves an observable
-# keyboard -> command dispatch -> application state mutation -> save round trip.
-if [ -e "$CONFIG_FILE" ]; then
-    echo "Runtime smoke expected a fresh config, but $CONFIG_FILE already exists." >&2
+# Exercise the remaining Phase 4 live-UI contracts before the existing
+# configuration persistence check. The seeded config keeps all state isolated,
+# disables only the save-reminder prompt for this deterministic smoke, and
+# points Sample Load at a directory containing exactly one generated WAV.
+if ! grep -Eq '^[[:space:]]*enableaudio[[:space:]]*=[[:space:]]*1[[:space:]]*$' "$CONFIG_FILE"; then
+    echo 'Runtime smoke seed did not start with enableaudio=1.' >&2
     exit 1
 fi
 
+# Shift+Enter is CMD_IMM_INFOMACHINE. Fresh songs now select Master by default,
+# so this must create a real floating parameter/tool frame.
+xdotool windowfocus "$window_id"
+xdotool key --clearmodifiers --window "$window_id" shift+Return
+editor_id=''
+for _ in $(seq 1 40); do
+    editor_id="$(xdotool search --onlyvisible --name '^80 :' 2>/dev/null | head -n 1 || true)"
+    [ -n "$editor_id" ] && break
+    sleep 0.1
+done
+if [ -z "$editor_id" ]; then
+    echo 'Shift+Enter did not expose the selected Master parameter frame.' >&2
+    tail -n 120 "$LOG" >&2 || true
+    exit 1
+fi
+xdotool windowfocus "$editor_id"
+sleep 0.1
+if [ "$(xdotool getwindowfocus)" != "$editor_id" ]; then
+    echo 'Machine parameter frame could not receive X11 focus.' >&2
+    exit 1
+fi
+xdotool windowclose "$editor_id"
+for _ in $(seq 1 30); do
+    if ! xdotool search --onlyvisible --name '^80 :' >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.1
+done
+if ! grep -q 'psycle: runtime smoke machine editor shown slot=128' "$LOG"; then
+    echo 'Machine editor window appeared without reaching ParamViews show path.' >&2
+    exit 1
+fi
+
+# F3 focuses Tracker Grid. Note input and Tab are handled only by focus-scoped
+# tracker input handlers, so their smoke markers prove both focus and keyboard
+# navigation/entry reached the real editor path.
+xdotool windowfocus "$window_id"
+xdotool key --clearmodifiers --window "$window_id" F3
+sleep 0.25
+xdotool key --clearmodifiers --window "$window_id" z
+xdotool key --clearmodifiers --window "$window_id" Tab
+xdotool key --clearmodifiers --window "$window_id" x
+for _ in $(seq 1 30); do
+    note_count="$(grep -c 'psycle: runtime smoke tracker note inserted' "$LOG" || true)"
+    if [ "$note_count" -ge 2 ] && grep -q 'psycle: runtime smoke tracker column next' "$LOG"; then
+        break
+    fi
+    sleep 0.1
+done
+note_count="$(grep -c 'psycle: runtime smoke tracker note inserted' "$LOG" || true)"
+if [ "$note_count" -lt 2 ] || ! grep -q 'psycle: runtime smoke tracker column next' "$LOG"; then
+    echo 'Tracker focus/note/navigation keyboard path did not complete.' >&2
+    tail -n 120 "$LOG" >&2 || true
+    exit 1
+fi
+
+# Ctrl+Shift+O is the restored CMD_IMM_LOAD_SAMPLE shortcut. FileView receives
+# focus, End selects the sole WAV fixture, and Return takes the normal
+# FileView -> FileSelect -> Workspace -> Sample/Instrument insertion path.
+xdotool key --clearmodifiers --window "$window_id" ctrl+shift+o
+sleep 0.4
+xdotool key --clearmodifiers --window "$window_id" End
+xdotool key --clearmodifiers --window "$window_id" Return
+for _ in $(seq 1 40); do
+    if grep -q 'psycle: runtime smoke sample loaded .*zzzz-phase4-ui-sample.wav' "$LOG"; then
+        break
+    fi
+    sleep 0.1
+done
+if ! grep -q 'psycle: runtime smoke sample loaded .*zzzz-phase4-ui-sample.wav' "$LOG"; then
+    echo 'Normal FileView sample-load workflow did not load the deterministic WAV.' >&2
+    tail -n 160 "$LOG" >&2 || true
+    exit 1
+fi
+
+# Alt+A is Psycle's default CMD_IMM_ENABLEAUDIO shortcut. It toggles the real
+# global `enableaudio` configuration property; normal shutdown must persist it.
 if ! xdotool key --clearmodifiers --window "$window_id" alt+a; then
     echo 'xdotool could not inject Psycle Enable Audio shortcut (Alt+A).' >&2
     exit 1
@@ -222,6 +328,9 @@ cat > "$SUMMARY" <<EOF
 - Dynamic SDL2 driver selection/load: PASS
 - SDL2 dummy audio device open: PASS
 - Completed SDL2 audio callback including Psycle host work: PASS
+- Floating Machine parameter frame open/focus/close through Shift+Enter: PASS
+- Tracker Grid focus-scoped note entry and Tab navigation: PASS
+- Normal FileView WAV -> Sample/Instrument loading workflow: PASS
 - Alt+A Enable Audio keyboard command dispatch: PASS
 - Persisted application state mutation (\`enableaudio=0\`): PASS
 - Clean X11 shutdown and configuration save: PASS
@@ -230,7 +339,7 @@ cat > "$SUMMARY" <<EOF
 - SDL backend: \`SDL_AUDIODRIVER=dummy\`
 - Config evidence: \`${CONFIG_FILE}\`
 
-This smoke test validates native X11 startup, a completed real audio-driver callback, and a keyboard command whose successful dispatch is evidenced by a persisted Psycle configuration state change after normal shutdown. It does not claim physical ALSA/JACK hardware coverage on the GitHub-hosted runner.
+This smoke test validates native X11 startup, a completed real audio-driver callback, a live Machine parameter frame, focus-scoped Tracker Grid editing/navigation, the normal FileView sample-load path, and a keyboard command whose successful dispatch is evidenced by a persisted Psycle configuration state change after normal shutdown. It does not claim physical ALSA/JACK hardware coverage on the GitHub-hosted runner.
 EOF
 
 trap - EXIT

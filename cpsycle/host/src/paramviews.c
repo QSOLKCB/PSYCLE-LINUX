@@ -7,6 +7,9 @@
 
 
 #include "paramviews.h"
+/* std */
+#include <stdio.h>
+#include <stdlib.h>
 
 
 /* prototypes */
@@ -70,6 +73,11 @@ void paramviews_show(ParamViews* self, uintptr_t mac_id)
 	if (frame) {
 		psy_ui_component_center(&frame->component);
 		psy_ui_component_show(&frame->component);
+		if (getenv("PSYCLE_RUNTIME_SMOKE")) {
+			fprintf(stderr, "psycle: runtime smoke machine editor shown slot=%lu\n",
+				(unsigned long)mac_id);
+			fflush(stderr);
+		}
 	}
 }
 

@@ -232,9 +232,11 @@ int driver_close(psy_AudioDriver* driver)
 	psy_audio_FileOutDriver* self = (psy_audio_FileOutDriver*) driver;
 
 	self->stop_polling_ = 1;
-#if defined(DIVERSALIS__OS__MICROSOFT)		
-	WaitForSingleObject(self->hEvent, INFINITE);
-#endif	
+	/* Closing a FileOut driver is a lifetime boundary: do not return while the
+	** worker can still write the file, emit signal_stop, or touch this driver.
+	** psy_thread_dispose() historically joins only on Windows, so join here on
+	** every platform before callers restore/deallocate the driver. */
+	psy_thread_join(&self->thread_);
 	return 0;
 }
 
@@ -418,7 +420,6 @@ unsigned int PollerThread(void* driver)
 		pBuf = self->driver.callback(self->driver.callbackcontext, &n,
 			&hostisplaying);		
 		fileoutdriver_writebuffer(self, pBuf, blocksize);
-		self->filecontext.numsamples += blocksize;
 		if (self->poll_sleep_ > 0) {
 			psy_sleep_for(self->poll_sleep_);
 		}
@@ -549,7 +550,6 @@ void fileoutdriver_writebuffer(psy_audio_FileOutDriver* self, float* pBuf, uintp
 		}
 		break;
 	}
-	self->filecontext.numsamples += (uint32_t)amount;
 }
 
 void fileoutdriver_closefile(psy_audio_FileOutDriver* self)
@@ -564,7 +564,11 @@ void fileoutdriver_closefile(psy_audio_FileOutDriver* self)
 
 		pos2 = psyfile_getpos(file);
 		psyfile_seek(file, self->filecontext.numsamplesbegin);
-		temp32 = self->filecontext.numsamples;
+		if (pos2 >= self->filecontext.numsamplesbegin + sizeof(temp32)) {
+			temp32 = pos2 - self->filecontext.numsamplesbegin - sizeof(temp32);
+		} else {
+			temp32 = 0;
+		}
 		psyfile_write(file, &temp32, sizeof(temp32));
 		psyfile_seek(file, pos2);	
 	}	

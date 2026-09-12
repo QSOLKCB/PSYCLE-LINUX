@@ -1,0 +1,40 @@
+name: Phase 4 preset roundtrip
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  preset-roundtrip:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install core build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run preset roundtrip regression
+        run: |
+          chmod +x scripts/phase4-preset-roundtrip-smoke.sh
+          scripts/phase4-preset-roundtrip-smoke.sh phase4-preset-roundtrip
+
+      - name: Upload preset roundtrip evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-preset-roundtrip
+          path: phase4-preset-roundtrip/
+          if-no-files-found: warn
+          retention-days: 30

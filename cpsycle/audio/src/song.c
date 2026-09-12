@@ -150,6 +150,7 @@ void song_init_machines(psy_audio_Song* self)
 		psy_audio_machines_insertmaster(&self->machines_,
 			psy_audio_machinefactory_make_machine(self->machine_factory,
 				psy_audio_MASTER, NULL, psy_INDEX_INVALID));
+		psy_audio_machines_select(&self->machines_, psy_audio_MASTER_INDEX);
 	}
 }
 
