@@ -52,8 +52,11 @@ cat > "$SUMMARY" <<'EOF'
 - Version-1 preset file load: PASS
 - Multiple named presets: PASS
 - Integer parameter preservation: PASS
+- Parameter hash remains valid while rebuilding opaque-state presets: PASS
+- Per-preset opaque state is serialized from the owning preset: PASS
 - Opaque plugin-state size preservation: PASS
 - Opaque plugin-state byte preservation: PASS
+- Read/write/finalization status propagation: PASS
 - Independent saved-file reload: PASS
 EOF
 
