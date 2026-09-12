@@ -26,7 +26,9 @@ typedef struct InsertMachineCommand {
 	struct psy_audio_Machine* machine;
 	uintptr_t slot;
 	bool restoreconnection;
+	bool machine_detached;
 	psy_audio_Connections connections;
+	psy_List* mixer_snapshots;
 } InsertMachineCommand;
 
 void insertmachinecommand_dispose(InsertMachineCommand*);
@@ -42,7 +44,9 @@ typedef struct {
 	psy_audio_Machines* machines;
 	struct psy_audio_Machine* machine;
 	uintptr_t slot;
+	bool machine_detached;
 	psy_audio_Connections connections;
+	psy_List* mixer_snapshots;
 } DeleteMachineCommand;
 
 void deletemachinecommand_dispose(DeleteMachineCommand*);
@@ -67,8 +71,8 @@ typedef struct ConnectMachineCommand {
 
 void connectmachinecommand_dispose(ConnectMachineCommand*);
 
-ConnectMachineCommand* connectmachinecommand_alloc_init(psy_audio_Machines*,
-	psy_audio_Wire);
+ConnectMachineCommand* connectmachinecommand_alloc_init(
+	psy_audio_Machines*, psy_audio_Wire);
 
 
 /* DisconnectMachineCommand */
@@ -83,8 +87,8 @@ typedef struct DisconnectMachineCommand {
 
 void disconnectmachinecommand_dispose(DisconnectMachineCommand*);
 
-DisconnectMachineCommand* disconnectmachinecommand_alloc_init(psy_audio_Machines*,
-	psy_audio_Wire);
+DisconnectMachineCommand* disconnectmachinecommand_alloc_init(
+	psy_audio_Machines*, psy_audio_Wire);
 
 void disconnectmachinecommand_execute(DisconnectMachineCommand*,
 	uintptr_t param);

@@ -1,0 +1,48 @@
+name: Phase 4 interactive editing
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase4-interactive-editing-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  interactive-editing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install core build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run interactive editing regression
+        run: |
+          chmod +x scripts/phase4-interactive-editing-smoke.sh
+          scripts/phase4-interactive-editing-smoke.sh phase4-interactive-editing
+
+      - name: Upload generated editing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-interactive-editing
+          path: phase4-interactive-editing/
+          if-no-files-found: warn
+          retention-days: 30
