@@ -232,9 +232,11 @@ int driver_close(psy_AudioDriver* driver)
 	psy_audio_FileOutDriver* self = (psy_audio_FileOutDriver*) driver;
 
 	self->stop_polling_ = 1;
-#if defined(DIVERSALIS__OS__MICROSOFT)		
-	WaitForSingleObject(self->hEvent, INFINITE);
-#endif	
+	/* Closing a FileOut driver is a lifetime boundary: do not return while the
+	** worker can still write the file, emit signal_stop, or touch this driver.
+	** psy_thread_dispose() historically joins only on Windows, so join here on
+	** every platform before callers restore/deallocate the driver. */
+	psy_thread_join(&self->thread_);
 	return 0;
 }
 

@@ -9,6 +9,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,11 +39,15 @@
 #define RENDER_WAIT_US 10000u
 #define MIN_RENDER_PEAK 100.0
 #define FILEOUT_BLOCK_FRAMES 1024u
+#define SOURCE_PLAYBACK_STEP 0.5
+#define EXPECTED_RENDER_GAIN 0.5
+#define DEFAULT_ATTACK_SECONDS 0.005
+#define SOURCE_SIGNAL_TOLERANCE 64.0
 #define PCM_TOLERANCE 0.5
 
 
 typedef struct RenderStopState {
-	volatile int stopped;
+	atomic_bool stopped;
 } RenderStopState;
 
 typedef struct WavInfo {
@@ -106,6 +111,76 @@ static int16_t source_pcm_value(uintptr_t frame)
 
 	phase = 2.0 * M_PI * SOURCE_FREQ * (double)frame / (double)SOURCE_RATE;
 	return (int16_t)lrint(sin(phase) * SOURCE_AMPLITUDE);
+}
+
+static double expected_render_sample(uintptr_t frame)
+{
+	double source_position;
+	uintptr_t source_frame;
+	double fraction;
+	double sample;
+	double envelope;
+
+	/* WAV-song import emits note 48 while the retained Sampler uses middle-C
+	** pitch as its unity-rate reference, so this fixture plays at half speed.
+	** The centered mono voice contributes half amplitude to each stereo side. */
+	source_position = (double)frame * SOURCE_PLAYBACK_STEP;
+	source_frame = (uintptr_t)source_position;
+	fraction = source_position - (double)source_frame;
+	sample = (double)source_pcm_value(source_frame);
+	if (source_frame + 1u < SOURCE_FRAMES) {
+		sample += ((double)source_pcm_value(source_frame + 1u) - sample) * fraction;
+	}
+	envelope = (double)frame / (DEFAULT_ATTACK_SECONDS * (double)SOURCE_RATE);
+	if (envelope > 1.0) {
+		envelope = 1.0;
+	}
+	return sample * EXPECTED_RENDER_GAIN * envelope;
+}
+
+static int compare_rendered_pcm_with_source(const char* path, const WavInfo* info)
+{
+	FILE* file;
+	uintptr_t frame;
+
+	file = fopen(path, "rb");
+	if (!file) {
+		return fail("could not reopen rendered WAV for source comparison");
+	}
+	if (fseek(file, 44, SEEK_SET) != 0) {
+		fclose(file);
+		return fail("could not seek to rendered WAV PCM for source comparison");
+	}
+	for (frame = 0; frame < SOURCE_FRAMES; ++frame) {
+		unsigned char left_bytes[2];
+		unsigned char right_bytes[2];
+		int16_t left;
+		int16_t right;
+		double expected;
+
+		if (fread(left_bytes, 1, 2, file) != 2 ||
+				fread(right_bytes, 1, 2, file) != 2) {
+			fclose(file);
+			return fail("rendered WAV ended during deterministic source comparison");
+		}
+		left = (int16_t)read_u16_le(left_bytes);
+		right = (int16_t)read_u16_le(right_bytes);
+		expected = expected_render_sample(frame);
+		if (fabs((double)left - expected) > SOURCE_SIGNAL_TOLERANCE ||
+				fabs((double)right - expected) > SOURCE_SIGNAL_TOLERANCE) {
+			fprintf(stderr,
+				"phase4-render-bounce-sampler: FAIL: source/render mismatch at frame %lu: expected %.3f, got L=%d R=%d\n",
+				(unsigned long)frame, expected, (int)left, (int)right);
+			fclose(file);
+			return 1;
+		}
+		if (abs((int)left - (int)right) > 1) {
+			fclose(file);
+			return fail("deterministic mono source did not render identically to both stereo channels");
+		}
+	}
+	fclose(file);
+	return 0;
 }
 
 static int write_source_wav(const char* path)
@@ -303,7 +378,7 @@ static int save_song(psy_audio_Song* song, const char* path)
 static void on_render_stopped(RenderStopState* state, psy_AudioDriver* sender)
 {
 	(void)sender;
-	state->stopped = 1;
+	atomic_store_explicit(&state->stopped, true, memory_order_release);
 }
 
 static int verify_bounced_song(psy_audio_Song* song, const WavInfo* info)
@@ -531,16 +606,17 @@ int main(int argc, char** argv)
 	psy_audio_sequencer_stop_loop(&player.sequencer);
 	psy_audio_player_set_position(&player, 0.0);
 	psy_audio_player_start(&player);
-	stop_state.stopped = 0;
+	atomic_init(&stop_state.stopped, false);
 	psy_signal_connect(&fileout->signal_stop, &stop_state, on_render_stopped);
 	if (psy_audiodriver_open(fileout) != 0) {
 		rc = fail("FileOutDriver failed to open");
 	} else {
 		rc = 0;
-		for (tick = 0; tick < RENDER_TIMEOUT_TICKS && !stop_state.stopped; ++tick) {
+		for (tick = 0; tick < RENDER_TIMEOUT_TICKS &&
+				!atomic_load_explicit(&stop_state.stopped, memory_order_acquire); ++tick) {
 			psy_sleep_for(RENDER_WAIT_US);
 		}
-		if (!stop_state.stopped) {
+		if (!atomic_load_explicit(&stop_state.stopped, memory_order_acquire)) {
 			rc = fail("FileOutDriver did not finish within the regression timeout");
 		}
 	}
@@ -554,6 +630,9 @@ int main(int argc, char** argv)
 
 	if (rc == 0) {
 		rc = inspect_rendered_wav(render_path, &wav_info);
+	}
+	if (rc == 0) {
+		rc = compare_rendered_pcm_with_source(render_path, &wav_info);
 	}
 
 	psy_audio_machinecallback_init(&import_callback);
