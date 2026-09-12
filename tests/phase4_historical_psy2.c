@@ -15,6 +15,7 @@
 #include <machinefactory.h>
 #include <machines.h>
 #include <pattern.h>
+#include <player.h>
 #include <plugincatcher.h>
 #include <psyconvert.h>
 #include <song.h>
