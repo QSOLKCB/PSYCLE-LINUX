@@ -139,13 +139,18 @@ Current automated runtime evidence also covers SDL2 selection, an opened SDL dum
 - [ ] Machine View creation, deletion, wiring, rewiring, mute, bypass, parameter access and editor opening.
 - [ ] Pattern editor note entry plus representative tracker commands/effect columns across multiple tracks.
 - [ ] Keyboard shortcuts, navigation and focus behaviour required for tracker use.
-- [ ] Sequencer editing and playback.
-- [ ] Tempo, LPB/line timing, transport, loop and position behaviour.
+- [x] Sequencer editing and playback.
+- [x] Tempo, LPB/line timing, transport, loop and position behaviour.
 - [ ] Normal UI sampler/sample loading workflow.
 - [ ] Preset loading/saving.
 - [ ] Representative historical `.psy` song load using redistributable or user-supplied fixtures.
-- [ ] WAV/audio render through Psycle's existing `FileOutDriver` path.
-- [ ] Psycle-generated WAV → Psycle Sampler compatibility regression.
+- [x] WAV/audio render through Psycle's existing `FileOutDriver` path.
+- [x] Psycle-generated WAV → Psycle Sampler compatibility regression.
+
+Automated evidence for the completed sequencer/transport rows is provided by
+`.github/workflows/phase4-sequencer-transport.yml`; automated evidence for the
+render/bounce rows is provided by `.github/workflows/phase4-render-bounce-sampler.yml`.
+These gates complement rather than replace the remaining UI and real-device work.
 
 ### Historical bounce-to-sampler acceptance workflow
 
