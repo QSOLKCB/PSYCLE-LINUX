@@ -1,0 +1,41 @@
+name: Phase 4 historical PSY2 compatibility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cpsycle/audio/**'
+      - 'tests/phase4_historical_psy2.c'
+      - 'scripts/phase4-historical-psy2-smoke.sh'
+      - '.github/workflows/phase4-historical-psy2.yml'
+  pull_request:
+    paths:
+      - 'cpsycle/audio/**'
+      - 'tests/phase4_historical_psy2.c'
+      - 'scripts/phase4-historical-psy2-smoke.sh'
+      - '.github/workflows/phase4-historical-psy2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  historical-psy2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install core build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config liblilv-dev liblua5.4-dev
+      - name: Run historical PSY2 regression
+        run: scripts/phase4-historical-psy2-smoke.sh phase4-historical-psy2
+      - name: Upload historical PSY2 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-historical-psy2
+          path: phase4-historical-psy2/
+          if-no-files-found: warn
+          retention-days: 30
