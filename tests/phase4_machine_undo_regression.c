@@ -23,6 +23,11 @@
 #define DOWNSTREAM_MIXER_SLOT 2
 #define ROUTE_MIXER_SLOT 3
 #define RAW_MIXER_SLOT 4
+#define INPUT_MIXER_SLOT 5
+#define INPUT_LOW_SLOT 6
+#define INPUT_TARGET_SLOT 7
+#define FX_INPUT_SOURCE_SLOT 8
+#define FX_INPUT_MIXER_SLOT 9
 #define MIXER_INPUT_VOLUME 0.37
 #define MIXER_INPUT_PANNING 0.23
 #define MIXER_INPUT_GAIN 0.61
@@ -32,6 +37,9 @@
 #define DOWNSTREAM_RETURN_INPUTCONVOL 0.58
 #define NEWER_ROUTE_RETURN_VOLUME 0.29
 #define NEWER_ROUTE_RETURN_PANNING 0.18
+#define TARGET_INPUT_VOLUME 0.36
+#define TARGET_INPUT_GAIN 0.63
+#define FX_NORMAL_INPUT_VOLUME 0.52
 
 static int fail(const char* message)
 {
@@ -94,6 +102,44 @@ static psy_audio_InputChannel* mixer_input_channel(psy_audio_Machine* machine)
 
 	mixer = mixer_client(machine);
 	return mixer ? psy_audio_mixer_channel(mixer, 0) : NULL;
+}
+
+static uintptr_t mixer_input_id_for_slot(psy_audio_Mixer* mixer,
+	uintptr_t inputslot)
+{
+	psy_TableIterator it;
+
+	for (it = psy_table_begin(&mixer->inputs);
+			!psy_tableiterator_equal(&it, psy_table_end());
+			psy_tableiterator_inc(&it)) {
+		psy_audio_InputChannel* input;
+
+		input = (psy_audio_InputChannel*)psy_tableiterator_value(&it);
+		if (input && input->inputslot == inputslot) {
+			return psy_tableiterator_key(&it);
+		}
+	}
+	return psy_INDEX_INVALID;
+}
+
+static uintptr_t mixer_input_count_for_slot(psy_audio_Mixer* mixer,
+	uintptr_t inputslot)
+{
+	uintptr_t rv;
+	psy_TableIterator it;
+
+	rv = 0;
+	for (it = psy_table_begin(&mixer->inputs);
+			!psy_tableiterator_equal(&it, psy_table_end());
+			psy_tableiterator_inc(&it)) {
+		psy_audio_InputChannel* input;
+
+		input = (psy_audio_InputChannel*)psy_tableiterator_value(&it);
+		if (input && input->inputslot == inputslot) {
+			++rv;
+		}
+	}
+	return rv;
 }
 
 static uintptr_t mixer_return_id_for_slot(psy_audio_Mixer* mixer,
@@ -230,10 +276,22 @@ int main(void)
 	psy_audio_Machine* downstream_mixer;
 	psy_audio_Machine* route_mixer;
 	psy_audio_Machine* raw_mixer;
+	psy_audio_Machine* input_mixer_machine;
+	psy_audio_Machine* input_low_sampler;
+	psy_audio_Machine* input_target_sampler;
+	psy_audio_Machine* fx_input_source;
+	psy_audio_Machine* fx_input_mixer_machine;
 	psy_audio_InputChannel* input;
+	psy_audio_InputChannel* target_input;
+	psy_audio_InputChannel* fx_input;
 	psy_audio_Mixer* downstream;
+	psy_audio_Mixer* input_mixer;
+	psy_audio_Mixer* fx_input_mixer;
 	uintptr_t deleted_return_id;
 	uintptr_t route_return_id;
+	uintptr_t target_input_id;
+	uintptr_t restored_input_id;
+	uintptr_t fx_input_id;
 	psy_audio_ReturnChannel* downstream_return;
 	psy_audio_ReturnChannel* route_return;
 	psy_audio_MixerSend* downstream_send;
@@ -481,6 +539,123 @@ int main(void)
 	if (psy_audio_machines_at(machines, RAW_MIXER_SLOT) != raw_mixer) {
 		psy_audio_song_deallocate(song);
 		return fail("raw Mixer delete undo failed");
+	}
+
+	/* A generator occupying input ID 1 must return to that exact column after
+	** deletion even when input ID 0 is vacant. Otherwise inputsolo and the
+	** gain parameter's ID-dependent metadata point at the wrong column. */
+	input_mixer_machine = psy_audio_machinefactory_make_machine_from_path(&factory,
+		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
+	input_low_sampler = psy_audio_machinefactory_make_machine_from_path(&factory,
+		psy_audio_SAMPLER, NULL, 0, psy_INDEX_INVALID);
+	input_target_sampler = psy_audio_machinefactory_make_machine_from_path(&factory,
+		psy_audio_SAMPLER, NULL, 0, psy_INDEX_INVALID);
+	if (!input_mixer_machine || !input_low_sampler || !input_target_sampler) {
+		psy_audio_song_deallocate(song);
+		return fail("could not create Mixer input-id regression machines");
+	}
+	psy_audio_machines_insert(machines, INPUT_MIXER_SLOT, input_mixer_machine);
+	psy_audio_machines_insert(machines, INPUT_LOW_SLOT, input_low_sampler);
+	psy_audio_machines_insert(machines, INPUT_TARGET_SLOT, input_target_sampler);
+	psy_audio_machines_connect(machines,
+		psy_audio_wire_make(INPUT_LOW_SLOT, INPUT_MIXER_SLOT));
+	psy_audio_machines_connect(machines,
+		psy_audio_wire_make(INPUT_TARGET_SLOT, INPUT_MIXER_SLOT));
+	input_mixer = mixer_client(psy_audio_machines_at(machines, INPUT_MIXER_SLOT));
+	if (!input_mixer) {
+		psy_audio_song_deallocate(song);
+		return fail("input-id regression Mixer is unavailable");
+	}
+	target_input_id = mixer_input_id_for_slot(input_mixer, INPUT_TARGET_SLOT);
+	if (mixer_input_id_for_slot(input_mixer, INPUT_LOW_SLOT) != 0 ||
+			target_input_id == psy_INDEX_INVALID || target_input_id == 0) {
+		psy_audio_song_deallocate(song);
+		return fail("input-id regression did not allocate target above ID 0");
+	}
+	target_input = psy_audio_mixer_channel(input_mixer, target_input_id);
+	if (!target_input) {
+		psy_audio_song_deallocate(song);
+		return fail("target input channel is missing");
+	}
+	target_input->volume = TARGET_INPUT_VOLUME;
+	target_input->gain = TARGET_INPUT_GAIN;
+	input_mixer->inputsolo = target_input_id;
+	psy_audio_machines_disconnect(machines,
+		psy_audio_wire_make(INPUT_LOW_SLOT, INPUT_MIXER_SLOT));
+	if (mixer_input_id_for_slot(input_mixer, INPUT_LOW_SLOT) != psy_INDEX_INVALID ||
+			mixer_input_id_for_slot(input_mixer, INPUT_TARGET_SLOT) != target_input_id) {
+		psy_audio_song_deallocate(song);
+		return fail("input-id regression did not leave the lower ID vacant");
+	}
+	psy_audio_machines_remove(machines, INPUT_TARGET_SLOT, FALSE);
+	if (mixer_input_id_for_slot(input_mixer, INPUT_TARGET_SLOT) != psy_INDEX_INVALID) {
+		psy_audio_song_deallocate(song);
+		return fail("target generator deletion did not remove its input channel");
+	}
+	psy_undoredo_undo(&machines->undoredo);
+	restored_input_id = mixer_input_id_for_slot(input_mixer, INPUT_TARGET_SLOT);
+	target_input = (restored_input_id == psy_INDEX_INVALID)
+		? NULL : psy_audio_mixer_channel(input_mixer, restored_input_id);
+	if (!target_input || restored_input_id != target_input_id ||
+			target_input->id != target_input_id ||
+			target_input->gain_param.index != target_input_id ||
+			input_mixer->inputsolo != target_input_id ||
+			target_input->volume != TARGET_INPUT_VOLUME ||
+			target_input->gain != TARGET_INPUT_GAIN ||
+			psy_audio_mixer_channel(input_mixer, 0)) {
+		psy_audio_song_deallocate(song);
+		return fail("generator delete undo did not restore the original input ID");
+	}
+
+	/* Non-generator FX normal inputs survive mixer.c::ondisconnected(). Undo
+	** must reuse that surviving channel while restoring the wire, not allocate a
+	** second InputChannel for the same source. */
+	fx_input_source = psy_audio_machinefactory_make_machine_from_path(&factory,
+		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
+	fx_input_mixer_machine = psy_audio_machinefactory_make_machine_from_path(&factory,
+		psy_audio_MIXER, NULL, 0, psy_INDEX_INVALID);
+	if (!fx_input_source || !fx_input_mixer_machine) {
+		psy_audio_song_deallocate(song);
+		return fail("could not create normal-FX-input regression machines");
+	}
+	psy_audio_machines_insert(machines, FX_INPUT_SOURCE_SLOT, fx_input_source);
+	psy_audio_machines_insert(machines, FX_INPUT_MIXER_SLOT,
+		fx_input_mixer_machine);
+	psy_audio_machines_connect_as_mixerinput(machines);
+	psy_audio_machines_connect(machines,
+		psy_audio_wire_make(FX_INPUT_SOURCE_SLOT, FX_INPUT_MIXER_SLOT));
+	fx_input_mixer = mixer_client(psy_audio_machines_at(machines,
+		FX_INPUT_MIXER_SLOT));
+	if (!fx_input_mixer ||
+			mixer_input_count_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT) != 1) {
+		psy_audio_song_deallocate(song);
+		return fail("normal FX input did not create exactly one Mixer channel");
+	}
+	fx_input_id = mixer_input_id_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT);
+	fx_input = psy_audio_mixer_channel(fx_input_mixer, fx_input_id);
+	if (!fx_input) {
+		psy_audio_song_deallocate(song);
+		return fail("normal FX input channel is missing");
+	}
+	fx_input->volume = FX_NORMAL_INPUT_VOLUME;
+	psy_audio_machines_remove(machines, FX_INPUT_SOURCE_SLOT, FALSE);
+	if (mixer_input_count_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT) != 1 ||
+			psy_audio_machines_connected(machines,
+				psy_audio_wire_make(FX_INPUT_SOURCE_SLOT, FX_INPUT_MIXER_SLOT))) {
+		psy_audio_song_deallocate(song);
+		return fail("normal FX delete did not leave the expected surviving input");
+	}
+	psy_undoredo_undo(&machines->undoredo);
+	fx_input_id = mixer_input_id_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT);
+	fx_input = (fx_input_id == psy_INDEX_INVALID)
+		? NULL : psy_audio_mixer_channel(fx_input_mixer, fx_input_id);
+	if (!fx_input ||
+			mixer_input_count_for_slot(fx_input_mixer, FX_INPUT_SOURCE_SLOT) != 1 ||
+			!psy_audio_machines_connected(machines,
+				psy_audio_wire_make(FX_INPUT_SOURCE_SLOT, FX_INPUT_MIXER_SLOT)) ||
+			fx_input->volume != FX_NORMAL_INPUT_VOLUME) {
+		psy_audio_song_deallocate(song);
+		return fail("normal FX delete undo duplicated or reset its Mixer input");
 	}
 
 	psy_audio_song_deallocate(song);
