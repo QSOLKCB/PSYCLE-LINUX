@@ -93,6 +93,7 @@ cat > "$SUMMARY" <<'EOF'
 
 - Project-owned deterministic source WAV generation: PASS
 - Source WAV import through Psycle historical WAV song path: PASS
+- Player startup without optional MIDI configuration: PASS
 - Real Psycle Player playback through FileOutDriver: PASS
 - RIFF/WAVE header and data-size integrity: PASS
 - 44.1 kHz stereo 16-bit PCM render format: PASS
