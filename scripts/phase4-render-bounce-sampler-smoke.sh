@@ -96,6 +96,7 @@ cat > "$SUMMARY" <<'EOF'
 - Player startup without optional MIDI configuration: PASS
 - Real Psycle Player playback through FileOutDriver: PASS
 - RIFF/WAVE header and data-size integrity: PASS
+- FileOut data size derived from actual payload bytes: PASS
 - 44.1 kHz stereo 16-bit PCM render format: PASS
 - Non-silent rendered PCM: PASS
 - Psycle-rendered WAV re-import to built-in Sampler: PASS
