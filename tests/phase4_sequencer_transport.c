@@ -12,6 +12,7 @@
 #include <machinefactory.h>
 #include <pattern.h>
 #include <patterns.h>
+#include <player.h>
 #include <plugincatcher.h>
 #include <sequence.h>
 #include <sequencecmds.h>
