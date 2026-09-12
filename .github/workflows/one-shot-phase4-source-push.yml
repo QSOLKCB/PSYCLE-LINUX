@@ -1,0 +1,56 @@
+name: One-shot Phase 4 source push
+
+on:
+  push:
+    branches:
+      - phase-4/render-bounce-sampler
+
+permissions:
+  contents: write
+
+jobs:
+  push-source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-4/render-bounce-sampler
+          fetch-depth: 0
+
+      - name: Reuse completion patch without workflow mutation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          source = Path('.github/workflows/one-shot-phase4-completion.yml').read_text()
+          marker = "      - name: Complete remaining Phase 4 paths\n        shell: bash\n        run: |\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n      - name: Commit completion and remove one-shot workflow", start)
+          script = textwrap.dedent(source[start:end])
+          Path('/tmp/phase4-completion.sh').write_text(script)
+          PY
+          bash /tmp/phase4-completion.sh
+
+          # GitHub's Actions token cannot create/update workflow files. The
+          # permanent historical gate is added separately through the connected
+          # GitHub account after this source commit lands.
+          rm -f .github/workflows/phase4-historical-psy2.yml
+
+      - name: Commit ordinary source and evidence files
+        shell: bash
+        run: |
+          git config user.name 'EmergentMonk'
+          git config user.email '73952179+EmergentMonk@users.noreply.github.com'
+          git add cpsycle/audio/src/song.c \
+                  cpsycle/host/src/workspace.c \
+                  cpsycle/host/src/cmdproperties.c \
+                  cpsycle/host/src/paramviews.c \
+                  cpsycle/host/src/trackergrid.c \
+                  scripts/phase3-runtime-smoke.sh \
+                  tests/phase4_historical_psy2.c \
+                  scripts/phase4-historical-psy2-smoke.sh \
+                  ROADMAP.md
+          git commit -m 'test: complete Phase 4 workflow compatibility'
+          git push origin HEAD:phase-4/render-bounce-sampler
