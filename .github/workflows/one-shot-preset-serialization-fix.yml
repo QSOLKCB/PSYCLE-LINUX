@@ -1,0 +1,89 @@
+name: One-shot preset serialization fix
+
+on:
+  push:
+    branches:
+      - phase-4/render-bounce-sampler
+    paths:
+      - .github/workflows/one-shot-preset-serialization-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-4/render-bounce-sampler
+          fetch-depth: 0
+
+      - name: Repair preset table and state serialization
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          preset = Path('cpsycle/audio/src/preset.c')
+          s = preset.read_text()
+          old = '''\tif (num > 0) {\n\t\tuintptr_t p;\n\t\tpsy_table_dispose(&self->parameters);\n\t\tfor (p = 0; p < num; ++p) {\n\t\t\tpsy_audio_preset_set_value(self, p, (intptr_t)parameters[p]);\n\t\t}\n\t} else\n\t{\n\t\tpsy_table_dispose(&self->parameters);\n\t}\n'''
+          new = '''\t/* Rebuild the parameter table as a live container.  The old code disposed\n\t** it and then inserted into keys_ == NULL, which crashes when version-1\n\t** preset files carry an opaque state structure. */\n\tpsy_table_dispose(&self->parameters);\n\tpsy_table_init(&self->parameters);\n\tif (num > 0) {\n\t\tuintptr_t p;\n\n\t\tfor (p = 0; p < num; ++p) {\n\t\t\tpsy_audio_preset_set_value(self, p, (intptr_t)parameters[p]);\n\t\t}\n\t}\n'''
+          if old not in s:
+              raise SystemExit('preset table anchor not found')
+          preset.write_text(s.replace(old, new, 1))
+
+          io = Path('cpsycle/audio/src/presetio.c')
+          s = io.read_text()
+
+          old = '''\tfread(&numpresets, sizeof(int), 1, fp);\n\tfread(&filenumpars, sizeof(int), 1, fp);\n\tfread(&filepresetsize, sizeof(int), 1, fp);\n\t/* now it is time to check our file for compatability */\n'''
+          new = '''\tif (fread(&numpresets, sizeof(int), 1, fp) != 1 ||\n\t\t\tfread(&filenumpars, sizeof(int), 1, fp) != 1 ||\n\t\t\tfread(&filepresetsize, sizeof(int), 1, fp) != 1) {\n\t\treturn psy_audio_PRESETIO_ERROR_READ;\n\t}\n\t/* now it is time to check our file for compatability */\n'''
+          if old not in s:
+              raise SystemExit('preset header read anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '''\t\tpreset = psy_audio_preset_alloc_init();\n\t\tfread(name, sizeof(name), 1, fp);\n\t\tpsy_audio_preset_set_name(preset, name);\n\t\tfread(ibuf, numparameters * sizeof(int), 1, fp);\n'''
+          new = '''\t\tpreset = psy_audio_preset_alloc_init();\n\t\tif (!preset || fread(name, sizeof(name), 1, fp) != 1 ||\n\t\t\t\tfread(ibuf, numparameters * sizeof(int), 1, fp) != 1) {\n\t\t\tif (preset) {\n\t\t\t\tpsy_audio_preset_dispose(preset);\n\t\t\t\tfree(preset);\n\t\t\t}\n\t\t\tstatus = psy_audio_PRESETIO_ERROR_READ;\n\t\t\tbreak;\n\t\t}\n\t\tpsy_audio_preset_set_name(preset, name);\n'''
+          # Only replace the version1 occurrence (the second matching block).
+          first = s.find(old)
+          second = s.find(old, first + 1) if first != -1 else -1
+          if second == -1:
+              raise SystemExit('version1 preset body anchor not found')
+          s = s[:second] + s[second:].replace(old, new, 1)
+
+          old = '''\t\tif (datasizestruct > 0) {\n\t\t\tfread(dbuf, datasizestruct, 1, fp);\n\t\t\tpsy_audio_preset_set_data_struct(preset, numparameters,name, ibuf,\n\t\t\t\tdatasizestruct,dbuf);\n\t\t}\n\t\tpsy_audio_presets_insert(presets, i, preset);\n'''
+          new = '''\t\tif (datasizestruct > 0) {\n\t\t\tif (fread(dbuf, datasizestruct, 1, fp) != 1) {\n\t\t\t\tpsy_audio_preset_dispose(preset);\n\t\t\t\tfree(preset);\n\t\t\t\tstatus = psy_audio_PRESETIO_ERROR_READ;\n\t\t\t\tbreak;\n\t\t\t}\n\t\t\tpsy_audio_preset_set_data_struct(preset, numparameters,name, ibuf,\n\t\t\t\tdatasizestruct,dbuf);\n\t\t}\n\t\tpsy_audio_presets_insert(presets, i, preset);\n'''
+          if old not in s:
+              raise SystemExit('version1 data read anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '''\t\tpsy_audio_presetsio_saveversion1(fp, presets);\n\t\tfclose(fp);\n'''
+          new = '''\t\tstatus = psy_audio_presetsio_saveversion1(fp, presets);\n\t\tif (fclose(fp) != 0 && status == psy_audio_PRESETIO_OK) {\n\t\t\tstatus = psy_audio_PRESETIO_ERROR_WRITE;\n\t\t}\n'''
+          if old not in s:
+              raise SystemExit('save status anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '''\t\tunsigned char* dbuf = 0;\n\t\tint32_t i;\n\n\t\tibuf = malloc(sizeof(int32_t) * numparameters);\n\t\tdbuf = NULL;\n\t\tif (datasizestruct > 0) {\n\t\t\tdbuf = malloc(datasizestruct);\n\t\t}\n'''
+          new = '''\t\tint32_t i;\n\n\t\tibuf = malloc(sizeof(int32_t) * numparameters);\n\t\tif (!ibuf) {\n\t\t\treturn psy_audio_PRESETIO_ERROR_WRITE;\n\t\t}\n'''
+          if old not in s:
+              raise SystemExit('save buffer anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '''\t\t\tfwrite(cbuf, sizeof(cbuf), 1, fp);\n\t\t\tfwrite(ibuf, numparameters * sizeof(int32_t), 1, fp);\n\t\t\tif (datasizestruct > 0) {\n\t\t\t\tfwrite(dbuf, datasizestruct, 1, fp);\n\t\t\t}\n\t\t}\n\t\tfree(ibuf);\n\t\tfree(dbuf);\n'''
+          new = '''\t\t\tif (fwrite(cbuf, sizeof(cbuf), 1, fp) != 1 ||\n\t\t\t\t\tfwrite(ibuf, numparameters * sizeof(int32_t), 1, fp) != 1) {\n\t\t\t\tstatus = psy_audio_PRESETIO_ERROR_WRITE;\n\t\t\t\tbreak;\n\t\t\t}\n\t\t\tif (datasizestruct > 0) {\n\t\t\t\tif (!preset->data || preset->datasize != (uintptr_t)datasizestruct ||\n\t\t\t\t\t\tfwrite(preset->data, datasizestruct, 1, fp) != 1) {\n\t\t\t\t\tstatus = psy_audio_PRESETIO_ERROR_WRITE;\n\t\t\t\t\tbreak;\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tfree(ibuf);\n'''
+          if old not in s:
+              raise SystemExit('save payload anchor not found')
+          s = s.replace(old, new, 1)
+
+          io.write_text(s)
+          PY
+
+      - name: Commit repairs and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/one-shot-preset-serialization-fix.yml
+          git config user.name "EmergentMonk"
+          git config user.email "73952179+EmergentMonk@users.noreply.github.com"
+          git add cpsycle/audio/src/preset.c cpsycle/audio/src/presetio.c .github/workflows/one-shot-preset-serialization-fix.yml
+          git commit -m "fix: preserve preset parameters and opaque state"
+          git push origin HEAD:phase-4/render-bounce-sampler
