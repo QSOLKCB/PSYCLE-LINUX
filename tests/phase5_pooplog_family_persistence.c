@@ -40,16 +40,16 @@ typedef struct PooplogSpec {
 	uint64_t expected_opaque_hash;
 } PooplogSpec;
 
-/* Historical opaque sizes are frozen. The hash placeholders are intentionally
-** zero for one observation run after adding hidden-bank seeding; the resulting
-** canonical hashes are frozen before the PR is considered merge-ready. */
+/* Historical opaque sizes and hashes are frozen from a canonical fixture that
+** seeds distinct non-selected oscillator/filter banks with inertia disabled.
+** These constants therefore cover state that can only be restored by PutData. */
 static const PooplogSpec SPECS[SPEC_COUNT] = {
 	{"FM Laboratory", "pooplog-fm-laboratory:0", "Pooplog FM Laboratory0.68b",
-		"Pooplog", "pooplog-fm-laboratory", 101u, 1508u, UINT64_C(0)},
+		"Pooplog", "pooplog-fm-laboratory", 101u, 1508u, UINT64_C(0x2b7c633d7a33daae)},
 	{"FM Light", "pooplog-fm-light:0", "Pooplog FM Light0.68b",
-		"Pooplog Light", "pooplog-fm-light", 57u, 468u, UINT64_C(0)},
+		"Pooplog Light", "pooplog-fm-light", 57u, 468u, UINT64_C(0x8f87d50fceda95e4)},
 	{"FM UltraLight", "pooplog-fm-ultralight:0", "Pooplog FM UltraLight0.68b",
-		"Pooplog UltraL", "pooplog-fm-ultralight", 45u, 344u, UINT64_C(0)},
+		"Pooplog UltraL", "pooplog-fm-ultralight", 45u, 344u, UINT64_C(0xe3a47f4ea86ba4b5)},
 	{"Delay", "pooplog-delay:0", "Pooplog Delay 0.04b",
 		"Pooplog Delay", "pooplog-delay", 43u, 0u, UINT64_C(0)},
 	{"Delay Light", "pooplog-delay-light:0", "Pooplog Delay Light 0.04b",
@@ -410,7 +410,7 @@ static int canonicalize_for_persistence(const PooplogSpec* spec,
 		hash = opaque_hash(expected->data, expected->data_size);
 		printf("pooplog-opaque-hash[%s]=0x%016llx size=%lu\n", spec->label,
 			(unsigned long long)hash, (unsigned long)expected->data_size);
-		if (spec->expected_opaque_hash != 0 && hash != spec->expected_opaque_hash) {
+		if (hash != spec->expected_opaque_hash) {
 			fprintf(stderr,
 				"phase5-pooplog-family-state: FAIL [%s]: canonical opaque hash "
 				"expected 0x%016llx got 0x%016llx\n", spec->label,
