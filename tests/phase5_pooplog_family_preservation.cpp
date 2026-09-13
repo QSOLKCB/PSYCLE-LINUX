@@ -25,6 +25,7 @@ using psycle::plugin_interface::CMachineParameter;
 namespace {
 
 enum class Kind { Synth, Delay, Filter, Autopan, Lofi, Scratch };
+enum class EffectTransition { SampleRateOnly, BpmOnly };
 
 struct Spec {
     const char* label;
@@ -323,7 +324,10 @@ int configure_effect_active(const Spec& spec, CMachineInterface* machine,
             set_parameter(spec, machine, info, "Filter Type", 1) ||
             set_parameter(spec, machine, info, "Filter Cutoff", 180) ||
             set_parameter(spec, machine, info, "Filter Resonance", 64) ||
-            set_parameter(spec, machine, info, "Cutoff LFO Depth", 0) ||
+            set_parameter(spec, machine, info, "Cutoff LFO Depth", 96) ||
+            set_parameter(spec, machine, info, "LFO Wave", 0) ||
+            set_parameter(spec, machine, info, "LFO Rate", 10) ||
+            set_parameter(spec, machine, info, "LFO Phase", 0) ||
             set_parameter(spec, machine, info, "Input Gain", 256) ||
             set_parameter(spec, machine, info, "Mix", 256);
     case Kind::Autopan:
@@ -331,7 +335,7 @@ int configure_effect_active(const Spec& spec, CMachineInterface* machine,
             set_parameter(spec, machine, info, "Pan LFO Depth", 192) ||
             set_parameter(spec, machine, info, "Delta Smoothing", 0) ||
             set_parameter(spec, machine, info, "LFO Wave", 0) ||
-            set_parameter(spec, machine, info, "LFO Rate", 64) ||
+            set_parameter(spec, machine, info, "LFO Rate", 10) ||
             set_parameter(spec, machine, info, "LFO Phase", 0) ||
             set_parameter(spec, machine, info, "Tweak Inertia", 0) ||
             set_parameter(spec, machine, info, "Input Gain", 256) ||
@@ -407,59 +411,79 @@ int verify_effect_unity(const Spec& spec, CMachineInterface* machine,
     return 0;
 }
 
-int verify_effect_timing_transition(const Spec& spec, const CMachineInfo* info,
-    CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
+const char* transition_name(EffectTransition transition)
+{
+    return transition == EffectTransition::SampleRateOnly
+        ? "sample-rate-only" : "BPM-only";
+}
+
+void configure_target_callback(TestCallback& callback, EffectTransition transition)
+{
+    if (transition == EffectTransition::SampleRateOnly)
+        callback.set_sample_rate(88200);
+    else
+        callback.set_bpm(137);
+}
+
+int verify_effect_timing_case(const Spec& spec, const CMachineInfo* info,
+    CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&),
+    EffectTransition transition)
 {
     TestCallback live_callback;
     TestCallback reference_callback;
     TestCallback stale_callback;
-    CMachineInterface* live = create_machine();
-    CMachineInterface* reference = create_machine();
-    CMachineInterface* stale = (spec.kind == Kind::Filter) ? create_machine() : nullptr;
+    CMachineInterface* live = nullptr;
+    CMachineInterface* reference = nullptr;
+    CMachineInterface* stale = nullptr;
     std::vector<float> input_l, input_r;
     std::vector<float> live_l, live_r, reference_l, reference_r, stale_l, stale_r;
     int rc = 0;
 
-    if (!live || !live->Vals || !reference || !reference->Vals ||
-            (spec.kind == Kind::Filter && (!stale || !stale->Vals))) {
-        if (stale) delete_machine(*stale);
-        if (reference) delete_machine(*reference);
+    /* Render the live transition before constructing a fresh reference. Several
+    ** retained Pooplog modules keep SyncAdd tables at module scope, so creating
+    ** the target reference first could mutate shared timing tables and mask a
+    ** broken live-instance SequencerTick branch. */
+    live = create_machine();
+    if (!live || !live->Vals) {
         if (live) delete_machine(*live);
         return fail(spec, "CreateMachine failed for active timing transition");
     }
-
-    reference_callback.set_sample_rate(88200);
-    reference_callback.set_bpm(137);
-    reference_callback.set_tick_length(8044);
     apply_defaults(live, info, live_callback);
-    apply_defaults(reference, info, reference_callback);
-    if (stale) apply_defaults(stale, info, stale_callback);
-    if (configure_effect_active(spec, live, info) != 0 ||
-            configure_effect_active(spec, reference, info) != 0 ||
-            (stale && configure_effect_active(spec, stale, info) != 0)) {
+    if (configure_effect_active(spec, live, info) != 0) {
         rc = 1;
         goto cleanup;
     }
 
-    live_callback.set_sample_rate(88200);
-    live_callback.set_bpm(137);
-    live_callback.set_tick_length(8044);
+    configure_target_callback(live_callback, transition);
     live->SequencerTick();
-
     fill_effect_probe(spec, input_l, input_r);
     live_l = input_l;
     live_r = input_r;
+    live->Work(live_l.data(), live_r.data(), static_cast<int>(live_l.size()), 1);
+    if (!finite_signal(live_l.data(), static_cast<int>(live_l.size())) ||
+            !finite_signal(live_r.data(), static_cast<int>(live_r.size()))) {
+        rc = fail(spec, "live active timing probe produced a non-finite sample");
+        goto cleanup;
+    }
+
+    reference = create_machine();
+    if (!reference || !reference->Vals) {
+        rc = fail(spec, "fresh target timing reference creation failed");
+        goto cleanup;
+    }
+    configure_target_callback(reference_callback, transition);
+    apply_defaults(reference, info, reference_callback);
+    if (configure_effect_active(spec, reference, info) != 0) {
+        rc = 1;
+        goto cleanup;
+    }
     reference_l = input_l;
     reference_r = input_r;
-    live->Work(live_l.data(), live_r.data(), static_cast<int>(live_l.size()), 1);
     reference->Work(reference_l.data(), reference_r.data(),
         static_cast<int>(reference_l.size()), 1);
-
-    if (!finite_signal(live_l.data(), static_cast<int>(live_l.size())) ||
-            !finite_signal(live_r.data(), static_cast<int>(live_r.size())) ||
-            !finite_signal(reference_l.data(), static_cast<int>(reference_l.size())) ||
+    if (!finite_signal(reference_l.data(), static_cast<int>(reference_l.size())) ||
             !finite_signal(reference_r.data(), static_cast<int>(reference_r.size()))) {
-        rc = fail(spec, "active timing probe produced a non-finite sample");
+        rc = fail(spec, "fresh target timing reference produced a non-finite sample");
         goto cleanup;
     }
 
@@ -471,12 +495,23 @@ int verify_effect_timing_transition(const Spec& spec, const CMachineInfo* info,
         goto cleanup;
     }
 
-    if (spec.kind == Kind::Filter) {
-        /* The retained filter's SequencerTick reinitializes its filter objects,
+    if (spec.kind == Kind::Filter &&
+            transition == EffectTransition::SampleRateOnly) {
+        /* The retained filter's sample-rate branch reinitializes filter objects,
         ** which is observably rate-sensitive but not byte-for-byte equivalent to
-        ** a fresh Init path. Compare against an otherwise identical stale 44.1 kHz
-        ** control instead: a no-op transition makes the active impulse responses
-        ** identical, while a real 88.2 kHz reinitialization must change them. */
+        ** a fresh Init path. Render an otherwise identical stale 44.1 kHz control
+        ** after the live output is captured: a no-op sample-rate branch makes the
+        ** active impulse responses identical, while a real transition changes it. */
+        stale = create_machine();
+        if (!stale || !stale->Vals) {
+            rc = fail(spec, "stale filter control creation failed");
+            goto cleanup;
+        }
+        apply_defaults(stale, info, stale_callback);
+        if (configure_effect_active(spec, stale, info) != 0) {
+            rc = 1;
+            goto cleanup;
+        }
         stale_l = input_l;
         stale_r = input_r;
         stale->Work(stale_l.data(), stale_r.data(), static_cast<int>(stale_l.size()), 1);
@@ -489,26 +524,39 @@ int verify_effect_timing_transition(const Spec& spec, const CMachineInfo* info,
                 static_cast<int>(live_l.size()), 1.0e-4f) &&
                 !different_signal(live_r.data(), stale_r.data(),
                     static_cast<int>(live_r.size()), 1.0e-4f)) {
-            rc = fail(spec, "active filter response did not change after sample-rate transition");
+            rc = fail(spec, "active filter response did not change after sample-rate-only transition");
             goto cleanup;
         }
-        std::printf("phase5-pooplog-family: active rate response changed PASS [%s]\n",
+        std::printf("phase5-pooplog-family: active sample-rate response changed PASS [%s]\n",
             spec.label);
     } else if (!same_signal(live_l.data(), reference_l.data(),
             static_cast<int>(live_l.size()), 1.0e-4f) ||
             !same_signal(live_r.data(), reference_r.data(),
                 static_cast<int>(live_r.size()), 1.0e-4f)) {
-        rc = fail(spec, "live active timing transition diverged from fresh target timing");
+        rc = fail(spec, transition == EffectTransition::SampleRateOnly
+            ? "live sample-rate-only transition diverged from fresh target timing"
+            : "live BPM-only transition diverged from fresh target timing");
         goto cleanup;
     }
 
-    std::printf("phase5-pooplog-family: active timing transition PASS [%s]\n",
-        spec.label);
+    std::printf("phase5-pooplog-family: active %s transition PASS [%s]\n",
+        transition_name(transition), spec.label);
 
 cleanup:
     if (stale) delete_machine(*stale);
-    delete_machine(*reference);
-    delete_machine(*live);
+    if (reference) delete_machine(*reference);
+    if (live) delete_machine(*live);
+    return rc;
+}
+
+int verify_effect_timing_transition(const Spec& spec, const CMachineInfo* info,
+    CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
+{
+    int rc = verify_effect_timing_case(spec, info, create_machine, delete_machine,
+        EffectTransition::SampleRateOnly);
+    if (rc == 0)
+        rc = verify_effect_timing_case(spec, info, create_machine, delete_machine,
+            EffectTransition::BpmOnly);
     return rc;
 }
 
