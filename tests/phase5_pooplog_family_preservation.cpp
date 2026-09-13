@@ -3,8 +3,9 @@
 **
 ** Covers the nine retained source-built Pooplog Linux binaries. Parameter
 ** metadata is frozen with complete hashes, effects use deterministic neutral
-** signal invariants, and all three FM synth variants exercise both fresh-machine
-** determinism and a live 44.1 -> 88.2 kHz SequencerTick transition.
+** and active timing-sensitive signal invariants, and all three FM synth variants
+** exercise both fresh-machine determinism and a live 44.1 -> 88.2 kHz
+** SequencerTick transition.
 */
 
 #include <cmath>
@@ -228,6 +229,16 @@ bool same_signal(const float* a, const float* b, int count,
     return true;
 }
 
+bool different_signal(const float* a, const float* b, int count,
+    float tolerance = 1.0e-4f)
+{
+    for (int i = 0; i < count; ++i) {
+        if (!std::isfinite(a[i]) || !std::isfinite(b[i])) return false;
+        if (std::fabs(a[i] - b[i]) > tolerance) return true;
+    }
+    return false;
+}
+
 int positive_zero_crossings(const std::vector<float>& signal)
 {
     int crossings = 0;
@@ -268,6 +279,80 @@ int configure_effect_neutral(const Spec& spec, CMachineInterface* machine,
     return 1;
 }
 
+int configure_effect_active(const Spec& spec, CMachineInterface* machine,
+    const CMachineInfo* info)
+{
+    switch (spec.kind) {
+    case Kind::Delay:
+        return set_parameter(spec, machine, info, "Tweak Inertia", 0) ||
+            set_parameter(spec, machine, info, "Follow Tempo", 1) ||
+            set_parameter(spec, machine, info, "Left Delay Length", 0) ||
+            set_parameter(spec, machine, info, "Right Delay Length", 0) ||
+            set_parameter(spec, machine, info, "Left Feedback", 0) ||
+            set_parameter(spec, machine, info, "Right Feedback", 0) ||
+            set_parameter(spec, machine, info, "Input Gain", 256) ||
+            set_parameter(spec, machine, info, "Mix", 256);
+    case Kind::Filter:
+        return set_parameter(spec, machine, info, "Tweak Inertia", 0) ||
+            set_parameter(spec, machine, info, "Filter Type", 1) ||
+            set_parameter(spec, machine, info, "Filter Cutoff", 180) ||
+            set_parameter(spec, machine, info, "Filter Resonance", 64) ||
+            set_parameter(spec, machine, info, "LFO Rate", 12) ||
+            set_parameter(spec, machine, info, "Cutoff LFO Depth", 96) ||
+            set_parameter(spec, machine, info, "Input Gain", 256) ||
+            set_parameter(spec, machine, info, "Mix", 256);
+    case Kind::Autopan:
+        return set_parameter(spec, machine, info, "Panning", 256) ||
+            set_parameter(spec, machine, info, "Pan LFO Depth", 192) ||
+            set_parameter(spec, machine, info, "Delta Smoothing", 0) ||
+            set_parameter(spec, machine, info, "LFO Wave", 0) ||
+            set_parameter(spec, machine, info, "LFO Rate", 64) ||
+            set_parameter(spec, machine, info, "LFO Phase", 0) ||
+            set_parameter(spec, machine, info, "Tweak Inertia", 0) ||
+            set_parameter(spec, machine, info, "Input Gain", 256) ||
+            set_parameter(spec, machine, info, "Mix", 256);
+    case Kind::Lofi:
+        return set_parameter(spec, machine, info, "Resample Frequency", 2048) ||
+            set_parameter(spec, machine, info, "Resample Bits", 0) ||
+            set_parameter(spec, machine, info, "Frequency Unbalance", 256) ||
+            set_parameter(spec, machine, info, "Input Gain", 256);
+    case Kind::Scratch:
+        return set_parameter(spec, machine, info, "Buffer Length", 0) ||
+            set_parameter(spec, machine, info, "Scratch Speed", 1024) ||
+            set_parameter(spec, machine, info, "Left Drag Delay", 0) ||
+            set_parameter(spec, machine, info, "Right Drag Delay", 0) ||
+            set_parameter(spec, machine, info, "Speed Unbalance", 256) ||
+            set_parameter(spec, machine, info, "Feedback", 256) ||
+            set_parameter(spec, machine, info, "Input Gain", 256) ||
+            set_parameter(spec, machine, info, "Mix", 256);
+    case Kind::Synth:
+        return fail(spec, "internal active-effect dispatch error");
+    }
+    return 1;
+}
+
+void fill_effect_probe(const Spec& spec, std::vector<float>& left,
+    std::vector<float>& right)
+{
+    const int count = 2048;
+    left.assign(count, 0.0f);
+    right.assign(count, 0.0f);
+    if (spec.kind == Kind::Autopan) {
+        for (int i = 0; i < count; ++i) {
+            left[i] = 900.0f;
+            right[i] = -700.0f;
+        }
+    } else if (spec.kind == Kind::Lofi) {
+        for (int i = 0; i < count; ++i) {
+            left[i] = static_cast<float>(((i * 37) % 257) - 128) * 8.0f;
+            right[i] = static_cast<float>(((i * 53) % 251) - 125) * 7.0f;
+        }
+    } else {
+        left[0] = 1200.0f;
+        right[0] = -900.0f;
+    }
+}
+
 int verify_effect_unity(const Spec& spec, CMachineInterface* machine,
     const CMachineInfo* info)
 {
@@ -295,6 +380,75 @@ int verify_effect_unity(const Spec& spec, CMachineInterface* machine,
     if (!same_signal(left, input_l, 6) || !same_signal(right, input_r, 6))
         return fail(spec, "neutral DSP changed after live host-timing transition");
     return 0;
+}
+
+int verify_effect_timing_transition(const Spec& spec, const CMachineInfo* info,
+    CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
+{
+    TestCallback live_callback;
+    TestCallback reference_callback;
+    CMachineInterface* live = create_machine();
+    CMachineInterface* reference = create_machine();
+    std::vector<float> input_l, input_r, live_l, live_r, reference_l, reference_r;
+    int rc = 0;
+
+    if (!live || !live->Vals || !reference || !reference->Vals) {
+        if (live) delete_machine(*live);
+        if (reference) delete_machine(*reference);
+        return fail(spec, "CreateMachine failed for active timing transition");
+    }
+
+    reference_callback.set_sample_rate(88200);
+    reference_callback.set_bpm(137);
+    reference_callback.set_tick_length(8044);
+    apply_defaults(live, info, live_callback);
+    apply_defaults(reference, info, reference_callback);
+    if (configure_effect_active(spec, live, info) != 0 ||
+            configure_effect_active(spec, reference, info) != 0) {
+        rc = 1;
+        goto cleanup;
+    }
+
+    /* The live instance is configured at 44.1 kHz / 120 BPM, then transitioned.
+    ** The reference instance is initialized directly at the target timing. With
+    ** no samples processed before the transition, their active DSP state should
+    ** agree after a correct SequencerTick refresh. A stale rate/BPM path diverges. */
+    live_callback.set_sample_rate(88200);
+    live_callback.set_bpm(137);
+    live_callback.set_tick_length(8044);
+    live->SequencerTick();
+
+    fill_effect_probe(spec, input_l, input_r);
+    live_l = input_l;
+    live_r = input_r;
+    reference_l = input_l;
+    reference_r = input_r;
+    live->Work(live_l.data(), live_r.data(), static_cast<int>(live_l.size()), 1);
+    reference->Work(reference_l.data(), reference_r.data(),
+        static_cast<int>(reference_l.size()), 1);
+
+    if (!different_signal(reference_l.data(), input_l.data(),
+            static_cast<int>(input_l.size())) &&
+            !different_signal(reference_r.data(), input_r.data(),
+                static_cast<int>(input_r.size()))) {
+        rc = fail(spec, "active timing probe did not engage the effect path");
+        goto cleanup;
+    }
+    if (!same_signal(live_l.data(), reference_l.data(),
+            static_cast<int>(live_l.size()), 1.0e-4f) ||
+            !same_signal(live_r.data(), reference_r.data(),
+                static_cast<int>(live_r.size()), 1.0e-4f)) {
+        rc = fail(spec, "live active timing transition diverged from fresh target timing");
+        goto cleanup;
+    }
+
+    std::printf("phase5-pooplog-family: active timing transition PASS [%s]\n",
+        spec.label);
+
+cleanup:
+    delete_machine(*reference);
+    delete_machine(*live);
+    return rc;
 }
 
 int render_active_note(const Spec& spec, CMachineInterface* machine,
@@ -419,11 +573,15 @@ int test_plugin(const Spec& spec, const char* path)
             rc = verify_synth(spec, info, create_machine, delete_machine);
         } else {
             CMachineInterface* machine = create_machine();
-            if (!machine || !machine->Vals)
+            if (!machine || !machine->Vals) {
+                if (machine) delete_machine(*machine);
                 rc = fail(spec, "CreateMachine did not provide a usable effect instance");
-            else {
+            } else {
                 rc = verify_effect_unity(spec, machine, info);
                 delete_machine(*machine);
+                if (rc == 0)
+                    rc = verify_effect_timing_transition(spec, info,
+                        create_machine, delete_machine);
             }
         }
     }
