@@ -228,6 +228,15 @@ bool same_signal(const float* a, const float* b, int count,
     return true;
 }
 
+int positive_zero_crossings(const std::vector<float>& signal)
+{
+    int crossings = 0;
+    for (std::size_t i = 1; i < signal.size(); ++i) {
+        if (signal[i - 1] <= 0.0f && signal[i] > 0.0f) ++crossings;
+    }
+    return crossings;
+}
+
 int configure_effect_neutral(const Spec& spec, CMachineInterface* machine,
     const CMachineInfo* info)
 {
@@ -340,13 +349,38 @@ int verify_synth(const Spec& spec, const CMachineInfo* info,
     if (rc != 0) { delete_machine(*a); return rc; }
 
     /* Exercise the actual live sample-rate transition on the already initialized
-    ** and already rendered instance, rather than creating a fresh 88.2 kHz synth. */
+    ** and already rendered instance. The same musical note should retain roughly
+    ** the same physical frequency after the sample rate doubles: over an equal
+    ** sample count the 88.2 kHz render therefore has about half as many cycles.
+    ** A no-op SequencerTick leaves the old phase increment in place and makes the
+    ** physical frequency estimate roughly double, which this oracle rejects. */
     a->Stop();
     callback_a.set_sample_rate(88200);
     callback_a.set_tick_length(11025);
     callback_a.set_bpm(137);
     a->SequencerTick();
     rc = render_active_note(spec, a, left_live, right_live);
+    if (rc == 0) {
+        const int crossings_44 = positive_zero_crossings(left_a);
+        const int crossings_88 = positive_zero_crossings(left_live);
+        if (crossings_44 < 4 || crossings_88 < 2) {
+            rc = fail(spec, "insufficient zero crossings for sample-rate pitch oracle");
+        } else {
+            const double hz_44 = crossings_44 * 44100.0 / left_a.size();
+            const double hz_88 = crossings_88 * 88200.0 / left_live.size();
+            if (hz_88 < hz_44 * 0.75 || hz_88 > hz_44 * 1.25) {
+                std::fprintf(stderr,
+                    "phase5-pooplog-family: FAIL [%s]: live sample-rate pitch estimate "
+                    "changed from %.2f Hz to %.2f Hz (%d -> %d crossings)\n",
+                    spec.label, hz_44, hz_88, crossings_44, crossings_88);
+                rc = 1;
+            } else {
+                std::printf(
+                    "phase5-pooplog-family: live pitch %.2f->%.2f Hz PASS [%s]\n",
+                    hz_44, hz_88, spec.label);
+            }
+        }
+    }
     delete_machine(*a);
     if (rc != 0) return rc;
 
