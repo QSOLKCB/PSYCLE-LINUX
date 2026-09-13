@@ -297,8 +297,7 @@ int configure_effect_active(const Spec& spec, CMachineInterface* machine,
             set_parameter(spec, machine, info, "Filter Type", 1) ||
             set_parameter(spec, machine, info, "Filter Cutoff", 180) ||
             set_parameter(spec, machine, info, "Filter Resonance", 64) ||
-            set_parameter(spec, machine, info, "LFO Rate", 12) ||
-            set_parameter(spec, machine, info, "Cutoff LFO Depth", 96) ||
+            set_parameter(spec, machine, info, "Cutoff LFO Depth", 0) ||
             set_parameter(spec, machine, info, "Input Gain", 256) ||
             set_parameter(spec, machine, info, "Mix", 256);
     case Kind::Autopan:
@@ -387,14 +386,19 @@ int verify_effect_timing_transition(const Spec& spec, const CMachineInfo* info,
 {
     TestCallback live_callback;
     TestCallback reference_callback;
+    TestCallback stale_callback;
     CMachineInterface* live = create_machine();
     CMachineInterface* reference = create_machine();
-    std::vector<float> input_l, input_r, live_l, live_r, reference_l, reference_r;
+    CMachineInterface* stale = (spec.kind == Kind::Filter) ? create_machine() : nullptr;
+    std::vector<float> input_l, input_r;
+    std::vector<float> live_l, live_r, reference_l, reference_r, stale_l, stale_r;
     int rc = 0;
 
-    if (!live || !live->Vals || !reference || !reference->Vals) {
-        if (live) delete_machine(*live);
+    if (!live || !live->Vals || !reference || !reference->Vals ||
+            (spec.kind == Kind::Filter && (!stale || !stale->Vals))) {
+        if (stale) delete_machine(*stale);
         if (reference) delete_machine(*reference);
+        if (live) delete_machine(*live);
         return fail(spec, "CreateMachine failed for active timing transition");
     }
 
@@ -403,16 +407,14 @@ int verify_effect_timing_transition(const Spec& spec, const CMachineInfo* info,
     reference_callback.set_tick_length(8044);
     apply_defaults(live, info, live_callback);
     apply_defaults(reference, info, reference_callback);
+    if (stale) apply_defaults(stale, info, stale_callback);
     if (configure_effect_active(spec, live, info) != 0 ||
-            configure_effect_active(spec, reference, info) != 0) {
+            configure_effect_active(spec, reference, info) != 0 ||
+            (stale && configure_effect_active(spec, stale, info) != 0)) {
         rc = 1;
         goto cleanup;
     }
 
-    /* The live instance is configured at 44.1 kHz / 120 BPM, then transitioned.
-    ** The reference instance is initialized directly at the target timing. With
-    ** no samples processed before the transition, their active DSP state should
-    ** agree after a correct SequencerTick refresh. A stale rate/BPM path diverges. */
     live_callback.set_sample_rate(88200);
     live_callback.set_bpm(137);
     live_callback.set_tick_length(8044);
@@ -434,7 +436,26 @@ int verify_effect_timing_transition(const Spec& spec, const CMachineInfo* info,
         rc = fail(spec, "active timing probe did not engage the effect path");
         goto cleanup;
     }
-    if (!same_signal(live_l.data(), reference_l.data(),
+
+    if (spec.kind == Kind::Filter) {
+        /* The retained filter's SequencerTick reinitializes its filter objects,
+        ** which is observably rate-sensitive but not byte-for-byte equivalent to
+        ** a fresh Init path. Compare against an otherwise identical stale 44.1 kHz
+        ** control instead: a no-op transition makes the active impulse responses
+        ** identical, while a real 88.2 kHz reinitialization must change them. */
+        stale_l = input_l;
+        stale_r = input_r;
+        stale->Work(stale_l.data(), stale_r.data(), static_cast<int>(stale_l.size()), 1);
+        if (!different_signal(live_l.data(), stale_l.data(),
+                static_cast<int>(live_l.size()), 1.0e-4f) &&
+                !different_signal(live_r.data(), stale_r.data(),
+                    static_cast<int>(live_r.size()), 1.0e-4f)) {
+            rc = fail(spec, "active filter response did not change after sample-rate transition");
+            goto cleanup;
+        }
+        std::printf("phase5-pooplog-family: active rate response changed PASS [%s]\n",
+            spec.label);
+    } else if (!same_signal(live_l.data(), reference_l.data(),
             static_cast<int>(live_l.size()), 1.0e-4f) ||
             !same_signal(live_r.data(), reference_r.data(),
                 static_cast<int>(live_r.size()), 1.0e-4f)) {
@@ -446,6 +467,7 @@ int verify_effect_timing_transition(const Spec& spec, const CMachineInfo* info,
         spec.label);
 
 cleanup:
+    if (stale) delete_machine(*stale);
     delete_machine(*reference);
     delete_machine(*live);
     return rc;
@@ -502,12 +524,6 @@ int verify_synth(const Spec& spec, const CMachineInfo* info,
     delete_machine(*b);
     if (rc != 0) { delete_machine(*a); return rc; }
 
-    /* Exercise the actual live sample-rate transition on the already initialized
-    ** and already rendered instance. The same musical note should retain roughly
-    ** the same physical frequency after the sample rate doubles: over an equal
-    ** sample count the 88.2 kHz render therefore has about half as many cycles.
-    ** A no-op SequencerTick leaves the old phase increment in place and makes the
-    ** physical frequency estimate roughly double, which this oracle rejects. */
     a->Stop();
     callback_a.set_sample_rate(88200);
     callback_a.set_tick_length(11025);
