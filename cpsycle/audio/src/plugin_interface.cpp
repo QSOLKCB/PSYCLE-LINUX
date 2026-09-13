@@ -29,7 +29,23 @@ class PluginFxCallback : public CFxCallback
 		}
 	}
 	inline virtual int GetTickLength() const {
-		return 256;
+		if (callback && callback->vtable &&
+				callback->vtable->beatspertick && callback->vtable->beatspersample) {
+			const double beats_per_tick = callback->vtable->beatspertick(callback);
+			const double beats_per_sample = callback->vtable->beatspersample(callback);
+			if (beats_per_tick > 0.0 && beats_per_sample > 0.0) {
+				/* Preserve Psycle's historical integer sample count by truncating
+				** the exact host timing ratio once, rather than scaling an already
+				** truncated value when the sample rate changes. */
+				return (int)(beats_per_tick / beats_per_sample);
+			}
+		}
+		const int samplerate = GetSamplingRate();
+		const int bpm = GetBPM();
+		const int tpb = GetTPB();
+		return (samplerate > 0 && bpm > 0 && tpb > 0)
+			? (int)(((double)samplerate * 60.0) / ((double)bpm * (double)tpb))
+			: 256;
 	}
 	inline virtual int GetSamplingRate() const {
 		return callback
@@ -192,7 +208,7 @@ CMachineInterface* mi_create(void* module)
 	mi = 0;
 	GetInterface = (CREATEMACHINE) psy_library_functionpointer(&library, "CreateMachine");
 	if (GetInterface != NULL)
-	{			
+	{		
 		mi = GetInterface();			
 	}
 	return mi;
