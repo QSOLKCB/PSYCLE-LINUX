@@ -195,10 +195,14 @@ Do **not** reintroduce the eight omitted upstream demo/example `.psy` songs mere
   - [x] Freeze machine identity/version/type plus all eight historical parameter names, descriptions, ranges, flags and defaults, including the retained `Absortion` spelling.
   - [x] Verify exact dry-path unity, retained wet stereo pre-delay behaviour and `SequencerTick()` sample-rate reinitialization at 88.2 kHz without changing the DSP equations.
   - [x] Verify eight-parameter preset/state serialization and a fresh production `.psy` save/reload through `PluginCatcher`, `MachineFactory`, preset I/O and PSY3 paths.
-- [ ] Arguru Synth 2f
+- [x] Arguru Synth 2f
+  - [x] Build the retained source as a Linux native-generator `.so` and load it through Psycle's `GetInfo` / `CreateMachine` / `DeleteMachine` ABI.
+  - [x] Freeze generator identity/version/type plus all 28 historical parameter names, descriptions, ranges, flags and defaults.
+  - [x] Verify deterministic fixed-waveform A4 rendering, minimum-release Note Off behaviour and retained 88.2 kHz wavetable/sample-rate reinitialization without changing synthesis equations.
+  - [x] Verify 28-parameter preset/state serialization and a fresh production `.psy` save/reload through `PluginCatcher`, `MachineFactory`, preset I/O and PSY3 paths.
 - [ ] Arguru XFilter
 
-Arguru Compressor, Arguru Distortion, Arguru Goaslicer and Arguru Reverb are now completely gated Phase 5A machines. Compressor coverage is split across `.github/workflows/phase5-arguru-compressor.yml` and `.github/workflows/phase5-arguru-compressor-state.yml`; Distortion is covered end to end by `.github/workflows/phase5-arguru-distortion.yml`; Goaslicer is covered by `.github/workflows/phase5-arguru-goaslicer.yml`; and Reverb is covered by `.github/workflows/phase5-arguru-reverb.yml`, including ABI/metadata, dry/wet delay behaviour, sample-rate reinitialization, eight-parameter preset state and fresh PSY3 reopen. None of these retained machines exposes an opaque `GetData` payload, so no new state format was invented. The next Arguru target is Synth 2f.
+Arguru Compressor, Arguru Distortion, Arguru Goaslicer, Arguru Reverb and Arguru Synth 2f are now completely gated Phase 5A machines. Compressor coverage is split across `.github/workflows/phase5-arguru-compressor.yml` and `.github/workflows/phase5-arguru-compressor-state.yml`; Distortion is covered end to end by `.github/workflows/phase5-arguru-distortion.yml`; Goaslicer is covered by `.github/workflows/phase5-arguru-goaslicer.yml`; Reverb is covered by `.github/workflows/phase5-arguru-reverb.yml`; and Synth 2f is covered by `.github/workflows/phase5-arguru-synth-2f.yml`, including ABI/metadata, deterministic pitch/release behaviour, sample-rate reinitialization, 28-parameter preset state and fresh PSY3 reopen. None of these retained machines exposes an opaque `GetData` payload, so no new state format was invented. The final remaining Arguru 5A target is XFilter.
 
 ### 5B — Pooplog family
 
@@ -314,7 +318,7 @@ The existing makefiles are the starting point. A build-system migration is justi
 - [x] Audio render checksum or tolerance-based regression tests where deterministic output is realistic.
 - [ ] Dependency and packaging smoke tests.
 
-Current Phase 9 evidence comes from the Linux build/runtime audit plus the Phase 4 interactive-editing, sequencer/transport, audible-sample, preset, historical-PSY2 and render/bounce gates. Phase 5 now adds real native-machine ABI/discovery, deterministic DSP/timing, preset/state serialization and PSY3 reopen coverage through the completely gated Arguru Compressor, Arguru Distortion, Arguru Goaslicer and Arguru Reverb.
+Current Phase 9 evidence comes from the Linux build/runtime audit plus the Phase 4 interactive-editing, sequencer/transport, audible-sample, preset, historical-PSY2 and render/bounce gates. Phase 5 now adds real native-machine ABI/discovery, deterministic DSP/timing/synthesis, preset/state serialization and PSY3 reopen coverage through the completely gated Arguru Compressor, Arguru Distortion, Arguru Goaslicer, Arguru Reverb and Arguru Synth 2f.
 
 **Exit condition:** major compatibility regressions are caught automatically before merge.
 
