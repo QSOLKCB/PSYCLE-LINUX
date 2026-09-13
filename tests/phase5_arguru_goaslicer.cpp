@@ -114,30 +114,39 @@ int verify_metadata(const CMachineInfo* info)
 int verify_44100_gate_and_tick(CMachineInterface* machine)
 {
     TestCallback callback(44100, 256);
-    float left[] = {1, 1, 1, 1, 1, 1, 1};
-    float right[] = {1, 1, 1, 1, 1, 1, 1};
-    const float expected[] = {1, 1, 1, 1, 1, 0.5f, 0};
+    float left[15];
+    float right[15];
+    for (int i = 0; i < 15; ++i) {
+        left[i] = right[i] = 1.0f;
+    }
 
     machine->pCB = &callback;
     machine->Init();
-    machine->ParameterTweak(0, 4);       // four samples before the gate closes
-    machine->ParameterTweak(1, 4096);    // 0.5 volume step per sample at 44.1 kHz
-    machine->Work(left, right, 7, 1);
+    machine->ParameterTweak(0, 10);      // ten samples before the gate closes
+    machine->ParameterTweak(1, 2048);    // published maximum: 0.25 step/sample
+    machine->Work(left, right, 15, 1);
 
-    for (int i = 0; i < 7; ++i) {
-        if (!near(left[i], expected[i]) || !near(right[i], expected[i])) {
+    for (int i = 0; i <= 10; ++i) {
+        if (!near(left[i], 1.0f) || !near(right[i], 1.0f)) {
+            return fail("44.1 kHz Goaslicer Length boundary changed");
+        }
+    }
+    const float fade_down[] = {0.75f, 0.5f, 0.25f, 0.0f};
+    for (int i = 0; i < 4; ++i) {
+        if (!near(left[11 + i], fade_down[i]) ||
+                !near(right[11 + i], fade_down[i])) {
             return fail("44.1 kHz gate/fade-down response changed");
         }
     }
 
-    /* SequencerTick starts the next slice and releases a muted gate.  With a
-    ** 0.5 step the retained implementation yields 0, 0.5, then unity. */
+    /* SequencerTick starts the next slice and releases a muted gate.  Keep the
+    ** work block below Length so the test isolates the retained fade-up path. */
     machine->SequencerTick();
-    float tick_left[] = {1, 1, 1};
-    float tick_right[] = {1, 1, 1};
-    const float tick_expected[] = {0, 0.5f, 1};
-    machine->Work(tick_left, tick_right, 3, 1);
-    for (int i = 0; i < 3; ++i) {
+    float tick_left[] = {1, 1, 1, 1, 1};
+    float tick_right[] = {1, 1, 1, 1, 1};
+    const float tick_expected[] = {0, 0.25f, 0.5f, 0.75f, 1};
+    machine->Work(tick_left, tick_right, 5, 1);
+    for (int i = 0; i < 5; ++i) {
         if (!near(tick_left[i], tick_expected[i]) ||
                 !near(tick_right[i], tick_expected[i])) {
             return fail("SequencerTick gate-release response changed");
@@ -149,26 +158,33 @@ int verify_44100_gate_and_tick(CMachineInterface* machine)
 int verify_sample_rate_scaling(CMachineInterface* machine)
 {
     TestCallback callback(88200, 512);
-    float left[11];
-    float right[11];
-    for (int i = 0; i < 11; ++i) {
+    float left[29];
+    float right[29];
+    for (int i = 0; i < 29; ++i) {
         left[i] = right[i] = 1.0f;
     }
 
     machine->pCB = &callback;
     machine->Init();
-    machine->ParameterTweak(0, 4);       // scales to eight samples at 88.2 kHz
-    machine->ParameterTweak(1, 8192);    // scales to the same 0.5 step/sample
-    machine->Work(left, right, 11, 1);
+    /* Use the exact same valid parameter values as the 44.1 kHz test. */
+    machine->ParameterTweak(0, 10);      // scales from 10 to 20 samples
+    machine->ParameterTweak(1, 2048);    // scales from 0.25 to 0.125/sample
+    machine->Work(left, right, 29, 1);
 
-    for (int i = 0; i < 9; ++i) {
+    for (int i = 0; i < 20; ++i) {
         if (!near(left[i], 1.0f) || !near(right[i], 1.0f)) {
-            return fail("sample-rate-scaled Goaslicer length changed");
+            return fail("sample-rate-scaled Goaslicer Length changed");
         }
     }
-    if (!near(left[9], 0.5f) || !near(right[9], 0.5f) ||
-            !near(left[10], 0.0f) || !near(right[10], 0.0f)) {
-        return fail("sample-rate-scaled Goaslicer slope changed");
+    const float scaled_fade[] = {
+        1.0f, 0.875f, 0.75f, 0.625f, 0.5f,
+        0.375f, 0.25f, 0.125f, 0.0f
+    };
+    for (int i = 0; i < 9; ++i) {
+        if (!near(left[20 + i], scaled_fade[i]) ||
+                !near(right[20 + i], scaled_fade[i])) {
+            return fail("sample-rate-scaled Goaslicer Slope changed");
+        }
     }
     return 0;
 }
@@ -243,6 +259,6 @@ int main(int argc, char** argv)
     std::printf("machine: Arguru Goaslicer\n");
     std::printf("parameters: 2\n");
     std::printf("abi: GetInfo/CreateMachine/DeleteMachine\n");
-    std::printf("timing: gate fade + SequencerTick release + sample-rate scaling\n");
+    std::printf("timing: in-range gate fade + SequencerTick release + sample-rate scaling\n");
     return 0;
 }
