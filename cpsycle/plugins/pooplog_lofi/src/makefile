@@ -21,4 +21,4 @@ $(OUTPUTFILE): $(obj)
 
 .PHONY: clean
 clean:
-	rm -f $(obj) $(OUTPUTFILE)
+	rm -f $(obj) $(OUTPUTDIR)$(OUTPUTFILE)
