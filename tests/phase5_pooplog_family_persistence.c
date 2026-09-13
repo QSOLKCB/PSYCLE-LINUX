@@ -314,11 +314,14 @@ static int seed_opaque_only_banks(const PooplogSpec* spec,
 {
 	if (spec->expected_opaque_size == 0) return 0;
 
-	/* Bank 1 is deliberately different from bank 0, then the selectors are
-	** returned to bank 0 before preset capture. The ordinary parameter table can
-	** therefore reconstruct bank 0, but bank 1 survives only through GetData /
-	** PutData. This makes a no-op PutData observable on fresh restoration. */
-	if (tweak_named_parameter(spec, machine, "OSC Select", 1) != 0 ||
+	/* The endpoint sweep deliberately exercises Tweak Inertia too. Force it off
+	** before seeding so NewInertia-backed bank fields land synchronously in the
+	** underlying opaque structs before GetData captures them. Bank 1 is then made
+	** deliberately different from bank 0 and the selectors are returned to bank 0.
+	** The ordinary parameter table can reconstruct bank 0, but bank 1 survives
+	** only through GetData / PutData. */
+	if (tweak_named_parameter(spec, machine, "Tweak Inertia", 0) != 0 ||
+			tweak_named_parameter(spec, machine, "OSC Select", 1) != 0 ||
 			tweak_named_parameter(spec, machine, "OSC Tune", 36) != 0 ||
 			tweak_named_parameter(spec, machine, "VCF Select", 1) != 0 ||
 			tweak_named_parameter(spec, machine, "VCF Cutoff", 301) != 0 ||
