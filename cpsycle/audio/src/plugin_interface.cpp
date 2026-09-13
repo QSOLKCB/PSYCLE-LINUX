@@ -117,6 +117,16 @@ void mi_putdata(CMachineInterface* mi, void * data)
 
 void mi_getdata(CMachineInterface* mi, void * data)
 {
+	int size;
+
+	size = mi->GetDataSize();
+	if (data && size > 0) {
+		/* Some historical native machines deliberately skip pointer-sized
+		** compatibility slots while serializing opaque state. Callers allocate
+		** an uninitialized buffer, so zero it first to make those reserved bytes
+		** deterministic without changing the historical state layout. */
+		memset(data, 0, (size_t)size);
+	}
 	mi->GetData(data);
 }
 

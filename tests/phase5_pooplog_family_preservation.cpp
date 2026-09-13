@@ -1,0 +1,716 @@
+/*
+** PSYCLE-LINUX Phase 5B Pooplog family native ABI / DSP preservation.
+**
+** Covers the nine retained source-built Pooplog Linux binaries. Parameter
+** metadata is frozen with complete hashes, effects use deterministic neutral
+** and active timing-sensitive signal invariants, and all three FM synth variants
+** exercise both fresh-machine determinism and a live 44.1 -> 88.2 kHz
+** SequencerTick transition.
+*/
+
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <dlfcn.h>
+#include <vector>
+
+#include <psycle/plugin_interface.hpp>
+
+using psycle::plugin_interface::CFxCallback;
+using psycle::plugin_interface::CMachineInfo;
+using psycle::plugin_interface::CMachineInterface;
+using psycle::plugin_interface::CMachineParameter;
+
+namespace {
+
+enum class Kind { Synth, Delay, Filter, Autopan, Lofi, Scratch };
+enum class EffectTransition { SampleRateOnly, BpmOnly };
+
+struct Spec {
+    const char* label;
+    const char* name;
+    const char* short_name;
+    int plug_version;
+    int flags;
+    int parameter_count;
+    int columns;
+    Kind kind;
+    std::uint64_t metadata_hash;
+};
+
+const Spec SPECS[] = {
+    {"FM Laboratory", "Pooplog FM Laboratory0.68b", "Pooplog", 0x0068,
+        psycle::plugin_interface::GENERATOR, 101, 5, Kind::Synth,
+        UINT64_C(0xd2db9e08a2e098a4)},
+    {"FM Light", "Pooplog FM Light0.68b", "Pooplog Light", 0x0068,
+        psycle::plugin_interface::GENERATOR, 57, 5, Kind::Synth,
+        UINT64_C(0xc955c42530dc6506)},
+    {"FM UltraLight", "Pooplog FM UltraLight0.68b", "Pooplog UltraL", 0x0068,
+        psycle::plugin_interface::GENERATOR, 45, 5, Kind::Synth,
+        UINT64_C(0xf9faacf032cc58f3)},
+    {"Delay", "Pooplog Delay 0.04b", "Pooplog Delay", 0x0004,
+        psycle::plugin_interface::EFFECT, 43, 5, Kind::Delay,
+        UINT64_C(0xd794adcf1c57390e)},
+    {"Delay Light", "Pooplog Delay Light 0.04b", "Pooplog Delay L", 0x0004,
+        psycle::plugin_interface::EFFECT, 28, 4, Kind::Delay,
+        UINT64_C(0xdd879bae9f506e07)},
+    {"Filter", "Pooplog Filter 0.06b", "Pooplog Filter", 0x0006,
+        psycle::plugin_interface::EFFECT, 16, 4, Kind::Filter,
+        UINT64_C(0xec1dd1dbd487381c)},
+    {"Autopan", "Pooplog Autopan 0.06b", "Pooplog Autopan", 0x0006,
+        psycle::plugin_interface::EFFECT, 9, 3, Kind::Autopan,
+        UINT64_C(0xc100243d6fa938a5)},
+    {"Lofi", "Pooplog Lofi Processor 0.04b", "Pooplog Lofi", 0x0004,
+        psycle::plugin_interface::EFFECT, 4, 4, Kind::Lofi,
+        UINT64_C(0x87c4d37392e2128a)},
+    {"Scratch", "Pooplog Scratch Master 0.06b", "Pooplog Scratch", 0x0006,
+        psycle::plugin_interface::EFFECT, 8, 4, Kind::Scratch,
+        UINT64_C(0xd4eb1c2f76e2e4c9)},
+};
+
+class TestCallback : public CFxCallback {
+public:
+    TestCallback() : sample_rate_(44100), bpm_(120), tick_length_(5512) {}
+    void set_sample_rate(int v) { sample_rate_ = v; }
+    void set_bpm(int v) { bpm_ = v; }
+    void set_tick_length(int v) { tick_length_ = v; }
+    void MessBox(const char*, const char*, unsigned int) const override {}
+    int CallbackFunc(int, int, int, void*) override { return 0; }
+    float* unused0(int, int) override { return nullptr; }
+    float* unused1(int, int) override { return nullptr; }
+    int GetTickLength() const override { return tick_length_; }
+    int GetSamplingRate() const override { return sample_rate_; }
+    int GetBPM() const override { return bpm_; }
+    int GetTPB() const override { return 4; }
+    bool FileBox(bool, char[], char[]) override { return false; }
+private:
+    int sample_rate_;
+    int bpm_;
+    int tick_length_;
+};
+
+int fail(const Spec& spec, const char* message)
+{
+    std::fprintf(stderr, "phase5-pooplog-family: FAIL [%s]: %s\n",
+        spec.label, message);
+    return 1;
+}
+
+void hash_byte(std::uint64_t& hash, unsigned char value)
+{
+    hash ^= static_cast<std::uint64_t>(value);
+    hash *= UINT64_C(1099511628211);
+}
+
+void hash_int(std::uint64_t& hash, std::int32_t value)
+{
+    const std::uint32_t u = static_cast<std::uint32_t>(value);
+    for (unsigned int i = 0; i < 4; ++i)
+        hash_byte(hash, static_cast<unsigned char>((u >> (i * 8)) & 0xffu));
+}
+
+void hash_string(std::uint64_t& hash, const char* text)
+{
+    if (text) while (*text) hash_byte(hash, static_cast<unsigned char>(*text++));
+    hash_byte(hash, 0);
+}
+
+std::uint64_t parameter_hash(const CMachineInfo* info)
+{
+    std::uint64_t hash = UINT64_C(1469598103934665603);
+    for (int i = 0; i < info->numParameters; ++i) {
+        const CMachineParameter* p = info->Parameters[i];
+        hash_int(hash, i);
+        hash_string(hash, p ? p->Name : nullptr);
+        hash_string(hash, p ? p->Description : nullptr);
+        if (p) {
+            hash_int(hash, p->MinValue);
+            hash_int(hash, p->MaxValue);
+            hash_int(hash, p->Flags);
+            hash_int(hash, p->DefValue);
+        }
+    }
+    return hash;
+}
+
+int verify_metadata(const Spec& spec, const CMachineInfo* info)
+{
+    if (!info) return fail(spec, "GetInfo returned null");
+    if (info->APIVersion != psycle::plugin_interface::MI_VERSION)
+        return fail(spec, "native-machine API version changed");
+    if (info->PlugVersion != spec.plug_version)
+        return fail(spec, "plugin version changed");
+    if (info->Flags != spec.flags)
+        return fail(spec, "generator/effect classification changed");
+    if (info->numParameters != spec.parameter_count)
+        return fail(spec, "parameter count changed");
+    if (!info->Name || std::strcmp(info->Name, spec.name) != 0 ||
+            !info->ShortName || std::strcmp(info->ShortName, spec.short_name) != 0 ||
+            !info->Author || std::strcmp(info->Author, "Jeremy Evers") != 0 ||
+            info->numCols != spec.columns)
+        return fail(spec, "machine identity metadata changed");
+    if (!info->Parameters) return fail(spec, "parameter table is missing");
+
+    for (int i = 0; i < info->numParameters; ++i) {
+        const CMachineParameter* p = info->Parameters[i];
+        if (!p || !p->Name || !p->Description)
+            return fail(spec, "parameter metadata contains a null entry");
+        if (p->MinValue > p->MaxValue)
+            return fail(spec, "parameter range is inverted");
+        if (p->Flags == psycle::plugin_interface::MPF_STATE &&
+                (p->DefValue < p->MinValue || p->DefValue > p->MaxValue))
+            return fail(spec, "state parameter default is outside its range");
+        if (p->Flags != psycle::plugin_interface::MPF_STATE &&
+                p->Flags != psycle::plugin_interface::MPF_NULL &&
+                p->Flags != psycle::plugin_interface::MPF_LABEL)
+            return fail(spec, "parameter flag changed to an unknown value");
+    }
+
+    const std::uint64_t actual = parameter_hash(info);
+    if (actual != spec.metadata_hash) {
+        std::fprintf(stderr,
+            "phase5-pooplog-family: FAIL [%s]: metadata hash expected 0x%016llx got 0x%016llx\n",
+            spec.label,
+            static_cast<unsigned long long>(spec.metadata_hash),
+            static_cast<unsigned long long>(actual));
+        return 1;
+    }
+    std::printf("pooplog-metadata-hash[%s]=0x%016llx\n", spec.label,
+        static_cast<unsigned long long>(actual));
+    return 0;
+}
+
+void apply_defaults(CMachineInterface* machine, const CMachineInfo* info,
+    TestCallback& callback)
+{
+    machine->pCB = &callback;
+    for (int i = 0; i < info->numParameters; ++i)
+        machine->Vals[i] = info->Parameters[i]->DefValue;
+    machine->Init();
+    for (int i = 0; i < info->numParameters; ++i) {
+        if (info->Parameters[i]->Flags == psycle::plugin_interface::MPF_STATE)
+            machine->ParameterTweak(i, info->Parameters[i]->DefValue);
+    }
+}
+
+int find_parameter(const CMachineInfo* info, const char* name)
+{
+    for (int i = 0; i < info->numParameters; ++i) {
+        if (info->Parameters[i] && info->Parameters[i]->Name &&
+                std::strcmp(info->Parameters[i]->Name, name) == 0)
+            return i;
+    }
+    return -1;
+}
+
+int set_parameter(const Spec& spec, CMachineInterface* machine,
+    const CMachineInfo* info, const char* name, int value)
+{
+    const int index = find_parameter(info, name);
+    if (index < 0) {
+        std::fprintf(stderr, "phase5-pooplog-family: FAIL [%s]: parameter '%s' missing\n",
+            spec.label, name);
+        return 1;
+    }
+    const CMachineParameter* p = info->Parameters[index];
+    if (value < p->MinValue || value > p->MaxValue)
+        return fail(spec, "test attempted an out-of-range parameter value");
+    machine->ParameterTweak(index, value);
+    return 0;
+}
+
+bool same_signal(const float* a, const float* b, int count,
+    float tolerance = 1.0e-5f)
+{
+    for (int i = 0; i < count; ++i) {
+        if (!std::isfinite(a[i]) || !std::isfinite(b[i])) return false;
+        if (std::fabs(a[i] - b[i]) > tolerance) return false;
+    }
+    return true;
+}
+
+bool finite_signal(const float* signal, int count)
+{
+    for (int i = 0; i < count; ++i) {
+        if (!std::isfinite(signal[i])) return false;
+    }
+    return true;
+}
+
+bool different_signal(const float* a, const float* b, int count,
+    float tolerance = 1.0e-4f)
+{
+    bool different = false;
+    for (int i = 0; i < count; ++i) {
+        if (!std::isfinite(a[i]) || !std::isfinite(b[i])) return false;
+        if (std::fabs(a[i] - b[i]) > tolerance) different = true;
+    }
+    return different;
+}
+
+bool estimate_positive_crossing_hz(const std::vector<float>& signal,
+    int sample_rate, double& hz, int& crossing_count)
+{
+    double first = -1.0;
+    double last = -1.0;
+    int crossings = 0;
+
+    for (std::size_t i = 1; i < signal.size(); ++i) {
+        const double a = signal[i - 1];
+        const double b = signal[i];
+        if (!std::isfinite(a) || !std::isfinite(b)) return false;
+        if (a <= 0.0 && b > 0.0) {
+            const double fraction = -a / (b - a);
+            const double position = static_cast<double>(i - 1) + fraction;
+            if (crossings == 0) first = position;
+            last = position;
+            ++crossings;
+        }
+    }
+
+    crossing_count = crossings;
+    if (crossings < 16 || first < 0.0 || last <= first) return false;
+    hz = static_cast<double>(crossings - 1) * sample_rate / (last - first);
+    return std::isfinite(hz) && hz > 0.0;
+}
+
+int configure_effect_neutral(const Spec& spec, CMachineInterface* machine,
+    const CMachineInfo* info)
+{
+    switch (spec.kind) {
+    case Kind::Delay:
+    case Kind::Filter:
+    case Kind::Scratch:
+        if (set_parameter(spec, machine, info, "Input Gain", 256) != 0 ||
+                set_parameter(spec, machine, info, "Mix", 0) != 0)
+            return 1;
+        if (find_parameter(info, "Tweak Inertia") >= 0 &&
+                set_parameter(spec, machine, info, "Tweak Inertia", 0) != 0)
+            return 1;
+        return 0;
+    case Kind::Autopan:
+        return set_parameter(spec, machine, info, "Panning", 256) ||
+            set_parameter(spec, machine, info, "Pan LFO Depth", 0) ||
+            set_parameter(spec, machine, info, "Tweak Inertia", 0) ||
+            set_parameter(spec, machine, info, "Input Gain", 256) ||
+            set_parameter(spec, machine, info, "Mix", 256);
+    case Kind::Lofi:
+        return set_parameter(spec, machine, info, "Resample Frequency", 0) ||
+            set_parameter(spec, machine, info, "Resample Bits", 0) ||
+            set_parameter(spec, machine, info, "Frequency Unbalance", 256) ||
+            set_parameter(spec, machine, info, "Input Gain", 256);
+    case Kind::Synth:
+        return fail(spec, "internal effect dispatch error");
+    }
+    return 1;
+}
+
+int configure_effect_active(const Spec& spec, CMachineInterface* machine,
+    const CMachineInfo* info)
+{
+    switch (spec.kind) {
+    case Kind::Delay:
+        return set_parameter(spec, machine, info, "Tweak Inertia", 0) ||
+            set_parameter(spec, machine, info, "Follow Tempo", 1) ||
+            set_parameter(spec, machine, info, "Left Delay Length", 0) ||
+            set_parameter(spec, machine, info, "Right Delay Length", 0) ||
+            set_parameter(spec, machine, info, "Left Feedback", 0) ||
+            set_parameter(spec, machine, info, "Right Feedback", 0) ||
+            set_parameter(spec, machine, info, "Input Gain", 256) ||
+            set_parameter(spec, machine, info, "Mix", 256);
+    case Kind::Filter:
+        return set_parameter(spec, machine, info, "Tweak Inertia", 0) ||
+            set_parameter(spec, machine, info, "Filter Type", 1) ||
+            set_parameter(spec, machine, info, "Filter Cutoff", 180) ||
+            set_parameter(spec, machine, info, "Filter Resonance", 64) ||
+            set_parameter(spec, machine, info, "Cutoff LFO Depth", 96) ||
+            set_parameter(spec, machine, info, "LFO Wave", 0) ||
+            set_parameter(spec, machine, info, "LFO Rate", 10) ||
+            set_parameter(spec, machine, info, "LFO Phase", 0) ||
+            set_parameter(spec, machine, info, "Input Gain", 256) ||
+            set_parameter(spec, machine, info, "Mix", 256);
+    case Kind::Autopan:
+        return set_parameter(spec, machine, info, "Panning", 256) ||
+            set_parameter(spec, machine, info, "Pan LFO Depth", 192) ||
+            set_parameter(spec, machine, info, "Delta Smoothing", 0) ||
+            set_parameter(spec, machine, info, "LFO Wave", 0) ||
+            set_parameter(spec, machine, info, "LFO Rate", 10) ||
+            set_parameter(spec, machine, info, "LFO Phase", 0) ||
+            set_parameter(spec, machine, info, "Tweak Inertia", 0) ||
+            set_parameter(spec, machine, info, "Input Gain", 256) ||
+            set_parameter(spec, machine, info, "Mix", 256);
+    case Kind::Lofi:
+        return set_parameter(spec, machine, info, "Resample Frequency", 2048) ||
+            set_parameter(spec, machine, info, "Resample Bits", 0) ||
+            set_parameter(spec, machine, info, "Frequency Unbalance", 256) ||
+            set_parameter(spec, machine, info, "Input Gain", 256);
+    case Kind::Scratch:
+        return set_parameter(spec, machine, info, "Buffer Length", 0) ||
+            set_parameter(spec, machine, info, "Scratch Speed", 1024) ||
+            set_parameter(spec, machine, info, "Left Drag Delay", 0) ||
+            set_parameter(spec, machine, info, "Right Drag Delay", 0) ||
+            set_parameter(spec, machine, info, "Speed Unbalance", 256) ||
+            set_parameter(spec, machine, info, "Feedback", 256) ||
+            set_parameter(spec, machine, info, "Input Gain", 256) ||
+            set_parameter(spec, machine, info, "Mix", 256);
+    case Kind::Synth:
+        return fail(spec, "internal active-effect dispatch error");
+    }
+    return 1;
+}
+
+void fill_effect_probe(const Spec& spec, std::vector<float>& left,
+    std::vector<float>& right)
+{
+    const int count = 2048;
+    left.assign(count, 0.0f);
+    right.assign(count, 0.0f);
+    if (spec.kind == Kind::Autopan) {
+        for (int i = 0; i < count; ++i) {
+            left[i] = 900.0f;
+            right[i] = -700.0f;
+        }
+    } else if (spec.kind == Kind::Lofi) {
+        for (int i = 0; i < count; ++i) {
+            left[i] = static_cast<float>(((i * 37) % 257) - 128) * 8.0f;
+            right[i] = static_cast<float>(((i * 53) % 251) - 125) * 7.0f;
+        }
+    } else {
+        left[0] = 1200.0f;
+        right[0] = -900.0f;
+    }
+}
+
+int verify_effect_unity(const Spec& spec, CMachineInterface* machine,
+    const CMachineInfo* info)
+{
+    const float input_l[] = {-1234.5f, -64.0f, 0.0f, 77.25f, 2048.0f, 0.5f};
+    const float input_r[] = {4321.0f, 17.0f, 0.0f, -99.5f, -1024.0f, -0.25f};
+    float left[6];
+    float right[6];
+    TestCallback callback;
+
+    apply_defaults(machine, info, callback);
+    if (configure_effect_neutral(spec, machine, info) != 0) return 1;
+    std::memcpy(left, input_l, sizeof(left));
+    std::memcpy(right, input_r, sizeof(right));
+    machine->Work(left, right, 6, 1);
+    if (!same_signal(left, input_l, 6) || !same_signal(right, input_r, 6))
+        return fail(spec, "neutral DSP path is not finite exact unity");
+
+    callback.set_sample_rate(88200);
+    callback.set_bpm(137);
+    callback.set_tick_length(8044);
+    machine->SequencerTick();
+    std::memcpy(left, input_l, sizeof(left));
+    std::memcpy(right, input_r, sizeof(right));
+    machine->Work(left, right, 6, 1);
+    if (!same_signal(left, input_l, 6) || !same_signal(right, input_r, 6))
+        return fail(spec, "neutral DSP changed after live host-timing transition");
+    return 0;
+}
+
+const char* transition_name(EffectTransition transition)
+{
+    return transition == EffectTransition::SampleRateOnly
+        ? "sample-rate-only" : "BPM-only";
+}
+
+void configure_target_callback(TestCallback& callback, EffectTransition transition)
+{
+    if (transition == EffectTransition::SampleRateOnly)
+        callback.set_sample_rate(88200);
+    else
+        callback.set_bpm(137);
+}
+
+int verify_effect_timing_case(const Spec& spec, const CMachineInfo* info,
+    CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&),
+    EffectTransition transition)
+{
+    TestCallback live_callback;
+    TestCallback reference_callback;
+    TestCallback stale_callback;
+    CMachineInterface* live = nullptr;
+    CMachineInterface* reference = nullptr;
+    CMachineInterface* stale = nullptr;
+    std::vector<float> input_l, input_r;
+    std::vector<float> live_l, live_r, reference_l, reference_r, stale_l, stale_r;
+    int rc = 0;
+
+    /* Render the live transition before constructing a fresh reference. Several
+    ** retained Pooplog modules keep SyncAdd tables at module scope, so creating
+    ** the target reference first could mutate shared timing tables and mask a
+    ** broken live-instance SequencerTick branch. */
+    live = create_machine();
+    if (!live || !live->Vals) {
+        if (live) delete_machine(*live);
+        return fail(spec, "CreateMachine failed for active timing transition");
+    }
+    apply_defaults(live, info, live_callback);
+    if (configure_effect_active(spec, live, info) != 0) {
+        rc = 1;
+        goto cleanup;
+    }
+
+    configure_target_callback(live_callback, transition);
+    live->SequencerTick();
+    fill_effect_probe(spec, input_l, input_r);
+    live_l = input_l;
+    live_r = input_r;
+    live->Work(live_l.data(), live_r.data(), static_cast<int>(live_l.size()), 1);
+    if (!finite_signal(live_l.data(), static_cast<int>(live_l.size())) ||
+            !finite_signal(live_r.data(), static_cast<int>(live_r.size()))) {
+        rc = fail(spec, "live active timing probe produced a non-finite sample");
+        goto cleanup;
+    }
+
+    reference = create_machine();
+    if (!reference || !reference->Vals) {
+        rc = fail(spec, "fresh target timing reference creation failed");
+        goto cleanup;
+    }
+    configure_target_callback(reference_callback, transition);
+    apply_defaults(reference, info, reference_callback);
+    if (configure_effect_active(spec, reference, info) != 0) {
+        rc = 1;
+        goto cleanup;
+    }
+    reference_l = input_l;
+    reference_r = input_r;
+    reference->Work(reference_l.data(), reference_r.data(),
+        static_cast<int>(reference_l.size()), 1);
+    if (!finite_signal(reference_l.data(), static_cast<int>(reference_l.size())) ||
+            !finite_signal(reference_r.data(), static_cast<int>(reference_r.size()))) {
+        rc = fail(spec, "fresh target timing reference produced a non-finite sample");
+        goto cleanup;
+    }
+
+    if (!different_signal(reference_l.data(), input_l.data(),
+            static_cast<int>(input_l.size())) &&
+            !different_signal(reference_r.data(), input_r.data(),
+                static_cast<int>(input_r.size()))) {
+        rc = fail(spec, "active timing probe did not engage the effect path");
+        goto cleanup;
+    }
+
+    if (spec.kind == Kind::Filter &&
+            transition == EffectTransition::SampleRateOnly) {
+        /* The retained filter's sample-rate branch reinitializes filter objects,
+        ** which is observably rate-sensitive but not byte-for-byte equivalent to
+        ** a fresh Init path. Render an otherwise identical stale 44.1 kHz control
+        ** after the live output is captured: a no-op sample-rate branch makes the
+        ** active impulse responses identical, while a real transition changes it. */
+        stale = create_machine();
+        if (!stale || !stale->Vals) {
+            rc = fail(spec, "stale filter control creation failed");
+            goto cleanup;
+        }
+        apply_defaults(stale, info, stale_callback);
+        if (configure_effect_active(spec, stale, info) != 0) {
+            rc = 1;
+            goto cleanup;
+        }
+        stale_l = input_l;
+        stale_r = input_r;
+        stale->Work(stale_l.data(), stale_r.data(), static_cast<int>(stale_l.size()), 1);
+        if (!finite_signal(stale_l.data(), static_cast<int>(stale_l.size())) ||
+                !finite_signal(stale_r.data(), static_cast<int>(stale_r.size()))) {
+            rc = fail(spec, "stale filter control produced a non-finite sample");
+            goto cleanup;
+        }
+        if (!different_signal(live_l.data(), stale_l.data(),
+                static_cast<int>(live_l.size()), 1.0e-4f) &&
+                !different_signal(live_r.data(), stale_r.data(),
+                    static_cast<int>(live_r.size()), 1.0e-4f)) {
+            rc = fail(spec, "active filter response did not change after sample-rate-only transition");
+            goto cleanup;
+        }
+        std::printf("phase5-pooplog-family: active sample-rate response changed PASS [%s]\n",
+            spec.label);
+    } else if (!same_signal(live_l.data(), reference_l.data(),
+            static_cast<int>(live_l.size()), 1.0e-4f) ||
+            !same_signal(live_r.data(), reference_r.data(),
+                static_cast<int>(live_r.size()), 1.0e-4f)) {
+        rc = fail(spec, transition == EffectTransition::SampleRateOnly
+            ? "live sample-rate-only transition diverged from fresh target timing"
+            : "live BPM-only transition diverged from fresh target timing");
+        goto cleanup;
+    }
+
+    std::printf("phase5-pooplog-family: active %s transition PASS [%s]\n",
+        transition_name(transition), spec.label);
+
+cleanup:
+    if (stale) delete_machine(*stale);
+    if (reference) delete_machine(*reference);
+    if (live) delete_machine(*live);
+    return rc;
+}
+
+int verify_effect_timing_transition(const Spec& spec, const CMachineInfo* info,
+    CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
+{
+    int rc = verify_effect_timing_case(spec, info, create_machine, delete_machine,
+        EffectTransition::SampleRateOnly);
+    if (rc == 0)
+        rc = verify_effect_timing_case(spec, info, create_machine, delete_machine,
+            EffectTransition::BpmOnly);
+    return rc;
+}
+
+int render_active_note(const Spec& spec, CMachineInterface* machine,
+    std::vector<float>& left, std::vector<float>& right, int sample_count)
+{
+    machine->SeqTick(0, 69, 0, 0, 0);
+    left.assign(sample_count, 0.0f);
+    right.assign(sample_count, 0.0f);
+    machine->Work(left.data(), right.data(), sample_count, 1);
+    bool nonzero = false;
+    for (int i = 0; i < sample_count; ++i) {
+        if (!std::isfinite(left[i]) || !std::isfinite(right[i]))
+            return fail(spec, "generator produced a non-finite sample");
+        if (left[i] != 0.0f || right[i] != 0.0f) nonzero = true;
+    }
+    return nonzero ? 0 : fail(spec, "generator note render remained silent");
+}
+
+int verify_synth(const Spec& spec, const CMachineInfo* info,
+    CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
+{
+    constexpr int samples_44 = 44100;
+    constexpr int samples_88 = 88200;
+    constexpr double pitch_tolerance_cents = 10.0;
+    std::vector<float> left_a, right_a, left_b, right_b, left_live, right_live;
+    TestCallback callback_a;
+    TestCallback callback_b;
+
+    CMachineInterface* a = create_machine();
+    CMachineInterface* b = create_machine();
+    if (!a || !a->Vals || !b || !b->Vals) {
+        if (a) delete_machine(*a);
+        if (b) delete_machine(*b);
+        return fail(spec, "CreateMachine failed for deterministic synth render");
+    }
+    apply_defaults(a, info, callback_a);
+    apply_defaults(b, info, callback_b);
+
+    float silent_l[64] = {};
+    float silent_r[64] = {};
+    a->Work(silent_l, silent_r, 64, 1);
+    for (int i = 0; i < 64; ++i) {
+        if (silent_l[i] != 0.0f || silent_r[i] != 0.0f) {
+            delete_machine(*b); delete_machine(*a);
+            return fail(spec, "generator emitted audio without an active note");
+        }
+    }
+
+    int rc = render_active_note(spec, a, left_a, right_a, samples_44);
+    if (rc == 0) rc = render_active_note(spec, b, left_b, right_b, samples_44);
+    if (rc == 0 && (!same_signal(left_a.data(), left_b.data(), samples_44) ||
+            !same_signal(right_a.data(), right_b.data(), samples_44)))
+        rc = fail(spec, "fresh-machine note rendering is no longer deterministic");
+    delete_machine(*b);
+    if (rc != 0) { delete_machine(*a); return rc; }
+
+    a->Stop();
+    callback_a.set_sample_rate(88200);
+    callback_a.set_tick_length(11025);
+    callback_a.set_bpm(137);
+    a->SequencerTick();
+    rc = render_active_note(spec, a, left_live, right_live, samples_88);
+    if (rc == 0) {
+        double hz_44 = 0.0;
+        double hz_88 = 0.0;
+        int crossings_44 = 0;
+        int crossings_88 = 0;
+        if (!estimate_positive_crossing_hz(left_a, 44100, hz_44, crossings_44) ||
+                !estimate_positive_crossing_hz(left_live, 88200, hz_88, crossings_88)) {
+            rc = fail(spec, "insufficient finite zero crossings for sample-rate pitch oracle");
+        } else {
+            const double cents = 1200.0 * std::log2(hz_88 / hz_44);
+            if (!std::isfinite(cents) || std::fabs(cents) > pitch_tolerance_cents) {
+                std::fprintf(stderr,
+                    "phase5-pooplog-family: FAIL [%s]: live sample-rate pitch estimate "
+                    "changed from %.3f Hz to %.3f Hz (%.2f cents, %d -> %d crossings)\n",
+                    spec.label, hz_44, hz_88, cents, crossings_44, crossings_88);
+                rc = 1;
+            } else {
+                std::printf(
+                    "phase5-pooplog-family: live pitch %.3f->%.3f Hz %.2f cents PASS [%s]\n",
+                    hz_44, hz_88, cents, spec.label);
+            }
+        }
+    }
+    delete_machine(*a);
+    if (rc != 0) return rc;
+
+    std::printf("phase5-pooplog-family: live 44.1->88.2 kHz PASS [%s]\n", spec.label);
+    return 0;
+}
+
+int test_plugin(const Spec& spec, const char* path)
+{
+    using GetInfoFn = const CMachineInfo* (*)();
+    using CreateMachineFn = CMachineInterface* (*)();
+    using DeleteMachineFn = void (*)(CMachineInterface&);
+
+    void* library = dlopen(path, RTLD_LAZY | RTLD_LOCAL);
+    if (!library) {
+        std::fprintf(stderr, "phase5-pooplog-family: FAIL [%s]: dlopen: %s\n",
+            spec.label, dlerror());
+        return 1;
+    }
+    dlerror();
+    GetInfoFn get_info = reinterpret_cast<GetInfoFn>(dlsym(library, "GetInfo"));
+    CreateMachineFn create_machine = reinterpret_cast<CreateMachineFn>(dlsym(library, "CreateMachine"));
+    DeleteMachineFn delete_machine = reinterpret_cast<DeleteMachineFn>(dlsym(library, "DeleteMachine"));
+    const char* error = dlerror();
+    if (error || !get_info || !create_machine || !delete_machine) {
+        std::fprintf(stderr, "phase5-pooplog-family: FAIL [%s]: ABI exports missing: %s\n",
+            spec.label, error ? error : "unknown symbol error");
+        dlclose(library);
+        return 1;
+    }
+
+    const CMachineInfo* info = get_info();
+    int rc = verify_metadata(spec, info);
+    if (rc == 0) {
+        if (spec.kind == Kind::Synth) {
+            rc = verify_synth(spec, info, create_machine, delete_machine);
+        } else {
+            CMachineInterface* machine = create_machine();
+            if (!machine || !machine->Vals) {
+                if (machine) delete_machine(*machine);
+                rc = fail(spec, "CreateMachine did not provide a usable effect instance");
+            } else {
+                rc = verify_effect_unity(spec, machine, info);
+                delete_machine(*machine);
+                if (rc == 0)
+                    rc = verify_effect_timing_transition(spec, info,
+                        create_machine, delete_machine);
+            }
+        }
+    }
+    if (dlclose(library) != 0 && rc == 0) rc = fail(spec, "dlclose failed");
+    if (rc == 0) std::printf("phase5-pooplog-family: PASS [%s]\n", spec.label);
+    return rc;
+}
+
+} // namespace
+
+int main(int argc, char** argv)
+{
+    const int count = static_cast<int>(sizeof(SPECS) / sizeof(SPECS[0]));
+    if (argc != count + 1) {
+        std::fprintf(stderr,
+            "usage: %s FM_LAB.so FM_LIGHT.so FM_ULTRALIGHT.so DELAY.so "
+            "DELAY_LIGHT.so FILTER.so AUTOPAN.so LOFI.so SCRATCH.so\n", argv[0]);
+        return 2;
+    }
+    for (int i = 0; i < count; ++i)
+        if (test_plugin(SPECS[i], argv[i + 1]) != 0) return 1;
+    std::printf("phase5-pooplog-family: PASS all %d retained source-built targets\n", count);
+    return 0;
+}

@@ -23,6 +23,7 @@ v0.01b
 #include "../detail/prefix.h"
 #include <psycle/plugin_interface.hpp>
 // #include <psycle/helpers/math.hpp>
+#include <cmath>
 #include <cstring>
 #include <cstdlib>
 #include <cassert>
@@ -183,7 +184,6 @@ void mi::Command()
 {
 // Called when user presses editor button
 // Probably you want to show your custom window here
-// or an about button
 pCB->MessBox("Jeremy Evers\r\nnegspect@hotmail.com",PLUGIN_NAME,0);
 }
 
@@ -322,7 +322,7 @@ void mi::Work(float *psamplesleft, float *psamplesright , int numsamples, int tr
 
 		int i;
 		// do bits
-		if (fabs(sl) < 16384)
+		if (std::fabs(sl) < 16384)
 		{
 			i = abs(rint<int>(sl*65536*2));
 		}
@@ -338,7 +338,7 @@ void mi::Work(float *psamplesleft, float *psamplesright , int numsamples, int tr
 		{
 			sl = (i & bits[Vals[1]-1])/(-65536*2.0f);
 		}
-		if (fabs(sr) < 16384)
+		if (std::fabs(sr) < 16384)
 		{
 			i = abs(rint<int>(sr*65536*2));
 		}

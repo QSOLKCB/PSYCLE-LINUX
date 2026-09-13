@@ -40,6 +40,8 @@ PLUGDIRS :=\
 			pooplog_delay/src\
 			pooplog_delay_light/src\
 			pooplog_filter/src\
+			pooplog_lofi/src\
+			pooplog_scratch/src\
 			pooplog-synth/src\
 			pooplog-synth-light/src\
 			pooplog-synth-ultralight/src\

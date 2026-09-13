@@ -212,12 +212,23 @@ Phase 5A Arguru-family preservation is complete. Arguru Compressor, Arguru Disto
 
 Preserve the Jeremy Evers/Pooplog native-machine family present in the imported source, including representative synth and effect variants such as:
 
-- [ ] Pooplog FM / FM Laboratory synth family
-- [ ] Pooplog Delay
-- [ ] Pooplog Filter
-- [ ] Pooplog Autopan
-- [ ] Pooplog Lofi Processor
-- [ ] Pooplog Scratch
+- [x] Pooplog FM / FM Laboratory synth family
+  - [x] Build and gate the retained FM Laboratory, FM Light and FM UltraLight Linux `.so` variants.
+  - [x] Freeze native identity/version/type plus complete parameter names, descriptions, ranges, flags and defaults with exact metadata hashes.
+  - [x] Verify deterministic active-note rendering and live 44.1 kHz → 88.2 kHz `SequencerTick()` sample-rate transition on existing synth instances.
+  - [x] Preserve historical opaque `GetData` state byte-for-byte across version-1 presets and fresh PSY3 reopen, including deterministic reserved pointer slots without changing the legacy layout or size.
+- [x] Pooplog Delay
+  - [x] Gate both retained full and Light builds, neutral DSP, live host-timing reinitialization, parameter persistence, presets and PSY3 reopen.
+- [x] Pooplog Filter
+  - [x] Gate native identity/metadata, neutral deterministic DSP, public parameter endpoints, presets and PSY3 reopen.
+- [x] Pooplog Autopan
+  - [x] Gate native identity/metadata, centered/depth-zero deterministic DSP, public parameter endpoints, presets and PSY3 reopen.
+- [x] Pooplog Lofi Processor
+  - [x] Restore the missing Linux makefile/top-level build target, fix the missing C++ math declaration without changing DSP equations, and gate neutral DSP, state and PSY3 reopen.
+- [x] Pooplog Scratch
+  - [x] Restore the missing Linux makefile/top-level build target and gate dry-path DSP, timing reinitialization, state and PSY3 reopen.
+
+Phase 5B Pooplog-family preservation is complete for the nine retained source-built identities: FM Laboratory, FM Light, FM UltraLight, Delay, Delay Light, Filter, Autopan, Lofi Processor and Scratch Master. `.github/workflows/phase5-pooplog-family.yml` gates native ABI/identity/metadata, exact parameter hashes, representative deterministic DSP, live sample-rate/timing transitions, public parameter application, per-machine preset persistence, FM opaque state, one-song nine-machine PSY3 reopen and all machine-to-Master topology edges. The host category alias `pooplog-scratch-master-2:0` is not claimed because no corresponding retained source/build directory exists in the audited tree.
 
 ### 5C — broader classic Psycle ecosystem
 
@@ -322,7 +333,7 @@ The existing makefiles are the starting point. A build-system migration is justi
 - [x] Audio render checksum or tolerance-based regression tests where deterministic output is realistic.
 - [ ] Dependency and packaging smoke tests.
 
-Current Phase 9 evidence comes from the Linux build/runtime audit plus the Phase 4 interactive-editing, sequencer/transport, audible-sample, preset, historical-PSY2 and render/bounce gates. Phase 5 now adds real native-machine ABI/discovery, deterministic DSP/timing/synthesis, preset/state serialization and PSY3 reopen coverage through the completely gated Arguru Compressor, Arguru Distortion, Arguru Goaslicer, Arguru Reverb, Arguru Synth 2f and Arguru XFilter/CrossDelay.
+Current Phase 9 evidence comes from the Linux build/runtime audit plus the Phase 4 interactive-editing, sequencer/transport, audible-sample, preset, historical-PSY2 and render/bounce gates. Phase 5 now adds real native-machine ABI/discovery, deterministic DSP/timing/synthesis, preset/state serialization and PSY3 reopen coverage through the completely gated Arguru family and the nine source-built Pooplog identities, including the three FM opaque-state variants.
 
 **Exit condition:** major compatibility regressions are caught automatically before merge.
 
