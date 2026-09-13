@@ -64,6 +64,21 @@ for dir in "${PLUGIN_DIRS[@]}"; do
     make -C "$CPSYCLE/plugins/$dir/src"
 done
 
+# Lofi and Scratch gained Linux makefiles in Phase 5B. Prove their direct clean
+# targets remove the actual loadable artifact from plugins/build, then rebuild.
+CLEAN_DIRS=(pooplog_lofi pooplog_scratch)
+CLEAN_FILES=(pooplog-lofi-processor.so pooplog-scratch-master.so)
+for i in "${!CLEAN_DIRS[@]}"; do
+    dir="${CLEAN_DIRS[$i]}"
+    file="${CLEAN_FILES[$i]}"
+    make -C "$CPSYCLE/plugins/$dir/src" clean
+    if [[ -e "$CPSYCLE/plugins/build/$file" ]]; then
+        echo "Pooplog clean target left stale shared object: $file" >&2
+        exit 1
+    fi
+    make -C "$CPSYCLE/plugins/$dir/src"
+done
+
 for file in "${PLUGIN_FILES[@]}"; do
     path="$CPSYCLE/plugins/build/$file"
     if [[ ! -s "$path" ]]; then
@@ -127,19 +142,21 @@ cat > "$SUMMARY" <<'EOF'
 - Source-built Pooplog FM Laboratory, Light and UltraLight `.so` targets: PASS
 - Source-built Pooplog Delay and Delay Light `.so` targets: PASS
 - Source-built Pooplog Filter, Autopan, Lofi and Scratch `.so` targets: PASS
+- Lofi and Scratch direct `make clean` targets remove their loadable `.so` artifacts before rebuild: PASS
 - Native ABI / identity / version / parameter-table geometry for all nine binaries: PASS
 - Complete parameter names/descriptions/ranges/flags/defaults frozen by nine exact metadata hashes: PASS
 - Neutral deterministic DSP for Delay, Delay Light, Filter, Autopan, Lofi and Scratch: PASS
 - Non-finite effect samples are rejected by the neutral-signal comparator: PASS
 - Live sample-rate/BPM reinitialization survival for retained effects: PASS
 - Deterministic active-note rendering for all three FM synth variants: PASS
-- Live 44.1 kHz -> 88.2 kHz `SequencerTick` transition on existing FM synth instances: PASS
+- Live 44.1 kHz -> 88.2 kHz `SequencerTick` transition preserves the note's physical-frequency estimate: PASS
 - Production `PluginCatcher` recognition for all nine binaries: PASS
 - Production `MachineFactory` instantiation for all nine binaries: PASS
 - Every requested public parameter endpoint is immediately verified after tweak: PASS
 - Selector-driven FM values are canonicalized through their historical opaque state before persistence comparison: PASS
 - Per-machine version-1 preset save/load and fresh-machine restore: PASS
 - FM Laboratory / Light / UltraLight opaque `GetData` byte preservation: PASS
+- Historical FM opaque-state sizes and canonical payload hashes are frozen independently of the round-trip oracle: PASS
 - Historical reserved pointer slots are deterministic without changing opaque-state size/layout: PASS
 - One-song nine-machine PSY3 save and fresh reopen: PASS
 - All nine machine -> Master topology edges survive reopen: PASS
