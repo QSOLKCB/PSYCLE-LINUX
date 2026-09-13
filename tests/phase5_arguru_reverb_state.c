@@ -29,7 +29,7 @@
 #define PRESET_NAME "Phase 5 Arguru Reverb state"
 
 static const intptr_t EXPECTED_VALUES[PARAM_COUNT] = {
-	1234, 96, 240, 700, 8000, 192, 96, 6
+	1234, 96, 240, 700, 22050, 192, 96, 6
 };
 
 static int fail(const char* message)
