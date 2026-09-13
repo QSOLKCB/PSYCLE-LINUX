@@ -13,6 +13,7 @@
 #include <machine.h>
 #include <machinefactory.h>
 #include <machineinfo.h>
+#include <player.h>
 #include <plugin.h>
 #include <plugincatcher.h>
 #include <preset.h>
