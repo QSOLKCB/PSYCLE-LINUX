@@ -185,12 +185,16 @@ Do **not** reintroduce the eight omitted upstream demo/example `.psy` songs mere
   - [x] Freeze machine identity/version/type plus all four historical parameter names, descriptions, ranges, flags and defaults.
   - [x] Verify deterministic hard clipping, stereo phase inversion and retained stateful saturate-mode response without changing the DSP equations.
   - [x] Verify four-parameter preset/state serialization and a fresh production `.psy` save/reload through `PluginCatcher`, `MachineFactory`, preset I/O and PSY3 paths.
-- [ ] Arguru Goaslicer
+- [x] Arguru Goaslicer
+  - [x] Build the retained source as a Linux native-machine `.so` and load it through Psycle's `GetInfo` / `CreateMachine` / `DeleteMachine` ABI.
+  - [x] Freeze machine identity/version/type plus the historical `Length` and `Slope` parameter names, descriptions, ranges, flags and defaults.
+  - [x] Verify deterministic 44.1 kHz gate/fade-down behaviour, `SequencerTick()` release/fade-up behaviour, and retained 88.2 kHz sample-rate scaling.
+  - [x] Verify two-parameter preset/state serialization and a fresh production `.psy` save/reload through `PluginCatcher`, `MachineFactory`, preset I/O and PSY3 paths.
 - [ ] Arguru Reverb
 - [ ] Arguru Synth 2f
 - [ ] Arguru XFilter
 
-Arguru Compressor and Arguru Distortion are now completely gated Phase 5A machines. Compressor coverage is split across `.github/workflows/phase5-arguru-compressor.yml` and `.github/workflows/phase5-arguru-compressor-state.yml`; Distortion is covered end to end by `.github/workflows/phase5-arguru-distortion.yml`, including ABI/metadata, both DSP modes, preset state and fresh PSY3 reopen. Neither retained machine exposes an opaque `GetData` payload, so no new state format was invented. The next Arguru target is Goaslicer.
+Arguru Compressor, Arguru Distortion and Arguru Goaslicer are now completely gated Phase 5A machines. Compressor coverage is split across `.github/workflows/phase5-arguru-compressor.yml` and `.github/workflows/phase5-arguru-compressor-state.yml`; Distortion is covered end to end by `.github/workflows/phase5-arguru-distortion.yml`; and Goaslicer is covered by `.github/workflows/phase5-arguru-goaslicer.yml`, including ABI/metadata, tick-synchronised gating, sample-rate scaling, preset state and fresh PSY3 reopen. None of these retained machines exposes an opaque `GetData` payload, so no new state format was invented. The next Arguru target is Reverb.
 
 ### 5B — Pooplog family
 
@@ -306,7 +310,7 @@ The existing makefiles are the starting point. A build-system migration is justi
 - [x] Audio render checksum or tolerance-based regression tests where deterministic output is realistic.
 - [ ] Dependency and packaging smoke tests.
 
-Current Phase 9 evidence comes from the Linux build/runtime audit plus the Phase 4 interactive-editing, sequencer/transport, audible-sample, preset, historical-PSY2 and render/bounce gates. Phase 5 now adds real native-machine ABI/discovery, deterministic DSP, preset/state serialization and PSY3 reopen coverage through the completely gated Arguru Compressor and Arguru Distortion.
+Current Phase 9 evidence comes from the Linux build/runtime audit plus the Phase 4 interactive-editing, sequencer/transport, audible-sample, preset, historical-PSY2 and render/bounce gates. Phase 5 now adds real native-machine ABI/discovery, deterministic DSP/timing, preset/state serialization and PSY3 reopen coverage through the completely gated Arguru Compressor, Arguru Distortion and Arguru Goaslicer.
 
 **Exit condition:** major compatibility regressions are caught automatically before merge.
 
