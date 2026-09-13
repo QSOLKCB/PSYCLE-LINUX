@@ -182,7 +182,8 @@ int presetio_loadversion1(FILE* fp, uintptr_t numparameters,
 
 		preset = psy_audio_preset_alloc_init();
 		if (!preset || fread(name, sizeof(name), 1, fp) != 1 ||
-				fread(ibuf, numparameters * sizeof(int), 1, fp) != 1) {
+				(numparameters > 0 &&
+					fread(ibuf, numparameters * sizeof(int), 1, fp) != 1)) {
 			if (preset) {
 				psy_audio_preset_dispose(preset);
 				free(preset);
