@@ -217,6 +217,10 @@ for _ in $(seq 1 30); do
     fi
     sleep 0.1
 done
+if xdotool search --onlyvisible --name '^80 :' >/dev/null 2>&1; then
+    echo 'Machine parameter frame remained visible after its X11 close request.' >&2
+    exit 1
+fi
 if ! grep -q 'psycle: runtime smoke machine editor shown slot=128' "$LOG"; then
     echo 'Machine editor window appeared without reaching ParamViews show path.' >&2
     exit 1
