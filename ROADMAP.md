@@ -175,18 +175,18 @@ Do **not** reintroduce the eight omitted upstream demo/example `.psy` songs mere
 
 ### 5A — Arguru family
 
-- [ ] Arguru Compressor
+- [x] Arguru Compressor
   - [x] Build the retained source as a Linux native-machine `.so` and load it through Psycle's `GetInfo` / `CreateMachine` / `DeleteMachine` ABI.
   - [x] Freeze machine identity/version/type plus all six parameter names, ranges, flags and defaults.
   - [x] Verify deterministic Ratio=0 unity bypass and retained 2x Input Gain behaviour without changing the DSP equations.
-  - [ ] Verify preset/state serialization and full `.psy` save/reload before marking the machine complete.
+  - [x] Verify six-parameter preset/state serialization and full `.psy` save/reload through production `PluginCatcher`, `MachineFactory`, preset I/O and PSY3 paths.
 - [ ] Arguru Distortion
 - [ ] Arguru Goaslicer
 - [ ] Arguru Reverb
 - [ ] Arguru Synth 2f
 - [ ] Arguru XFilter
 
-The Arguru Compressor baseline is gated by `.github/workflows/phase5-arguru-compressor.yml`. The top-level machine checkbox intentionally remains open until state/preset and song-reopen behaviour are covered; Phase 5 should not equate “builds” with “preserved.”
+Arguru Compressor is now the first completely gated Phase 5A machine. Its ABI/metadata/DSP baseline is covered by `.github/workflows/phase5-arguru-compressor.yml`, while `.github/workflows/phase5-arguru-compressor-state.yml` proves its six historical `MPF_STATE` parameters survive public preset save/load and a fresh production PSY3 reopen. The retained compressor exposes no opaque `GetData` payload, so no new state format was invented. The next Arguru target is Distortion.
 
 ### 5B — Pooplog family
 
@@ -298,11 +298,11 @@ The existing makefiles are the starting point. A build-system migration is justi
 - [x] Headless/library-level tests where UI testing is unnecessary.
 - [x] `.psy` fixture load tests.
 - [x] Save/reload round-trip tests.
-- [ ] Native-machine discovery and state tests.
+- [x] Native-machine discovery and state tests.
 - [x] Audio render checksum or tolerance-based regression tests where deterministic output is realistic.
 - [ ] Dependency and packaging smoke tests.
 
-Current Phase 9 evidence comes from the Linux build/runtime audit plus the Phase 4 interactive-editing, sequencer/transport, audible-sample, preset, historical-PSY2 and render/bounce gates. The Phase 5 Arguru work begins native-machine-specific discovery/audio coverage, but the native-machine state item remains open until serialization/reopen evidence exists.
+Current Phase 9 evidence comes from the Linux build/runtime audit plus the Phase 4 interactive-editing, sequencer/transport, audible-sample, preset, historical-PSY2 and render/bounce gates. Phase 5 now adds real native-machine ABI/discovery, deterministic DSP, preset/state serialization and PSY3 reopen coverage through the completely gated Arguru Compressor.
 
 **Exit condition:** major compatibility regressions are caught automatically before merge.
 
