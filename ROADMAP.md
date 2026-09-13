@@ -175,18 +175,18 @@ Do **not** reintroduce the eight omitted upstream demo/example `.psy` songs mere
 
 ### 5A — Arguru family
 
-- [ ] Arguru Compressor
+- [x] Arguru Compressor
   - [x] Build the retained source as a Linux native-machine `.so` and load it through Psycle's `GetInfo` / `CreateMachine` / `DeleteMachine` ABI.
   - [x] Freeze machine identity/version/type plus all six parameter names, ranges, flags and defaults.
   - [x] Verify deterministic Ratio=0 unity bypass and retained 2x Input Gain behaviour without changing the DSP equations.
-  - [ ] Verify preset/state serialization and full `.psy` save/reload before marking the machine complete.
+  - [x] Verify preset/state serialization and full `.psy` save/reload through the production native-plugin wrapper.
 - [ ] Arguru Distortion
 - [ ] Arguru Goaslicer
 - [ ] Arguru Reverb
 - [ ] Arguru Synth 2f
 - [ ] Arguru XFilter
 
-The Arguru Compressor baseline is gated by `.github/workflows/phase5-arguru-compressor.yml`. The top-level machine checkbox intentionally remains open until state/preset and song-reopen behaviour are covered; Phase 5 should not equate “builds” with “preserved.”
+Arguru Compressor preservation is gated by `.github/workflows/phase5-arguru-compressor.yml` for Linux ABI/metadata/DSP and `.github/workflows/phase5-arguru-compressor-state.yml` for production `PluginCatcher`/`MachineFactory` state, preset and repeated PSY3 save/reload coverage. With both gates green, the machine-level preservation checkbox is complete; the next Phase 5A target is Arguru Distortion.
 
 ### 5B — Pooplog family
 
@@ -214,13 +214,13 @@ Preserve the Jeremy Evers/Pooplog native-machine family present in the imported 
 
 For representative machines, validate:
 
-- [ ] discovery and instantiation;
-- [ ] parameter ranges and parameter naming;
-- [ ] deterministic/tolerance-based audio behaviour where practical;
-- [ ] presets;
+- [x] discovery and instantiation;
+- [x] parameter ranges and parameter naming;
+- [x] deterministic/tolerance-based audio behaviour where practical;
+- [x] presets;
 - [ ] timing and tracker-command behaviour;
-- [ ] state serialization;
-- [ ] `.psy` save/reload;
+- [x] state serialization;
+- [x] `.psy` save/reload;
 - [ ] missing-machine behaviour;
 - [ ] historical-song compatibility where a trustworthy legal reference exists.
 
@@ -298,11 +298,11 @@ The existing makefiles are the starting point. A build-system migration is justi
 - [x] Headless/library-level tests where UI testing is unnecessary.
 - [x] `.psy` fixture load tests.
 - [x] Save/reload round-trip tests.
-- [ ] Native-machine discovery and state tests.
+- [x] Native-machine discovery and state tests.
 - [x] Audio render checksum or tolerance-based regression tests where deterministic output is realistic.
 - [ ] Dependency and packaging smoke tests.
 
-Current Phase 9 evidence comes from the Linux build/runtime audit plus the Phase 4 interactive-editing, sequencer/transport, audible-sample, preset, historical-PSY2 and render/bounce gates. The Phase 5 Arguru work begins native-machine-specific discovery/audio coverage, but the native-machine state item remains open until serialization/reopen evidence exists.
+Current Phase 9 evidence comes from the Linux build/runtime audit plus the Phase 4 interactive-editing, sequencer/transport, audible-sample, preset, historical-PSY2 and render/bounce gates. The Phase 5 Arguru Compressor ABI/DSP and state-preservation gates now add production native-machine discovery, instantiation, preset/state serialization and repeated PSY3 reopen coverage.
 
 **Exit condition:** major compatibility regressions are caught automatically before merge.
 
