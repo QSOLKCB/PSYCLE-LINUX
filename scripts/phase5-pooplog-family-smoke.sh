@@ -9,7 +9,7 @@ if [[ "$OUT" != /* ]]; then
     OUT="$ROOT/$OUT"
 fi
 rm -rf "$OUT"
-mkdir -p "$OUT" "$CPSYCLE/plugins/build"
+mkdir -p "$OUT"
 
 ABI_BIN="$OUT/phase5-pooplog-family"
 STATE_BIN="$OUT/phase5-pooplog-family-state"
@@ -57,6 +57,7 @@ EXPECTED_OPAQUE_LINES=(
     "pooplog-opaque-hash[FM Light]=0x8f87d50fceda95e4 size=468"
     "pooplog-opaque-hash[FM UltraLight]=0xe3a47f4ea86ba4b5 size=344"
 )
+EFFECT_LABELS=("Delay" "Delay Light" "Filter" "Autopan" "Lofi" "Scratch")
 
 make -C "$CPSYCLE/container/src"
 make -C "$CPSYCLE/thread/src"
@@ -65,22 +66,32 @@ make -C "$CPSYCLE/file/src"
 make -C "$CPSYCLE/dsp/src"
 make -C "$CPSYCLE/audio/src"
 
-for dir in "${PLUGIN_DIRS[@]}"; do
+# Lofi and Scratch were missing Linux makefiles before Phase 5B. Prove each new
+# target can build directly from a truly absent plugins/build directory, then
+# prove its direct clean removes the loadable artifact.
+STANDALONE_DIRS=(pooplog_lofi pooplog_scratch)
+STANDALONE_FILES=(pooplog-lofi-processor.so pooplog-scratch-master.so)
+for i in "${!STANDALONE_DIRS[@]}"; do
+    dir="${STANDALONE_DIRS[$i]}"
+    file="${STANDALONE_FILES[$i]}"
+    rm -rf "$CPSYCLE/plugins/build"
     make -C "$CPSYCLE/plugins/$dir/src"
-done
-
-# Lofi and Scratch gained Linux makefiles in Phase 5B. Prove their direct clean
-# targets remove the actual loadable artifact from plugins/build, then rebuild.
-CLEAN_DIRS=(pooplog_lofi pooplog_scratch)
-CLEAN_FILES=(pooplog-lofi-processor.so pooplog-scratch-master.so)
-for i in "${!CLEAN_DIRS[@]}"; do
-    dir="${CLEAN_DIRS[$i]}"
-    file="${CLEAN_FILES[$i]}"
+    if [[ ! -s "$CPSYCLE/plugins/build/$file" ]]; then
+        echo "Standalone Pooplog build did not create output artifact: $file" >&2
+        exit 1
+    fi
     make -C "$CPSYCLE/plugins/$dir/src" clean
     if [[ -e "$CPSYCLE/plugins/build/$file" ]]; then
         echo "Pooplog clean target left stale shared object: $file" >&2
         exit 1
     fi
+done
+
+# The older retained Pooplog makefiles assume the common build directory exists.
+# Recreate it for the complete family build after the standalone checks above.
+rm -rf "$CPSYCLE/plugins/build"
+mkdir -p "$CPSYCLE/plugins/build"
+for dir in "${PLUGIN_DIRS[@]}"; do
     make -C "$CPSYCLE/plugins/$dir/src"
 done
 
@@ -122,6 +133,16 @@ for expected in "${EXPECTED_HASH_LINES[@]}"; do
         exit 1
     }
 done
+for label in "${EFFECT_LABELS[@]}"; do
+    grep -Fqx "phase5-pooplog-family: active sample-rate-only transition PASS [$label]" "$ABI_LOG" || {
+        echo "Pooplog sample-rate-only transition evidence missing: $label" >&2
+        exit 1
+    }
+    grep -Fqx "phase5-pooplog-family: active BPM-only transition PASS [$label]" "$ABI_LOG" || {
+        echo "Pooplog BPM-only transition evidence missing: $label" >&2
+        exit 1
+    }
+done
 
 grep -Fqx "phase5-pooplog-family: PASS all 9 retained source-built targets" "$ABI_LOG" || {
     echo "Pooplog ABI/DSP family completion marker missing" >&2
@@ -154,11 +175,13 @@ cat > "$SUMMARY" <<'EOF'
 - Source-built Pooplog FM Laboratory, Light and UltraLight `.so` targets: PASS
 - Source-built Pooplog Delay and Delay Light `.so` targets: PASS
 - Source-built Pooplog Filter, Autopan, Lofi and Scratch `.so` targets: PASS
-- Lofi and Scratch direct `make clean` targets remove their loadable `.so` artifacts before rebuild: PASS
+- Lofi and Scratch standalone direct builds create `plugins/build` and their loadable `.so` artifacts: PASS
+- Lofi and Scratch direct `make clean` targets remove their loadable `.so` artifacts: PASS
 - Native ABI / identity / version / parameter-table geometry for all nine binaries: PASS
 - Complete parameter names/descriptions/ranges/flags/defaults frozen by nine exact metadata hashes: PASS
 - Neutral deterministic DSP for Delay, Delay Light, Filter, Autopan, Lofi and Scratch: PASS
-- Active timing-sensitive transitions for Delay, Delay Light, Filter, Autopan, Lofi and Scratch: PASS
+- Independent active sample-rate-only transitions for Delay, Delay Light, Filter, Autopan, Lofi and Scratch: PASS
+- Independent active BPM-only transitions for Delay, Delay Light, Filter, Autopan, Lofi and Scratch: PASS
 - Non-finite effect samples are rejected by the signal comparators: PASS
 - Deterministic active-note rendering for all three FM synth variants: PASS
 - Live 44.1 kHz -> 88.2 kHz `SequencerTick` transition preserves the note's physical-frequency estimate: PASS
