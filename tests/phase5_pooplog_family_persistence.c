@@ -40,16 +40,19 @@ typedef struct PooplogSpec {
 	uint64_t expected_opaque_hash;
 } PooplogSpec;
 
-/* Historical opaque sizes are part of the Psycle song/preset compatibility
-** contract. The three hash constants are filled from one source-derived
-** canonical endpoint fixture and then frozen before the PR is merge-ready. */
+/* Historical opaque sizes and the hashes of a canonical endpoint fixture are
+** frozen independently of the runtime round-trip oracle. A layout/field-order
+** change therefore fails even when the changed binary can read its own output. */
 static const PooplogSpec SPECS[SPEC_COUNT] = {
 	{"FM Laboratory", "pooplog-fm-laboratory:0", "Pooplog FM Laboratory0.68b",
-		"Pooplog", "pooplog-fm-laboratory", 101u, 1508u, UINT64_C(0)},
+		"Pooplog", "pooplog-fm-laboratory", 101u, 1508u,
+		UINT64_C(0x89f6ae2978a8997a)},
 	{"FM Light", "pooplog-fm-light:0", "Pooplog FM Light0.68b",
-		"Pooplog Light", "pooplog-fm-light", 57u, 468u, UINT64_C(0)},
+		"Pooplog Light", "pooplog-fm-light", 57u, 468u,
+		UINT64_C(0xef4c752ed666c783)},
 	{"FM UltraLight", "pooplog-fm-ultralight:0", "Pooplog FM UltraLight0.68b",
-		"Pooplog UltraL", "pooplog-fm-ultralight", 45u, 344u, UINT64_C(0)},
+		"Pooplog UltraL", "pooplog-fm-ultralight", 45u, 344u,
+		UINT64_C(0xd7fee89fd7e1bcb6)},
 	{"Delay", "pooplog-delay:0", "Pooplog Delay 0.04b",
 		"Pooplog Delay", "pooplog-delay", 43u, 0u, UINT64_C(0)},
 	{"Delay Light", "pooplog-delay-light:0", "Pooplog Delay Light 0.04b",
@@ -302,8 +305,7 @@ static int canonicalize_for_persistence(const PooplogSpec* spec,
 		hash = opaque_hash(expected->data, expected->data_size);
 		printf("pooplog-opaque-hash[%s]=0x%016llx size=%lu\n", spec->label,
 			(unsigned long long)hash, (unsigned long)expected->data_size);
-		if (spec->expected_opaque_hash != UINT64_C(0) &&
-				hash != spec->expected_opaque_hash) {
+		if (hash != spec->expected_opaque_hash) {
 			fprintf(stderr,
 				"phase5-pooplog-family-state: FAIL [%s]: canonical opaque hash "
 				"expected 0x%016llx got 0x%016llx\n", spec->label,
