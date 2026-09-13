@@ -36,28 +36,32 @@ typedef struct PooplogSpec {
 	const char* expected_shortname;
 	const char* module_token;
 	uintptr_t parameter_count;
-	int expects_opaque_state;
+	uintptr_t expected_opaque_size;
+	uint64_t expected_opaque_hash;
 } PooplogSpec;
 
+/* Historical opaque sizes are part of the Psycle song/preset compatibility
+** contract. The three hash constants are filled from one source-derived
+** canonical endpoint fixture and then frozen before the PR is merge-ready. */
 static const PooplogSpec SPECS[SPEC_COUNT] = {
 	{"FM Laboratory", "pooplog-fm-laboratory:0", "Pooplog FM Laboratory0.68b",
-		"Pooplog", "pooplog-fm-laboratory", 101u, 1},
+		"Pooplog", "pooplog-fm-laboratory", 101u, 1508u, UINT64_C(0)},
 	{"FM Light", "pooplog-fm-light:0", "Pooplog FM Light0.68b",
-		"Pooplog Light", "pooplog-fm-light", 57u, 1},
+		"Pooplog Light", "pooplog-fm-light", 57u, 468u, UINT64_C(0)},
 	{"FM UltraLight", "pooplog-fm-ultralight:0", "Pooplog FM UltraLight0.68b",
-		"Pooplog UltraL", "pooplog-fm-ultralight", 45u, 1},
+		"Pooplog UltraL", "pooplog-fm-ultralight", 45u, 344u, UINT64_C(0)},
 	{"Delay", "pooplog-delay:0", "Pooplog Delay 0.04b",
-		"Pooplog Delay", "pooplog-delay", 43u, 0},
+		"Pooplog Delay", "pooplog-delay", 43u, 0u, UINT64_C(0)},
 	{"Delay Light", "pooplog-delay-light:0", "Pooplog Delay Light 0.04b",
-		"Pooplog Delay L", "pooplog-delay-light", 28u, 0},
+		"Pooplog Delay L", "pooplog-delay-light", 28u, 0u, UINT64_C(0)},
 	{"Filter", "pooplog-filter:0", "Pooplog Filter 0.06b",
-		"Pooplog Filter", "pooplog-filter", 16u, 0},
+		"Pooplog Filter", "pooplog-filter", 16u, 0u, UINT64_C(0)},
 	{"Autopan", "pooplog-autopan:0", "Pooplog Autopan 0.06b",
-		"Pooplog Autopan", "pooplog-autopan", 9u, 0},
+		"Pooplog Autopan", "pooplog-autopan", 9u, 0u, UINT64_C(0)},
 	{"Lofi", "pooplog-lofi-processor:0", "Pooplog Lofi Processor 0.04b",
-		"Pooplog Lofi", "pooplog-lofi-processor", 4u, 0},
+		"Pooplog Lofi", "pooplog-lofi-processor", 4u, 0u, UINT64_C(0)},
 	{"Scratch", "pooplog-scratch-master:0", "Pooplog Scratch Master 0.06b",
-		"Pooplog Scratch", "pooplog-scratch-master", 8u, 0},
+		"Pooplog Scratch", "pooplog-scratch-master", 8u, 0u, UINT64_C(0)},
 };
 
 typedef struct Snapshot {
@@ -72,6 +76,17 @@ static int fail_spec(const PooplogSpec* spec, const char* message)
 	fprintf(stderr, "phase5-pooplog-family-state: FAIL [%s]: %s\n",
 		spec ? spec->label : "family", message);
 	return 1;
+}
+
+static uint64_t opaque_hash(const unsigned char* data, uintptr_t size)
+{
+	uint64_t hash = UINT64_C(1469598103934665603);
+	uintptr_t i;
+	for (i = 0; i < size; ++i) {
+		hash ^= (uint64_t)data[i];
+		hash *= UINT64_C(1099511628211);
+	}
+	return hash;
 }
 
 static void snapshot_init(Snapshot* self)
@@ -189,10 +204,12 @@ static int verify_identity(const PooplogSpec* spec, psy_audio_Machine* machine)
 	if (psy_audio_machine_num_parameters(machine) != spec->parameter_count)
 		return fail_spec(spec, "production parameter count changed");
 	data_size = psy_audio_machine_data_size(machine);
-	if (spec->expects_opaque_state) {
-		if (data_size == 0) return fail_spec(spec, "FM synth lost historical opaque state");
-	} else if (data_size != 0) {
-		return fail_spec(spec, "effect unexpectedly acquired opaque state");
+	if (data_size != spec->expected_opaque_size) {
+		fprintf(stderr,
+			"phase5-pooplog-family-state: FAIL [%s]: opaque size expected %lu got %lu\n",
+			spec->label, (unsigned long)spec->expected_opaque_size,
+			(unsigned long)data_size);
+		return 1;
 	}
 	return 0;
 }
@@ -264,13 +281,14 @@ static int canonicalize_for_persistence(const PooplogSpec* spec,
 	psy_audio_Machine* machine, Snapshot* expected)
 {
 	Snapshot raw;
+	uint64_t hash;
 	int rc;
 	snapshot_init(&raw);
 	if ((rc = snapshot_from_machine(spec, machine, &raw)) != 0) return rc;
-	if (spec->expects_opaque_state) {
-		if (raw.data_size == 0 || !raw.data) {
+	if (spec->expected_opaque_size > 0) {
+		if (raw.data_size != spec->expected_opaque_size || !raw.data) {
 			snapshot_dispose(&raw);
-			return fail_spec(spec, "FM synth captured no opaque state");
+			return fail_spec(spec, "FM synth captured unexpected opaque-state geometry");
 		}
 		/* Selector-driven Pooplog parameters include wrapped/canonical forms in
 		** the opaque structure (for example OSC phase). Re-applying the machine's
@@ -279,7 +297,22 @@ static int canonicalize_for_persistence(const PooplogSpec* spec,
 		psy_audio_machine_put_data(machine, raw.data);
 	}
 	snapshot_dispose(&raw);
-	return snapshot_from_machine(spec, machine, expected);
+	if ((rc = snapshot_from_machine(spec, machine, expected)) != 0) return rc;
+	if (spec->expected_opaque_size > 0) {
+		hash = opaque_hash(expected->data, expected->data_size);
+		printf("pooplog-opaque-hash[%s]=0x%016llx size=%lu\n", spec->label,
+			(unsigned long long)hash, (unsigned long)expected->data_size);
+		if (spec->expected_opaque_hash != UINT64_C(0) &&
+				hash != spec->expected_opaque_hash) {
+			fprintf(stderr,
+				"phase5-pooplog-family-state: FAIL [%s]: canonical opaque hash "
+				"expected 0x%016llx got 0x%016llx\n", spec->label,
+				(unsigned long long)spec->expected_opaque_hash,
+				(unsigned long long)hash);
+			return 1;
+		}
+	}
+	return 0;
 }
 
 static int exercise_preset_roundtrip(const PooplogSpec* spec,
