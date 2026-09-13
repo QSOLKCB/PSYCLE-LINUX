@@ -65,6 +65,7 @@ static const psy_Property* driver_configuration(const psy_AudioDriver*);
 static int driver_close(psy_AudioDriver*);
 static int driver_dispose(psy_AudioDriver*);
 static double samplerate(psy_AudioDriver*);
+static bool fileoutdriver_on_worker_thread(const psy_audio_FileOutDriver*);
 
 #if defined DIVERSALIS__OS__MICROSOFT
 static unsigned int __stdcall PollerThread(void *psy_audio_FileOutDriver);
@@ -232,12 +233,27 @@ int driver_close(psy_AudioDriver* driver)
 	psy_audio_FileOutDriver* self = (psy_audio_FileOutDriver*) driver;
 
 	self->stop_polling_ = 1;
-	/* Closing a FileOut driver is a lifetime boundary: do not return while the
-	** worker can still write the file, emit signal_stop, or touch this driver.
-	** psy_thread_dispose() historically joins only on Windows, so join here on
-	** every platform before callers restore/deallocate the driver. */
-	psy_thread_join(&self->thread_);
+	/* signal_stop is emitted synchronously by PollerThread after the output file
+	** has already been finalized.  Its RenderView callback closes this same
+	** driver, so joining here from the worker would deadlock (or EDEADLK on
+	** POSIX).  External close callers still wait for the worker to finish. */
+	if (!fileoutdriver_on_worker_thread(self)) {
+		psy_thread_join(&self->thread_);
+	}
 	return 0;
+}
+
+bool fileoutdriver_on_worker_thread(const psy_audio_FileOutDriver* self)
+{
+#if defined(DIVERSALIS__OS__POSIX)
+	return self->thread_.native_handle_ != 0 &&
+		pthread_equal(self->thread_.native_handle_, pthread_self()) != 0;
+#elif defined(DIVERSALIS__OS__MICROSOFT)
+	return self->thread_.native_handle_ != NULL &&
+		GetThreadId(self->thread_.native_handle_) == GetCurrentThreadId();
+#else
+	#error "unsupported operating system"
+#endif
 }
 
 void fileoutdriver_make_config(psy_audio_FileOutDriver* self)
