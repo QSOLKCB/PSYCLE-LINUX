@@ -40,14 +40,15 @@ typedef struct DruttisSpec {
 } DruttisSpec;
 
 /* Slicit PROG is 134 bytes (3 shorts + 16 * 4 shorts); sixteen programs are
-** therefore 2144 bytes. The hash is filled after the observation CI run. */
+** therefore 2144 bytes. The hidden-program fixture below has a frozen canonical
+** FNV-1a hash so layout/content drift fails before preset or PSY3 publication. */
 static const DruttisSpec SPECS[SPEC_COUNT] = {
 	{"EQ-3", "eq3:0", "EQ-3", "EQ-3", "eq3", 12u, 0u, UINT64_C(0)},
 	{"FeedMe", "feedme:0", "FeedMe 1.2", "FeedMe", "feedme", 24u, 0u, UINT64_C(0)},
 	{"Koruz", "koruz:0", "Koruz", "Koruz", "koruz", 14u, 0u, UINT64_C(0)},
 	{"Phantom", "phantom:0", "Phantom 1.2", "Phantom", "phantom", 55u, 0u, UINT64_C(0)},
 	{"Plucked String", "pluckedstring:0", "Plucked String 1.2", "Plucked String", "pluckedstring", 7u, 0u, UINT64_C(0)},
-	{"Slicit", "slicit:0", "Slicit", "Slicit", "slicit", 68u, 2144u, UINT64_C(0)},
+	{"Slicit", "slicit:0", "Slicit", "Slicit", "slicit", 68u, 2144u, UINT64_C(0x7271bd63c9a7782d)},
 	{"Sublime", "sublime:0", "Sublime 1.1", "Sublime", "sublime", 60u, 0u, UINT64_C(0)},
 };
 
@@ -350,7 +351,7 @@ static int canonicalize_for_persistence(const DruttisSpec* spec,
 		hash = opaque_hash(expected->data, expected->data_size);
 		printf("druttis-opaque-hash[Slicit]=0x%016llx size=%lu\n",
 			(unsigned long long)hash, (unsigned long)expected->data_size);
-		if (spec->expected_opaque_hash != 0 && hash != spec->expected_opaque_hash)
+		if (hash != spec->expected_opaque_hash)
 			return fail_spec(spec, "frozen Slicit opaque hash changed");
 	}
 	return 0;
