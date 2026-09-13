@@ -92,13 +92,15 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
     -laudio -lthread -llilv-0 -ldsp -lscript -lfile -lm \
     -lpthread -ldl -lstdc++ -lcontainer "${LUA_LIBS[@]}"
 
-"$ABI_BIN" "${PLUGIN_PATHS[@]}" 2>&1 | tee "$ABI_LOG"
+# Keep observation output unbuffered so a crash identifies the exact machine and
+# stage that was executing immediately before the fault.
+stdbuf -o0 -e0 "$ABI_BIN" "${PLUGIN_PATHS[@]}" 2>&1 | tee "$ABI_LOG"
 grep -Fqx "phase5-druttis-family: PASS all 7 retained source-built targets" "$ABI_LOG" || {
     echo "Druttis ABI/DSP family completion marker missing" >&2
     exit 1
 }
 
-"$STATE_BIN" "$OUT" "${PLUGIN_PATHS[@]}" 2>&1 | tee "$STATE_LOG"
+stdbuf -o0 -e0 "$STATE_BIN" "$OUT" "${PLUGIN_PATHS[@]}" 2>&1 | tee "$STATE_LOG"
 grep -Fqx "phase5-druttis-family-state: PASS all 7 source-built Druttis machines" "$STATE_LOG" || {
     echo "Druttis production persistence completion marker missing" >&2
     exit 1
