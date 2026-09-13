@@ -1,0 +1,38 @@
+name: Phase 5 Druttis family preservation
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-5/**'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  druttis-family:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run Druttis family preservation regression
+        run: |
+          chmod +x scripts/phase5-druttis-family-smoke.sh
+          scripts/phase5-druttis-family-smoke.sh phase5-druttis-family
+
+      - name: Upload Druttis family evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-druttis-family
+          path: phase5-druttis-family/
+          if-no-files-found: warn
