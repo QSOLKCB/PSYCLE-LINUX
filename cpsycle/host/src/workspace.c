@@ -339,6 +339,9 @@ void workspace_init_sample_load(Workspace* self)
 	psy_fileselect_connect_file_name_change(&self->load_sample, self,
 		(psy_fp_fileselect_change)workspace_on_load_sample_file_name_change);
 	psy_fileselect_set_title(&self->load_sample, "Load Sample");
+	psy_fileselect_set_directory(&self->load_sample,
+		psy_configuration_value_str(psycleconfig_directories(workspace_cfg(self)),
+			"samples", PSYCLE_SAMPLES_DEFAULT_DIR));
 	psy_fileselect_set_default_extension(&self->load_sample, "wav");
 	psy_fileselect_add_filter(&self->load_sample, "Wave", "*.wav");
 	psy_fileselect_add_filter(&self->load_sample, "IFF", "*.iff");	
@@ -885,7 +888,12 @@ void workspace_load_sample_internal(Workspace * self, const char* path)
 		psy_audio_instruments_select(psy_audio_song_instruments(
 			workspace_song(self)), inst);
 		psy_audio_machines_notify_aux_change(psy_audio_song_machines(
-			self->song));		
+			self->song));
+		workspace_mark_song_modified(self);
+		if (getenv("PSYCLE_RUNTIME_SMOKE")) {
+			fprintf(stderr, "psycle: runtime smoke sample loaded %s\n", path);
+			fflush(stderr);
+		}
 	}
 }
 
@@ -1312,7 +1320,15 @@ void workspace_on_input(Workspace* self, uintptr_t cmdid)
 		workspace_load_song(self);
 		break;
 	case CMD_IMM_LOAD_SAMPLE:
-		//workspace_load_sample(self);
+		if (self->song) {
+			psy_audio_SampleIndex index;
+
+			index = self->song->samples_.selected;
+			if (!psy_audio_sampleindex_valid(&index)) {
+				index = psy_audio_sampleindex_make(0, 0);
+			}
+			workspace_load_sample(self, index);
+		}
 		break;
 	case CMD_IMM_INFOMACHINE:
 		if (self->song && self->param_views_) {

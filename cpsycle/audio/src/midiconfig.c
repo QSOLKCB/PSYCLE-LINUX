@@ -138,16 +138,18 @@ void psy_audio_midiconfig_init(psy_audio_MidiConfig* self,
 		}
 		self->raw = psy_property_at_bool(configuration, "recordrawmidiasmcm", 0);
 	}
-	psy_configuration_connect(cfg, "macselect",
-		self, psy_audio_midiconfig_on_mac_select);
-	psy_configuration_connect(cfg, "auxselect",
-		self, psy_audio_midiconfig_on_aux_select);
-	psy_configuration_connect(cfg, "recordrawmidiasmcm",
-		self, psy_audio_midiconfig_on_record_raw_midi_as_mcm);
-	psy_configuration_connect(cfg, "addcontroller",	
-		self, psy_audio_midiconfig_on_add_controller);
-	psy_configuration_connect(cfg, "removecontrollers",	
-		self, psy_audio_midiconfig_on_remove_controller);	
+	if (cfg) {
+		psy_configuration_connect(cfg, "macselect",
+			self, psy_audio_midiconfig_on_mac_select);
+		psy_configuration_connect(cfg, "auxselect",
+			self, psy_audio_midiconfig_on_aux_select);
+		psy_configuration_connect(cfg, "recordrawmidiasmcm",
+			self, psy_audio_midiconfig_on_record_raw_midi_as_mcm);
+		psy_configuration_connect(cfg, "addcontroller",	
+			self, psy_audio_midiconfig_on_add_controller);
+		psy_configuration_connect(cfg, "removecontrollers",	
+			self, psy_audio_midiconfig_on_remove_controller);	
+	}
 }
 
 void psy_audio_midiconfig_dispose(psy_audio_MidiConfig* self)
@@ -265,6 +267,9 @@ void psy_audio_midiconfig_write_controllers(psy_audio_MidiConfig* self)
 	
 	assert(self);
 
+	if (!self->cfg) {
+		return;
+	}
 	p = psy_configuration_at(self->cfg, "controllerdata");
 	if (p) {
 		char_dyn_t* str;
@@ -320,6 +325,9 @@ void psy_audio_midiconfig_add_controller_to_config(psy_audio_MidiConfig* self,
 
 	assert(self);
 
+	if (!self->cfg) {
+		return;
+	}
 	groups = psy_configuration_at(self->cfg, "groups");
 	if (!groups) {
 		return;

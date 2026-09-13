@@ -156,13 +156,20 @@ void filechooser_execute(FileChooser* self, psy_FileSelect* load,
 			psy_fileselect_directory(dir));
 		if (psy_ui_folderdialog_execute(&dialog)) {
 			psy_fileselect_set_value(dir, psy_ui_folderdialog_path(&dialog));
-			psy_fileselect_notify(dir);
+			psy_fileselect_notify(dir);			
 		}
 		psy_ui_folderdialog_dispose(&dialog);
 	}
 	if (self->use_file_view_) {	
 		workspace_select_view(self->workspace_, viewindex_make(
 			VIEW_ID_FILEVIEW));
+		/* A disk operation that opens the embedded FileView must leave the
+		** keyboard in the file list, rather than depending on whichever
+		** component happened to own focus before the view switch.  This keeps
+		** navigation/selection deterministic for tracker-first workflows. */
+		if (self->file_view_) {
+			psy_ui_component_set_focus(filebox_base(&self->file_view_->file_box_));
+		}
 	}
 }
 

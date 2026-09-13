@@ -40,6 +40,25 @@ void psy_thread_init_all(psy_Thread* self, psy_native_handle_type native_handle)
 
 void psy_thread_init_start(psy_Thread* self, void* context, psy_fp_thread_callback callback)
 {	
+	psy_thread_init(self);
+	psy_thread_start(self, context, callback);
+}
+
+void psy_thread_dispose(psy_Thread* self)
+{	
+	psy_thread_join(self);
+}
+
+void psy_thread_start(psy_Thread* self, void* context, psy_fp_thread_callback callback)
+{	
+	/* Reusing a psy_Thread must not overwrite an unreaped native handle.  This
+	** also covers workers that completed normally without an earlier join. */
+	if (self->native_handle_ != 0) {
+		psy_thread_join(self);
+		if (self->native_handle_ != 0) {
+			return;
+		}
+	}
 #if defined DIVERSALIS__OS__POSIX
 	pthread_create(&self->native_handle_, NULL, (void* (*)(void*))callback,
 		(void*)context);
@@ -50,42 +69,24 @@ void psy_thread_init_start(psy_Thread* self, void* context, psy_fp_thread_callba
 #endif
 }
 
-void psy_thread_dispose(psy_Thread* self)
-{	
-	if (self->native_handle_) {
-#if defined DIVERSALIS__OS__MICROSOFT
-		psy_thread_join(self);
-		CloseHandle(self->native_handle_);
-#endif
-	}
-}
-
-void psy_thread_start(psy_Thread* self, void* context, psy_fp_thread_callback callback)
-{	
-	#if defined DIVERSALIS__OS__POSIX
-		pthread_create(&self->native_handle_, NULL, (void* (*)(void*))callback,
-			(void*)context);
-	#elif defined DIVERSALIS__OS__MICROSOFT		
-		self->native_handle_ = (HANDLE)_beginthreadex(0, 0, callback, context, 0, 0);		
-	#else
-		#error "unsupported operating system"
-	#endif
-}
-
 
 void psy_thread_join(psy_Thread* self)
 {
 	if (self->native_handle_ != 0) {
-		#if defined DIVERSALIS__OS__POSIX
-			int ret;
-			void *ret_join;
+#if defined DIVERSALIS__OS__POSIX
+		void* ret_join;
 
-			ret = pthread_join(self->native_handle_, &ret_join);			
-		#elif defined DIVERSALIS__OS__MICROSOFT		
-			WaitForSingleObject(self->native_handle_, INFINITE);
-		#else
-			#error "unsupported operating system"
-		#endif
+		if (pthread_join(self->native_handle_, &ret_join) == 0) {
+			self->native_handle_ = 0;
+		}
+#elif defined DIVERSALIS__OS__MICROSOFT		
+		if (WaitForSingleObject(self->native_handle_, INFINITE) == WAIT_OBJECT_0) {
+			CloseHandle(self->native_handle_);
+			self->native_handle_ = 0;
+		}
+#else
+	#error "unsupported operating system"
+#endif
 	}
 }
 

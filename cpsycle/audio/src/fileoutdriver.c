@@ -14,6 +14,7 @@
 #include "../../driver/audiodriver.h"
 #include "../../driver/audiodriversettings.h"
 /* std */
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 /* local */
@@ -42,7 +43,7 @@ typedef struct psy_audio_FileOutDriver {
 	psy_AudioDriverSettings settings;
 	psy_Property* configuration;
 	int poll_sleep_;
-	int stop_polling_;
+	atomic_bool stop_polling_;
 	bool do_dither_;
 	psy_dsp_Dither dither_;
 #if defined(DIVERSALIS__OS__MICROSOFT)	
@@ -65,6 +66,7 @@ static const psy_Property* driver_configuration(const psy_AudioDriver*);
 static int driver_close(psy_AudioDriver*);
 static int driver_dispose(psy_AudioDriver*);
 static double samplerate(psy_AudioDriver*);
+static bool fileoutdriver_on_worker_thread(const psy_audio_FileOutDriver*);
 
 #if defined DIVERSALIS__OS__MICROSOFT
 static unsigned int __stdcall PollerThread(void *psy_audio_FileOutDriver);
@@ -132,7 +134,7 @@ int fileoutdriver_init(psy_audio_FileOutDriver* self)
 	self->hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 #endif	
 	self->poll_sleep_ = 0;
-	self->stop_polling_ = 0;
+	atomic_init(&self->stop_polling_, FALSE);
 	psy_thread_init(&self->thread_);	
 	return 0;
 }
@@ -154,7 +156,7 @@ int driver_open(psy_AudioDriver* driver)
 	psy_audio_FileOutDriver* self;	
 
 	self = (psy_audio_FileOutDriver*)driver;
-	self->stop_polling_ = 0;
+	atomic_store_explicit(&self->stop_polling_, FALSE, memory_order_release);
 	self->do_dither_ = psy_property_at_bool(self->configuration,
 		"dither.enable", FALSE);
 	if (self->do_dither_) {		
@@ -231,11 +233,28 @@ int driver_close(psy_AudioDriver* driver)
 {
 	psy_audio_FileOutDriver* self = (psy_audio_FileOutDriver*) driver;
 
-	self->stop_polling_ = 1;
-#if defined(DIVERSALIS__OS__MICROSOFT)		
-	WaitForSingleObject(self->hEvent, INFINITE);
-#endif	
+	atomic_store_explicit(&self->stop_polling_, TRUE, memory_order_release);
+	/* signal_stop is emitted synchronously by PollerThread after the output file
+	** has already been finalized.  Its RenderView callback closes this same
+	** driver, so joining here from the worker would deadlock (or EDEADLK on
+	** POSIX).  External close callers still wait for the worker to finish. */
+	if (!fileoutdriver_on_worker_thread(self)) {
+		psy_thread_join(&self->thread_);
+	}
 	return 0;
+}
+
+bool fileoutdriver_on_worker_thread(const psy_audio_FileOutDriver* self)
+{
+#if defined(DIVERSALIS__OS__POSIX)
+	return self->thread_.native_handle_ != 0 &&
+		pthread_equal(self->thread_.native_handle_, pthread_self()) != 0;
+#elif defined(DIVERSALIS__OS__MICROSOFT)
+	return self->thread_.native_handle_ != NULL &&
+		GetThreadId(self->thread_.native_handle_) == GetCurrentThreadId();
+#else
+	#error "unsupported operating system"
+#endif
 }
 
 void fileoutdriver_make_config(psy_audio_FileOutDriver* self)
@@ -410,7 +429,8 @@ unsigned int PollerThread(void* driver)
 		THREAD_PRIORITY_ABOVE_NORMAL);
 #endif		
 	fileoutdriver_createfile(self);	
-	while (!self->stop_polling_ && hostisplaying)
+	while (!atomic_load_explicit(&self->stop_polling_, memory_order_acquire) &&
+			hostisplaying)
 	{
 		float *pBuf;		
 		
@@ -418,7 +438,6 @@ unsigned int PollerThread(void* driver)
 		pBuf = self->driver.callback(self->driver.callbackcontext, &n,
 			&hostisplaying);		
 		fileoutdriver_writebuffer(self, pBuf, blocksize);
-		self->filecontext.numsamples += blocksize;
 		if (self->poll_sleep_ > 0) {
 			psy_sleep_for(self->poll_sleep_);
 		}
@@ -549,7 +568,6 @@ void fileoutdriver_writebuffer(psy_audio_FileOutDriver* self, float* pBuf, uintp
 		}
 		break;
 	}
-	self->filecontext.numsamples += (uint32_t)amount;
 }
 
 void fileoutdriver_closefile(psy_audio_FileOutDriver* self)
@@ -564,7 +582,11 @@ void fileoutdriver_closefile(psy_audio_FileOutDriver* self)
 
 		pos2 = psyfile_getpos(file);
 		psyfile_seek(file, self->filecontext.numsamplesbegin);
-		temp32 = self->filecontext.numsamples;
+		if (pos2 >= self->filecontext.numsamplesbegin + sizeof(temp32)) {
+			temp32 = pos2 - self->filecontext.numsamplesbegin - sizeof(temp32);
+		} else {
+			temp32 = 0;
+		}
 		psyfile_write(file, &temp32, sizeof(temp32));
 		psyfile_seek(file, pos2);	
 	}	

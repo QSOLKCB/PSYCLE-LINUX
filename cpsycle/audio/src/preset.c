@@ -104,15 +104,17 @@ void psy_audio_preset_set_data_struct(psy_audio_Preset* self,
 {	
 	assert(self);
 
+	/* Rebuild the parameter table as a live container.  The old code disposed
+	** it and then inserted into keys_ == NULL, which crashes when version-1
+	** preset files carry an opaque state structure. */
+	psy_table_dispose(&self->parameters);
+	psy_table_init(&self->parameters);
 	if (num > 0) {
 		uintptr_t p;
-		psy_table_dispose(&self->parameters);
+
 		for (p = 0; p < num; ++p) {
 			psy_audio_preset_set_value(self, p, (intptr_t)parameters[p]);
 		}
-	} else
-	{
-		psy_table_dispose(&self->parameters);
 	}
 	psy_audio_preset_put_data(self, size, newdata);
 	free(self->name);
