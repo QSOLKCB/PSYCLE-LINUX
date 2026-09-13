@@ -52,6 +52,11 @@ EXPECTED_HASH_LINES=(
     "pooplog-metadata-hash[Lofi]=0x87c4d37392e2128a"
     "pooplog-metadata-hash[Scratch]=0xd4eb1c2f76e2e4c9"
 )
+EXPECTED_OPAQUE_LINES=(
+    "pooplog-opaque-hash[FM Laboratory]=0x89f6ae2978a8997a size=1508"
+    "pooplog-opaque-hash[FM Light]=0xef4c752ed666c783 size=468"
+    "pooplog-opaque-hash[FM UltraLight]=0xd7fee89fd7e1bcb6 size=344"
+)
 
 make -C "$CPSYCLE/container/src"
 make -C "$CPSYCLE/thread/src"
@@ -124,6 +129,13 @@ grep -Fqx "phase5-pooplog-family: PASS all 9 retained source-built targets" "$AB
 }
 
 "$STATE_BIN" "$OUT" "${PLUGIN_PATHS[@]}" 2>&1 | tee "$STATE_LOG"
+for expected in "${EXPECTED_OPAQUE_LINES[@]}"; do
+    grep -Fqx "$expected" "$STATE_LOG" || {
+        echo "Frozen Pooplog opaque-state contract was not observed: $expected" >&2
+        exit 1
+    }
+done
+
 grep -Fqx "phase5-pooplog-family-state: PASS all 9 source-built Pooplog machines" "$STATE_LOG" || {
     echo "Pooplog production persistence completion marker missing" >&2
     exit 1
