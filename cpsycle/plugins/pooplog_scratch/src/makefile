@@ -14,6 +14,7 @@ debug: CFLAGS = -DDEBUG -g3
 debug: $(OUTPUTFILE)
 
 $(OUTPUTFILE): $(obj)
+	mkdir -p $(OUTPUTDIR)
 	$(CC) $(CFLAGS) $(LIBDIRS) $(INC) -o $(OUTPUTDIR)$@ $^ $(LDFLAGS)
 
 %.o: %.cpp
