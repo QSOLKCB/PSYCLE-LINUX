@@ -19,6 +19,7 @@ using psycle::plugin_interface::CFxCallback;
 using psycle::plugin_interface::CMachineInfo;
 using psycle::plugin_interface::CMachineInterface;
 using psycle::plugin_interface::CMachineParameter;
+using psycle::plugin_interface::MAX_BUFFER_LENGTH;
 
 namespace {
 
@@ -420,7 +421,19 @@ int render_note(const Spec& spec, CMachineInterface* machine, int count,
     machine->SeqTick(0, 69, 0, 0, 0);
     left.assign(count, 0.0f);
     right.assign(count, 0.0f);
-    machine->Work(left.data(), right.data(), count, 1);
+
+    /* The native Psycle ABI guarantees Work() blocks no larger than
+    ** MAX_BUFFER_LENGTH (256 samples per channel). Sublime and other retained
+    ** machines keep fixed-size scratch buffers at exactly that size, so long
+    ** observations must be rendered as a sequence of host-faithful blocks. */
+    int offset = 0;
+    while (offset < count) {
+        const int remaining = count - offset;
+        const int block = remaining < MAX_BUFFER_LENGTH ? remaining : MAX_BUFFER_LENGTH;
+        machine->Work(left.data() + offset, right.data() + offset, block, 1);
+        offset += block;
+    }
+
     if (!finite_signal(left, right)) return fail(spec, "generator produced non-finite audio");
     if (!nonzero_signal(left, right)) return fail(spec, "generator note render remained silent");
     return 0;
@@ -431,9 +444,77 @@ bool stochastic_generator(const Spec& spec)
     return std::strcmp(spec.label, "Phantom") == 0 || spec.kind == Kind::Plucked;
 }
 
+int verify_sublime_rate_transition(const Spec& spec, const CMachineInfo* info,
+    CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
+{
+    std::vector<float> live_l, live_r, stale_l, stale_r, target_l, target_r;
+    int rc = 0;
+
+    /* Sublime owns global band-limited wavetable storage. UpdateWaveforms(sr)
+    ** may reallocate that storage, while live Voice/Globals objects retain
+    ** pointers into it. Psycle changes the engine rate globally, so it never
+    ** keeps 44.1- and 88.2-kHz Sublime instances alive simultaneously. Record
+    ** the three observations sequentially to preserve that real lifecycle. */
+    {
+        TestCallback stale_cb;
+        CMachineInterface* stale = create_machine();
+        if (!stale || !stale->Vals) {
+            if (stale) delete_machine(*stale);
+            return fail(spec, "CreateMachine failed for sequential stale Sublime reference");
+        }
+        apply_defaults(stale, info, stale_cb);
+        rc = render_note(spec, stale, 16384, stale_l, stale_r);
+        delete_machine(*stale);
+        if (rc != 0) return rc;
+    }
+
+    {
+        TestCallback target_cb;
+        target_cb.set_sample_rate(88200);
+        CMachineInterface* target = create_machine();
+        if (!target || !target->Vals) {
+            if (target) delete_machine(*target);
+            return fail(spec, "CreateMachine failed for sequential target Sublime reference");
+        }
+        apply_defaults(target, info, target_cb);
+        rc = render_note(spec, target, 16384, target_l, target_r);
+        delete_machine(*target);
+        if (rc != 0) return rc;
+    }
+
+    {
+        TestCallback live_cb;
+        CMachineInterface* live = create_machine();
+        if (!live || !live->Vals) {
+            if (live) delete_machine(*live);
+            return fail(spec, "CreateMachine failed for sequential live Sublime transition");
+        }
+        apply_defaults(live, info, live_cb);
+        live_cb.set_sample_rate(88200);
+        live->SequencerTick();
+        rc = render_note(spec, live, 16384, live_l, live_r);
+        delete_machine(*live);
+        if (rc != 0) return rc;
+    }
+
+    const double target_distance = rms_difference(live_l, live_r, target_l, target_r);
+    const double stale_distance = rms_difference(live_l, live_r, stale_l, stale_r);
+    std::printf("phase5-druttis-family: generator rate distances [Sublime] target=%.6f stale=%.6f\n",
+        target_distance, stale_distance);
+    if (!std::isfinite(target_distance) || !std::isfinite(stale_distance) ||
+            stale_distance <= 1.0e-6 || !(target_distance < stale_distance))
+        return fail(spec, "Sublime live rate response is not closer to fresh 88.2 kHz than stale 44.1 kHz");
+
+    std::printf("phase5-druttis-family: live rate-sensitive generator PASS [Sublime]\n");
+    return 0;
+}
+
 int verify_generator_rate_transition(const Spec& spec, const CMachineInfo* info,
     CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
 {
+    if (std::strcmp(spec.label, "Sublime") == 0)
+        return verify_sublime_rate_transition(spec, info, create_machine, delete_machine);
+
     TestCallback live_cb;
     TestCallback stale_cb;
     TestCallback target_cb;
