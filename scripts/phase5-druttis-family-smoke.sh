@@ -92,15 +92,36 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
     -laudio -lthread -llilv-0 -ldsp -lscript -lfile -lm \
     -lpthread -ldl -lstdc++ -lcontainer "${LUA_LIBS[@]}"
 
-# Keep observation output unbuffered so a crash identifies the exact machine and
-# stage that was executing immediately before the fault.
+# Keep regression output unbuffered so a future fault identifies the exact
+# machine/stage immediately before failure.
 stdbuf -o0 -e0 "$ABI_BIN" "${PLUGIN_PATHS[@]}" 2>&1 | tee "$ABI_LOG"
+
+EXPECTED_METADATA=(
+    'druttis-metadata-hash[EQ-3]=0x1d7768bf2bf65d17'
+    'druttis-metadata-hash[FeedMe]=0x665df6f57aa34c4b'
+    'druttis-metadata-hash[Koruz]=0x8c1bbabd87f42796'
+    'druttis-metadata-hash[Phantom]=0xbefdde29123bea07'
+    'druttis-metadata-hash[Plucked String]=0x3be7f541e23e0f3f'
+    'druttis-metadata-hash[Slicit]=0x689adbb03c0fd4d3'
+    'druttis-metadata-hash[Sublime]=0xbaa335eeecaf0b09'
+)
+for marker in "${EXPECTED_METADATA[@]}"; do
+    grep -Fqx "$marker" "$ABI_LOG" || {
+        echo "Frozen Druttis metadata marker missing: $marker" >&2
+        exit 1
+    }
+done
+
 grep -Fqx "phase5-druttis-family: PASS all 7 retained source-built targets" "$ABI_LOG" || {
     echo "Druttis ABI/DSP family completion marker missing" >&2
     exit 1
 }
 
 stdbuf -o0 -e0 "$STATE_BIN" "$OUT" "${PLUGIN_PATHS[@]}" 2>&1 | tee "$STATE_LOG"
+grep -Fqx 'druttis-opaque-hash[Slicit]=0x7271bd63c9a7782d size=2144' "$STATE_LOG" || {
+    echo "Frozen Slicit opaque-state marker missing" >&2
+    exit 1
+}
 grep -Fqx "phase5-druttis-family-state: PASS all 7 source-built Druttis machines" "$STATE_LOG" || {
     echo "Druttis production persistence completion marker missing" >&2
     exit 1
@@ -120,13 +141,14 @@ cat > "$SUMMARY" <<'EOF'
 - Standalone build creates `plugins/build` for every Druttis target: PASS
 - Direct clean removes every Druttis loadable `.so`: PASS
 - Native ABI / identity / version / parameter geometry: PASS
-- Complete parameter metadata hashes emitted for freezing: PASS
-- Deterministic finite effect paths: PASS
-- Active generator note rendering: PASS
+- Frozen complete parameter metadata hashes for all seven machines: PASS
+- Native generator observations honor the historical 256-sample `MAX_BUFFER_LENGTH`: PASS
+- Deterministic/stochastic historical DSP paths: PASS
 - Live 44.1 -> 88.2 kHz generator/effect transitions where applicable: PASS
 - Production PluginCatcher + MachineFactory discovery: PASS
 - Every requested public parameter endpoint immediately verified: PASS
-- Slicit hidden program state depends on opaque PutData restoration: PASS
+- Slicit hidden 16-program bank survives through opaque `PutData`: PASS
+- Slicit 2144-byte opaque-state hash `0x7271bd63c9a7782d`: PASS
 - Per-machine preset save/load and fresh-machine restore: PASS
 - One-song seven-machine PSY3 save and fresh reopen: PASS
 - All seven machine -> Master topology edges survive reopen: PASS
