@@ -766,7 +766,10 @@ bool filebox_handle_command(FileBox* self, psy_EventDriverCmd cmd)
 		filebox_nav_up(self, self->num_lines_);
 		return TRUE;
 	case CMD_NAVBOTTOM:
-		filebox_nav_down(self, self->num_lines_);
+		if (self->num_lines_ > 0) {
+			filebox_select(self, self->num_lines_ - 1);
+			filebox_scroll_down(self);
+		}
 		return TRUE;
 	case CMD_NAVUP:
 		filebox_nav_up(self, 1);
