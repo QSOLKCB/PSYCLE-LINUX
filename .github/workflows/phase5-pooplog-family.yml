@@ -1,0 +1,40 @@
+name: Phase 5 Pooplog family preservation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pooplog-family:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run Pooplog family preservation regression
+        run: |
+          chmod +x scripts/phase5-pooplog-family-smoke.sh
+          scripts/phase5-pooplog-family-smoke.sh phase5-pooplog-family
+
+      - name: Upload Pooplog family evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-pooplog-family
+          path: phase5-pooplog-family/
+          if-no-files-found: warn
+          retention-days: 30
