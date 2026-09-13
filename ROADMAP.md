@@ -134,7 +134,7 @@ Current automated runtime evidence also covers SDL2 selection, an opened SDL dum
 - [x] Deterministic embedded PCM preservation across PSY3 save/reload.
 - [x] Explicit sampler trigger routing after fresh reload.
 
-### Remaining/expanding user workflow
+### Established end-to-end user workflow
 
 - [x] Machine View command/model path: creation, deletion, wiring, rewiring, mute, bypass, parameter access and persisted machine positions.
 - [x] Live Machine View editor opening and embedded editor interaction through the native X11 parameter/tool frame.
@@ -163,7 +163,7 @@ A classic Psycle workflow must remain first-class:
 
 > build/process a loop in Psycle → render it to WAV → load that exact WAV into Sampler → continue arranging with the rendered loop.
 
-This was used historically to collapse CPU-heavy machine chains into samples. The regression should eventually use Psycle as both producer and consumer so WAV headers, channel layout, sample rate, PCM conversion, frame count and sampler compatibility are tested end to end.
+This was used historically to collapse CPU-heavy machine chains into samples. The regression now uses Psycle as both producer and consumer so WAV headers, channel layout, sample rate, PCM conversion, frame count and sampler compatibility are tested end to end.
 
 Do **not** reintroduce the eight omitted upstream demo/example `.psy` songs merely to obtain fixtures. Prefer project-authored deterministic fixtures; real showcase/demo material can be added later only with clear rights.
 
@@ -176,11 +176,17 @@ Do **not** reintroduce the eight omitted upstream demo/example `.psy` songs mere
 ### 5A — Arguru family
 
 - [ ] Arguru Compressor
+  - [x] Build the retained source as a Linux native-machine `.so` and load it through Psycle's `GetInfo` / `CreateMachine` / `DeleteMachine` ABI.
+  - [x] Freeze machine identity/version/type plus all six parameter names, ranges, flags and defaults.
+  - [x] Verify deterministic Ratio=0 unity bypass and retained 2x Input Gain behaviour without changing the DSP equations.
+  - [ ] Verify preset/state serialization and full `.psy` save/reload before marking the machine complete.
 - [ ] Arguru Distortion
 - [ ] Arguru Goaslicer
 - [ ] Arguru Reverb
 - [ ] Arguru Synth 2f
 - [ ] Arguru XFilter
+
+The Arguru Compressor baseline is gated by `.github/workflows/phase5-arguru-compressor.yml`. The top-level machine checkbox intentionally remains open until state/preset and song-reopen behaviour are covered; Phase 5 should not equate “builds” with “preserved.”
 
 ### 5B — Pooplog family
 
@@ -286,15 +292,17 @@ The existing makefiles are the starting point. A build-system migration is justi
 
 **Goal:** stop regressions from undoing the port.
 
-- [ ] CI build on supported Linux compiler versions.
+- [x] CI build on the current supported Ubuntu/GCC reference platform.
 - [ ] Debug and release build jobs.
 - [ ] AddressSanitizer and UndefinedBehaviorSanitizer jobs where compatible with the audio path.
-- [ ] Headless/library-level tests where UI testing is unnecessary.
-- [ ] `.psy` fixture load tests.
-- [ ] Save/reload round-trip tests.
+- [x] Headless/library-level tests where UI testing is unnecessary.
+- [x] `.psy` fixture load tests.
+- [x] Save/reload round-trip tests.
 - [ ] Native-machine discovery and state tests.
-- [ ] Audio render checksum or tolerance-based regression tests where deterministic output is realistic.
+- [x] Audio render checksum or tolerance-based regression tests where deterministic output is realistic.
 - [ ] Dependency and packaging smoke tests.
+
+Current Phase 9 evidence comes from the Linux build/runtime audit plus the Phase 4 interactive-editing, sequencer/transport, audible-sample, preset, historical-PSY2 and render/bounce gates. The Phase 5 Arguru work begins native-machine-specific discovery/audio coverage, but the native-machine state item remains open until serialization/reopen evidence exists.
 
 **Exit condition:** major compatibility regressions are caught automatically before merge.
 
