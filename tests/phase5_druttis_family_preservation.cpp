@@ -250,6 +250,92 @@ void configure_eq3_active(CMachineInterface* machine)
     machine->ParameterTweak(7, 160);
 }
 
+void render_effect_constant(CMachineInterface* machine, int count,
+    std::vector<float>& left, std::vector<float>& right)
+{
+    left.assign(count, 1.0f);
+    right.assign(count, 1.0f);
+    int offset = 0;
+    while (offset < count) {
+        const int remaining = count - offset;
+        const int block = remaining < MAX_BUFFER_LENGTH ? remaining : MAX_BUFFER_LENGTH;
+        machine->Work(left.data() + offset, right.data() + offset, block, 1);
+        offset += block;
+    }
+}
+
+void configure_slicit_timing(CMachineInterface* machine)
+{
+    /* Program 0: two steps. Step 1 is unity/centered and step 2 is silent,
+    ** so the second step boundary is directly visible in the rendered signal. */
+    machine->ParameterTweak(17, 2);   // No. Steps
+    machine->ParameterTweak(34, 0);   // Speed Factor x1
+    machine->ParameterTweak(1, 256);  // Level 1
+    machine->ParameterTweak(2, 0);    // Level 2
+    machine->ParameterTweak(18, 0);   // Attack 1: 5 ms minimum
+    machine->ParameterTweak(19, 0);   // Attack 2: 5 ms minimum
+    machine->ParameterTweak(35, 128); // Pan 1 centered
+    machine->ParameterTweak(36, 128); // Pan 2 centered
+    machine->ParameterTweak(51, 0);   // Filter off
+    machine->Stop();
+}
+
+int verify_slicit_timing_transition(const Spec& spec, const CMachineInfo* info,
+    CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
+{
+    TestCallback live_cb;
+    TestCallback stale_cb;
+    TestCallback target_cb;
+    target_cb.set_sample_rate(88200);
+    target_cb.set_tick_length(11024);
+
+    CMachineInterface* live = create_machine();
+    CMachineInterface* stale = create_machine();
+    CMachineInterface* target = create_machine();
+    std::vector<float> live_l, live_r, stale_l, stale_r, target_l, target_r;
+    int rc = 0;
+
+    if (!live || !live->Vals || !stale || !stale->Vals || !target || !target->Vals) {
+        if (target) delete_machine(*target);
+        if (stale) delete_machine(*stale);
+        if (live) delete_machine(*live);
+        return fail(spec, "CreateMachine failed for Slicit timing transition");
+    }
+
+    apply_defaults(live, info, live_cb);
+    apply_defaults(stale, info, stale_cb);
+    apply_defaults(target, info, target_cb);
+    configure_slicit_timing(live);
+    configure_slicit_timing(stale);
+    configure_slicit_timing(target);
+
+    live_cb.set_sample_rate(88200);
+    live_cb.set_tick_length(11024);
+    live->SequencerTick();
+    stale->SequencerTick();
+    target->SequencerTick();
+
+    render_effect_constant(live, 14000, live_l, live_r);
+    render_effect_constant(stale, 14000, stale_l, stale_r);
+    render_effect_constant(target, 14000, target_l, target_r);
+
+    if (!finite_signal(live_l, live_r) || !finite_signal(stale_l, stale_r) ||
+            !finite_signal(target_l, target_r)) {
+        rc = fail(spec, "Slicit timing probe produced non-finite audio");
+    } else if (!same_signal(live_l, live_r, target_l, target_r, 1.0e-6f)) {
+        rc = fail(spec, "Slicit live rate/tick transition diverged from fresh target timing");
+    } else if (!different_signal(live_l, live_r, stale_l, stale_r, 1.0e-4f)) {
+        rc = fail(spec, "Slicit live rate/tick transition remained equivalent to stale timing");
+    } else {
+        std::printf("phase5-druttis-family: live rate/tick transition PASS [Slicit]\n");
+    }
+
+    delete_machine(*target);
+    delete_machine(*stale);
+    delete_machine(*live);
+    return rc;
+}
+
 int verify_koruz_rate_transition(const Spec& spec, const CMachineInfo* info,
     CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
 {
@@ -272,8 +358,10 @@ int verify_koruz_rate_transition(const Spec& spec, const CMachineInfo* info,
     apply_defaults(live, info, live_cb);
     apply_defaults(stale, info, stale_cb);
     target_cb.set_sample_rate(88200);
+    target_cb.set_tick_length(11024);
     apply_defaults(target, info, target_cb);
     live_cb.set_sample_rate(88200);
+    live_cb.set_tick_length(11024);
     live->SequencerTick();
 
     make_probe(input_l, input_r, 8192);
@@ -348,8 +436,11 @@ int verify_effect(const Spec& spec, const CMachineInfo* info,
     }
     delete_machine(*b);
     delete_machine(*a);
-    if (rc != 0 || spec.kind != Kind::Effect) return rc;
+    if (rc != 0) return rc;
 
+    if (spec.kind == Kind::Slicit)
+        return verify_slicit_timing_transition(spec, info, create_machine, delete_machine);
+    if (spec.kind != Kind::Effect) return rc;
     if (is_koruz)
         return verify_koruz_rate_transition(spec, info, create_machine, delete_machine);
 
@@ -370,6 +461,7 @@ int verify_effect(const Spec& spec, const CMachineInfo* info,
         configure_eq3_active(stale);
     }
     live_cb.set_sample_rate(88200);
+    live_cb.set_tick_length(11024);
     live->SequencerTick();
     make_probe(input_l, input_r, 2048);
     a_l = input_l;
@@ -396,6 +488,7 @@ int verify_effect(const Spec& spec, const CMachineInfo* info,
 
     TestCallback ref_cb;
     ref_cb.set_sample_rate(88200);
+    ref_cb.set_tick_length(11024);
     CMachineInterface* ref = create_machine();
     if (!ref || !ref->Vals) {
         if (ref) delete_machine(*ref);
@@ -471,6 +564,7 @@ int verify_sublime_rate_transition(const Spec& spec, const CMachineInfo* info,
     {
         TestCallback target_cb;
         target_cb.set_sample_rate(88200);
+        target_cb.set_tick_length(11024);
         CMachineInterface* target = create_machine();
         if (!target || !target->Vals) {
             if (target) delete_machine(*target);
@@ -491,6 +585,7 @@ int verify_sublime_rate_transition(const Spec& spec, const CMachineInfo* info,
         }
         apply_defaults(live, info, live_cb);
         live_cb.set_sample_rate(88200);
+        live_cb.set_tick_length(11024);
         live->SequencerTick();
         rc = render_note(spec, live, 16384, live_l, live_r);
         delete_machine(*live);
@@ -534,8 +629,10 @@ int verify_generator_rate_transition(const Spec& spec, const CMachineInfo* info,
     apply_defaults(live, info, live_cb);
     apply_defaults(stale, info, stale_cb);
     target_cb.set_sample_rate(88200);
+    target_cb.set_tick_length(11024);
     apply_defaults(target, info, target_cb);
     live_cb.set_sample_rate(88200);
+    live_cb.set_tick_length(11024);
     live->SequencerTick();
 
     if ((rc = render_note(spec, live, 16384, live_l, live_r)) == 0 &&
