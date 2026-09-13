@@ -1,0 +1,40 @@
+name: Phase 5 Arguru Compressor state preservation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  arguru-compressor-state:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run Arguru Compressor state preservation regression
+        run: |
+          chmod +x scripts/phase5-arguru-compressor-state-smoke.sh
+          scripts/phase5-arguru-compressor-state-smoke.sh phase5-arguru-compressor-state
+
+      - name: Upload Arguru Compressor state evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-arguru-compressor-state
+          path: phase5-arguru-compressor-state/
+          if-no-files-found: warn
+          retention-days: 30
