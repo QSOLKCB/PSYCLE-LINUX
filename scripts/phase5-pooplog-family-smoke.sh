@@ -53,9 +53,9 @@ EXPECTED_HASH_LINES=(
     "pooplog-metadata-hash[Scratch]=0xd4eb1c2f76e2e4c9"
 )
 EXPECTED_OPAQUE_LINES=(
-    "pooplog-opaque-hash[FM Laboratory]=0x89f6ae2978a8997a size=1508"
-    "pooplog-opaque-hash[FM Light]=0xef4c752ed666c783 size=468"
-    "pooplog-opaque-hash[FM UltraLight]=0xd7fee89fd7e1bcb6 size=344"
+    "pooplog-opaque-hash[FM Laboratory]=0x2b7c633d7a33daae size=1508"
+    "pooplog-opaque-hash[FM Light]=0x8f87d50fceda95e4 size=468"
+    "pooplog-opaque-hash[FM UltraLight]=0xe3a47f4ea86ba4b5 size=344"
 )
 
 make -C "$CPSYCLE/container/src"
@@ -158,17 +158,18 @@ cat > "$SUMMARY" <<'EOF'
 - Native ABI / identity / version / parameter-table geometry for all nine binaries: PASS
 - Complete parameter names/descriptions/ranges/flags/defaults frozen by nine exact metadata hashes: PASS
 - Neutral deterministic DSP for Delay, Delay Light, Filter, Autopan, Lofi and Scratch: PASS
-- Non-finite effect samples are rejected by the neutral-signal comparator: PASS
-- Live sample-rate/BPM reinitialization survival for retained effects: PASS
+- Active timing-sensitive transitions for Delay, Delay Light, Filter, Autopan, Lofi and Scratch: PASS
+- Non-finite effect samples are rejected by the signal comparators: PASS
 - Deterministic active-note rendering for all three FM synth variants: PASS
 - Live 44.1 kHz -> 88.2 kHz `SequencerTick` transition preserves the note's physical-frequency estimate: PASS
 - Production `PluginCatcher` recognition for all nine binaries: PASS
 - Production `MachineFactory` instantiation for all nine binaries: PASS
 - Every requested public parameter endpoint is immediately verified after tweak: PASS
-- Selector-driven FM values are canonicalized through their historical opaque state before persistence comparison: PASS
+- Non-selected FM oscillator/filter banks are seeded distinctly with inertia disabled: PASS
+- Opaque-only FM bank state survives source canonicalization, fresh preset restore and fresh PSY3 reopen: PASS
 - Per-machine version-1 preset save/load and fresh-machine restore: PASS
 - FM Laboratory / Light / UltraLight opaque `GetData` byte preservation: PASS
-- Historical FM opaque-state sizes and canonical payload hashes are frozen independently of the round-trip oracle: PASS
+- Historical FM opaque-state sizes and hidden-bank canonical payload hashes are frozen independently of the round-trip oracle: PASS
 - Historical reserved pointer slots are deterministic without changing opaque-state size/layout: PASS
 - One-song nine-machine PSY3 save and fresh reopen: PASS
 - All nine machine -> Master topology edges survive reopen: PASS
