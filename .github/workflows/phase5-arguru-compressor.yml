@@ -1,0 +1,37 @@
+name: Phase 5 Arguru Compressor preservation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  arguru-compressor:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential
+
+      - name: Run Arguru Compressor preservation regression
+        run: |
+          chmod +x scripts/phase5-arguru-compressor-smoke.sh
+          scripts/phase5-arguru-compressor-smoke.sh phase5-arguru-compressor
+
+      - name: Upload Arguru Compressor evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-arguru-compressor
+          path: phase5-arguru-compressor/
+          if-no-files-found: warn
+          retention-days: 30
