@@ -14,6 +14,7 @@
 #include "../../driver/audiodriver.h"
 #include "../../driver/audiodriversettings.h"
 /* std */
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 /* local */
@@ -42,7 +43,7 @@ typedef struct psy_audio_FileOutDriver {
 	psy_AudioDriverSettings settings;
 	psy_Property* configuration;
 	int poll_sleep_;
-	int stop_polling_;
+	atomic_bool stop_polling_;
 	bool do_dither_;
 	psy_dsp_Dither dither_;
 #if defined(DIVERSALIS__OS__MICROSOFT)	
@@ -133,7 +134,7 @@ int fileoutdriver_init(psy_audio_FileOutDriver* self)
 	self->hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 #endif	
 	self->poll_sleep_ = 0;
-	self->stop_polling_ = 0;
+	atomic_init(&self->stop_polling_, FALSE);
 	psy_thread_init(&self->thread_);	
 	return 0;
 }
@@ -155,7 +156,7 @@ int driver_open(psy_AudioDriver* driver)
 	psy_audio_FileOutDriver* self;	
 
 	self = (psy_audio_FileOutDriver*)driver;
-	self->stop_polling_ = 0;
+	atomic_store_explicit(&self->stop_polling_, FALSE, memory_order_release);
 	self->do_dither_ = psy_property_at_bool(self->configuration,
 		"dither.enable", FALSE);
 	if (self->do_dither_) {		
@@ -232,7 +233,7 @@ int driver_close(psy_AudioDriver* driver)
 {
 	psy_audio_FileOutDriver* self = (psy_audio_FileOutDriver*) driver;
 
-	self->stop_polling_ = 1;
+	atomic_store_explicit(&self->stop_polling_, TRUE, memory_order_release);
 	/* signal_stop is emitted synchronously by PollerThread after the output file
 	** has already been finalized.  Its RenderView callback closes this same
 	** driver, so joining here from the worker would deadlock (or EDEADLK on
@@ -275,10 +276,10 @@ void fileoutdriver_make_config(psy_audio_FileOutDriver* self)
 			TRUE), "Name"));
 	psy_property_hide(psy_property_setreadonly(
 		psy_property_append_str(self->configuration, "vendor", "Psycledelics"),
-		TRUE));
+			TRUE), "Vendor"));
 	psy_property_hide(psy_property_setreadonly(
 		psy_property_append_str(self->configuration, "version", "1.0"),
-		TRUE));
+			TRUE), "Version"));
 	psy_property_set_text(
 		psy_property_append_str(self->configuration, "outputpath",
 			"Untitled.wav"),
@@ -428,7 +429,8 @@ unsigned int PollerThread(void* driver)
 		THREAD_PRIORITY_ABOVE_NORMAL);
 #endif		
 	fileoutdriver_createfile(self);	
-	while (!self->stop_polling_ && hostisplaying)
+	while (!atomic_load_explicit(&self->stop_polling_, memory_order_acquire) &&
+			hostisplaying)
 	{
 		float *pBuf;		
 		
