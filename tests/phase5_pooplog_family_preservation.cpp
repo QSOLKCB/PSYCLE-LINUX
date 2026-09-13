@@ -229,23 +229,49 @@ bool same_signal(const float* a, const float* b, int count,
     return true;
 }
 
+bool finite_signal(const float* signal, int count)
+{
+    for (int i = 0; i < count; ++i) {
+        if (!std::isfinite(signal[i])) return false;
+    }
+    return true;
+}
+
 bool different_signal(const float* a, const float* b, int count,
     float tolerance = 1.0e-4f)
 {
+    bool different = false;
     for (int i = 0; i < count; ++i) {
         if (!std::isfinite(a[i]) || !std::isfinite(b[i])) return false;
-        if (std::fabs(a[i] - b[i]) > tolerance) return true;
+        if (std::fabs(a[i] - b[i]) > tolerance) different = true;
     }
-    return false;
+    return different;
 }
 
-int positive_zero_crossings(const std::vector<float>& signal)
+bool estimate_positive_crossing_hz(const std::vector<float>& signal,
+    int sample_rate, double& hz, int& crossing_count)
 {
+    double first = -1.0;
+    double last = -1.0;
     int crossings = 0;
+
     for (std::size_t i = 1; i < signal.size(); ++i) {
-        if (signal[i - 1] <= 0.0f && signal[i] > 0.0f) ++crossings;
+        const double a = signal[i - 1];
+        const double b = signal[i];
+        if (!std::isfinite(a) || !std::isfinite(b)) return false;
+        if (a <= 0.0 && b > 0.0) {
+            const double fraction = -a / (b - a);
+            const double position = static_cast<double>(i - 1) + fraction;
+            if (crossings == 0) first = position;
+            last = position;
+            ++crossings;
+        }
     }
-    return crossings;
+
+    crossing_count = crossings;
+    if (crossings < 16 || first < 0.0 || last <= first) return false;
+    hz = static_cast<double>(crossings - 1) * sample_rate / (last - first);
+    return std::isfinite(hz) && hz > 0.0;
 }
 
 int configure_effect_neutral(const Spec& spec, CMachineInterface* machine,
@@ -429,6 +455,14 @@ int verify_effect_timing_transition(const Spec& spec, const CMachineInfo* info,
     reference->Work(reference_l.data(), reference_r.data(),
         static_cast<int>(reference_l.size()), 1);
 
+    if (!finite_signal(live_l.data(), static_cast<int>(live_l.size())) ||
+            !finite_signal(live_r.data(), static_cast<int>(live_r.size())) ||
+            !finite_signal(reference_l.data(), static_cast<int>(reference_l.size())) ||
+            !finite_signal(reference_r.data(), static_cast<int>(reference_r.size()))) {
+        rc = fail(spec, "active timing probe produced a non-finite sample");
+        goto cleanup;
+    }
+
     if (!different_signal(reference_l.data(), input_l.data(),
             static_cast<int>(input_l.size())) &&
             !different_signal(reference_r.data(), input_r.data(),
@@ -446,6 +480,11 @@ int verify_effect_timing_transition(const Spec& spec, const CMachineInfo* info,
         stale_l = input_l;
         stale_r = input_r;
         stale->Work(stale_l.data(), stale_r.data(), static_cast<int>(stale_l.size()), 1);
+        if (!finite_signal(stale_l.data(), static_cast<int>(stale_l.size())) ||
+                !finite_signal(stale_r.data(), static_cast<int>(stale_r.size()))) {
+            rc = fail(spec, "stale filter control produced a non-finite sample");
+            goto cleanup;
+        }
         if (!different_signal(live_l.data(), stale_l.data(),
                 static_cast<int>(live_l.size()), 1.0e-4f) &&
                 !different_signal(live_r.data(), stale_r.data(),
@@ -474,14 +513,14 @@ cleanup:
 }
 
 int render_active_note(const Spec& spec, CMachineInterface* machine,
-    std::vector<float>& left, std::vector<float>& right)
+    std::vector<float>& left, std::vector<float>& right, int sample_count)
 {
     machine->SeqTick(0, 69, 0, 0, 0);
-    left.assign(1024, 0.0f);
-    right.assign(1024, 0.0f);
-    machine->Work(left.data(), right.data(), static_cast<int>(left.size()), 1);
+    left.assign(sample_count, 0.0f);
+    right.assign(sample_count, 0.0f);
+    machine->Work(left.data(), right.data(), sample_count, 1);
     bool nonzero = false;
-    for (std::size_t i = 0; i < left.size(); ++i) {
+    for (int i = 0; i < sample_count; ++i) {
         if (!std::isfinite(left[i]) || !std::isfinite(right[i]))
             return fail(spec, "generator produced a non-finite sample");
         if (left[i] != 0.0f || right[i] != 0.0f) nonzero = true;
@@ -492,6 +531,9 @@ int render_active_note(const Spec& spec, CMachineInterface* machine,
 int verify_synth(const Spec& spec, const CMachineInfo* info,
     CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
 {
+    constexpr int samples_44 = 44100;
+    constexpr int samples_88 = 88200;
+    constexpr double pitch_tolerance_cents = 10.0;
     std::vector<float> left_a, right_a, left_b, right_b, left_live, right_live;
     TestCallback callback_a;
     TestCallback callback_b;
@@ -516,10 +558,10 @@ int verify_synth(const Spec& spec, const CMachineInfo* info,
         }
     }
 
-    int rc = render_active_note(spec, a, left_a, right_a);
-    if (rc == 0) rc = render_active_note(spec, b, left_b, right_b);
-    if (rc == 0 && (!same_signal(left_a.data(), left_b.data(), 1024) ||
-            !same_signal(right_a.data(), right_b.data(), 1024)))
+    int rc = render_active_note(spec, a, left_a, right_a, samples_44);
+    if (rc == 0) rc = render_active_note(spec, b, left_b, right_b, samples_44);
+    if (rc == 0 && (!same_signal(left_a.data(), left_b.data(), samples_44) ||
+            !same_signal(right_a.data(), right_b.data(), samples_44)))
         rc = fail(spec, "fresh-machine note rendering is no longer deterministic");
     delete_machine(*b);
     if (rc != 0) { delete_machine(*a); return rc; }
@@ -529,25 +571,27 @@ int verify_synth(const Spec& spec, const CMachineInfo* info,
     callback_a.set_tick_length(11025);
     callback_a.set_bpm(137);
     a->SequencerTick();
-    rc = render_active_note(spec, a, left_live, right_live);
+    rc = render_active_note(spec, a, left_live, right_live, samples_88);
     if (rc == 0) {
-        const int crossings_44 = positive_zero_crossings(left_a);
-        const int crossings_88 = positive_zero_crossings(left_live);
-        if (crossings_44 < 4 || crossings_88 < 2) {
-            rc = fail(spec, "insufficient zero crossings for sample-rate pitch oracle");
+        double hz_44 = 0.0;
+        double hz_88 = 0.0;
+        int crossings_44 = 0;
+        int crossings_88 = 0;
+        if (!estimate_positive_crossing_hz(left_a, 44100, hz_44, crossings_44) ||
+                !estimate_positive_crossing_hz(left_live, 88200, hz_88, crossings_88)) {
+            rc = fail(spec, "insufficient finite zero crossings for sample-rate pitch oracle");
         } else {
-            const double hz_44 = crossings_44 * 44100.0 / left_a.size();
-            const double hz_88 = crossings_88 * 88200.0 / left_live.size();
-            if (hz_88 < hz_44 * 0.75 || hz_88 > hz_44 * 1.25) {
+            const double cents = 1200.0 * std::log2(hz_88 / hz_44);
+            if (!std::isfinite(cents) || std::fabs(cents) > pitch_tolerance_cents) {
                 std::fprintf(stderr,
                     "phase5-pooplog-family: FAIL [%s]: live sample-rate pitch estimate "
-                    "changed from %.2f Hz to %.2f Hz (%d -> %d crossings)\n",
-                    spec.label, hz_44, hz_88, crossings_44, crossings_88);
+                    "changed from %.3f Hz to %.3f Hz (%.2f cents, %d -> %d crossings)\n",
+                    spec.label, hz_44, hz_88, cents, crossings_44, crossings_88);
                 rc = 1;
             } else {
                 std::printf(
-                    "phase5-pooplog-family: live pitch %.2f->%.2f Hz PASS [%s]\n",
-                    hz_44, hz_88, spec.label);
+                    "phase5-pooplog-family: live pitch %.3f->%.3f Hz %.2f cents PASS [%s]\n",
+                    hz_44, hz_88, cents, spec.label);
             }
         }
     }
