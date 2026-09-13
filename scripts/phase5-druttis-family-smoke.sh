@@ -10,8 +10,10 @@ mkdir -p "$OUT"
 
 ABI_BIN="$OUT/phase5-druttis-family"
 STATE_BIN="$OUT/phase5-druttis-family-state"
+CALLBACK_BIN="$OUT/phase5-druttis-production-callback"
 ABI_LOG="$OUT/phase5-druttis-family.log"
 STATE_LOG="$OUT/phase5-druttis-family-state.log"
+CALLBACK_LOG="$OUT/phase5-druttis-production-callback.log"
 SUMMARY="$OUT/summary.md"
 
 PLUGIN_DIRS=(
@@ -80,17 +82,52 @@ LUA_CFLAGS=($(pkg-config --cflags lua))
 # shellcheck disable=SC2207
 LUA_LIBS=($(pkg-config --libs lua))
 
+COMMON_INCLUDES=(
+    -I"$CPSYCLE/audio/src" -I"$CPSYCLE/thread/src"
+    -I"$CPSYCLE/script/src" -I"$CPSYCLE/container/src"
+    -I"$CPSYCLE/file/src" -I"$CPSYCLE/dsp/src"
+    -I"$CPSYCLE/diversalis/src" "${LUA_CFLAGS[@]}"
+)
+COMMON_LIBDIRS=(
+    -L"$CPSYCLE/thread/src" -L"$CPSYCLE/script/src"
+    -L"$CPSYCLE/container/src" -L"$CPSYCLE/dsp/src"
+    -L"$CPSYCLE/audio/src" -L"$CPSYCLE/file/src"
+)
+COMMON_LIBS=(
+    -laudio -lthread -llilv-0 -ldsp -lscript -lfile -lm
+    -lpthread -ldl -lcontainer "${LUA_LIBS[@]}"
+)
+
 gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
-    -I"$CPSYCLE/audio/src" -I"$CPSYCLE/thread/src" \
-    -I"$CPSYCLE/script/src" -I"$CPSYCLE/container/src" \
-    -I"$CPSYCLE/file/src" -I"$CPSYCLE/dsp/src" \
-    -I"$CPSYCLE/diversalis/src" "${LUA_CFLAGS[@]}" \
+    "${COMMON_INCLUDES[@]}" \
     "$ROOT/tests/phase5_druttis_family_persistence.c" -o "$STATE_BIN" \
-    -L"$CPSYCLE/thread/src" -L"$CPSYCLE/script/src" \
-    -L"$CPSYCLE/container/src" -L"$CPSYCLE/dsp/src" \
-    -L"$CPSYCLE/audio/src" -L"$CPSYCLE/file/src" \
-    -laudio -lthread -llilv-0 -ldsp -lscript -lfile -lm \
-    -lpthread -ldl -lstdc++ -lcontainer "${LUA_LIBS[@]}"
+    "${COMMON_LIBDIRS[@]}" "${COMMON_LIBS[@]}" -lstdc++
+
+g++ -std=c++17 -Wall -Wextra -Werror \
+    "${COMMON_INCLUDES[@]}" \
+    "$ROOT/tests/phase5_druttis_production_callback.cpp" -o "$CALLBACK_BIN" \
+    "${COMMON_LIBDIRS[@]}" "${COMMON_LIBS[@]}"
+
+# Gate the exact PluginFxCallback timing adapter used by production native
+# machines. These values deliberately derive 88.2 kHz timing independently,
+# rather than doubling an already-truncated 44.1 kHz tick length.
+stdbuf -o0 -e0 "$CALLBACK_BIN" 2>&1 | tee "$CALLBACK_LOG"
+EXPECTED_CALLBACK_TIMING=(
+    'phase5-druttis-production-callback: tick PASS sr=44100 bpm=120 tpb=4 samples=5512'
+    'phase5-druttis-production-callback: tick PASS sr=88200 bpm=120 tpb=4 samples=11025'
+    'phase5-druttis-production-callback: tick PASS sr=88200 bpm=137 tpb=4 samples=9656'
+    'phase5-druttis-production-callback: tick PASS sr=88200 bpm=120 tpb=8 samples=5512'
+)
+for marker in "${EXPECTED_CALLBACK_TIMING[@]}"; do
+    grep -Fqx "$marker" "$CALLBACK_LOG" || {
+        echo "Production native callback timing marker missing: $marker" >&2
+        exit 1
+    }
+done
+grep -Fqx 'phase5-druttis-production-callback: PASS host-derived native tick timing' "$CALLBACK_LOG" || {
+    echo "Production native callback timing completion marker missing" >&2
+    exit 1
+}
 
 # Keep regression output unbuffered so a future fault identifies the exact
 # machine/stage immediately before failure.
@@ -112,6 +149,14 @@ for marker in "${EXPECTED_METADATA[@]}"; do
     }
 done
 
+grep -Fqx 'phase5-druttis-family: live rate/tick transition PASS [Slicit]' "$ABI_LOG" || {
+    echo "Slicit 44.1 -> 88.2 kHz / 11025-sample timing marker missing" >&2
+    exit 1
+}
+grep -Fqx 'phase5-druttis-family: deterministic active generator PASS [Plucked String]' "$ABI_LOG" || {
+    echo "Plucked String deterministic generator marker missing" >&2
+    exit 1
+}
 grep -Fqx "phase5-druttis-family: PASS all 7 retained source-built targets" "$ABI_LOG" || {
     echo "Druttis ABI/DSP family completion marker missing" >&2
     exit 1
@@ -142,7 +187,11 @@ cat > "$SUMMARY" <<'EOF'
 - Direct clean removes every Druttis loadable `.so`: PASS
 - Native ABI / identity / version / parameter geometry: PASS
 - Frozen complete parameter metadata hashes for all seven machines: PASS
+- Production `PluginFxCallback` derives native tick length from host timing: PASS
+- 44.1 kHz / 120 BPM / TPB 4 native tick = 5512 samples: PASS
+- 88.2 kHz / 120 BPM / TPB 4 native tick = 11025 samples: PASS
 - Native generator observations honor the historical 256-sample `MAX_BUFFER_LENGTH`: PASS
+- Sublime timing is initialized before every note trigger: PASS
 - Deterministic/stochastic historical DSP paths: PASS
 - Live 44.1 -> 88.2 kHz generator/effect transitions where applicable: PASS
 - Production PluginCatcher + MachineFactory discovery: PASS
