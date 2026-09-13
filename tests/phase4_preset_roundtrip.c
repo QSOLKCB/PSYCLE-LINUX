@@ -148,59 +148,55 @@ static int exercise_file(const char* path, uintptr_t state_size)
 
 static int exercise_zero_parameter_state_file(const char* path)
 {
-	const int32_t marker = -1;
-	const int32_t version = 1;
-	const int32_t num_presets = 1;
-	const int32_t num_parameters = 0;
-	const int32_t state_size = STATE_SIZE;
-	char name[32];
-	FILE* fp;
+	psy_audio_Presets saved;
 	psy_audio_Presets loaded;
 	psy_audio_Preset* preset;
 	int status;
 	int rc;
 
-	memset(name, 0, sizeof(name));
-	snprintf(name, sizeof(name), "%s", "State only");
-	fp = fopen(path, "wb");
-	if (!fp) {
-		return fail("could not create zero-parameter state preset fixture");
-	}
-	if (fwrite(&marker, sizeof(marker), 1, fp) != 1 ||
-			fwrite(&version, sizeof(version), 1, fp) != 1 ||
-			fwrite(&num_presets, sizeof(num_presets), 1, fp) != 1 ||
-			fwrite(&num_parameters, sizeof(num_parameters), 1, fp) != 1 ||
-			fwrite(&state_size, sizeof(state_size), 1, fp) != 1 ||
-			fwrite(name, sizeof(name), 1, fp) != 1 ||
-			fwrite(STATE_A, STATE_SIZE, 1, fp) != 1) {
-		fclose(fp);
-		return fail("could not write zero-parameter state preset fixture");
-	}
-	if (fclose(fp) != 0) {
-		return fail("could not close zero-parameter state preset fixture");
-	}
-
+	psy_audio_presets_init(&saved);
 	psy_audio_presets_init(&loaded);
+	preset = psy_audio_preset_alloc_init();
+	if (!preset) {
+		psy_audio_presets_dispose(&saved);
+		psy_audio_presets_dispose(&loaded);
+		return fail("could not allocate zero-parameter state preset");
+	}
+	psy_audio_preset_set_name(preset, "State only");
+	psy_audio_preset_put_data(preset, STATE_SIZE, (void*)STATE_A);
+	psy_audio_presets_insert(&saved, 0, preset);
+
+	status = psy_audio_presetsio_save(path, &saved);
+	if (status != psy_audio_PRESETIO_OK) {
+		fprintf(stderr,
+			"phase4-preset-roundtrip: zero-parameter state save failed: %s (%d)\n",
+			psy_audio_presetsio_statusstr(status), status);
+		psy_audio_presets_dispose(&saved);
+		psy_audio_presets_dispose(&loaded);
+		return 1;
+	}
 	status = psy_audio_presetsio_load(path, &loaded, 0, STATE_SIZE, "");
 	if (status != psy_audio_PRESETIO_OK) {
 		fprintf(stderr,
 			"phase4-preset-roundtrip: zero-parameter state load failed: %s (%d)\n",
 			psy_audio_presetsio_statusstr(status), status);
+		psy_audio_presets_dispose(&saved);
 		psy_audio_presets_dispose(&loaded);
 		return 1;
 	}
 	preset = psy_audio_presets_at(&loaded, 0);
 	rc = 0;
 	if (psy_audio_presets_size(&loaded) != 1 || !preset) {
-		rc = fail("zero-parameter state preset is missing after load");
+		rc = fail("zero-parameter state preset is missing after save/load");
 	} else if (strcmp(psy_audio_preset_name(preset), "State only") != 0) {
-		rc = fail("zero-parameter state preset name changed across load");
+		rc = fail("zero-parameter state preset name changed across save/load");
 	} else if (psy_audio_preset_num_parameters(preset) != 0) {
-		rc = fail("zero-parameter state preset gained parameters across load");
+		rc = fail("zero-parameter state preset gained parameters across save/load");
 	} else if (preset->datasize != STATE_SIZE || !preset->data ||
 			memcmp(preset->data, STATE_A, STATE_SIZE) != 0) {
-		rc = fail("zero-parameter opaque preset-state bytes changed across load");
+		rc = fail("zero-parameter opaque preset-state bytes changed across save/load");
 	}
+	psy_audio_presets_dispose(&saved);
 	psy_audio_presets_dispose(&loaded);
 	return rc;
 }
