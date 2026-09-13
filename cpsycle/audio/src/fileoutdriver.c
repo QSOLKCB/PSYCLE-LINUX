@@ -276,10 +276,10 @@ void fileoutdriver_make_config(psy_audio_FileOutDriver* self)
 			TRUE), "Name"));
 	psy_property_hide(psy_property_setreadonly(
 		psy_property_append_str(self->configuration, "vendor", "Psycledelics"),
-			TRUE), "Vendor"));
+		TRUE));
 	psy_property_hide(psy_property_setreadonly(
 		psy_property_append_str(self->configuration, "version", "1.0"),
-			TRUE), "Version"));
+		TRUE));
 	psy_property_set_text(
 		psy_property_append_str(self->configuration, "outputpath",
 			"Untitled.wav"),
