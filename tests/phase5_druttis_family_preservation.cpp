@@ -287,7 +287,7 @@ int verify_slicit_timing_transition(const Spec& spec, const CMachineInfo* info,
     TestCallback stale_cb;
     TestCallback target_cb;
     target_cb.set_sample_rate(88200);
-    target_cb.set_tick_length(11024);
+    target_cb.set_tick_length(11025);
 
     CMachineInterface* live = create_machine();
     CMachineInterface* stale = create_machine();
@@ -310,7 +310,7 @@ int verify_slicit_timing_transition(const Spec& spec, const CMachineInfo* info,
     configure_slicit_timing(target);
 
     live_cb.set_sample_rate(88200);
-    live_cb.set_tick_length(11024);
+    live_cb.set_tick_length(11025);
     live->SequencerTick();
     stale->SequencerTick();
     target->SequencerTick();
@@ -358,10 +358,10 @@ int verify_koruz_rate_transition(const Spec& spec, const CMachineInfo* info,
     apply_defaults(live, info, live_cb);
     apply_defaults(stale, info, stale_cb);
     target_cb.set_sample_rate(88200);
-    target_cb.set_tick_length(11024);
+    target_cb.set_tick_length(11025);
     apply_defaults(target, info, target_cb);
     live_cb.set_sample_rate(88200);
-    live_cb.set_tick_length(11024);
+    live_cb.set_tick_length(11025);
     live->SequencerTick();
 
     make_probe(input_l, input_r, 8192);
@@ -461,7 +461,7 @@ int verify_effect(const Spec& spec, const CMachineInfo* info,
         configure_eq3_active(stale);
     }
     live_cb.set_sample_rate(88200);
-    live_cb.set_tick_length(11024);
+    live_cb.set_tick_length(11025);
     live->SequencerTick();
     make_probe(input_l, input_r, 2048);
     a_l = input_l;
@@ -488,7 +488,7 @@ int verify_effect(const Spec& spec, const CMachineInfo* info,
 
     TestCallback ref_cb;
     ref_cb.set_sample_rate(88200);
-    ref_cb.set_tick_length(11024);
+    ref_cb.set_tick_length(11025);
     CMachineInterface* ref = create_machine();
     if (!ref || !ref->Vals) {
         if (ref) delete_machine(*ref);
@@ -511,6 +511,11 @@ int verify_effect(const Spec& spec, const CMachineInfo* info,
 int render_note(const Spec& spec, CMachineInterface* machine, int count,
     std::vector<float>& left, std::vector<float>& right)
 {
+    /* Sublime's Voice::NoteOn consumes m_globals.m_ticklength, which the
+    ** retained machine initializes only from SequencerTick(). Ensure every
+    ** fresh/stale/target reference has defined host timing before SeqTick(). */
+    if (std::strcmp(spec.label, "Sublime") == 0)
+        machine->SequencerTick();
     machine->SeqTick(0, 69, 0, 0, 0);
     left.assign(count, 0.0f);
     right.assign(count, 0.0f);
@@ -564,7 +569,7 @@ int verify_sublime_rate_transition(const Spec& spec, const CMachineInfo* info,
     {
         TestCallback target_cb;
         target_cb.set_sample_rate(88200);
-        target_cb.set_tick_length(11024);
+        target_cb.set_tick_length(11025);
         CMachineInterface* target = create_machine();
         if (!target || !target->Vals) {
             if (target) delete_machine(*target);
@@ -584,8 +589,11 @@ int verify_sublime_rate_transition(const Spec& spec, const CMachineInfo* info,
             return fail(spec, "CreateMachine failed for sequential live Sublime transition");
         }
         apply_defaults(live, info, live_cb);
+        /* Initialize retained tick-dependent voice timing at the source rate
+        ** before exercising the live host-rate transition. */
+        live->SequencerTick();
         live_cb.set_sample_rate(88200);
-        live_cb.set_tick_length(11024);
+        live_cb.set_tick_length(11025);
         live->SequencerTick();
         rc = render_note(spec, live, 16384, live_l, live_r);
         delete_machine(*live);
@@ -629,10 +637,10 @@ int verify_generator_rate_transition(const Spec& spec, const CMachineInfo* info,
     apply_defaults(live, info, live_cb);
     apply_defaults(stale, info, stale_cb);
     target_cb.set_sample_rate(88200);
-    target_cb.set_tick_length(11024);
+    target_cb.set_tick_length(11025);
     apply_defaults(target, info, target_cb);
     live_cb.set_sample_rate(88200);
-    live_cb.set_tick_length(11024);
+    live_cb.set_tick_length(11025);
     live->SequencerTick();
 
     if ((rc = render_note(spec, live, 16384, live_l, live_r)) == 0 &&
