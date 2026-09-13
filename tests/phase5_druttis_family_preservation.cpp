@@ -534,7 +534,7 @@ int render_note(const Spec& spec, CMachineInterface* machine, int count,
 
 bool stochastic_generator(const Spec& spec)
 {
-    return std::strcmp(spec.label, "Phantom") == 0 || spec.kind == Kind::Plucked;
+    return std::strcmp(spec.label, "Phantom") == 0;
 }
 
 int verify_sublime_rate_transition(const Spec& spec, const CMachineInfo* info,
