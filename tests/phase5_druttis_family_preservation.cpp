@@ -348,19 +348,33 @@ int verify_generator(const Spec& spec, const CMachineInfo* info,
     TestCallback callback_a;
     TestCallback callback_b;
     CMachineInterface* a = create_machine();
-    CMachineInterface* b = create_machine();
+    CMachineInterface* b = nullptr;
     std::vector<float> a_l, a_r, b_l, b_r;
     int rc = 0;
 
-    if (!a || !a->Vals || !b || !b->Vals) {
+    if (!a || !a->Vals) {
         if (a) delete_machine(*a);
-        if (b) delete_machine(*b);
-        return fail(spec, "CreateMachine failed for generator regression");
+        return fail(spec, "CreateMachine failed for first generator regression instance");
     }
+
+    /* Several retained Druttis generators initialize shared static wavetable
+    ** state only when the first live instance is initialized. Preserve that
+    ** host lifecycle: initialize/render A before constructing B. */
     apply_defaults(a, info, callback_a);
-    apply_defaults(b, info, callback_b);
     rc = render_note(spec, a, 8192, a_l, a_r);
-    if (rc == 0) rc = render_note(spec, b, 8192, b_l, b_r);
+    if (rc != 0) {
+        delete_machine(*a);
+        return rc;
+    }
+
+    b = create_machine();
+    if (!b || !b->Vals) {
+        if (b) delete_machine(*b);
+        delete_machine(*a);
+        return fail(spec, "CreateMachine failed for second generator regression instance");
+    }
+    apply_defaults(b, info, callback_b);
+    rc = render_note(spec, b, 8192, b_l, b_r);
     if (rc == 0 && spec.kind != Kind::Plucked &&
             !same_signal(a_l, a_r, b_l, b_r, 1.0e-5f))
         rc = fail(spec, "fresh generator instances are not deterministic");
