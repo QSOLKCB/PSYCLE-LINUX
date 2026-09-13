@@ -38,13 +38,13 @@ struct Spec {
 };
 
 const Spec SPECS[] = {
-    {"EQ-3", "EQ-3", "EQ-3", 0x0110, psycle::plugin_interface::EFFECT, 12, 4, Kind::Effect, UINT64_C(0)},
-    {"FeedMe", "FeedMe 1.2", "FeedMe", 0x0120, psycle::plugin_interface::GENERATOR, 24, 5, Kind::Generator, UINT64_C(0)},
-    {"Koruz", "Koruz", "Koruz", 0x0110, psycle::plugin_interface::EFFECT, 14, 2, Kind::Effect, UINT64_C(0)},
-    {"Phantom", "Phantom 1.2", "Phantom", 0x0120, psycle::plugin_interface::GENERATOR, 55, 5, Kind::Generator, UINT64_C(0)},
-    {"Plucked String", "Plucked String 1.2", "Plucked String", 0x0120, psycle::plugin_interface::GENERATOR, 7, 1, Kind::Plucked, UINT64_C(0)},
-    {"Slicit", "Slicit", "Slicit", 0x0100, psycle::plugin_interface::EFFECT, 68, 4, Kind::Slicit, UINT64_C(0)},
-    {"Sublime", "Sublime 1.1", "Sublime", 0x0110, psycle::plugin_interface::GENERATOR, 60, 4, Kind::Generator, UINT64_C(0)},
+    {"EQ-3", "EQ-3", "EQ-3", 0x0110, psycle::plugin_interface::EFFECT, 12, 4, Kind::Effect, UINT64_C(0x1d7768bf2bf65d17)},
+    {"FeedMe", "FeedMe 1.2", "FeedMe", 0x0120, psycle::plugin_interface::GENERATOR, 24, 5, Kind::Generator, UINT64_C(0x665df6f57aa34c4b)},
+    {"Koruz", "Koruz", "Koruz", 0x0110, psycle::plugin_interface::EFFECT, 14, 2, Kind::Effect, UINT64_C(0x8c1bbabd87f42796)},
+    {"Phantom", "Phantom 1.2", "Phantom", 0x0120, psycle::plugin_interface::GENERATOR, 55, 5, Kind::Generator, UINT64_C(0xbefdde29123bea07)},
+    {"Plucked String", "Plucked String 1.2", "Plucked String", 0x0120, psycle::plugin_interface::GENERATOR, 7, 1, Kind::Plucked, UINT64_C(0x3be7f541e23e0f3f)},
+    {"Slicit", "Slicit", "Slicit", 0x0100, psycle::plugin_interface::EFFECT, 68, 4, Kind::Slicit, UINT64_C(0x689adbb03c0fd4d3)},
+    {"Sublime", "Sublime 1.1", "Sublime", 0x0110, psycle::plugin_interface::GENERATOR, 60, 4, Kind::Generator, UINT64_C(0xbaa335eeecaf0b09)},
 };
 
 class TestCallback : public CFxCallback {
@@ -150,7 +150,7 @@ int verify_metadata(const Spec& spec, const CMachineInfo* info)
     const std::uint64_t actual = parameter_hash(info);
     std::printf("druttis-metadata-hash[%s]=0x%016llx\n", spec.label,
         static_cast<unsigned long long>(actual));
-    if (spec.metadata_hash != 0 && actual != spec.metadata_hash)
+    if (actual != spec.metadata_hash)
         return fail(spec, "frozen parameter metadata hash changed");
     return 0;
 }
