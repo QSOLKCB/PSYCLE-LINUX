@@ -53,8 +53,8 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
     -laudio -lthread -llilv-0 -ldsp -lscript -lfile -lm \
     -lpthread -ldl -lstdc++ -lcontainer "${LUA_LIBS[@]}"
 
-"$ABI_BIN" "$PLUGIN" >"$ABI_LOG" 2>&1
-"$STATE_BIN" "$OUT" "$PLUGIN" >"$STATE_LOG" 2>&1
+"$ABI_BIN" "$PLUGIN" 2>&1 | tee "$ABI_LOG"
+"$STATE_BIN" "$OUT" "$PLUGIN" 2>&1 | tee "$STATE_LOG"
 
 PRESET="$OUT/phase5-arguru-reverb.prs"
 SONG="$OUT/phase5-arguru-reverb.psy"
@@ -83,6 +83,4 @@ low-pass history, and sample-rate bookkeeping remain runtime DSP state and are
 intentionally not given a new serialization format.
 EOF
 
-cat "$ABI_LOG"
-cat "$STATE_LOG"
 cat "$SUMMARY"
