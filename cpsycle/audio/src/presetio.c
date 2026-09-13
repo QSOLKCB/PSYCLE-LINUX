@@ -269,14 +269,17 @@ int psy_audio_presetsio_saveversion1(FILE* fp, psy_audio_Presets* presets)
 	fwrite(&numparameters, sizeof(int), 1, fp);
 	fwrite(&datasizestruct, sizeof(int), 1, fp);
 
-	if (numparameters > 0) {
+	{
 		char cbuf[32];
 		int* ibuf;
 		int32_t i;
 
-		ibuf = malloc(sizeof(int32_t) * numparameters);
-		if (!ibuf) {
-			return psy_audio_PRESETIO_ERROR_WRITE;
+		ibuf = NULL;
+		if (numparameters > 0) {
+			ibuf = malloc(sizeof(int32_t) * numparameters);
+			if (!ibuf) {
+				return psy_audio_PRESETIO_ERROR_WRITE;
+			}
 		}
 		for (i = 0; i < numpresets && !feof(fp) && !ferror(fp); i++) {
 			psy_audio_Preset* preset;
@@ -298,7 +301,8 @@ int psy_audio_presetsio_saveversion1(FILE* fp, psy_audio_Presets* presets)
 				psy_snprintf(cbuf, 32, "%s", psy_audio_preset_name(preset));
 			}
 			if (fwrite(cbuf, sizeof(cbuf), 1, fp) != 1 ||
-					fwrite(ibuf, numparameters * sizeof(int32_t), 1, fp) != 1) {
+					(numparameters > 0 &&
+						fwrite(ibuf, numparameters * sizeof(int32_t), 1, fp) != 1)) {
 				status = psy_audio_PRESETIO_ERROR_WRITE;
 				break;
 			}
