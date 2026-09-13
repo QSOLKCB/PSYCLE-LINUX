@@ -1,0 +1,40 @@
+name: Phase 5 Arguru Distortion preservation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  arguru-distortion:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run Arguru Distortion preservation regression
+        run: |
+          chmod +x scripts/phase5-arguru-distortion-smoke.sh
+          scripts/phase5-arguru-distortion-smoke.sh phase5-arguru-distortion
+
+      - name: Upload Arguru Distortion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-arguru-distortion
+          path: phase5-arguru-distortion/
+          if-no-files-found: warn
+          retention-days: 30
