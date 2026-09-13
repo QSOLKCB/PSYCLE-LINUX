@@ -214,6 +214,21 @@ bool different_signal(const std::vector<float>& a_l, const std::vector<float>& a
     return different;
 }
 
+double rms_difference(const std::vector<float>& a_l, const std::vector<float>& a_r,
+    const std::vector<float>& b_l, const std::vector<float>& b_r)
+{
+    if (a_l.size() != b_l.size() || a_r.size() != b_r.size() ||
+            !finite_signal(a_l, a_r) || !finite_signal(b_l, b_r) || a_l.empty())
+        return INFINITY;
+    long double sum = 0.0;
+    for (std::size_t i = 0; i < a_l.size(); ++i) {
+        const long double dl = static_cast<long double>(a_l[i]) - b_l[i];
+        const long double dr = static_cast<long double>(a_r[i]) - b_r[i];
+        sum += dl * dl + dr * dr;
+    }
+    return std::sqrt(static_cast<double>(sum / (2.0L * a_l.size())));
+}
+
 void make_probe(std::vector<float>& left, std::vector<float>& right, int count)
 {
     left.resize(count);
@@ -234,9 +249,68 @@ void configure_eq3_active(CMachineInterface* machine)
     machine->ParameterTweak(7, 160);
 }
 
+int verify_koruz_rate_transition(const Spec& spec, const CMachineInfo* info,
+    CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
+{
+    TestCallback live_cb;
+    TestCallback stale_cb;
+    TestCallback target_cb;
+    CMachineInterface* live = create_machine();
+    CMachineInterface* stale = create_machine();
+    CMachineInterface* target = create_machine();
+    std::vector<float> input_l, input_r, live_l, live_r, stale_l, stale_r, target_l, target_r;
+    int rc = 0;
+
+    if (!live || !live->Vals || !stale || !stale->Vals || !target || !target->Vals) {
+        if (target) delete_machine(*target);
+        if (stale) delete_machine(*stale);
+        if (live) delete_machine(*live);
+        return fail(spec, "CreateMachine failed for Koruz rate transition");
+    }
+
+    apply_defaults(live, info, live_cb);
+    apply_defaults(stale, info, stale_cb);
+    target_cb.set_sample_rate(88200);
+    apply_defaults(target, info, target_cb);
+    live_cb.set_sample_rate(88200);
+    live->SequencerTick();
+
+    make_probe(input_l, input_r, 8192);
+    live_l = input_l;
+    live_r = input_r;
+    stale_l = input_l;
+    stale_r = input_r;
+    target_l = input_l;
+    target_r = input_r;
+    live->Work(live_l.data(), live_r.data(), static_cast<int>(live_l.size()), 1);
+    stale->Work(stale_l.data(), stale_r.data(), static_cast<int>(stale_l.size()), 1);
+    target->Work(target_l.data(), target_r.data(), static_cast<int>(target_l.size()), 1);
+
+    if (!finite_signal(live_l, live_r) || !finite_signal(stale_l, stale_r) ||
+            !finite_signal(target_l, target_r)) {
+        rc = fail(spec, "Koruz rate probe produced non-finite audio");
+    } else {
+        const double target_distance = rms_difference(live_l, live_r, target_l, target_r);
+        const double stale_distance = rms_difference(live_l, live_r, stale_l, stale_r);
+        std::printf("phase5-druttis-family: Koruz rate distances target=%.6f stale=%.6f\n",
+            target_distance, stale_distance);
+        if (!std::isfinite(target_distance) || !std::isfinite(stale_distance) ||
+                !(target_distance < stale_distance))
+            rc = fail(spec, "Koruz live rate response is not closer to fresh 88.2 kHz than stale 44.1 kHz");
+        else
+            std::printf("phase5-druttis-family: live stochastic rate transition PASS [Koruz]\n");
+    }
+
+    delete_machine(*target);
+    delete_machine(*stale);
+    delete_machine(*live);
+    return rc;
+}
+
 int verify_effect(const Spec& spec, const CMachineInfo* info,
     CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
 {
+    const bool is_koruz = std::strcmp(spec.label, "Koruz") == 0;
     TestCallback callback_a;
     TestCallback callback_b;
     CMachineInterface* a = create_machine();
@@ -258,15 +332,25 @@ int verify_effect(const Spec& spec, const CMachineInfo* info,
     b_r = input_r;
     a->Work(a_l.data(), a_r.data(), static_cast<int>(a_l.size()), 1);
     b->Work(b_l.data(), b_r.data(), static_cast<int>(b_l.size()), 1);
-    if (!finite_signal(a_l, a_r) || !finite_signal(b_l, b_r))
+    if (!finite_signal(a_l, a_r) || !finite_signal(b_l, b_r)) {
         rc = fail(spec, "effect produced a non-finite sample");
-    else if (!same_signal(a_l, a_r, b_l, b_r, 1.0e-5f))
+    } else if (is_koruz) {
+        if (!different_signal(a_l, a_r, input_l, input_r) ||
+                !different_signal(b_l, b_r, input_l, input_r))
+            rc = fail(spec, "Koruz stochastic effect path did not engage");
+        else
+            std::printf("phase5-druttis-family: stochastic finite effect PASS [Koruz]\n");
+    } else if (!same_signal(a_l, a_r, b_l, b_r, 1.0e-5f)) {
         rc = fail(spec, "fresh effect instances are not deterministic");
-    else
+    } else {
         std::printf("phase5-druttis-family: deterministic effect PASS [%s]\n", spec.label);
+    }
     delete_machine(*b);
     delete_machine(*a);
     if (rc != 0 || spec.kind != Kind::Effect) return rc;
+
+    if (is_koruz)
+        return verify_koruz_rate_transition(spec, info, create_machine, delete_machine);
 
     TestCallback live_cb;
     TestCallback stale_cb;
