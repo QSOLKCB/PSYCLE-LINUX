@@ -295,8 +295,8 @@ int verify_koruz_rate_transition(const Spec& spec, const CMachineInfo* info,
         std::printf("phase5-druttis-family: Koruz rate distances target=%.6f stale=%.6f\n",
             target_distance, stale_distance);
         if (!std::isfinite(target_distance) || !std::isfinite(stale_distance) ||
-                !(target_distance < stale_distance))
-            rc = fail(spec, "Koruz live rate response is not closer to fresh 88.2 kHz than stale 44.1 kHz");
+                stale_distance <= 1.0 || !(target_distance < stale_distance * 0.01))
+            rc = fail(spec, "Koruz live rate response is not decisively closer to fresh 88.2 kHz than stale 44.1 kHz");
         else
             std::printf("phase5-druttis-family: live stochastic rate transition PASS [Koruz]\n");
     }
@@ -426,6 +426,57 @@ int render_note(const Spec& spec, CMachineInterface* machine, int count,
     return 0;
 }
 
+bool stochastic_generator(const Spec& spec)
+{
+    return std::strcmp(spec.label, "Phantom") == 0 || spec.kind == Kind::Plucked;
+}
+
+int verify_generator_rate_transition(const Spec& spec, const CMachineInfo* info,
+    CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
+{
+    TestCallback live_cb;
+    TestCallback stale_cb;
+    TestCallback target_cb;
+    CMachineInterface* live = create_machine();
+    CMachineInterface* stale = create_machine();
+    CMachineInterface* target = create_machine();
+    std::vector<float> live_l, live_r, stale_l, stale_r, target_l, target_r;
+    int rc = 0;
+
+    if (!live || !live->Vals || !stale || !stale->Vals || !target || !target->Vals) {
+        if (target) delete_machine(*target);
+        if (stale) delete_machine(*stale);
+        if (live) delete_machine(*live);
+        return fail(spec, "CreateMachine failed for generator rate transition");
+    }
+
+    apply_defaults(live, info, live_cb);
+    apply_defaults(stale, info, stale_cb);
+    target_cb.set_sample_rate(88200);
+    apply_defaults(target, info, target_cb);
+    live_cb.set_sample_rate(88200);
+    live->SequencerTick();
+
+    if ((rc = render_note(spec, live, 16384, live_l, live_r)) == 0 &&
+            (rc = render_note(spec, stale, 16384, stale_l, stale_r)) == 0 &&
+            (rc = render_note(spec, target, 16384, target_l, target_r)) == 0) {
+        const double target_distance = rms_difference(live_l, live_r, target_l, target_r);
+        const double stale_distance = rms_difference(live_l, live_r, stale_l, stale_r);
+        std::printf("phase5-druttis-family: generator rate distances [%s] target=%.6f stale=%.6f\n",
+            spec.label, target_distance, stale_distance);
+        if (!std::isfinite(target_distance) || !std::isfinite(stale_distance) ||
+                stale_distance <= 1.0e-6 || !(target_distance < stale_distance))
+            rc = fail(spec, "live generator rate response is not closer to fresh 88.2 kHz than stale 44.1 kHz");
+        else
+            std::printf("phase5-druttis-family: live rate-sensitive generator PASS [%s]\n", spec.label);
+    }
+
+    delete_machine(*target);
+    delete_machine(*stale);
+    delete_machine(*live);
+    return rc;
+}
+
 int verify_generator(const Spec& spec, const CMachineInfo* info,
     CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
 {
@@ -459,26 +510,18 @@ int verify_generator(const Spec& spec, const CMachineInfo* info,
     }
     apply_defaults(b, info, callback_b);
     rc = render_note(spec, b, 8192, b_l, b_r);
-    if (rc == 0 && spec.kind != Kind::Plucked &&
+    if (rc == 0 && !stochastic_generator(spec) &&
             !same_signal(a_l, a_r, b_l, b_r, 1.0e-5f))
         rc = fail(spec, "fresh generator instances are not deterministic");
-    if (rc == 0)
-        std::printf("phase5-druttis-family: active generator PASS [%s]\n", spec.label);
+    if (rc == 0 && stochastic_generator(spec))
+        std::printf("phase5-druttis-family: stochastic active generator PASS [%s]\n", spec.label);
+    else if (rc == 0)
+        std::printf("phase5-druttis-family: deterministic active generator PASS [%s]\n", spec.label);
     delete_machine(*b);
-    if (rc != 0) {
-        delete_machine(*a);
-        return rc;
-    }
-
-    a->Stop();
-    callback_a.set_sample_rate(88200);
-    a->SequencerTick();
-    rc = render_note(spec, a, 16384, a_l, a_r);
-    if (rc == 0)
-        std::printf("phase5-druttis-family: live 44.1->88.2 generator transition PASS [%s]\n",
-            spec.label);
     delete_machine(*a);
-    return rc;
+    if (rc != 0) return rc;
+
+    return verify_generator_rate_transition(spec, info, create_machine, delete_machine);
 }
 
 int test_plugin(const Spec& spec, const char* path)
