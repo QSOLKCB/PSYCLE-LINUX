@@ -2,8 +2,8 @@
 ** PSYCLE-LINUX Phase 5C D. W. Aley family native ABI / DSP preservation.
 **
 ** Covers the four retained source-built DW machines: dw eq, dw granulizer,
-** dw IoPan and dw Tremolo. Metadata hashes are emitted by the real native ABI
-** and are frozen after the first dedicated observation run.
+** dw IoPan and dw Tremolo. Complete parameter-table hashes are frozen from the
+** first dedicated observation of the real source-built native modules.
 */
 
 #include <algorithm>
@@ -38,10 +38,10 @@ struct Spec {
 };
 
 const Spec SPECS[] = {
-    {"dw eq", "dw eq", "eq", 0x0100, 12, 3, Kind::Eq, UINT64_C(0)},
-    {"dw granulizer", "dw granulizer", "granulizer", 0x0100, 50, 5, Kind::Granulizer, UINT64_C(0)},
-    {"dw IoPan", "dw IoPan", "IoPan", 0x0001, 4, 2, Kind::IoPan, UINT64_C(0)},
-    {"dw Tremolo", "dw Tremolo", "Tremolo", 0x0002, 8, 2, Kind::Tremolo, UINT64_C(0)},
+    {"dw eq", "dw eq", "eq", 0x0100, 12, 3, Kind::Eq, UINT64_C(0xc82fe5a084c00d43)},
+    {"dw granulizer", "dw granulizer", "granulizer", 0x0100, 50, 5, Kind::Granulizer, UINT64_C(0x77e34d124f74ed41)},
+    {"dw IoPan", "dw IoPan", "IoPan", 0x0001, 4, 2, Kind::IoPan, UINT64_C(0xd2b2cf8908d12251)},
+    {"dw Tremolo", "dw Tremolo", "Tremolo", 0x0002, 8, 2, Kind::Tremolo, UINT64_C(0x637aa08128ba99b8)},
 };
 
 class TestCallback : public CFxCallback {
@@ -138,7 +138,7 @@ int verify_metadata(const Spec& spec, const CMachineInfo* info)
     const std::uint64_t actual = parameter_hash(info);
     std::printf("dw-metadata-hash[%s]=0x%016llx\n", spec.label,
         static_cast<unsigned long long>(actual));
-    if (spec.metadata_hash != 0 && actual != spec.metadata_hash)
+    if (actual != spec.metadata_hash)
         return fail(spec, "frozen parameter metadata hash changed");
     return 0;
 }
@@ -302,14 +302,14 @@ int verify_iopan(const Spec& spec, const CMachineInfo* info,
 
 void configure_tremolo(CMachineInterface* machine)
 {
-    machine->ParameterTweak(0, 1000); // depth 100%
-    machine->ParameterTweak(1, 1);    // triangle
-    machine->ParameterTweak(2, 100);  // neutral gravity
-    machine->ParameterTweak(3, 360);  // symmetric skew
-    machine->ParameterTweak(4, 5000); // visible rate
-    machine->ParameterTweak(5, 0);    // aligned stereo phase basis
+    machine->ParameterTweak(0, 1000);
+    machine->ParameterTweak(1, 1);
+    machine->ParameterTweak(2, 100);
+    machine->ParameterTweak(3, 360);
+    machine->ParameterTweak(4, 5000);
+    machine->ParameterTweak(5, 0);
     machine->ParameterTweak(6, 0);
-    machine->ParameterTweak(7, 1);    // restart LFO
+    machine->ParameterTweak(7, 1);
 }
 
 int verify_tremolo(const Spec& spec, const CMachineInfo* info,
@@ -381,16 +381,16 @@ int verify_tremolo(const Spec& spec, const CMachineInfo* info,
 
 void configure_granulizer_probe(CMachineInterface* machine)
 {
-    machine->ParameterTweak(1, 10);     // 10-sample grain at 44.1 kHz
-    machine->ParameterTweak(2, 1000);   // no second grain in short probe
-    machine->ParameterTweak(3, 0);      // no attack envelope
-    machine->ParameterTweak(4, 0);      // no decay envelope
-    machine->ParameterTweak(5, 1000);   // unity pitch
+    machine->ParameterTweak(1, 10);
+    machine->ParameterTweak(2, 1000);
+    machine->ParameterTweak(3, 0);
+    machine->ParameterTweak(4, 0);
+    machine->ParameterTweak(5, 1000);
     machine->ParameterTweak(6, 1000);
-    machine->ParameterTweak(7, 0);      // pitch link off
-    machine->ParameterTweak(8, 1);      // one layer
-    machine->ParameterTweak(41, 32768); // limiter effectively open for probe
-    machine->ParameterTweak(42, 100);   // unity integer gain
+    machine->ParameterTweak(7, 0);
+    machine->ParameterTweak(8, 1);
+    machine->ParameterTweak(41, 32768);
+    machine->ParameterTweak(42, 100);
 }
 
 int verify_granulizer(const Spec& spec, const CMachineInfo* info,
