@@ -44,15 +44,15 @@ const Spec SPECS[] = {
     {"stk Plucked", "stk Plucked", "stk Plucked",
         "Sartorius, Bohan and STK 4.2.0 developers", 0x0100,
         psycle::plugin_interface::GENERATOR, 5, 1, Kind::Plucked,
-        UINT64_C(0x6656c2f630c6cab7)},
+        UINT64_C(0x55e20a3f7e90f611)},
     {"stk Reverbs", "stk Reverbs", "stk Reverbs",
         "Sartorius and STK developers", 0x0110,
         psycle::plugin_interface::EFFECT, 4, 1, Kind::Reverbs,
-        UINT64_C(0x6470b9b92b7da93d)},
+        UINT64_C(0xf92219f73194a3ae)},
     {"stk Shakers", "stk Shakers", "Shakers",
         "Sartorius, bohan and STK 4.5.0 developers", 0x0100,
         psycle::plugin_interface::GENERATOR, 6, 1, Kind::Shakers,
-        UINT64_C(0x82538540e9128cf5)},
+        UINT64_C(0x4c29aa201e9bb317)},
 };
 
 class TestCallback : public CFxCallback {
