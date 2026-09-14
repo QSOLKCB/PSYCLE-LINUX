@@ -26,7 +26,7 @@
 #define PARAMETER_COUNT 5u
 #define SLOT 0u
 #define CATCHER_NAME "arguru-freeverb:0"
-#define PRESET_NAME "Phase 5 Jezar Freeverb preservation"
+#define PRESET_NAME "Phase 5 Jezar Freeverb"
 
 static const intptr_t EXPECTED_VALUES[PARAMETER_COUNT] = {
 	401, 300, 250, 123, 321
