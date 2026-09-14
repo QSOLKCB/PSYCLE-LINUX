@@ -29,7 +29,13 @@ class PluginFxCallback : public CFxCallback
 		}
 	}
 	inline virtual int GetTickLength() const {
-		if (callback && callback->vtable &&
+		/* A freshly initialized MachineCallback has no Player yet. Its timing
+		** vtable deliberately returns positive sentinel values (4096 beats per
+		** line and 512 beats per sample), so positivity alone cannot identify
+		** usable sequencer timing. Only consume the line/sample ratio once a
+		** live Player has been attached; headless factory flows must use the
+		** historical sample-rate/BPM fallback below. */
+		if (callback && callback->player && callback->vtable &&
 				callback->vtable->currbeatsperline && callback->vtable->beatspersample) {
 			const double beats_per_line = callback->vtable->currbeatsperline(callback);
 			const double beats_per_sample = callback->vtable->beatspersample(callback);
