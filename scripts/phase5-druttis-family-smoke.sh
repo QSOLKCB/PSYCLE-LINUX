@@ -123,14 +123,14 @@ g++ -std=c++17 -Wall -Wextra -Werror=return-type \
 
 # Gate the exact PluginFxCallback timing adapter used by production native
 # machines. Native GetTickLength is a tracker-line duration (LPB), not the
-# finer transport tick selected by song TPB. Integral line durations that land
-# one floating-point step low must be preserved without rounding genuinely
-# fractional line durations upward. Oversized finite durations are capped at
-# INT_MAX/256 so retained signed-int consumers remain safe: CrossDelay's max
-# Lines multiplier is 16, Bexphase's refresh multiplier is 32, and Sublime's
-# Glide path can multiply the ABI value by 256. Non-finite timing must fall back
-# rather than narrow. The final marker uses a real Song -> Player ->
-# MachineCallback chain with the normal LPB=4 / TPB=24 split.
+# finer transport tick selected by song TPB. Near-integral values are snapped
+# within a small floating-point tolerance while genuinely fractional durations
+# still truncate. Positive sub-sample durations floor to one sample. Oversized
+# finite durations are capped at INT_MAX/256 so retained signed-int consumers
+# remain arithmetically safe; CrossDelay separately enforces its historical
+# two-second resource ceiling before growing delay buffers. Non-finite timing
+# must fall back rather than narrow. The final marker uses a real Song -> Player
+# -> MachineCallback chain with the normal LPB=4 / TPB=24 split.
 stdbuf -o0 -e0 "$CALLBACK_BIN" 2>&1 | tee "$CALLBACK_LOG"
 EXPECTED_CALLBACK_TIMING=(
     'phase5-druttis-production-callback: line PASS sr=44100 bpm=120 lpb=4 tpb=24 samples=5512'
@@ -139,6 +139,8 @@ EXPECTED_CALLBACK_TIMING=(
     'phase5-druttis-production-callback: line PASS sr=88200 bpm=137 lpb=4 tpb=24 samples=9656'
     'phase5-druttis-production-callback: line PASS sr=88200 bpm=120 lpb=8 tpb=24 samples=5512'
     'phase5-druttis-production-callback: line PASS sr=88200 bpm=120 lpb=4 tpb=48 samples=11025'
+    'phase5-druttis-production-callback: integral-snap PASS samples=264'
+    'phase5-druttis-production-callback: subsample-floor PASS samples=1'
     'phase5-druttis-production-callback: legacy-cap PASS raw-samples=4500000000 cap=8388607 crossdelay=134217712 bexphase=268435424 sublime=2147483392'
     'phase5-druttis-production-callback: nonfinite-fallback PASS samples=45000'
     'phase5-druttis-production-callback: actual-player PASS sr=44100 bpm=120 lpb=4 tpb=24 transport-tick=918 line=5512'
@@ -216,8 +218,10 @@ cat > "$SUMMARY" <<'EOF'
 - Real Song/Player callback with LPB 4 / TPB 24 distinguishes 5512-sample line from 918-sample transport tick: PASS
 - 44.1 kHz / 120 BPM / LPB 4 fractional native line truncates to 5512 samples: PASS
 - 44.1 kHz / 35 BPM / LPB 3 exact native line remains 25200 samples: PASS
+- Multi-ULP near-integral native timing snaps to the intended integer sample count: PASS
+- Positive sub-sample native timing floors to one sample, never zero: PASS
 - Oversized finite native line durations cap at `INT_MAX / 256` so retained legacy signed multipliers remain representable: PASS
-- CrossDelay (16x), Bexphase (32x), and Sublime Glide (256x) worst-case products remain within signed `int`: PASS
+- CrossDelay enforces its historical two-second delay resource ceiling before buffer growth: PASS
 - Non-finite native line timing is rejected before integer narrowing and uses fallback timing: PASS
 - 88.2 kHz / 120 BPM / LPB 4 native line = 11025 samples: PASS
 - Native line timing is independent of finer transport TPB: PASS
