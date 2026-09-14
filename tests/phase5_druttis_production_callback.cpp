@@ -112,6 +112,50 @@ int expect_line(CMachineInterface& machine, TimingCallback& callback,
 
 class DummyMachine : public CMachineInterface {};
 
+int expect_precision_guards(CMachineInterface& machine, TimingCallback& callback)
+{
+    /* Reproduce callback arithmetic that lands more than one ULP below an
+    ** exact integral line: 263.9999999999999 must still expose 264 samples. */
+    callback.sample_rate = 8000.0;
+    callback.bpm = 32.0;
+    callback.lpb = 11.0;
+    callback.tpb = 24.0;
+    const double bps = callback_beatspersample(&callback);
+    callback.line_beats_override = 263.9999999999999 * bps;
+    const double raw_integral = callback_currbeatsperline(&callback) / bps;
+    const int integral = machine.pCB->GetTickLength();
+    if (!(raw_integral < 264.0) || integral != 264) {
+        callback.line_beats_override = 0.0;
+        std::fprintf(stderr,
+            "phase5-druttis-production-callback: FAIL integral snap raw=%.17g expected=264 got=%d\n",
+            raw_integral, integral);
+        return 1;
+    }
+    std::printf(
+        "phase5-druttis-production-callback: integral-snap PASS samples=264\n");
+
+    /* Positive sub-sample line durations must never collapse the native ABI to
+    ** zero: retained consumers use the value as a divisor and delay quantum. */
+    callback.sample_rate = 8000.0;
+    callback.bpm = 999.0;
+    callback.lpb = 1.0;
+    callback.tpb = 24.0;
+    const double fast_bps = callback_beatspersample(&callback);
+    callback.line_beats_override = fast_bps * 0.5;
+    const double raw_subsample = callback_currbeatsperline(&callback) / fast_bps;
+    const int subsample = machine.pCB->GetTickLength();
+    callback.line_beats_override = 0.0;
+    if (!(raw_subsample > 0.0 && raw_subsample < 1.0) || subsample != 1) {
+        std::fprintf(stderr,
+            "phase5-druttis-production-callback: FAIL sub-sample floor raw=%.17g expected=1 got=%d\n",
+            raw_subsample, subsample);
+        return 1;
+    }
+    std::printf(
+        "phase5-druttis-production-callback: subsample-floor PASS samples=1\n");
+    return 0;
+}
+
 int expect_extreme_line_guards(CMachineInterface& machine, TimingCallback& callback)
 {
     callback.sample_rate = 96000.0;
@@ -286,6 +330,7 @@ int main()
             (rc = expect_line(machine, callback, 88200.0, 137.0, 4.0, 24.0, 9656)) == 0 &&
             (rc = expect_line(machine, callback, 88200.0, 120.0, 8.0, 24.0, 5512)) == 0 &&
             (rc = expect_line(machine, callback, 88200.0, 120.0, 4.0, 48.0, 11025)) == 0 &&
+            (rc = expect_precision_guards(machine, callback)) == 0 &&
             (rc = expect_extreme_line_guards(machine, callback)) == 0 &&
             (rc = expect_headless_callback_fallback()) == 0 &&
             (rc = expect_real_player_callback()) == 0) {
