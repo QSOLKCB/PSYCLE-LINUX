@@ -75,11 +75,13 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 
 grep -F 'phase5-zephod-superfm: metadata PASS parameters=20 version=0x0110' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-zephod-superfm: deterministic PASS' "$NATIVE_LOG" >/dev/null
+grep -F 'idle-before-note=stable' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-zephod-superfm: volume-command PASS command=0C80' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-zephod-superfm: noteoff PASS release-default=2414 active-through=' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-zephod-superfm: rate-transition PASS sr=44100->88200 in-flight=attack pitch=stable sustain<16=until-noteoff' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-zephod-superfm: rate-transition PASS sr=44100->88200 in-flight=attack pitch=stored finetune-pending=ignored sustain<16=until-noteoff' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-zephod-superfm: PASS' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-zephod-superfm-state: PASS' "$STATE_LOG" >/dev/null
+grep -F 'state: 20/20 public parameters seeded non-default, 0 opaque bytes' "$STATE_LOG" >/dev/null
 
 [[ -s "$OUT/phase5-zephod-superfm.prs" ]] || {
     echo "Zephod SuperFM preset evidence missing" >&2
@@ -97,15 +99,15 @@ cat > "$SUMMARY" <<'EOF'
 - Direct clean removes only the generated SuperFM shared object and leaves unrelated plugin outputs untouched: PASS
 - Historical native ABI exports (`GetInfo`, `CreateMachine`, `DeleteMachine`): PASS
 - Identity/version/type/two-column geometry and all 20 parameter metadata records: PASS
-- Fresh default FM rendering is finite, active and deterministic: PASS
+- Fresh envelopes remain stopped across idle rendering until the first note; first-note rendering remains deterministic: PASS
 - Historical `0C80` tracker-volume scaling: PASS
 - Default 2414-sample smooth Note Off release remains active near its expected endpoint and reaches silence: PASS
-- Live 44.1 kHz -> 88.2 kHz reconfiguration preserves an in-flight attack envelope and active-note pitch: PASS
+- Live 44.1 kHz -> 88.2 kHz reconfiguration preserves an in-flight attack envelope and the actual sounding pitch even with pending Finetune automation: PASS
 - Sustain lengths below 16 retain historical `until noteoff` meaning across rate changes: PASS
 - Production `PluginCatcher` identity `zephod-superfm:0`: PASS
 - Production `MachineFactory` instantiation: PASS
-- Complete 20-parameter version-1 preset save/load and fresh-machine restore: PASS
-- Fresh PSY3 reopen with all public parameter state restored: PASS
+- All 20 public parameters are seeded to legal non-default values before version-1 preset save/load and fresh-machine restore: PASS
+- Fresh PSY3 reopen restores all 20/20 non-default public parameter values: PASS
 - Zephod SuperFM -> Master topology: PASS
 - Opaque state: none; persistence remains the historical public parameters: PASS
 
