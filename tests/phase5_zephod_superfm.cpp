@@ -192,6 +192,19 @@ double rms(const std::vector<float>& signal)
     return signal.empty() ? 0.0 : std::sqrt(sum / signal.size());
 }
 
+double tail_rms(const std::vector<float>& signal, std::size_t count)
+{
+    if (signal.empty() || count == 0) return 0.0;
+    if (count > signal.size()) count = signal.size();
+    double sum = 0.0;
+    const std::size_t start = signal.size() - count;
+    for (std::size_t i = start; i < signal.size(); ++i) {
+        const double v = static_cast<double>(signal[i]);
+        sum += v * v;
+    }
+    return std::sqrt(sum / static_cast<double>(count));
+}
+
 bool same_signal(const std::vector<float>& a, const std::vector<float>& b,
     double tolerance = 2.0e-4)
 {
@@ -200,6 +213,34 @@ bool same_signal(const std::vector<float>& a, const std::vector<float>& b,
         if (!near(a[i], b[i], tolerance)) return false;
     }
     return true;
+}
+
+bool same_magnitude_signal(const std::vector<float>& a, const std::vector<float>& b,
+    double tolerance)
+{
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        const double delta = std::fabs(std::fabs(static_cast<double>(a[i])) -
+            std::fabs(static_cast<double>(b[i])));
+        if (delta > tolerance) return false;
+    }
+    return true;
+}
+
+int sign_changes(const std::vector<float>& signal)
+{
+    int changes = 0;
+    int previous = 0;
+    for (float sample : signal) {
+        int current = 0;
+        if (sample > 1.0e-4f) current = 1;
+        else if (sample < -1.0e-4f) current = -1;
+        if (current != 0) {
+            if (previous != 0 && current != previous) ++changes;
+            previous = current;
+        }
+    }
+    return changes;
 }
 
 int verify_default_render(CMachineInterface* a, CMachineInterface* b,
@@ -261,27 +302,55 @@ int verify_noteoff_release(CMachineInterface* machine, const CMachineInfo* info)
     machine->SeqTick(0, psycle::plugin_interface::NOTE_NOTEOFF, 0, 0, 0);
     const std::vector<float> release = render_continuation(machine, 3000);
     if (release.empty()) return fail("SuperFM release render failed");
+
+    bool saw_active = false;
+    std::size_t last_active = 0;
+    for (std::size_t i = 0; i < release.size(); ++i) {
+        if (std::fabs(release[i]) > 1.0e-3f) {
+            saw_active = true;
+            last_active = i;
+        }
+    }
+    if (!saw_active || last_active + 1 < 2300 || last_active + 1 > 2450) {
+        return fail("SuperFM retained 2414-sample VCA release ended at the wrong duration");
+    }
     for (std::size_t i = release.size() - 32; i < release.size(); ++i) {
         if (!near(release[i], 0.0f, 1.0e-5)) {
             return fail("SuperFM retained VCA release no longer reaches silence");
         }
     }
-    std::printf("phase5-zephod-superfm: noteoff PASS release-default=2414 tail=silent\n");
+    std::printf(
+        "phase5-zephod-superfm: noteoff PASS release-default=2414 active-through=%zu tail=silent\n",
+        last_active + 1);
     return 0;
 }
 
-void configure_until_noteoff(CMachineInterface* machine)
+void configure_rate_transition(CMachineInterface* machine)
 {
-    machine->ParameterTweak(0, 16);
+    /* Keep both envelopes in a long attack when the rate changes, then let them
+    ** reach the historical until-noteoff sustain. Pulse/no-FM output makes the
+    ** absolute sample magnitude a direct envelope oracle while sign changes
+    ** retain a simple pitch oracle. */
+    machine->ParameterTweak(0, 4410);
     machine->ParameterTweak(1, 16);
     machine->ParameterTweak(2, 1);
     machine->ParameterTweak(3, 128);
-    machine->ParameterTweak(4, 1000);
-    machine->ParameterTweak(5, 16);
+    machine->ParameterTweak(4, 4410);
+    machine->ParameterTweak(5, 4410);
     machine->ParameterTweak(6, 16);
     machine->ParameterTweak(7, 1);
     machine->ParameterTweak(8, 128);
-    machine->ParameterTweak(9, 1000);
+    machine->ParameterTweak(9, 4410);
+    machine->ParameterTweak(10, 0);
+    machine->ParameterTweak(11, 0);
+    machine->ParameterTweak(12, 0);
+    machine->ParameterTweak(13, 0);
+    machine->ParameterTweak(14, 0);
+    machine->ParameterTweak(15, 0);
+    machine->ParameterTweak(16, 1);
+    machine->ParameterTweak(17, 0);
+    machine->ParameterTweak(18, 0);
+    machine->ParameterTweak(19, 128);
 }
 
 int verify_rate_transition(CMachineInterface* live, CMachineInterface* target,
@@ -293,21 +362,45 @@ int verify_rate_transition(CMachineInterface* live, CMachineInterface* target,
     target->pCB = &target_cb;
     apply_defaults(live, info);
     apply_defaults(target, info);
-    configure_until_noteoff(live);
-    configure_until_noteoff(target);
+    configure_rate_transition(live);
+    configure_rate_transition(target);
+
+    live->SeqTick(0, 69, 0, 0, 0);
+    target->SeqTick(0, 69, 0, 0, 0);
+
+    /* Advance both machines by the same 10 ms wall-clock interval while the
+    ** VCA/MOD envelopes are still in attack. */
+    const std::vector<float> live_before = render_continuation(live, 441);
+    const std::vector<float> target_before = render_continuation(target, 882);
+    if (live_before.empty() || target_before.empty() ||
+            rms(live_before) <= 0.01 || rms(target_before) <= 0.01 ||
+            std::fabs(std::fabs(static_cast<double>(live_before.back())) -
+                std::fabs(static_cast<double>(target_before.back()))) > 2.0) {
+        return fail("SuperFM in-flight rate-transition setup did not align at equal wall-clock time");
+    }
 
     live_cb.set_sample_rate(88200);
     live->SequencerTick();
-    live->Stop();
-    target->Stop();
 
-    const std::vector<float> live_signal = render_note(live, 1024);
-    const std::vector<float> target_signal = render_note(target, 1024);
-    if (live_signal.empty() || target_signal.empty() ||
-            !same_signal(live_signal, target_signal, 5.0e-4)) {
-        return fail("SuperFM live 44.1 -> 88.2 kHz envelope transition diverged from fresh target rate");
+    /* Do not Stop()/retrigger here: production driver reconfiguration leaves
+    ** machines alive. This continuation therefore checks the active attack
+    ** slope, oscillator pitch, and later until-noteoff sustain in one path. */
+    const std::vector<float> live_after = render_continuation(live, 10000);
+    const std::vector<float> target_after = render_continuation(target, 10000);
+    if (live_after.empty() || target_after.empty() ||
+            !same_magnitude_signal(live_after, target_after, 2.0)) {
+        return fail("SuperFM in-flight envelope timing changed across 44.1 -> 88.2 kHz transition");
     }
-    std::printf("phase5-zephod-superfm: rate-transition PASS sr=44100->88200 sustain<16=until-noteoff\n");
+    const int live_changes = sign_changes(live_after);
+    const int target_changes = sign_changes(target_after);
+    if (std::abs(live_changes - target_changes) > 1) {
+        return fail("SuperFM active-note pitch changed across 44.1 -> 88.2 kHz transition");
+    }
+    if (tail_rms(live_after, 256) <= 0.01 || tail_rms(target_after, 256) <= 0.01) {
+        return fail("SuperFM sustain<16 no longer remains active until noteoff after rate transition");
+    }
+    std::printf(
+        "phase5-zephod-superfm: rate-transition PASS sr=44100->88200 in-flight=attack pitch=stable sustain<16=until-noteoff\n");
     return 0;
 }
 
@@ -328,6 +421,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "phase5-zephod-superfm: FAIL: dlopen: %s\n", dlerror());
         return 1;
     }
+
     dlerror();
     GetInfoFn get_info = reinterpret_cast<GetInfoFn>(dlsym(library, "GetInfo"));
     CreateMachineFn create_machine = reinterpret_cast<CreateMachineFn>(dlsym(library, "CreateMachine"));
@@ -363,6 +457,6 @@ int main(int argc, char** argv)
     std::printf("phase5-zephod-superfm: PASS\n");
     std::printf("machine: Zephod SuperFM (Arguru Remix)\n");
     std::printf("abi: GetInfo/CreateMachine/DeleteMachine\n");
-    std::printf("dsp: deterministic FM + 0Cxx volume + Note Off release + live sample-rate envelope transition\n");
+    std::printf("dsp: deterministic FM + 0Cxx volume + timed Note Off release + in-flight sample-rate transition\n");
     return 0;
 }
