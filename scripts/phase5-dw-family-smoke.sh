@@ -27,12 +27,9 @@ NATIVE_LOG="$OUT/phase5-dw-family.log"
 STATE_LOG="$OUT/phase5-dw-family-state.log"
 SUMMARY="$OUT/summary.md"
 
-# DW EQ links Psycle's retained container/DSP libraries directly.
 make -C "$CPSYCLE/container/src"
 make -C "$CPSYCLE/dsp/src"
 
-# Prove each historical standalone makefile builds, cleans its own generated
-# module, and does not require deleting the shared plugin build directory.
 for i in "${!PLUGIN_DIRS[@]}"; do
   rm -f "${PLUGINS[$i]}"
   make -C "${PLUGIN_DIRS[$i]}"
@@ -86,6 +83,10 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 "$NATIVE_BIN" "${PLUGINS[@]}" 2>&1 | tee "$NATIVE_LOG"
 "$STATE_BIN" "$OUT" "${PLUGINS[@]}" 2>&1 | tee "$STATE_LOG"
 
+grep -F 'dw-metadata-hash[dw eq]=0xc82fe5a084c00d43' "$NATIVE_LOG" >/dev/null
+grep -F 'dw-metadata-hash[dw granulizer]=0x77e34d124f74ed41' "$NATIVE_LOG" >/dev/null
+grep -F 'dw-metadata-hash[dw IoPan]=0xd2b2cf8908d12251' "$NATIVE_LOG" >/dev/null
+grep -F 'dw-metadata-hash[dw Tremolo]=0x637aa08128ba99b8' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dw-family: machine PASS [dw eq]' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dw-family: machine PASS [dw granulizer]' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dw-family: machine PASS [dw IoPan]' "$NATIVE_LOG" >/dev/null
@@ -102,6 +103,7 @@ grep -F 'phase5-dw-family-state: seed PASS [dw IoPan]' "$STATE_LOG" >/dev/null
 grep -F 'phase5-dw-family-state: seed PASS [dw Tremolo]' "$STATE_LOG" >/dev/null
 grep -F 'phase5-dw-family-state: PASS machines=4' "$STATE_LOG" >/dev/null
 grep -F 'catchers: dw-eq:0 dw-granulizer:0 dw-iopan:0 dw-tremolo:0' "$STATE_LOG" >/dev/null
+grep -F 'state: EQ 12/12, Granulizer 36 writable non-default + runtime display state, IoPan 4/4, Tremolo 8/8; 0 opaque bytes' "$STATE_LOG" >/dev/null
 grep -F 'topology: 4/4 DW effects -> Master' "$STATE_LOG" >/dev/null
 
 [[ -s "$OUT/phase5-dw-family.psy" ]] || {
@@ -120,18 +122,20 @@ cat > "$SUMMARY" <<'EOF'
 
 - Four retained source-built DW identities audited: dw eq, dw granulizer, dw IoPan, dw Tremolo.
 - All four build independently as Linux native-machine `.so` modules and clean only their own outputs: PASS
-- Native ABI identity/version/type/geometry and complete parameter tables observed through the real modules: PASS
+- Native ABI identity/version/type/geometry and complete parameter tables are frozen by exact hashes: PASS
+  - dw eq: `0xc82fe5a084c00d43`
+  - dw granulizer: `0x77e34d124f74ed41`
+  - dw IoPan: `0xd2b2cf8908d12251`
+  - dw Tremolo: `0x637aa08128ba99b8`
 - dw eq default unity and live scaled-wrapper 44.1 -> 88.2 kHz coefficient reconfiguration: PASS
 - dw granulizer deterministic fixed-grain duration scales 10 samples @44.1 kHz -> 20 @88.2 kHz with random modulation disabled: PASS
 - dw IoPan default unity and historical full channel-flip matrix: PASS
 - dw Tremolo Depth=0 unity and live 44.1 -> 88.2 kHz wall-clock LFO timing: PASS
 - Production catcher identities: dw-eq:0, dw-granulizer:0, dw-iopan:0, dw-tremolo:0: PASS
+- Public state seeds: EQ 12/12; Granulizer 36 directly writable controls plus derived runtime display state; IoPan 4/4; Tremolo 8/8: PASS
 - Version-1 preset round-trip for each DW effect through a fresh MachineFactory instance: PASS
 - One-song four-machine fresh PSY3 reopen and all four DW -> Master topology edges: PASS
 - Opaque state: none.
-
-The first observation run emits native parameter-table hashes. They must be frozen
-into the regression before the Phase 5C DW roadmap checkbox is marked complete.
 EOF
 
 cat "$SUMMARY"
