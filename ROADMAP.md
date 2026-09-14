@@ -261,11 +261,16 @@ Phase 5B Pooplog-family preservation is complete for the nine retained source-bu
   - [x] Freeze the compatibility identity `Jezar Freeverb` / `Freeverb` / `Jezar`, version `0x0110`, effect/two-column geometry, catcher `arguru-freeverb:0`, and all five historical parameter records including the retained `Absortion` spelling.
   - [x] Preserve exact Dry=320/Wet=0 unity plus wet-only stereo comb timing at 44.1 kHz (1116 left / 1139 right) and live 88.2 kHz `SequencerTick()` network reinitialization (2232 left / 2278 right) without rewriting Freeverb comb/allpass equations.
   - [x] Verify all 5/5 public parameters with legal non-default values through version-1 preset restore and independent fresh PSY3 reopen, with zero opaque state and Jezar Freeverb-to-Master topology.
-- [ ] DW machines
+- [x] DW machines
+  - [x] Build and gate all four retained source-built D. W. Aley identities independently on Linux: dw eq, dw granulizer, dw IoPan and dw Tremolo.
+  - [x] Freeze native identity/version/type/geometry and complete parameter metadata with exact hashes (`0xc82fe5a084c00d43`, `0x77e34d124f74ed41`, `0xd2b2cf8908d12251`, `0x637aa08128ba99b8`).
+  - [x] Preserve representative historical DSP/timing behaviour: dw eq default unity and live 44.1 → 88.2 kHz coefficient reconfiguration, Granulizer fixed-grain 10→20-sample rate scaling with random modulation disabled, IoPan default unity/full channel flip, and Tremolo Depth=0 unity plus live wall-clock LFO rate scaling.
+  - [x] Verify production catcher identities `dw-eq:0`, `dw-granulizer:0`, `dw-iopan:0` and `dw-tremolo:0`, including version-1 preset restore, one four-machine fresh PSY3 reopen and all four effect-to-Master topology edges.
+  - [x] Preserve DW public state without inventing opaque payloads: EQ 12/12 state slots, Granulizer 38 `MPF_STATE` slots (36 writable controls plus two derived runtime values) while freezing its 12 structural label/null ABI slots only through metadata, IoPan 4/4 and Tremolo 8/8.
 - [ ] STK-derived Psycle machines where licensing/provenance permits
 - [ ] Remaining retained native generators/effects in the audited r12005 set
 
-The Druttis, JM, JME, Zephod and Yezar slices of Phase 5C are complete and gated by `.github/workflows/phase5-druttis-family.yml`, `.github/workflows/phase5-jm-drum.yml`, `.github/workflows/phase5-jme-family.yml`, `.github/workflows/phase5-zephod-superfm.yml` and `.github/workflows/phase5-yezar-freeverb.yml`. The remainder of Phase 5C stays open until each classic family has its own source-derived preservation evidence.
+The Druttis, JM, JME, Zephod, Yezar and DW slices of Phase 5C are complete and gated by `.github/workflows/phase5-druttis-family.yml`, `.github/workflows/phase5-jm-drum.yml`, `.github/workflows/phase5-jme-family.yml`, `.github/workflows/phase5-zephod-superfm.yml`, `.github/workflows/phase5-yezar-freeverb.yml` and `.github/workflows/phase5-dw-family.yml`. The remainder of Phase 5C stays open until each classic family has its own source-derived preservation evidence.
 
 ### 5D — preservation matrix
 
