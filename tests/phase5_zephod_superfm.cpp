@@ -252,14 +252,23 @@ int verify_default_render(CMachineInterface* a, CMachineInterface* b,
     b->pCB = &cb_b;
     apply_defaults(a, info);
     apply_defaults(b, info);
+
+    /* Hosts may render idle blocks before the first pattern event. That must not
+    ** pre-advance a fresh envelope or perturb the first note. Exercise only one
+    ** instance here so equality below proves idle rendering is state-neutral. */
+    const std::vector<float> idle = render_continuation(a, 256);
+    if (idle.empty() || rms(idle) > 1.0e-9) {
+        return fail("fresh SuperFM envelope became active before the first note");
+    }
+
     const std::vector<float> first = render_note(a, 2048);
     const std::vector<float> second = render_note(b, 2048);
     const double level = rms(first);
     if (first.empty() || second.empty() || level <= 0.01 ||
             !same_signal(first, second)) {
-        return fail("fresh default SuperFM instances are not deterministic and active");
+        return fail("fresh default SuperFM instances are not deterministic and active after idle rendering");
     }
-    std::printf("phase5-zephod-superfm: deterministic PASS rms=%.6f\n", level);
+    std::printf("phase5-zephod-superfm: deterministic PASS rms=%.6f idle-before-note=stable\n", level);
     return 0;
 }
 
@@ -379,12 +388,19 @@ int verify_rate_transition(CMachineInterface* live, CMachineInterface* target,
         return fail("SuperFM in-flight rate-transition setup did not align at equal wall-clock time");
     }
 
+    /* Finetune automation updates the parameter but historically does not
+    ** retune a note that is already sounding. A rate change must therefore
+    ** preserve the stored phase increment rather than rebuild from Vals[19]. */
+    live->ParameterTweak(19, 224);
+    target->ParameterTweak(19, 224);
+
     live_cb.set_sample_rate(88200);
     live->SequencerTick();
 
     /* Do not Stop()/retrigger here: production driver reconfiguration leaves
     ** machines alive. This continuation therefore checks the active attack
-    ** slope, oscillator pitch, and later until-noteoff sustain in one path. */
+    ** slope, the pre-existing sounding pitch despite pending Finetune, and
+    ** later until-noteoff sustain in one path. */
     const std::vector<float> live_after = render_continuation(live, 10000);
     const std::vector<float> target_after = render_continuation(target, 10000);
     if (live_after.empty() || target_after.empty() ||
@@ -394,13 +410,13 @@ int verify_rate_transition(CMachineInterface* live, CMachineInterface* target,
     const int live_changes = sign_changes(live_after);
     const int target_changes = sign_changes(target_after);
     if (std::abs(live_changes - target_changes) > 1) {
-        return fail("SuperFM active-note pitch changed across 44.1 -> 88.2 kHz transition");
+        return fail("SuperFM sounding pitch adopted pending Finetune during sample-rate transition");
     }
     if (tail_rms(live_after, 256) <= 0.01 || tail_rms(target_after, 256) <= 0.01) {
         return fail("SuperFM sustain<16 no longer remains active until noteoff after rate transition");
     }
     std::printf(
-        "phase5-zephod-superfm: rate-transition PASS sr=44100->88200 in-flight=attack pitch=stable sustain<16=until-noteoff\n");
+        "phase5-zephod-superfm: rate-transition PASS sr=44100->88200 in-flight=attack pitch=stored finetune-pending=ignored sustain<16=until-noteoff\n");
     return 0;
 }
 
