@@ -243,14 +243,19 @@ Phase 5B Pooplog-family preservation is complete for the nine retained source-bu
   - [x] Freeze native identity/version/type, four-column geometry and all 16 historical parameter names, descriptions, ranges, flags and defaults.
   - [x] Preserve deterministic drum/thump synthesis, historical `0Cxx` volume behaviour, the 256-sample Note Off release and live 44.1 → 88.2 kHz sample-rate reinitialization without rewriting synthesis equations.
   - [x] Verify production `PluginCatcher` identity `jmdrum:0`, `MachineFactory` instantiation, complete 16-parameter version-1 preset persistence, fresh PSY3 reopen and JM Drum-to-Master topology.
-- [ ] JME machines
+- [x] JME machines
+  - [x] Build and gate all four retained source-built JME identities independently on Linux: Blitz 1.2.1, Blitz 1.6, GameFX 1.3.1 and GameFX 1.6.
+  - [x] Freeze each historical generator identity/version/parameter geometry and complete parameter metadata with exact hashes (`0x93f6aa60b3378502`, `0x194a11c1f2c71a31`, `0x85b25fe270d3bdd0`, `0x1a597c19c5c61a60`).
+  - [x] Preserve deterministic default synthesis, fresh 88.2 kHz rendering and version-specific `0C80` semantics: Blitz 1.2.1, Blitz 1.6 and GameFX 1.3.1 retain note-on amplitude scaling while GameFX 1.6 retains its later `InitEffect` path without that note-on scaling.
+  - [x] Define Blitz 1.2.1 runtime state before production `Init()` by carrying forward the later Blitz lifecycle initialization only; no synthesis/filter/envelope equations are rewritten.
+  - [x] Verify production catcher identities `blitz12:0`, `blitzn:0`, `gamefx13:0`, `gamefxn:0`, complete public-parameter version-1 preset persistence, one four-machine fresh PSY3 reopen and all four generator-to-Master topology edges.
 - [ ] Zephod machines
 - [ ] Yezar machines
 - [ ] DW machines
 - [ ] STK-derived Psycle machines where licensing/provenance permits
 - [ ] Remaining retained native generators/effects in the audited r12005 set
 
-The Druttis and JM slices of Phase 5C are complete and gated by `.github/workflows/phase5-druttis-family.yml` and `.github/workflows/phase5-jm-drum.yml`. The remainder of Phase 5C stays open until each classic family has its own source-derived preservation evidence.
+The Druttis, JM and JME slices of Phase 5C are complete and gated by `.github/workflows/phase5-druttis-family.yml`, `.github/workflows/phase5-jm-drum.yml` and `.github/workflows/phase5-jme-family.yml`. The remainder of Phase 5C stays open until each classic family has its own source-derived preservation evidence.
 
 ### 5D — preservation matrix
 
