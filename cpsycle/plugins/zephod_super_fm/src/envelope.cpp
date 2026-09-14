@@ -71,3 +71,19 @@ void envelope::noteoff()
 		envcoef=envvol/(float)r;
 	}
 }
+
+void envelope::retime(float sample_ratio)
+{
+	if (sample_ratio <= 0.0f || sample_ratio == 1.0f)
+		return;
+
+	/* Keep an already-running stage continuous in wall-clock time when the host
+	** changes sample rate. Duration setters update a/d/s/r for future stage
+	** transitions, but the active stage's per-sample slope/progress also needs
+	** to move to the new sample grid. The fixed 32-sample anti-click transition
+	** intentionally remains sample-count based. */
+	if (envstate==ENV_ATT || envstate==ENV_DEC || envstate==ENV_REL)
+		envcoef/=sample_ratio;
+	else if (envstate==ENV_FINITE_SUS)
+		suscounter=(int)((float)suscounter*sample_ratio+0.5f);
+}
