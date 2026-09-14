@@ -1,0 +1,37 @@
+name: Phase 5 JME family preservation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  jme-family:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run JME family preservation regression
+        run: |
+          chmod +x scripts/phase5-jme-family-smoke.sh
+          scripts/phase5-jme-family-smoke.sh phase5-jme-family
+
+      - name: Upload JME family evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-jme-family
+          path: phase5-jme-family/

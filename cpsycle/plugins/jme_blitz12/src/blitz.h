@@ -49,9 +49,14 @@ public:
 
 private:
 	CSynthTrack track[MAX_TRACKS];
-	VOICEPAR globals;
-	int InitPos[4];
-	int slomo;
+	/* Production calls Init() before applying parameter defaults.  Blitz 1.2.1
+	** reads several VOICEPAR fields during Init(), so value-initialize the
+	** retained runtime state instead of depending on indeterminate storage.
+	** This mirrors the explicit memset added by the later Blitz 1.6 code and
+	** does not alter any synthesis or envelope equations. */
+	VOICEPAR globals{};
+	int InitPos[4]{};
+	int slomo{0};
 	pwm InitLoop[4];
 	lfo SyncViber;
 	lfo FiltViber;
