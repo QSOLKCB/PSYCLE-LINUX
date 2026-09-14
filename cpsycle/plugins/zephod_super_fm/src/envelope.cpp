@@ -4,7 +4,14 @@
 
 envelope::envelope()
 {
-	envcoef=0;
+	a=1;
+	d=1;
+	s=0;
+	r=1;
+	envstate=ENV_NONE;
+	envvol=0.0f;
+	susvol=0.0f;
+	envcoef=0.0f;
 	suscounter=0;
 }
 
@@ -14,7 +21,11 @@ envelope::~envelope()
 
 void envelope::reset()
 {
-	if(envstate==ENV_NONE)
+	/* A stopped or zero-level envelope must start a fresh attack.  The retained
+	** code used the anti-click path whenever envstate was non-NONE, but at zero
+	** level that produces envcoef == 0 and can leave the first/retriggered note
+	** stuck in ENV_ANTICLICK forever. */
+	if(envstate==ENV_NONE || envvol<=0.0f)
 	{
 		envstate=ENV_ATT;
 		envcoef=1.0f/(float)a;
