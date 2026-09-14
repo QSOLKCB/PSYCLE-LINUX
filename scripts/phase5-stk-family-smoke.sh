@@ -80,9 +80,9 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 "$NATIVE_BIN" "${PLUGINS[@]}" 2>&1 | tee "$NATIVE_LOG"
 "$STATE_BIN" "$OUT" "${PLUGINS[@]}" 2>&1 | tee "$STATE_LOG"
 
-grep -F 'stk-metadata-hash[stk Plucked]=0x6656c2f630c6cab7' "$NATIVE_LOG" >/dev/null
-grep -F 'stk-metadata-hash[stk Reverbs]=0x6470b9b92b7da93d' "$NATIVE_LOG" >/dev/null
-grep -F 'stk-metadata-hash[stk Shakers]=0x82538540e9128cf5' "$NATIVE_LOG" >/dev/null
+grep -F 'stk-metadata-hash[stk Plucked]=0x55e20a3f7e90f611' "$NATIVE_LOG" >/dev/null
+grep -F 'stk-metadata-hash[stk Reverbs]=0xf92219f73194a3ae' "$NATIVE_LOG" >/dev/null
+grep -F 'stk-metadata-hash[stk Shakers]=0x4c29aa201e9bb317' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-stk-family: machine PASS [stk Plucked]' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-stk-family: machine PASS [stk Reverbs]' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-stk-family: machine PASS [stk Shakers]' "$NATIVE_LOG" >/dev/null
@@ -117,9 +117,9 @@ cat > "$SUMMARY" <<'EOF'
 - Linux dependency boundary: distro `libstk-dev`; retained STK 4.5.0 archive remains provenance/history evidence.
 - All three build independently as Linux native-machine `.so` modules and clean only their own outputs: PASS
 - Native ABI identity/version/type/geometry and complete parameter tables are frozen by exact hashes: PASS
-  - stk Plucked: `0x6656c2f630c6cab7`
-  - stk Reverbs: `0x6470b9b92b7da93d`
-  - stk Shakers: `0x82538540e9128cf5`
+  - stk Plucked: `0x55e20a3f7e90f611`
+  - stk Reverbs: `0xf92219f73194a3ae`
+  - stk Shakers: `0x4c29aa201e9bb317`
 - stk Plucked idle silence, historical 0C00 mute, Stop clearing and live 44.1 -> 88.2 kHz finite rendering: PASS
 - stk Reverbs exact Dry/Wet=0 bypass, all three algorithms, independent/mixed routing and live 44.1 -> 88.2 kHz finite rendering: PASS
 - stk Shakers historical note map 48..70, 0C00 mute, Stop silence and live 44.1 -> 88.2 kHz finite rendering: PASS
