@@ -30,14 +30,16 @@ class PluginFxCallback : public CFxCallback
 	}
 	inline virtual int GetTickLength() const {
 		if (callback && callback->vtable &&
-				callback->vtable->beatspertick && callback->vtable->beatspersample) {
-			const double beats_per_tick = callback->vtable->beatspertick(callback);
+				callback->vtable->currbeatsperline && callback->vtable->beatspersample) {
+			const double beats_per_line = callback->vtable->currbeatsperline(callback);
 			const double beats_per_sample = callback->vtable->beatspersample(callback);
-			if (beats_per_tick > 0.0 && beats_per_sample > 0.0) {
-				/* Preserve Psycle's historical integer sample count by truncating
-				** the exact host timing ratio once, rather than scaling an already
-				** truncated value when the sample rate changes. */
-				return (int)(beats_per_tick / beats_per_sample);
+			if (beats_per_line > 0.0 && beats_per_sample > 0.0) {
+				/* Native Psycle machines historically call this a tick length, but
+				** the ABI value is the current tracker line duration. Host TPB is a
+				** finer transport clock (normally 24) and must not shorten the line
+				** seen by plugins (normally LPB 4). Preserve the historical integer
+				** sample count by truncating the exact line/sample ratio once. */
+				return (int)(beats_per_line / beats_per_sample);
 			}
 		}
 		const int samplerate = GetSamplingRate();

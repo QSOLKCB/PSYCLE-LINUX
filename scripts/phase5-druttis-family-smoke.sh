@@ -112,14 +112,17 @@ g++ -std=c++17 -Wall -Wextra -Werror=return-type \
     "${COMMON_LIBDIRS[@]}" "${COMMON_LIBS[@]}"
 
 # Gate the exact PluginFxCallback timing adapter used by production native
-# machines. These values deliberately derive 88.2 kHz timing independently,
-# rather than doubling an already-truncated 44.1 kHz tick length.
+# machines. Native GetTickLength is a tracker-line duration (LPB), not the
+# finer transport tick selected by song TPB. The final marker uses a real
+# Song -> Player -> MachineCallback chain with the normal LPB=4 / TPB=24 split.
 stdbuf -o0 -e0 "$CALLBACK_BIN" 2>&1 | tee "$CALLBACK_LOG"
 EXPECTED_CALLBACK_TIMING=(
-    'phase5-druttis-production-callback: tick PASS sr=44100 bpm=120 tpb=4 samples=5512'
-    'phase5-druttis-production-callback: tick PASS sr=88200 bpm=120 tpb=4 samples=11025'
-    'phase5-druttis-production-callback: tick PASS sr=88200 bpm=137 tpb=4 samples=9656'
-    'phase5-druttis-production-callback: tick PASS sr=88200 bpm=120 tpb=8 samples=5512'
+    'phase5-druttis-production-callback: line PASS sr=44100 bpm=120 lpb=4 tpb=24 samples=5512'
+    'phase5-druttis-production-callback: line PASS sr=88200 bpm=120 lpb=4 tpb=24 samples=11025'
+    'phase5-druttis-production-callback: line PASS sr=88200 bpm=137 lpb=4 tpb=24 samples=9656'
+    'phase5-druttis-production-callback: line PASS sr=88200 bpm=120 lpb=8 tpb=24 samples=5512'
+    'phase5-druttis-production-callback: line PASS sr=88200 bpm=120 lpb=4 tpb=48 samples=11025'
+    'phase5-druttis-production-callback: actual-player PASS sr=44100 bpm=120 lpb=4 tpb=24 transport-tick=918 line=5512'
 )
 for marker in "${EXPECTED_CALLBACK_TIMING[@]}"; do
     grep -Fqx "$marker" "$CALLBACK_LOG" || {
@@ -127,7 +130,7 @@ for marker in "${EXPECTED_CALLBACK_TIMING[@]}"; do
         exit 1
     }
 done
-grep -Fqx 'phase5-druttis-production-callback: PASS host-derived native tick timing' "$CALLBACK_LOG" || {
+grep -Fqx 'phase5-druttis-production-callback: PASS tracker-line-derived native timing' "$CALLBACK_LOG" || {
     echo "Production native callback timing completion marker missing" >&2
     exit 1
 }
@@ -190,9 +193,11 @@ cat > "$SUMMARY" <<'EOF'
 - Direct clean removes every Druttis loadable `.so`: PASS
 - Native ABI / identity / version / parameter geometry: PASS
 - Frozen complete parameter metadata hashes for all seven machines: PASS
-- Production `PluginFxCallback` derives native tick length from host timing: PASS
-- 44.1 kHz / 120 BPM / TPB 4 native tick = 5512 samples: PASS
-- 88.2 kHz / 120 BPM / TPB 4 native tick = 11025 samples: PASS
+- Production `PluginFxCallback` derives native tick length from the current tracker-line duration: PASS
+- Real Song/Player callback with LPB 4 / TPB 24 distinguishes 5512-sample line from 918-sample transport tick: PASS
+- 44.1 kHz / 120 BPM / LPB 4 native line = 5512 samples: PASS
+- 88.2 kHz / 120 BPM / LPB 4 native line = 11025 samples: PASS
+- Native line timing is independent of finer transport TPB: PASS
 - Native generator observations honor the historical 256-sample `MAX_BUFFER_LENGTH`: PASS
 - Sublime timing is initialized before every note trigger: PASS
 - Deterministic/stochastic historical DSP paths: PASS
