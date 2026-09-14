@@ -209,6 +209,16 @@ int mi_describevalue(CMachineInterface* mi, char* txt, int const param, int cons
 	return mi->DescribeValue(txt, param, value); 
 }
 
+int mi_hostevent(CMachineInterface* mi, int const eventNr, int const val1, float const val2)
+{
+	return mi->HostEvent(eventNr, val1, val2);
+}
+
+void mi_seqtick(CMachineInterface* mi, int channel, int note, int ins, int cmd, int val)
+{
+	mi->SeqTick(channel, note, ins, cmd, val);
+}
+
 void mi_unused3(CMachineInterface* mi)
 {
 	mi->unused3();
