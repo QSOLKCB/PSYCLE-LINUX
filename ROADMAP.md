@@ -249,13 +249,19 @@ Phase 5B Pooplog-family preservation is complete for the nine retained source-bu
   - [x] Preserve deterministic default synthesis, fresh 88.2 kHz rendering and version-specific `0C80` semantics: Blitz 1.2.1, Blitz 1.6 and GameFX 1.3.1 retain note-on amplitude scaling while GameFX 1.6 retains its later `InitEffect` path without that note-on scaling.
   - [x] Define Blitz 1.2.1 runtime state before production `Init()` by carrying forward the later Blitz lifecycle initialization only; no synthesis/filter/envelope equations are rewritten.
   - [x] Verify production catcher identities `blitz12:0`, `blitzn:0`, `gamefx13:0`, `gamefxn:0`, complete public-parameter version-1 preset persistence, one four-machine fresh PSY3 reopen and all four generator-to-Master topology edges.
-- [ ] Zephod machines
+- [x] Zephod machines
+  - [x] Build and gate the retained source-built Zephod SuperFM (Arguru Remix) generator independently on Linux as `zephod-superfm.so`.
+  - [x] Freeze native identity/version/type, two-column geometry and all 20 historical parameter names, descriptions, ranges, flags and defaults for catcher identity `zephod-superfm:0`.
+  - [x] Define the envelope lifecycle so stopped/zero-level notes enter a real attack instead of a zero-coefficient anti-click deadlock, while retaining the anti-click path for active retriggers.
+  - [x] Preserve deterministic FM synthesis, historical `0C80` volume scaling, the default 2414-sample smooth Note Off release and live 44.1 → 88.2 kHz envelope reconfiguration without rewriting oscillator/FM-routing equations.
+  - [x] Preserve the historical `sustain < 16 => until noteoff` rule during live sample-rate changes for both VCA and modulation envelopes.
+  - [x] Verify production `PluginCatcher` / `MachineFactory` discovery, complete 20-parameter version-1 preset persistence, fresh PSY3 reopen and Zephod SuperFM-to-Master topology.
 - [ ] Yezar machines
 - [ ] DW machines
 - [ ] STK-derived Psycle machines where licensing/provenance permits
 - [ ] Remaining retained native generators/effects in the audited r12005 set
 
-The Druttis, JM and JME slices of Phase 5C are complete and gated by `.github/workflows/phase5-druttis-family.yml`, `.github/workflows/phase5-jm-drum.yml` and `.github/workflows/phase5-jme-family.yml`. The remainder of Phase 5C stays open until each classic family has its own source-derived preservation evidence.
+The Druttis, JM, JME and Zephod slices of Phase 5C are complete and gated by `.github/workflows/phase5-druttis-family.yml`, `.github/workflows/phase5-jm-drum.yml`, `.github/workflows/phase5-jme-family.yml` and `.github/workflows/phase5-zephod-superfm.yml`. The remainder of Phase 5C stays open until each classic family has its own source-derived preservation evidence.
 
 ### 5D — preservation matrix
 
