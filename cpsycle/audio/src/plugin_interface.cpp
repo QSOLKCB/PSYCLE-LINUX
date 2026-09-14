@@ -50,20 +50,26 @@ class PluginFxCallback : public CFxCallback
 				** for genuinely fractional durations while moving one representable
 				** step upward first so an exact integral duration that landed one ULP
 				** low (for example 25199.999999999996) is not shortened by a sample.
-				** The native ABI returns int, so saturate valid oversized durations
-				** at INT_MAX instead of invoking undefined floating-to-int narrowing. */
+				**
+				** Retained native machines perform further signed-int arithmetic on
+				** this ABI value. Sublime has the largest direct multiplier: Glide can
+				** multiply the tick length by 256 before shifting; Bexphase uses 32,
+				** and CrossDelay uses at most 8 lines * 2. Keep the host-exposed tick
+				** length at INT_MAX / 256 so all of those legacy products remain
+				** representable instead of overflowing after a nominally safe cast. */
 				const double samples_per_line = beats_per_line / beats_per_sample;
-				const double max_tick_length =
-					(double)std::numeric_limits<int>::max();
+				const int legacy_tick_limit =
+					std::numeric_limits<int>::max() / 256;
+				const double max_tick_length = (double)legacy_tick_limit;
 				if (!std::isfinite(samples_per_line) ||
 						samples_per_line > max_tick_length) {
-					return std::numeric_limits<int>::max();
+					return legacy_tick_limit;
 				}
 				const double stabilized_samples = std::nextafter(samples_per_line,
 					std::numeric_limits<double>::infinity());
 				if (!std::isfinite(stabilized_samples) ||
 						stabilized_samples > max_tick_length) {
-					return std::numeric_limits<int>::max();
+					return legacy_tick_limit;
 				}
 				return (int)stabilized_samples;
 			}
