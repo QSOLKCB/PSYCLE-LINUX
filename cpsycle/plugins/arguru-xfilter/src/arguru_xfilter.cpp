@@ -9,6 +9,7 @@
 // #include <psycle/helpers/dsp.hpp>
 // #include <universalis/stdlib/cstdint.hpp>
 // #include <universalis/os/aligned_alloc.hpp>
+#include <cstdint>
 #include <cstdio>
 
 using namespace psycle::plugin_interface;
@@ -156,7 +157,20 @@ void mi::SetDelay(int delay) {
 }
 
 void mi::SetDelayTicks(int ticks) {
-	int delaySR = ticks*pCB->GetTickLength()*2;
+	/* Delay time's historical maximum is 88200 samples at 44.1 kHz, i.e.
+	** two seconds. Lines mode normally reaches the same envelope (8 lines *
+	** 5512 samples * 2 ~= 88200). Keep that existing resource contract at
+	** every sample rate instead of allowing extreme tracker timing to grow
+	** unchecked multi-gigabyte buffers. Use 64-bit arithmetic before capping
+	** so the bound itself cannot be bypassed by signed-int overflow. */
+	const int64_t requested_delay =
+		(int64_t)ticks * (int64_t)pCB->GetTickLength() * 2;
+	const int64_t max_resource_delay =
+		((int64_t)paraDelay.MaxValue * (int64_t)currentSR) / 44100;
+	const int64_t bounded_delay = requested_delay > max_resource_delay
+		? max_resource_delay
+		: requested_delay;
+	int delaySR = bounded_delay > 0 ? (int)bounded_delay : 0;
 	if (delaySR > max_delay_samples) {
 		do {
 			max_delay_samples <<=1;
