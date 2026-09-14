@@ -73,6 +73,11 @@ void timing_callback_init(TimingCallback& self)
     self.vtable.beatspersample = callback_beatspersample;
     self.vtable.currbeatsperline = callback_currbeatsperline;
     self.base.vtable = &self.vtable;
+    /* Model an attached/live host without pulling the legacy Player definition
+    ** into this C++ translation unit. The synthetic vtable above owns every
+    ** timing read; production only uses player presence to distinguish it from
+    ** a freshly initialized headless callback. */
+    self.base.player = (struct psy_audio_Player*)1;
     self.sample_rate = 44100.0;
     self.bpm = 120.0;
     self.lpb = 4.0;
@@ -100,6 +105,52 @@ int expect_line(CMachineInterface& machine, TimingCallback& callback,
 }
 
 class DummyMachine : public CMachineInterface {};
+
+int expect_headless_callback_fallback()
+{
+    psy_audio_MachineCallback callback;
+    DummyMachine machine;
+    int rc = 0;
+
+    psy_audio_machinecallback_init(&callback);
+    if (callback.player != nullptr) {
+        std::fprintf(stderr,
+            "phase5-druttis-production-callback: FAIL fresh callback unexpectedly has a player\n");
+        return 1;
+    }
+
+    const double sentinel_beats_per_line = callback.vtable->currbeatsperline(&callback);
+    const double sentinel_beats_per_sample = callback.vtable->beatspersample(&callback);
+    if ((int)sentinel_beats_per_line != 4096 || (int)sentinel_beats_per_sample != 512) {
+        std::fprintf(stderr,
+            "phase5-druttis-production-callback: FAIL fresh callback sentinels changed line=%.0f sample=%.0f\n",
+            sentinel_beats_per_line, sentinel_beats_per_sample);
+        return 1;
+    }
+
+    mi_resetcallback(&machine);
+    mi_setcallback(&machine, &callback);
+    if (!machine.pCB) {
+        std::fprintf(stderr,
+            "phase5-druttis-production-callback: FAIL adapter was not installed for headless callback\n");
+        return 1;
+    }
+
+    const int actual = machine.pCB->GetTickLength();
+    if (actual != 5292) {
+        rc = 1;
+        std::fprintf(stderr,
+            "phase5-druttis-production-callback: FAIL headless fallback expected=5292 got=%d sentinel-ratio=%d\n",
+            actual, (int)(sentinel_beats_per_line / sentinel_beats_per_sample));
+    } else {
+        std::printf(
+            "phase5-druttis-production-callback: headless-fallback PASS sentinel-ratio=8 fallback=5292\n");
+    }
+
+    mi_dispose(&machine);
+    machine.pCB = nullptr;
+    return rc;
+}
 
 int expect_real_player_callback()
 {
@@ -181,6 +232,7 @@ int main()
             (rc = expect_line(machine, callback, 88200.0, 137.0, 4.0, 24.0, 9656)) == 0 &&
             (rc = expect_line(machine, callback, 88200.0, 120.0, 8.0, 24.0, 5512)) == 0 &&
             (rc = expect_line(machine, callback, 88200.0, 120.0, 4.0, 48.0, 11025)) == 0 &&
+            (rc = expect_headless_callback_fallback()) == 0 &&
             (rc = expect_real_player_callback()) == 0) {
         std::printf("phase5-druttis-production-callback: PASS tracker-line-derived native timing\n");
     }
