@@ -123,11 +123,14 @@ g++ -std=c++17 -Wall -Wextra -Werror=return-type \
 
 # Gate the exact PluginFxCallback timing adapter used by production native
 # machines. Native GetTickLength is a tracker-line duration (LPB), not the
-# finer transport tick selected by song TPB. The final marker uses a real
-# Song -> Player -> MachineCallback chain with the normal LPB=4 / TPB=24 split.
+# finer transport tick selected by song TPB. Integral line durations that land
+# one floating-point step low must be preserved without rounding genuinely
+# fractional line durations upward. The final marker uses a real Song -> Player
+# -> MachineCallback chain with the normal LPB=4 / TPB=24 split.
 stdbuf -o0 -e0 "$CALLBACK_BIN" 2>&1 | tee "$CALLBACK_LOG"
 EXPECTED_CALLBACK_TIMING=(
     'phase5-druttis-production-callback: line PASS sr=44100 bpm=120 lpb=4 tpb=24 samples=5512'
+    'phase5-druttis-production-callback: line PASS sr=44100 bpm=35 lpb=3 tpb=24 samples=25200'
     'phase5-druttis-production-callback: line PASS sr=88200 bpm=120 lpb=4 tpb=24 samples=11025'
     'phase5-druttis-production-callback: line PASS sr=88200 bpm=137 lpb=4 tpb=24 samples=9656'
     'phase5-druttis-production-callback: line PASS sr=88200 bpm=120 lpb=8 tpb=24 samples=5512'
@@ -205,7 +208,8 @@ cat > "$SUMMARY" <<'EOF'
 - Frozen complete parameter metadata hashes for all seven machines: PASS
 - Production `PluginFxCallback` derives native tick length from the current tracker-line duration: PASS
 - Real Song/Player callback with LPB 4 / TPB 24 distinguishes 5512-sample line from 918-sample transport tick: PASS
-- 44.1 kHz / 120 BPM / LPB 4 native line = 5512 samples: PASS
+- 44.1 kHz / 120 BPM / LPB 4 fractional native line truncates to 5512 samples: PASS
+- 44.1 kHz / 35 BPM / LPB 3 exact native line remains 25200 samples: PASS
 - 88.2 kHz / 120 BPM / LPB 4 native line = 11025 samples: PASS
 - Native line timing is independent of finer transport TPB: PASS
 - Native generator observations honor the historical 256-sample `MAX_BUFFER_LENGTH`: PASS
