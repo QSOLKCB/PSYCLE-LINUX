@@ -260,33 +260,66 @@ int verify_lines_mode_tick_scaling(CMachineInterface* machine)
 
 int verify_lines_mode_resource_cap(CMachineInterface* machine)
 {
-    /* A large but ABI-valid tick length must not make CrossDelay allocate from
-    ** the raw Lines product. Its historical Delay-time parameter already caps
-    ** the machine at 88200 samples (two seconds) at 44.1 kHz, so Lines mode
-    ** must use the same resource ceiling. A 100000-sample tick with three
-    ** lines requests 600000 raw samples but must render as an 88200-sample
-    ** delay instead. */
-    TestCallback callback(44100, 100000);
-    const int values[6] = {4, 0, 0, 256, 1, 3};
-    std::vector<float> left(88202, 0.0f);
-    std::vector<float> right(88202, 0.0f);
-    left[0] = 1.0f;
-    right[0] = 1.0f;
+    /* Preserve historical Lines timing beyond the sample-mode two-second
+    ** parameter envelope. At 44.1 kHz / 60 BPM / LPB4 one tracker line is
+    ** 11025 samples; Lines=8 therefore requests 176400 samples and must remain
+    ** exactly that long. */
+    TestCallback callback(44100, 11025);
+    const int values[6] = {4, 0, 0, 256, 1, 8};
+    const int slow_delay = 176400;
+    std::vector<float> slow_left(slow_delay + 2, 0.0f);
+    std::vector<float> slow_right(slow_delay + 2, 0.0f);
+    slow_left[0] = 1.0f;
+    slow_right[0] = 1.0f;
 
     machine->pCB = &callback;
     machine->Init();
     apply_values(machine, values);
-    machine->Work(left.data(), right.data(), static_cast<int>(left.size()), 1);
+    machine->Work(slow_left.data(), slow_right.data(),
+        static_cast<int>(slow_left.size()), 1);
 
-    for (std::size_t i = 0; i < left.size(); ++i) {
-        const float expected_left = (i == 88200) ? 1.0f : 0.0f;
-        const float expected_right = (i == 44100) ? 1.0f : 0.0f;
-        if (!near(left[i], expected_left) || !near(right[i], expected_right)) {
-            return fail("Lines mode resource ceiling changed");
+    for (std::size_t i = 0; i < slow_left.size(); ++i) {
+        const float expected_left = (i == static_cast<std::size_t>(slow_delay))
+            ? 1.0f : 0.0f;
+        const float expected_right =
+            (i == static_cast<std::size_t>(slow_delay / 2)) ? 1.0f : 0.0f;
+        if (!near(slow_left[i], expected_left) ||
+                !near(slow_right[i], expected_right)) {
+            return fail("slow-tempo Lines delay was truncated");
         }
     }
     std::printf(
-        "phase5-arguru-xfilter: resource-cap PASS requested=600000 bounded=88200\n");
+        "phase5-arguru-xfilter: slow-lines PASS requested=176400 preserved=176400\n");
+
+    /* Only genuinely unsafe allocations are capped. CrossDelay permits a
+    ** 2^20-sample ring and reserves eight samples for its historical write
+    ** cursor, so the largest exposed delay is 1048568 samples. An extreme
+    ** 1,000,000-sample tick with eight lines requests 16,000,000 samples but
+    ** must stop at that allocation-derived ceiling rather than allocating
+    ** hundreds of MiB. */
+    callback.set_tick_length(1000000);
+    machine->SequencerTick();
+    const int max_buffer_samples = 1 << 20;
+    const int safe_delay = max_buffer_samples - 8;
+    std::vector<float> capped_left(safe_delay + 2, 0.0f);
+    std::vector<float> capped_right(safe_delay + 2, 0.0f);
+    capped_left[0] = 1.0f;
+    capped_right[0] = 1.0f;
+    machine->Work(capped_left.data(), capped_right.data(),
+        static_cast<int>(capped_left.size()), 1);
+
+    for (std::size_t i = 0; i < capped_left.size(); ++i) {
+        const float expected_left = (i == static_cast<std::size_t>(safe_delay))
+            ? 1.0f : 0.0f;
+        const float expected_right =
+            (i == static_cast<std::size_t>(safe_delay / 2)) ? 1.0f : 0.0f;
+        if (!near(capped_left[i], expected_left) ||
+                !near(capped_right[i], expected_right)) {
+            return fail("Lines mode allocation safety ceiling changed");
+        }
+    }
+    std::printf(
+        "phase5-arguru-xfilter: resource-cap PASS requested=16000000 bounded=1048568 buffer-limit=1048576\n");
     return 0;
 }
 
@@ -388,6 +421,6 @@ int main(int argc, char** argv)
     std::printf("machine: Arguru CrossDelay\n");
     std::printf("parameters: 6\n");
     std::printf("abi: GetInfo/CreateMachine/DeleteMachine\n");
-    std::printf("dsp: dry unity + sample-delay stereo offset + sample-rate scaling + Lines mode + bounded Lines resources\n");
+    std::printf("dsp: dry unity + sample-delay stereo offset + sample-rate scaling + Lines mode + preserved long Lines timing + bounded extreme Lines resources\n");
     return 0;
 }
