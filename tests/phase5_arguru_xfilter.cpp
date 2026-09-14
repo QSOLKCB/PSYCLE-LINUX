@@ -47,11 +47,12 @@ const ExpectedParameter EXPECTED_PARAMETERS[] = {
 
 class TestCallback : public CFxCallback {
 public:
-    TestCallback(int sample_rate, int tick_length)
-        : sample_rate_(sample_rate), tick_length_(tick_length) {}
+    TestCallback(int sample_rate, int tick_length, int bpm = 120)
+        : sample_rate_(sample_rate), tick_length_(tick_length), bpm_(bpm) {}
 
     void set_sample_rate(int sample_rate) { sample_rate_ = sample_rate; }
     void set_tick_length(int tick_length) { tick_length_ = tick_length; }
+    void set_bpm(int bpm) { bpm_ = bpm; }
 
     void MessBox(const char*, const char*, unsigned int) const override {}
     int CallbackFunc(int, int, int, void*) override { return 0; }
@@ -59,13 +60,14 @@ public:
     float* unused1(int, int) override { return nullptr; }
     int GetTickLength() const override { return tick_length_; }
     int GetSamplingRate() const override { return sample_rate_; }
-    int GetBPM() const override { return 120; }
+    int GetBPM() const override { return bpm_; }
     int GetTPB() const override { return 4; }
     bool FileBox(bool, char[], char[]) override { return false; }
 
 private:
     int sample_rate_;
     int tick_length_;
+    int bpm_;
 };
 
 int fail(const char* message)
@@ -258,68 +260,89 @@ int verify_lines_mode_tick_scaling(CMachineInterface* machine)
     return 0;
 }
 
+int verify_delay_impulse(CMachineInterface* machine, int delay,
+    const char* failure)
+{
+    std::vector<float> left(delay + 2, 0.0f);
+    std::vector<float> right(delay + 2, 0.0f);
+    left[0] = 1.0f;
+    right[0] = 1.0f;
+    machine->Work(left.data(), right.data(), static_cast<int>(left.size()), 1);
+
+    for (std::size_t i = 0; i < left.size(); ++i) {
+        const float expected_left = (i == static_cast<std::size_t>(delay))
+            ? 1.0f : 0.0f;
+        const float expected_right =
+            (i == static_cast<std::size_t>(delay / 2)) ? 1.0f : 0.0f;
+        if (!near(left[i], expected_left) || !near(right[i], expected_right)) {
+            return fail(failure);
+        }
+    }
+    return 0;
+}
+
 int verify_lines_mode_resource_cap(CMachineInterface* machine)
 {
     /* Preserve historical Lines timing beyond the sample-mode two-second
     ** parameter envelope. At 44.1 kHz / 60 BPM / LPB4 one tracker line is
     ** 11025 samples; Lines=8 therefore requests 176400 samples and must remain
     ** exactly that long. */
-    TestCallback callback(44100, 11025);
+    TestCallback callback(44100, 11025, 60);
     const int values[6] = {4, 0, 0, 256, 1, 8};
     const int slow_delay = 176400;
-    std::vector<float> slow_left(slow_delay + 2, 0.0f);
-    std::vector<float> slow_right(slow_delay + 2, 0.0f);
-    slow_left[0] = 1.0f;
-    slow_right[0] = 1.0f;
 
     machine->pCB = &callback;
     machine->Init();
     apply_values(machine, values);
-    machine->Work(slow_left.data(), slow_right.data(),
-        static_cast<int>(slow_left.size()), 1);
-
-    for (std::size_t i = 0; i < slow_left.size(); ++i) {
-        const float expected_left = (i == static_cast<std::size_t>(slow_delay))
-            ? 1.0f : 0.0f;
-        const float expected_right =
-            (i == static_cast<std::size_t>(slow_delay / 2)) ? 1.0f : 0.0f;
-        if (!near(slow_left[i], expected_left) ||
-                !near(slow_right[i], expected_right)) {
-            return fail("slow-tempo Lines delay was truncated");
-        }
+    if (verify_delay_impulse(machine, slow_delay,
+            "slow-tempo Lines delay was truncated") != 0) {
+        return 1;
     }
     std::printf(
         "phase5-arguru-xfilter: slow-lines PASS requested=176400 preserved=176400\n");
 
-    /* Only genuinely unsafe allocations are capped. CrossDelay permits a
-    ** 2^20-sample ring and reserves eight samples for its historical write
-    ** cursor, so the largest exposed delay is 1048568 samples. An extreme
-    ** 1,000,000-sample tick with eight lines requests 16,000,000 samples but
-    ** must stop at that allocation-derived ceiling rather than allocating
-    ** hundreds of MiB. */
-    callback.set_tick_length(1000000);
+    /* Codex's supported edge: at 96 kHz / 32 BPM / LPB1 a tracker line is
+    ** 180000 samples. The default Lines=3 therefore requests 1080000 samples,
+    ** which is ordinary host timing and must not hit the resource guard. */
+    callback.set_sample_rate(96000);
+    callback.set_bpm(32);
+    callback.set_tick_length(180000);
+    machine->Vals[5] = 3;
     machine->SequencerTick();
-    const int max_buffer_samples = 1 << 20;
-    const int safe_delay = max_buffer_samples - 8;
-    std::vector<float> capped_left(safe_delay + 2, 0.0f);
-    std::vector<float> capped_right(safe_delay + 2, 0.0f);
-    capped_left[0] = 1.0f;
-    capped_right[0] = 1.0f;
-    machine->Work(capped_left.data(), capped_right.data(),
-        static_cast<int>(capped_left.size()), 1);
-
-    for (std::size_t i = 0; i < capped_left.size(); ++i) {
-        const float expected_left = (i == static_cast<std::size_t>(safe_delay))
-            ? 1.0f : 0.0f;
-        const float expected_right =
-            (i == static_cast<std::size_t>(safe_delay / 2)) ? 1.0f : 0.0f;
-        if (!near(capped_left[i], expected_left) ||
-                !near(capped_right[i], expected_right)) {
-            return fail("Lines mode allocation safety ceiling changed");
-        }
+    const int supported_default_delay = 1080000;
+    if (verify_delay_impulse(machine, supported_default_delay,
+            "96 kHz / 32 BPM / LPB1 default Lines delay was truncated") != 0) {
+        return 1;
     }
     std::printf(
-        "phase5-arguru-xfilter: resource-cap PASS requested=16000000 bounded=1048568 buffer-limit=1048576\n");
+        "phase5-arguru-xfilter: supported-lines PASS requested=1080000 preserved=1080000\n");
+
+    /* The complete ordinary host envelope is BPM 32 / LPB1 with Lines=8.
+    ** CrossDelay's x2 convention makes that exactly 30 seconds, or 2880000
+    ** samples at 96 kHz. Freeze that maximum before checking the guard. */
+    machine->ParameterTweak(5, 8);
+    const int supported_max_delay = 2880000;
+    if (verify_delay_impulse(machine, supported_max_delay,
+            "maximum supported Lines delay was truncated") != 0) {
+        return 1;
+    }
+    std::printf(
+        "phase5-arguru-xfilter: supported-max-lines PASS requested=2880000 preserved=2880000 seconds=30\n");
+
+    /* Only timing beyond the ordinary 30-second Lines envelope is capped.
+    ** An extreme 1,000,000-sample tick with eight lines requests 16,000,000
+    ** samples, but at 96 kHz the safety boundary is 2,880,000 samples. */
+    callback.set_tick_length(1000000);
+    machine->SequencerTick();
+    const int extreme_requested_delay = 16000000;
+    const int safe_delay = 96000 * 30;
+    if (verify_delay_impulse(machine, safe_delay,
+            "Lines mode 30-second safety ceiling changed") != 0) {
+        return 1;
+    }
+    std::printf(
+        "phase5-arguru-xfilter: resource-cap PASS requested=%d bounded=%d seconds=30\n",
+        extreme_requested_delay, safe_delay);
     return 0;
 }
 
@@ -421,6 +444,6 @@ int main(int argc, char** argv)
     std::printf("machine: Arguru CrossDelay\n");
     std::printf("parameters: 6\n");
     std::printf("abi: GetInfo/CreateMachine/DeleteMachine\n");
-    std::printf("dsp: dry unity + sample-delay stereo offset + sample-rate scaling + Lines mode + preserved long Lines timing + bounded extreme Lines resources\n");
+    std::printf("dsp: dry unity + sample-delay stereo offset + sample-rate scaling + Lines mode + full supported Lines timing + bounded pathological Lines resources\n");
     return 0;
 }
