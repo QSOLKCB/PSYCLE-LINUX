@@ -16,6 +16,7 @@
 #include <machines.h>
 #include <player.h>
 #include <plugin.h>
+#include <plugin_interface.h>
 #include <plugincatcher.h>
 #include <preset.h>
 #include <presetio.h>
@@ -251,7 +252,7 @@ static int tweak_value(const DwSpec* spec, psy_audio_Machine* machine,
 	if (actual != requested) {
 		fprintf(stderr,
 			"phase5-dw-family-state: FAIL [%s]: seed %lu requested %ld got %ld\n",
-				spec->label, (unsigned long)index, (long)requested, (long)actual);
+			spec->label, (unsigned long)index, (long)requested, (long)actual);
 		return 1;
 	}
 	return 0;
