@@ -464,6 +464,7 @@ int verify_reverbs(const Spec& spec, const CMachineInfo* info,
         }
 
         machine->ParameterTweak(0, algorithm);
+        machine->ParameterTweak(2, 50);
         left.assign(65536, 0.0f); right.assign(65536, 0.0f);
         right[0] = 1.0f;
         process_blocks(machine, left, right);
