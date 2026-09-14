@@ -36,6 +36,10 @@ void comb::setbuffer(int samples)
 
 void comb::mute()
 {
+	/* Muting a rebuilt comb must discard the complete old tail. Clearing only
+	** the ring buffer while retaining filterstore leaks the previous damping
+	** state into the new allocation on the next process() call. */
+	filterstore = 0.0f;
 	dsp.clear(buffer, bufsize);
 }
 
