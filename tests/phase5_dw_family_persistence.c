@@ -41,15 +41,16 @@ typedef struct DwSpec {
 	const char* expected_shortname;
 	const char* module_token;
 	uintptr_t parameter_count;
+	uintptr_t persistent_state_count;
 	uintptr_t writable_seed_count;
 	SeedKind seed_kind;
 } DwSpec;
 
 static const DwSpec SPECS[SPEC_COUNT] = {
-	{"dw eq", "dw-eq:0", "dw eq", "eq", "dw-eq", 12u, 12u, SEED_EQ},
-	{"dw granulizer", "dw-granulizer:0", "dw granulizer", "granulizer", "dw-granulizer", 50u, 36u, SEED_GRANULIZER},
-	{"dw IoPan", "dw-iopan:0", "dw IoPan", "IoPan", "dw-iopan", 4u, 4u, SEED_IOPAN},
-	{"dw Tremolo", "dw-tremolo:0", "dw Tremolo", "Tremolo", "dw-tremolo", 8u, 8u, SEED_TREMOLO},
+	{"dw eq", "dw-eq:0", "dw eq", "eq", "dw-eq", 12u, 12u, 12u, SEED_EQ},
+	{"dw granulizer", "dw-granulizer:0", "dw granulizer", "granulizer", "dw-granulizer", 50u, 38u, 36u, SEED_GRANULIZER},
+	{"dw IoPan", "dw-iopan:0", "dw IoPan", "IoPan", "dw-iopan", 4u, 4u, 4u, SEED_IOPAN},
+	{"dw Tremolo", "dw-tremolo:0", "dw Tremolo", "Tremolo", "dw-tremolo", 8u, 8u, 8u, SEED_TREMOLO},
 };
 
 typedef struct Snapshot {
@@ -81,11 +82,18 @@ static void snapshot_dispose(Snapshot* self)
 	snapshot_init(self);
 }
 
+static int parameter_is_state(psy_audio_Machine* machine,
+	psy_audio_MachineParam* param)
+{
+	return (psy_audio_machine_parameter_type(machine, param) & 0x1FF) == MPF_STATE;
+}
+
 static int snapshot_from_machine(const DwSpec* spec,
 	psy_audio_Machine* machine, Snapshot* out)
 {
 	psy_audio_Preset preset;
 	uintptr_t i;
+	uintptr_t state_count = 0;
 	snapshot_dispose(out);
 	psy_audio_preset_init(&preset);
 	psy_audio_machine_current_preset(machine, &preset);
@@ -99,8 +107,26 @@ static int snapshot_from_machine(const DwSpec* spec,
 		psy_audio_preset_dispose(&preset);
 		return fail_spec(spec, "snapshot parameter allocation failed");
 	}
-	for (i = 0; i < out->parameter_count; ++i)
-		out->parameters[i] = psy_audio_preset_value(&preset, i);
+	for (i = 0; i < out->parameter_count; ++i) {
+		psy_audio_MachineParam* param = psy_audio_machine_parameter(machine, i);
+		if (!param) {
+			psy_audio_preset_dispose(&preset);
+			return fail_spec(spec, "snapshot parameter surface is incomplete");
+		}
+		if (parameter_is_state(machine, param)) {
+			out->parameters[i] = psy_audio_preset_value(&preset, i);
+			++state_count;
+		} else {
+			/* Labels/nulls occupy historical ABI slots and remain covered by the
+			** native metadata hash, but their incidental Vals[] bytes are not
+			** persistent state. Normalize them before round-trip comparison. */
+			out->parameters[i] = 0;
+		}
+	}
+	if (state_count != spec->persistent_state_count) {
+		psy_audio_preset_dispose(&preset);
+		return fail_spec(spec, "persistent MPF_STATE slot count changed");
+	}
 	out->data_size = preset.datasize;
 	if (out->data_size > 0) {
 		if (!preset.data) {
@@ -127,7 +153,7 @@ static int snapshot_equal(const DwSpec* spec, const Snapshot* expected,
 	for (i = 0; i < expected->parameter_count; ++i) {
 		if (expected->parameters[i] != actual->parameters[i]) {
 			fprintf(stderr,
-				"phase5-dw-family-state: FAIL [%s]: %s parameter %lu expected %ld got %ld\n",
+				"phase5-dw-family-state: FAIL [%s]: %s state slot %lu expected %ld got %ld\n",
 				spec->label, context, (unsigned long)i,
 				(long)expected->parameters[i], (long)actual->parameters[i]);
 			return 1;
@@ -250,10 +276,9 @@ static int seed_eq(const DwSpec* spec, psy_audio_Machine* machine,
 
 static int seed_granulizer(const DwSpec* spec, psy_audio_Machine* machine)
 {
-	/* 50 visible slots = 12 label/null structure slots + 36 directly writable
-	** state controls + runtime display values Limit amount (47) and Density (48).
-	** The runtime values are still captured in every preset/PSY3 snapshot, but
-	** they are not seeded as if they were user-writable controls. */
+	/* 50 visible slots = 12 structural label/null slots + 38 MPF_STATE slots.
+	** Of those state slots, 36 are directly writable controls; Limit amount (47)
+	** and Density (48) are runtime-derived state values. */
 	static const intptr_t seeds[50] = {
 		SKIP_SEED, 2000, 1200, 300, 400, 900, 800, 1, 4, SKIP_SEED,
 		SKIP_SEED, 10, 20, 30, 40, 50, 60, SKIP_SEED, 1, 2,
@@ -319,7 +344,13 @@ static int seed_machine(const DwSpec* spec, psy_audio_Machine* machine)
 	}
 
 	for (i = 0; i < spec->parameter_count; ++i) {
+		psy_audio_MachineParam* param = psy_audio_machine_parameter(machine, i);
 		intptr_t actual;
+		if (!param) {
+			free(defaults);
+			return fail_spec(spec, "parameter missing during seed verification");
+		}
+		if (!parameter_is_state(machine, param)) continue;
 		if (read_value(spec, machine, i, &actual) != 0) {
 			free(defaults);
 			return 1;
@@ -329,13 +360,14 @@ static int seed_machine(const DwSpec* spec, psy_audio_Machine* machine)
 	free(defaults);
 	if (changed < spec->writable_seed_count) {
 		fprintf(stderr,
-			"phase5-dw-family-state: FAIL [%s]: only %lu parameters differ from fresh defaults; expected at least %lu\n",
+			"phase5-dw-family-state: FAIL [%s]: only %lu state parameters differ from fresh defaults; expected at least %lu\n",
 			spec->label, (unsigned long)changed,
 			(unsigned long)spec->writable_seed_count);
 		return 1;
 	}
-	printf("phase5-dw-family-state: seed PASS [%s] changed=%lu\n",
-		spec->label, (unsigned long)changed);
+	printf("phase5-dw-family-state: seed PASS [%s] changed=%lu persistent=%lu\n",
+		spec->label, (unsigned long)changed,
+		(unsigned long)spec->persistent_state_count);
 	return 0;
 }
 
@@ -566,7 +598,7 @@ initial_cleanup:
 
 	printf("phase5-dw-family-state: PASS machines=4\n");
 	printf("catchers: dw-eq:0 dw-granulizer:0 dw-iopan:0 dw-tremolo:0\n");
-	printf("state: EQ 12/12, Granulizer 36 writable non-default + runtime display state, IoPan 4/4, Tremolo 8/8; 0 opaque bytes\n");
+	printf("state: EQ 12/12; Granulizer 38 persistent slots = 36 writable + 2 derived runtime; IoPan 4/4; Tremolo 8/8; 0 opaque bytes\n");
 	printf("topology: 4/4 DW effects -> Master\n");
 	printf("song: %s\n", song_path);
 	return 0;
