@@ -11,11 +11,19 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
 #include <vector>
 
 #include <psycle/plugin_interface.hpp>
+#include <stk/ADSR.h>
+#include <stk/JCRev.h>
+#include <stk/NRev.h>
+#include <stk/PRCRev.h>
+#include <stk/Plucked.h>
+#include <stk/Shakers.h>
+#include <stk/Stk.h>
 
 using psycle::plugin_interface::CFxCallback;
 using psycle::plugin_interface::CMachineInfo;
@@ -53,6 +61,14 @@ const Spec SPECS[] = {
         "Sartorius, bohan and STK 4.5.0 developers", 0x0100,
         psycle::plugin_interface::GENERATOR, 6, 1, Kind::Shakers,
         UINT64_C(0x4c29aa201e9bb317)},
+};
+
+constexpr double PLUCKED_OFFSET = -36.3763165623;
+constexpr unsigned int PLUCKED_SEED = 0x51a7u;
+constexpr unsigned int SHAKER_RATE_SEED = 0x5a17u;
+const int SHAKER_OLD_TO_NEW[] = {
+    0, 1, 2, 19, 21, 5, 3, 4, 8, 9, 20, 6,
+    7, 12, 13, 14, 15, 16, 17, 18, 10, 11, 22
 };
 
 class TestCallback : public CFxCallback {
@@ -211,6 +227,18 @@ bool same_signal(const std::vector<float>& a_l, const std::vector<float>& a_r,
     return true;
 }
 
+bool same_mono(const std::vector<float>& actual, const std::vector<float>& expected,
+    float tolerance)
+{
+    if (actual.size() != expected.size()) return false;
+    for (std::size_t i = 0; i < actual.size(); ++i) {
+        if (!std::isfinite(actual[i]) || !std::isfinite(expected[i]) ||
+                std::fabs(actual[i] - expected[i]) > tolerance)
+            return false;
+    }
+    return true;
+}
+
 double signal_energy(const std::vector<float>& left, const std::vector<float>& right)
 {
     if (!finite_signal(left, right)) return INFINITY;
@@ -222,9 +250,104 @@ double signal_energy(const std::vector<float>& left, const std::vector<float>& r
     return static_cast<double>(energy);
 }
 
+double mono_energy(const std::vector<float>& signal)
+{
+    long double energy = 0.0;
+    for (float value : signal) {
+        if (!std::isfinite(value)) return INFINITY;
+        energy += static_cast<long double>(value) * value;
+    }
+    return static_cast<double>(energy);
+}
+
+void render_direct_plucked(int sample_rate, int note, std::size_t samples,
+    unsigned int seed, std::vector<float>& left, std::vector<float>& right)
+{
+    stk::Stk::setSampleRate(static_cast<stk::StkFloat>(sample_rate));
+    stk::Plucked track(20.0);
+    stk::ADSR adsr;
+    track.clear();
+    track.noteOff(0.0);
+    adsr.setAllTimes(
+        static_cast<stk::StkFloat>(32.0 * 0.000030517578125),
+        static_cast<stk::StkFloat>(32.0 * 0.000030517578125),
+        static_cast<stk::StkFloat>(16768.0 * 0.000030517578125),
+        static_cast<stk::StkFloat>(328.0 * 0.000030517578125));
+    const stk::StkFloat frequency = static_cast<stk::StkFloat>(
+        std::pow(2.0, (static_cast<double>(note) - PLUCKED_OFFSET) / 12.0));
+    std::srand(seed);
+    adsr.keyOn();
+    track.noteOn(frequency, 1.0);
+    left.assign(samples, 0.0f);
+    right.assign(samples, 0.0f);
+    for (std::size_t i = 0; i < samples; ++i) {
+        float value = static_cast<float>(adsr.tick() * track.tick()) * 32767.0f;
+        value = std::max(-32767.0f, std::min(32767.0f, value));
+        left[i] = value;
+        right[i] = value;
+    }
+}
+
+template <typename Reverb>
+std::vector<float> render_direct_reverb_channel(int sample_rate, int channel,
+    std::size_t samples)
+{
+    stk::Stk::setSampleRate(static_cast<stk::StkFloat>(sample_rate));
+    Reverb reverb;
+    reverb.setT60(static_cast<stk::StkFloat>(80.0 * 0.03125));
+    reverb.setEffectMix(1.0);
+    reverb.clear();
+    std::vector<float> output(samples, 0.0f);
+    for (std::size_t i = 0; i < samples; ++i) {
+        const stk::StkFloat input = i == 0 ? 1.0 : 0.0;
+        output[i] = static_cast<float>(reverb.tick(input, static_cast<unsigned int>(channel)));
+    }
+    return output;
+}
+
+std::vector<float> render_direct_reverb(int algorithm, int sample_rate, int channel,
+    std::size_t samples)
+{
+    switch (algorithm) {
+    case 0:
+        return render_direct_reverb_channel<stk::JCRev>(sample_rate, channel, samples);
+    case 1:
+        return render_direct_reverb_channel<stk::NRev>(sample_rate, channel, samples);
+    case 2:
+        return render_direct_reverb_channel<stk::PRCRev>(sample_rate, channel, samples);
+    default:
+        return std::vector<float>();
+    }
+}
+
+void render_direct_shaker(int sample_rate, int instrument, std::size_t samples,
+    unsigned int seed, std::vector<float>& left, std::vector<float>& right)
+{
+    stk::Stk::setSampleRate(static_cast<stk::StkFloat>(sample_rate));
+    stk::Shakers shaker;
+    shaker.controlChange(2, 64.0);
+    shaker.controlChange(4, 64.0);
+    shaker.controlChange(11, 10.0);
+    shaker.controlChange(1, 64.0);
+    shaker.controlChange(128, 64.0);
+    const stk::StkFloat frequency = static_cast<stk::StkFloat>(
+        220.0 * std::pow(2.0, (static_cast<double>(instrument) + 7.0) / 12.0));
+    std::srand(seed);
+    shaker.noteOn(frequency, 10.0);
+    left.assign(samples, 0.0f);
+    right.assign(samples, 0.0f);
+    for (std::size_t i = 0; i < samples; ++i) {
+        float value = static_cast<float>(shaker.tick()) * 32767.0f;
+        value = std::max(-32767.0f, std::min(32767.0f, value));
+        left[i] = value;
+        right[i] = value;
+    }
+}
+
 int verify_plucked(const Spec& spec, const CMachineInfo* info,
     CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
 {
+    stk::Stk::setSampleRate(44100.0);
     TestCallback callback(44100);
     CMachineInterface* machine = create_machine();
     if (!machine || !machine->Vals) {
@@ -265,28 +388,44 @@ int verify_plucked(const Spec& spec, const CMachineInfo* info,
             rc = fail(spec, "Stop no longer clears the plucked generator");
     }
 
+    delete_machine(*machine);
+    machine = nullptr;
+
     if (rc == 0) {
-        callback.set_sample_rate(88200);
-        machine->SequencerTick();
-        machine->SeqTick(0, 60, 0, 0x0c, 255);
-        left.assign(2048, 0.0f); right.assign(2048, 0.0f);
-        process_blocks(machine, left, right);
-        const double energy = signal_energy(left, right);
-        if (!std::isfinite(energy) || energy <= 1.0e-8)
-            rc = fail(spec, "live 88.2 kHz plucked note became silent/non-finite");
-        callback.set_sample_rate(44100);
-        machine->SequencerTick();
+        stk::Stk::setSampleRate(44100.0);
+        TestCallback rate_callback(44100);
+        CMachineInterface* rate_machine = create_machine();
+        if (!rate_machine || !rate_machine->Vals) {
+            if (rate_machine) delete_machine(*rate_machine);
+            return fail(spec, "rate-test CreateMachine failed");
+        }
+        apply_defaults(rate_machine, info, rate_callback);
+        rate_callback.set_sample_rate(88200);
+        rate_machine->SequencerTick();
+        if (std::fabs(static_cast<double>(stk::Stk::sampleRate()) - 88200.0) > 0.5) {
+            rc = fail(spec, "SequencerTick did not propagate 88.2 kHz to STK");
+        } else {
+            std::srand(PLUCKED_SEED);
+            rate_machine->SeqTick(0, 60, 0, 0x0c, 255);
+            left.assign(8192, 0.0f); right.assign(8192, 0.0f);
+            process_blocks(rate_machine, left, right);
+            std::vector<float> ref_l, ref_r;
+            render_direct_plucked(88200, 60, left.size(), PLUCKED_SEED, ref_l, ref_r);
+            if (!same_signal(left, right, ref_l, ref_r, 1.0e-3f))
+                rc = fail(spec, "live 88.2 kHz plucked render diverged from direct STK reference");
+        }
+        delete_machine(*rate_machine);
     }
 
     if (rc == 0)
-        std::printf("phase5-stk-family: Plucked PASS idle=zero 0C00=zero Stop=zero live-rate=finite\n");
-    delete_machine(*machine);
+        std::printf("phase5-stk-family: Plucked PASS idle=zero 0C00=zero Stop=zero live-rate=STK-reference\n");
     return rc;
 }
 
 int verify_reverbs(const Spec& spec, const CMachineInfo* info,
     CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
 {
+    stk::Stk::setSampleRate(44100.0);
     TestCallback callback(44100);
     CMachineInterface* machine = create_machine();
     if (!machine || !machine->Vals) {
@@ -305,19 +444,48 @@ int verify_reverbs(const Spec& spec, const CMachineInfo* info,
     if (!same_signal(left, right, ref_l, ref_r))
         rc = fail(spec, "Dry/Wet=0 exact bypass changed");
 
+    std::vector<std::vector<float>> algorithm_refs;
     for (int algorithm = 0; rc == 0 && algorithm < 3; ++algorithm) {
         machine->ParameterTweak(0, algorithm);
         machine->ParameterTweak(1, 80);
         machine->ParameterTweak(2, 100);
         machine->ParameterTweak(3, 0);
+
         left.assign(65536, 0.0f); right.assign(65536, 0.0f);
         left[0] = 1.0f;
         process_blocks(machine, left, right);
-        const double energy = signal_energy(left, right);
-        if (!std::isfinite(energy) || energy <= 1.0e-12)
-            rc = fail(spec, "selected reverb produced no finite impulse response");
-        else if (!silent_signal(right, right, 1.0e-7f))
-            rc = fail(spec, "independent reverb routing leaked into silent right input");
+        const std::vector<float> expected_left =
+            render_direct_reverb(algorithm, 44100, 0, left.size());
+        algorithm_refs.push_back(expected_left);
+        if (!same_mono(left, expected_left, 1.0e-6f) ||
+                !silent_signal(right, right, 1.0e-7f)) {
+            rc = fail(spec, "left-input independent reverb diverged from selected STK algorithm");
+            break;
+        }
+
+        machine->ParameterTweak(0, algorithm);
+        left.assign(65536, 0.0f); right.assign(65536, 0.0f);
+        right[0] = 1.0f;
+        process_blocks(machine, left, right);
+        const std::vector<float> expected_right =
+            render_direct_reverb(algorithm, 44100, 1, right.size());
+        if (!same_mono(right, expected_right, 1.0e-6f) ||
+                !silent_signal(left, left, 1.0e-7f)) {
+            rc = fail(spec, "right-input independent reverb diverged from selected STK algorithm");
+            break;
+        }
+    }
+
+    if (rc == 0 && algorithm_refs.size() == 3) {
+        const double d01 = mono_energy(algorithm_refs[0]);
+        const double d11 = mono_energy(algorithm_refs[1]);
+        const double d21 = mono_energy(algorithm_refs[2]);
+        if (!std::isfinite(d01) || !std::isfinite(d11) || !std::isfinite(d21) ||
+                d01 <= 1.0e-12 || d11 <= 1.0e-12 || d21 <= 1.0e-12 ||
+                same_mono(algorithm_refs[0], algorithm_refs[1], 1.0e-7f) ||
+                same_mono(algorithm_refs[0], algorithm_refs[2], 1.0e-7f) ||
+                same_mono(algorithm_refs[1], algorithm_refs[2], 1.0e-7f))
+            rc = fail(spec, "direct STK reverb references are not three distinct responses");
     }
 
     if (rc == 0) {
@@ -325,40 +493,87 @@ int verify_reverbs(const Spec& spec, const CMachineInfo* info,
         machine->ParameterTweak(1, 80);
         machine->ParameterTweak(2, 100);
         machine->ParameterTweak(3, 1);
+
         left.assign(65536, 0.0f); right.assign(65536, 0.0f);
         left[0] = 1.0f;
         process_blocks(machine, left, right);
-        long double right_energy = 0.0;
-        for (float value : right) right_energy += static_cast<long double>(value) * value;
-        if (!finite_signal(left, right) || !(right_energy > 1.0e-12L))
-            rc = fail(spec, "mixed-channel reverb no longer crossfeeds the opposite channel");
+        if (!finite_signal(left, right) || !(mono_energy(right) > 1.0e-12))
+            rc = fail(spec, "mixed reverb lost left-to-right crossfeed");
+
+        machine->ParameterTweak(0, 1);
+        left.assign(65536, 0.0f); right.assign(65536, 0.0f);
+        right[0] = 1.0f;
+        process_blocks(machine, left, right);
+        if (!finite_signal(left, right) || !(mono_energy(left) > 1.0e-12))
+            rc = fail(spec, "mixed reverb lost right-to-left crossfeed");
     }
 
     if (rc == 0) {
         callback.set_sample_rate(88200);
         machine->SequencerTick();
-        machine->ParameterTweak(0, 1);
-        machine->ParameterTweak(2, 100);
-        machine->ParameterTweak(3, 0);
-        left.assign(65536, 0.0f); right.assign(65536, 0.0f);
-        left[0] = 1.0f;
-        process_blocks(machine, left, right);
-        const double energy = signal_energy(left, right);
-        if (!std::isfinite(energy) || energy <= 1.0e-12)
-            rc = fail(spec, "live 88.2 kHz reverb became silent/non-finite");
-        callback.set_sample_rate(44100);
-        machine->SequencerTick();
+        if (std::fabs(static_cast<double>(stk::Stk::sampleRate()) - 88200.0) > 0.5) {
+            rc = fail(spec, "SequencerTick did not propagate 88.2 kHz to STK");
+        } else {
+            machine->ParameterTweak(0, 1);
+            machine->ParameterTweak(1, 80);
+            machine->ParameterTweak(2, 100);
+            machine->ParameterTweak(3, 0);
+            left.assign(65536, 0.0f); right.assign(65536, 0.0f);
+            left[0] = 1.0f;
+            process_blocks(machine, left, right);
+            const std::vector<float> expected =
+                render_direct_reverb(1, 88200, 0, left.size());
+            if (!same_mono(left, expected, 1.0e-6f) ||
+                    !silent_signal(right, right, 1.0e-7f))
+                rc = fail(spec, "live 88.2 kHz reverb diverged from direct STK reference");
+        }
     }
 
     if (rc == 0)
-        std::printf("phase5-stk-family: Reverbs PASS dry=unity algorithms=3 routing=independent+mixed live-rate=finite\n");
+        std::printf("phase5-stk-family: Reverbs PASS dry=unity algorithms=STK-reference routing=bidirectional live-rate=STK-reference\n");
     delete_machine(*machine);
     return rc;
+}
+
+int verify_shaker_mapping(const Spec& spec, const CMachineInfo* info,
+    CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
+{
+    const int map_count = static_cast<int>(sizeof(SHAKER_OLD_TO_NEW) /
+        sizeof(SHAKER_OLD_TO_NEW[0]));
+    for (int index = 0; index < map_count; ++index) {
+        const int note = 48 + index;
+        const int instrument = SHAKER_OLD_TO_NEW[index];
+        const unsigned int seed = 0x600du + static_cast<unsigned int>(note);
+        stk::Stk::setSampleRate(44100.0);
+        TestCallback callback(44100);
+        CMachineInterface* machine = create_machine();
+        if (!machine || !machine->Vals) {
+            if (machine) delete_machine(*machine);
+            return fail(spec, "mapping-test CreateMachine failed");
+        }
+        apply_defaults(machine, info, callback);
+        std::srand(seed);
+        machine->SeqTick(0, note, 0, 0x0c, 255);
+        std::vector<float> left(4096, 0.0f), right(4096, 0.0f);
+        process_blocks(machine, left, right);
+        std::vector<float> ref_left, ref_right;
+        render_direct_shaker(44100, instrument, left.size(), seed, ref_left, ref_right);
+        const bool matches = same_signal(left, right, ref_left, ref_right, 1.0e-3f);
+        delete_machine(*machine);
+        if (!matches) {
+            std::fprintf(stderr,
+                "phase5-stk-family: FAIL [%s]: note %d no longer maps to STK instrument %d\n",
+                spec.label, note, instrument);
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int verify_shakers(const Spec& spec, const CMachineInfo* info,
     CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
 {
+    stk::Stk::setSampleRate(44100.0);
     TestCallback callback(44100);
     CMachineInterface* machine = create_machine();
     if (!machine || !machine->Vals) {
@@ -407,22 +622,41 @@ int verify_shakers(const Spec& spec, const CMachineInfo* info,
             rc = fail(spec, "note above historical shaker mapping range became active");
     }
 
+    delete_machine(*machine);
+    machine = nullptr;
+
+    if (rc == 0)
+        rc = verify_shaker_mapping(spec, info, create_machine, delete_machine);
+
     if (rc == 0) {
-        callback.set_sample_rate(88200);
-        machine->SequencerTick();
-        machine->SeqTick(0, 48, 0, 0x0c, 255);
-        left.assign(4096, 0.0f); right.assign(4096, 0.0f);
-        process_blocks(machine, left, right);
-        const double energy = signal_energy(left, right);
-        if (!std::isfinite(energy) || energy <= 1.0e-8)
-            rc = fail(spec, "live 88.2 kHz shaker became silent/non-finite");
-        callback.set_sample_rate(44100);
-        machine->SequencerTick();
+        stk::Stk::setSampleRate(44100.0);
+        TestCallback rate_callback(44100);
+        CMachineInterface* rate_machine = create_machine();
+        if (!rate_machine || !rate_machine->Vals) {
+            if (rate_machine) delete_machine(*rate_machine);
+            return fail(spec, "rate-test CreateMachine failed");
+        }
+        apply_defaults(rate_machine, info, rate_callback);
+        rate_callback.set_sample_rate(88200);
+        rate_machine->SequencerTick();
+        if (std::fabs(static_cast<double>(stk::Stk::sampleRate()) - 88200.0) > 0.5) {
+            rc = fail(spec, "SequencerTick did not propagate 88.2 kHz to STK");
+        } else {
+            std::srand(SHAKER_RATE_SEED);
+            rate_machine->SeqTick(0, 48, 0, 0x0c, 255);
+            left.assign(8192, 0.0f); right.assign(8192, 0.0f);
+            process_blocks(rate_machine, left, right);
+            std::vector<float> ref_left, ref_right;
+            render_direct_shaker(88200, SHAKER_OLD_TO_NEW[0], left.size(),
+                SHAKER_RATE_SEED, ref_left, ref_right);
+            if (!same_signal(left, right, ref_left, ref_right, 1.0e-3f))
+                rc = fail(spec, "live 88.2 kHz shaker render diverged from direct STK reference");
+        }
+        delete_machine(*rate_machine);
     }
 
     if (rc == 0)
-        std::printf("phase5-stk-family: Shakers PASS map=48..70 0C00=zero Stop=zero live-rate=finite\n");
-    delete_machine(*machine);
+        std::printf("phase5-stk-family: Shakers PASS map=48..70->STK-reference 0C00=zero Stop=zero live-rate=STK-reference\n");
     return rc;
 }
 
