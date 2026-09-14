@@ -103,7 +103,7 @@ grep -F 'phase5-dw-family-state: seed PASS [dw IoPan]' "$STATE_LOG" >/dev/null
 grep -F 'phase5-dw-family-state: seed PASS [dw Tremolo]' "$STATE_LOG" >/dev/null
 grep -F 'phase5-dw-family-state: PASS machines=4' "$STATE_LOG" >/dev/null
 grep -F 'catchers: dw-eq:0 dw-granulizer:0 dw-iopan:0 dw-tremolo:0' "$STATE_LOG" >/dev/null
-grep -F 'state: EQ 12/12, Granulizer 36 writable non-default + runtime display state, IoPan 4/4, Tremolo 8/8; 0 opaque bytes' "$STATE_LOG" >/dev/null
+grep -F 'state: EQ 12/12; Granulizer 38 persistent slots = 36 writable + 2 derived runtime; IoPan 4/4; Tremolo 8/8; 0 opaque bytes' "$STATE_LOG" >/dev/null
 grep -F 'topology: 4/4 DW effects -> Master' "$STATE_LOG" >/dev/null
 
 [[ -s "$OUT/phase5-dw-family.psy" ]] || {
@@ -132,7 +132,8 @@ cat > "$SUMMARY" <<'EOF'
 - dw IoPan default unity and historical full channel-flip matrix: PASS
 - dw Tremolo Depth=0 unity and live 44.1 -> 88.2 kHz wall-clock LFO timing: PASS
 - Production catcher identities: dw-eq:0, dw-granulizer:0, dw-iopan:0, dw-tremolo:0: PASS
-- Public state seeds: EQ 12/12; Granulizer 36 directly writable controls plus derived runtime display state; IoPan 4/4; Tremolo 8/8: PASS
+- Public persistent state: EQ 12/12; Granulizer 38 MPF_STATE slots = 36 writable controls + 2 derived runtime values; IoPan 4/4; Tremolo 8/8: PASS
+- Granulizer's 12 structural label/null ABI slots are frozen by metadata hash but intentionally excluded from persistence-value comparison: PASS
 - Version-1 preset round-trip for each DW effect through a fresh MachineFactory instance: PASS
 - One-song four-machine fresh PSY3 reopen and all four DW -> Master topology edges: PASS
 - Opaque state: none.
