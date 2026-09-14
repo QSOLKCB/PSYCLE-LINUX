@@ -1,0 +1,39 @@
+name: Phase 5 Zephod SuperFM preservation
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-5/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zephod-superfm:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run Zephod SuperFM preservation regression
+        run: |
+          chmod +x scripts/phase5-zephod-superfm-smoke.sh
+          scripts/phase5-zephod-superfm-smoke.sh phase5-zephod-superfm
+
+      - name: Upload Zephod SuperFM evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-zephod-superfm
+          path: phase5-zephod-superfm/

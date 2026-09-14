@@ -206,19 +206,19 @@ void CTrack::Init()
 	Mot3dv=0;
 
 	Volume=0.0f;
-	VCA.reset();
 	VCA.attack(1000);
 	VCA.decay(1000);
 	VCA.sustain(1000);
 	VCA.sustainv(0.5);
 	VCA.release(1000);
+	VCA.stop();
 
-	ENV.reset();
 	ENV.attack(1000);
 	ENV.decay(1000);
 	ENV.sustain(1000);
 	ENV.sustainv(0.5);
 	ENV.release(1000);
+	ENV.stop();
 	
 	phase=0;
 	freq=0;
@@ -431,19 +431,42 @@ void mi::ParameterTweak(int par, int val)
 void mi::SequencerTick() 
 {
 	tickCounter=0;
-	if (currentSR != pCB->GetSamplingRate()) {
-		currentSR = pCB->GetSamplingRate();
+	const int32_t nextSR = pCB->GetSamplingRate();
+	if (currentSR != nextSR) {
+		const int32_t previousSR = currentSR;
+		currentSR = nextSR;
 		float srMult = currentSR/44100.0f;
+		float sampleRatio = previousSR > 0 ? (float)currentSR/(float)previousSR : 1.0f;
+		float phaseRatio = (previousSR > 0 && currentSR > 0)
+			? (float)previousSR/(float)currentSR : 1.0f;
 		int i;
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].VCA.attack((int)(Vals[0]*srMult));
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].VCA.decay((int)(Vals[1]*srMult));
-		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].VCA.sustain((int)(Vals[2]*srMult));
+		for (i=0; i<MAX_TRACKS ; i++) {
+			if (Vals[2]<16) Tracks[i].VCA.sustain(0);
+			else Tracks[i].VCA.sustain((int)(Vals[2]*srMult));
+		}
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].VCA.release((int)(Vals[4]*srMult));
 		
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].ENV.attack((int)(Vals[5]*srMult));
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].ENV.decay((int)(Vals[6]*srMult));
-		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].ENV.sustain((int)(Vals[7]*srMult));
+		for (i=0; i<MAX_TRACKS ; i++) {
+			if (Vals[7]<16) Tracks[i].ENV.sustain(0);
+			else Tracks[i].ENV.sustain((int)(Vals[7]*srMult));
+		}
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].ENV.release((int)(Vals[9]*srMult));
+
+		/* Driver reconfiguration does not stop machines. Preserve the wall-clock
+		** progress of any in-flight envelope and the phase increment that is
+		** actually sounding; pending Finetune automation must not be applied by
+		** an unrelated sample-rate change. */
+		for (i=0; i<MAX_TRACKS ; i++) {
+			Tracks[i].VCA.retime(sampleRatio);
+			Tracks[i].ENV.retime(sampleRatio);
+			if (Tracks[i].VCA.envstate!=ENV_NONE || Tracks[i].ENV.envstate!=ENV_NONE) {
+				Tracks[i].freq *= phaseRatio;
+			}
+		}
 	}
 }
 
@@ -570,4 +593,3 @@ bool mi::DescribeValue(char * txt, const int param, const int value)
 
 	return false;
 }
-

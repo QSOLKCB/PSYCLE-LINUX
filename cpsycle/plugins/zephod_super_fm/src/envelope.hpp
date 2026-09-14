@@ -26,6 +26,7 @@ public:
 	void release(int newv);
 	void stop();
 	void noteoff();
+	void retime(float sample_ratio);
 
 public:
 	int a,d,s,r;
