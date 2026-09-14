@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 
 using namespace psycle::plugin_interface;
 
@@ -160,9 +161,21 @@ void bexphase::ParameterTweak(int par, int val) {
 			dry = 1 - wet;
 		break;
 		case pRefresh:
-			buflen = val * pCB->GetTickLength();
-			counter = val;
-			last_dir = 1;
+			{
+				/* GetTickLength now exposes the tracker-line duration.  Keep the
+				** historical refresh-derived working length inside BexPhase's fixed
+				** 24,576-sample rings instead of allowing a larger host timing value
+				** to escape the storage invariant.  Work() already wraps its cursor
+				** at inbuflen; this also keeps the dormant refresh-analysis path safe
+				** if it is re-enabled. */
+				const int64_t requested_buflen =
+					(int64_t)val * (int64_t)pCB->GetTickLength();
+				if (requested_buflen < 1) buflen = 1;
+				else if (requested_buflen > inbuflen) buflen = inbuflen;
+				else buflen = (int)requested_buflen;
+				counter = val;
+				last_dir = 1;
+			}
 		break;
 		case pMode:
 			if (shiftcount > 0 ) {
@@ -215,6 +228,8 @@ void bexphase::Work(float *psamplesleft, float *psamplesright , int numsamples, 
 		++psamplesright;
 		*psamplesleft = ((inbufl[inpoint] - *psamplesleft)*diff)+(*psamplesleft*undiff);
 		++psamplesleft;
+		/* The physical delay ring is fixed-size; never couple cursor wrap to the
+		** refresh-derived buflen value. */
 		if ( ++inpoint == inbuflen ) inpoint = 0;
 	}
 	while(--numsamples);
