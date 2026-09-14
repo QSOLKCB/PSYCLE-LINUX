@@ -281,6 +281,30 @@ int verify_delay_impulse(CMachineInterface* machine, int delay,
     return 0;
 }
 
+int verify_reserved_tail_growth(CMachineInterface* machine)
+{
+    /* At 44.1 kHz / 323 BPM / LPB1 the production callback truncates the
+    ** mathematical line duration to 8191 samples. Lines=2 therefore requests
+    ** 32764 samples. The initial 32768-sample ring has only 32760 usable delay
+    ** samples because ccl starts eight samples before its physical end, so this
+    ** request must grow the ring rather than clamp dcl to zero and arrive four
+    ** samples early. */
+    TestCallback callback(44100, 8191, 323);
+    const int values[6] = {4, 0, 0, 256, 1, 2};
+    const int boundary_delay = 32764;
+
+    machine->pCB = &callback;
+    machine->Init();
+    apply_values(machine, values);
+    if (verify_delay_impulse(machine, boundary_delay,
+            "reserved-tail Lines delay arrived early") != 0) {
+        return 1;
+    }
+    std::printf(
+        "phase5-arguru-xfilter: reserved-tail PASS requested=32764 initial-ring=32768 usable=32760 preserved=32764\n");
+    return 0;
+}
+
 int verify_lines_mode_resource_cap(CMachineInterface* machine)
 {
     /* Preserve historical Lines timing beyond the sample-mode two-second
@@ -385,6 +409,7 @@ int main(int argc, char** argv)
     CMachineInterface* sample_machine = nullptr;
     CMachineInterface* rate_machine = nullptr;
     CMachineInterface* lines_machine = nullptr;
+    CMachineInterface* boundary_machine = nullptr;
     CMachineInterface* resource_machine = nullptr;
 
     if (rc == 0) {
@@ -420,6 +445,14 @@ int main(int argc, char** argv)
         }
     }
     if (rc == 0) {
+        boundary_machine = create_machine();
+        if (!boundary_machine || !boundary_machine->Vals) {
+            rc = fail("CreateMachine did not provide a usable reserved-tail instance");
+        } else {
+            rc = verify_reserved_tail_growth(boundary_machine);
+        }
+    }
+    if (rc == 0) {
         resource_machine = create_machine();
         if (!resource_machine || !resource_machine->Vals) {
             rc = fail("CreateMachine did not provide a usable resource-cap instance");
@@ -429,6 +462,7 @@ int main(int argc, char** argv)
     }
 
     if (resource_machine) delete_machine(*resource_machine);
+    if (boundary_machine) delete_machine(*boundary_machine);
     if (lines_machine) delete_machine(*lines_machine);
     if (rate_machine) delete_machine(*rate_machine);
     if (sample_machine) delete_machine(*sample_machine);
@@ -444,6 +478,6 @@ int main(int argc, char** argv)
     std::printf("machine: Arguru CrossDelay\n");
     std::printf("parameters: 6\n");
     std::printf("abi: GetInfo/CreateMachine/DeleteMachine\n");
-    std::printf("dsp: dry unity + sample-delay stereo offset + sample-rate scaling + Lines mode + full supported Lines timing + bounded pathological Lines resources\n");
+    std::printf("dsp: dry unity + sample-delay stereo offset + sample-rate scaling + Lines mode + reserved-tail growth + full supported Lines timing + bounded pathological Lines resources\n");
     return 0;
 }
