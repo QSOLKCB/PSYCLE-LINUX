@@ -425,66 +425,81 @@ int verify_plucked(const Spec& spec, const CMachineInfo* info,
 int verify_reverbs(const Spec& spec, const CMachineInfo* info,
     CMachineInterface* (*create_machine)(), void (*delete_machine)(CMachineInterface&))
 {
-    stk::Stk::setSampleRate(44100.0);
-    TestCallback callback(44100);
-    CMachineInterface* machine = create_machine();
-    if (!machine || !machine->Vals) {
-        if (machine) delete_machine(*machine);
-        return fail(spec, "CreateMachine failed");
-    }
-    apply_defaults(machine, info, callback);
     int rc = 0;
 
-    machine->ParameterTweak(2, 0);
+    stk::Stk::setSampleRate(44100.0);
+    TestCallback bypass_callback(44100);
+    CMachineInterface* bypass_machine = create_machine();
+    if (!bypass_machine || !bypass_machine->Vals) {
+        if (bypass_machine) delete_machine(*bypass_machine);
+        return fail(spec, "CreateMachine failed");
+    }
+    apply_defaults(bypass_machine, info, bypass_callback);
+    bypass_machine->ParameterTweak(2, 0);
     std::vector<float> left = {-3.0f, 0.5f, 7.0f};
     std::vector<float> right = {4.0f, -2.0f, 1.25f};
     const std::vector<float> ref_l = left;
     const std::vector<float> ref_r = right;
-    process_blocks(machine, left, right);
+    process_blocks(bypass_machine, left, right);
     if (!same_signal(left, right, ref_l, ref_r))
         rc = fail(spec, "Dry/Wet=0 exact bypass changed");
+    delete_machine(*bypass_machine);
 
     std::vector<std::vector<float>> algorithm_refs;
     for (int algorithm = 0; rc == 0 && algorithm < 3; ++algorithm) {
-        machine->ParameterTweak(0, algorithm);
-        machine->ParameterTweak(1, 80);
-        machine->ParameterTweak(2, 100);
-        machine->ParameterTweak(3, 0);
+        stk::Stk::setSampleRate(44100.0);
+        TestCallback left_callback(44100);
+        CMachineInterface* left_machine = create_machine();
+        if (!left_machine || !left_machine->Vals) {
+            if (left_machine) delete_machine(*left_machine);
+            return fail(spec, "left-routing CreateMachine failed");
+        }
+        apply_defaults(left_machine, info, left_callback);
+        left_machine->ParameterTweak(0, algorithm);
+        left_machine->ParameterTweak(1, 80);
+        left_machine->ParameterTweak(2, 100);
+        left_machine->ParameterTweak(3, 0);
 
         left.assign(65536, 0.0f); right.assign(65536, 0.0f);
         left[0] = 1.0f;
-        process_blocks(machine, left, right);
+        process_blocks(left_machine, left, right);
         const std::vector<float> expected_left =
             render_direct_reverb(algorithm, 44100, 0, left.size());
         algorithm_refs.push_back(expected_left);
         if (!same_mono(left, expected_left, 1.0e-6f) ||
-                !silent_signal(right, right, 1.0e-7f)) {
+                !silent_signal(right, right, 1.0e-7f))
             rc = fail(spec, "left-input independent reverb diverged from selected STK algorithm");
-            break;
-        }
+        delete_machine(*left_machine);
+        if (rc != 0) break;
 
-        machine->ParameterTweak(0, algorithm);
-        machine->ParameterTweak(2, 100);
+        stk::Stk::setSampleRate(44100.0);
+        TestCallback right_callback(44100);
+        CMachineInterface* right_machine = create_machine();
+        if (!right_machine || !right_machine->Vals) {
+            if (right_machine) delete_machine(*right_machine);
+            return fail(spec, "right-routing CreateMachine failed");
+        }
+        apply_defaults(right_machine, info, right_callback);
+        right_machine->ParameterTweak(0, algorithm);
+        right_machine->ParameterTweak(1, 80);
+        right_machine->ParameterTweak(2, 100);
+        right_machine->ParameterTweak(3, 0);
+
         left.assign(65536, 0.0f); right.assign(65536, 0.0f);
         right[0] = 1.0f;
-        process_blocks(machine, left, right);
+        process_blocks(right_machine, left, right);
         const double right_energy = mono_energy(right);
         const double left_energy = mono_energy(left);
         std::printf(
             "phase5-stk-family: Reverbs right-routing algorithm=%d right-energy=%.12g left-energy=%.12g\n",
             algorithm, right_energy, left_energy);
-        if (!finite_signal(left, right)) {
+        if (!finite_signal(left, right))
             rc = fail(spec, "right-input independent reverb produced non-finite output");
-            break;
-        }
-        if (!std::isfinite(right_energy) || right_energy <= 1.0e-12) {
+        else if (!std::isfinite(right_energy) || right_energy <= 1.0e-12)
             rc = fail(spec, "right-input independent reverb produced no right output");
-            break;
-        }
-        if (!std::isfinite(left_energy) || !silent_signal(left, left, 1.0e-7f)) {
+        else if (!std::isfinite(left_energy) || !silent_signal(left, left, 1.0e-7f))
             rc = fail(spec, "right-input independent reverb leaked into left output");
-            break;
-        }
+        delete_machine(*right_machine);
     }
 
     if (rc == 0 && algorithm_refs.size() == 3) {
@@ -500,49 +515,79 @@ int verify_reverbs(const Spec& spec, const CMachineInfo* info,
     }
 
     if (rc == 0) {
-        machine->ParameterTweak(0, 1);
-        machine->ParameterTweak(1, 80);
-        machine->ParameterTweak(2, 100);
-        machine->ParameterTweak(3, 1);
-
+        stk::Stk::setSampleRate(44100.0);
+        TestCallback mixed_left_callback(44100);
+        CMachineInterface* mixed_left = create_machine();
+        if (!mixed_left || !mixed_left->Vals) {
+            if (mixed_left) delete_machine(*mixed_left);
+            return fail(spec, "mixed-left CreateMachine failed");
+        }
+        apply_defaults(mixed_left, info, mixed_left_callback);
+        mixed_left->ParameterTweak(0, 1);
+        mixed_left->ParameterTweak(1, 80);
+        mixed_left->ParameterTweak(2, 100);
+        mixed_left->ParameterTweak(3, 1);
         left.assign(65536, 0.0f); right.assign(65536, 0.0f);
         left[0] = 1.0f;
-        process_blocks(machine, left, right);
+        process_blocks(mixed_left, left, right);
         if (!finite_signal(left, right) || !(mono_energy(right) > 1.0e-12))
             rc = fail(spec, "mixed reverb lost left-to-right crossfeed");
-
-        machine->ParameterTweak(0, 1);
-        left.assign(65536, 0.0f); right.assign(65536, 0.0f);
-        right[0] = 1.0f;
-        process_blocks(machine, left, right);
-        if (!finite_signal(left, right) || !(mono_energy(left) > 1.0e-12))
-            rc = fail(spec, "mixed reverb lost right-to-left crossfeed");
+        delete_machine(*mixed_left);
     }
 
     if (rc == 0) {
-        callback.set_sample_rate(88200);
-        machine->SequencerTick();
+        stk::Stk::setSampleRate(44100.0);
+        TestCallback mixed_right_callback(44100);
+        CMachineInterface* mixed_right = create_machine();
+        if (!mixed_right || !mixed_right->Vals) {
+            if (mixed_right) delete_machine(*mixed_right);
+            return fail(spec, "mixed-right CreateMachine failed");
+        }
+        apply_defaults(mixed_right, info, mixed_right_callback);
+        mixed_right->ParameterTweak(0, 1);
+        mixed_right->ParameterTweak(1, 80);
+        mixed_right->ParameterTweak(2, 100);
+        mixed_right->ParameterTweak(3, 1);
+        left.assign(65536, 0.0f); right.assign(65536, 0.0f);
+        right[0] = 1.0f;
+        process_blocks(mixed_right, left, right);
+        if (!finite_signal(left, right) || !(mono_energy(left) > 1.0e-12))
+            rc = fail(spec, "mixed reverb lost right-to-left crossfeed");
+        delete_machine(*mixed_right);
+    }
+
+    if (rc == 0) {
+        stk::Stk::setSampleRate(44100.0);
+        TestCallback rate_callback(44100);
+        CMachineInterface* rate_machine = create_machine();
+        if (!rate_machine || !rate_machine->Vals) {
+            if (rate_machine) delete_machine(*rate_machine);
+            return fail(spec, "rate-test CreateMachine failed");
+        }
+        apply_defaults(rate_machine, info, rate_callback);
+        rate_callback.set_sample_rate(88200);
+        rate_machine->SequencerTick();
         if (std::fabs(static_cast<double>(stk::Stk::sampleRate()) - 88200.0) > 0.5) {
             rc = fail(spec, "SequencerTick did not propagate 88.2 kHz to STK");
         } else {
-            machine->ParameterTweak(0, 1);
-            machine->ParameterTweak(1, 80);
-            machine->ParameterTweak(2, 100);
-            machine->ParameterTweak(3, 0);
+            rate_machine->ParameterTweak(0, 1);
+            rate_machine->ParameterTweak(1, 80);
+            rate_machine->ParameterTweak(2, 100);
+            rate_machine->ParameterTweak(3, 0);
             left.assign(65536, 0.0f); right.assign(65536, 0.0f);
             left[0] = 1.0f;
-            process_blocks(machine, left, right);
+            process_blocks(rate_machine, left, right);
             const std::vector<float> expected =
                 render_direct_reverb(1, 88200, 0, left.size());
             if (!same_mono(left, expected, 1.0e-6f) ||
                     !silent_signal(right, right, 1.0e-7f))
                 rc = fail(spec, "live 88.2 kHz reverb diverged from direct STK reference");
         }
+        delete_machine(*rate_machine);
     }
 
     if (rc == 0)
-        std::printf("phase5-stk-family: Reverbs PASS dry=unity algorithms=STK-reference routing=bidirectional live-rate=STK-reference\n");
-    delete_machine(*machine);
+        std::printf("phase5-stk-family: Reverbs PASS dry=unity algorithms=STK-reference routing=bidirectional-fresh-state live-rate=STK-reference\n");
     return rc;
 }
 
