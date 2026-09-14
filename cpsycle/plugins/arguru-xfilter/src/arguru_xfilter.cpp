@@ -68,8 +68,11 @@ class mi : public CMachineInterface {
 		void SetDelayTicks(int ticks);
 		void AllocateBuffers()
 		{
-			dbl = (float*)dsp.memory_alloc(16, max_delay_samples);
-			dbr = (float*)dsp.memory_alloc(16, max_delay_samples);
+			/* memory_alloc is count x element-size; alignment is supplied by the
+			** DSP backend.  CrossDelay historically passed 16 as the count, which
+			** over-allocated every float buffer by four times. */
+			dbl = (float*)dsp.memory_alloc(max_delay_samples, sizeof(float));
+			dbr = (float*)dsp.memory_alloc(max_delay_samples, sizeof(float));
 			dsp.clear(dbl, max_delay_samples);
 			dsp.clear(dbr, max_delay_samples);
 		}
@@ -157,19 +160,19 @@ void mi::SetDelay(int delay) {
 }
 
 void mi::SetDelayTicks(int ticks) {
-	/* Lines mode historically follows tracker timing and can legitimately exceed
-	** the sample-mode Delay parameter's two-second maximum at slow tempos. Keep
-	** that audible behavior, but stop pathological timing from growing the two
-	** legacy buffers without bound. Each buffer is allocated as
-	** memory_alloc(16, max_delay_samples), so a 2^20-sample ring consumes 16 MiB
-	** per channel / 32 MiB total. Reserve the historical 8-sample write-cursor
-	** headroom and cap only requests that exceed that explicit resource budget.
-	** Use 64-bit arithmetic before capping so signed-int overflow cannot bypass
-	** the bound. */
+	/* Lines mode historically follows tracker timing.  The host accepts BPM 32
+	** and LPB 1, while CrossDelay exposes up to eight Lines; with the retained
+	** x2 stereo-delay convention that makes 30 seconds the largest ordinary
+	** Lines delay (8 * 2 * 60 / 32).  Preserve that full supported envelope at
+	** the current sample rate and cap only timing stretched beyond it.  Use
+	** 64-bit arithmetic before capping so signed-int overflow cannot bypass the
+	** resource guard. */
 	const int64_t requested_delay =
 		(int64_t)ticks * (int64_t)pCB->GetTickLength() * 2;
-	const int64_t max_buffer_samples = (int64_t)1 << 20;
-	const int64_t max_resource_delay = max_buffer_samples - 8;
+	const int64_t resource_samplerate = currentSR > 0
+		? (int64_t)currentSR
+		: (int64_t)44100;
+	const int64_t max_resource_delay = resource_samplerate * 30;
 	const int64_t bounded_delay = requested_delay > max_resource_delay
 		? max_resource_delay
 		: requested_delay;
