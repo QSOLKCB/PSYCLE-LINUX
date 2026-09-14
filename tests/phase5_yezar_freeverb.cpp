@@ -197,33 +197,49 @@ int verify_rate_reinitialization(CMachineInterface* machine, const CMachineInfo*
 {
     TestCallback callback(44100);
     const int values[5] = {320, 640, 175, 0, 640};
+    const std::size_t advanced_samples = 257;
+    std::vector<float> advance_left(advanced_samples, 0.0f);
+    std::vector<float> advance_right(advanced_samples, 0.0f);
     std::vector<float> left(2300, 0.0f);
     std::vector<float> right(2300, 0.0f);
     left[0] = 1.0f;
     right[0] = 1.0f;
 
     configure(machine, info, values, &callback);
+
+    /* Exercise a real in-flight transition: advance every retained comb and
+    ** allpass cursor at 44.1 kHz before rebuilding the delay network. A newly
+    ** allocated and muted 88.2 kHz network must restart from cursor zero; if a
+    ** discarded buffer's cursor leaks through setbuffer(), the impulse below
+    ** arrives advanced_samples samples too early. */
+    process_blocks(machine, &advance_left, &advance_right);
+    for (std::size_t i = 0; i < advanced_samples; ++i) {
+        if (!near(advance_left[i], 0.0f) || !near(advance_right[i], 0.0f)) {
+            return fail("44.1 kHz pre-transition silent advance produced output");
+        }
+    }
+
     callback.set_sample_rate(88200);
     machine->SequencerTick();
     process_blocks(machine, &left, &right);
 
     for (int i = 0; i < 2232; ++i) {
         if (!near(left[static_cast<std::size_t>(i)], 0.0f)) {
-            return fail("88.2 kHz left wet path arrived before scaled comb tuning 2232");
+            return fail("88.2 kHz left wet path arrived before scaled comb tuning 2232 after in-flight transition");
         }
     }
     if (!near(left[2232], 0.09f, 2.0e-5)) {
-        return fail("88.2 kHz first left Freeverb impulse changed");
+        return fail("88.2 kHz first left Freeverb impulse changed after in-flight transition");
     }
     for (int i = 0; i < 2278; ++i) {
         if (!near(right[static_cast<std::size_t>(i)], 0.0f)) {
-            return fail("88.2 kHz right wet path arrived before scaled comb tuning 2278");
+            return fail("88.2 kHz right wet path arrived before scaled comb tuning 2278 after in-flight transition");
         }
     }
     if (!near(right[2278], 0.09f, 2.0e-5)) {
-        return fail("88.2 kHz first right Freeverb impulse changed");
+        return fail("88.2 kHz first right Freeverb impulse changed after in-flight transition");
     }
-    std::printf("phase5-yezar-freeverb: rate-transition PASS sr=44100->88200 first-left=2232 first-right=2278 network=reinitialized\n");
+    std::printf("phase5-yezar-freeverb: rate-transition PASS sr=44100->88200 advanced=257 first-left=2232 first-right=2278 network=reinitialized\n");
     return 0;
 }
 
@@ -289,6 +305,6 @@ int main(int argc, char** argv)
     std::printf("machine: Jezar Freeverb\n");
     std::printf("module: arguru-freeverb.so\n");
     std::printf("abi: GetInfo/CreateMachine/DeleteMachine\n");
-    std::printf("dsp: dry unity + retained stereo comb timing + 88.2 kHz network reinitialization\n");
+    std::printf("dsp: dry unity + retained stereo comb timing + in-flight 88.2 kHz network reinitialization\n");
     return 0;
 }
