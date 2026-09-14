@@ -238,7 +238,11 @@ Phase 5B Pooplog-family preservation is complete for the nine retained source-bu
   - [x] Preserve representative historical DSP and timing behaviour, including FeedMe first-instance wavetable initialization, Koruz/Phantom stochastic anti-denormal paths, live 44.1 → 88.2 kHz rate transitions and the native 256-sample `MAX_BUFFER_LENGTH` contract.
   - [x] Preserve Slicit's historical 16-program opaque bank as the exact 2144-byte payload (`0x7271bd63c9a7782d`) through `PutData`, version-1 preset reload and fresh PSY3 reopen.
   - [x] Verify production `PluginCatcher` / `MachineFactory` discovery, public parameter endpoints, per-machine presets, one-song seven-machine fresh PSY3 reopen and all seven machine-to-Master topology edges.
-- [ ] JM machines, including JAZ's JM Drum
+- [x] JM machines, including JAZ's JM Drum
+  - [x] Build and gate the retained source-built JM Drum v2.5 native generator independently on Linux.
+  - [x] Freeze native identity/version/type, four-column geometry and all 16 historical parameter names, descriptions, ranges, flags and defaults.
+  - [x] Preserve deterministic drum/thump synthesis, historical `0Cxx` volume behaviour, the 256-sample Note Off release and live 44.1 → 88.2 kHz sample-rate reinitialization without rewriting synthesis equations.
+  - [x] Verify production `PluginCatcher` identity `jmdrum:0`, `MachineFactory` instantiation, complete 16-parameter version-1 preset persistence, fresh PSY3 reopen and JM Drum-to-Master topology.
 - [ ] JME machines
 - [ ] Zephod machines
 - [ ] Yezar machines
@@ -246,7 +250,7 @@ Phase 5B Pooplog-family preservation is complete for the nine retained source-bu
 - [ ] STK-derived Psycle machines where licensing/provenance permits
 - [ ] Remaining retained native generators/effects in the audited r12005 set
 
-The Druttis slice of Phase 5C is complete and gated by `.github/workflows/phase5-druttis-family.yml`. The remainder of Phase 5C stays open until each classic family has its own source-derived preservation evidence.
+The Druttis and JM slices of Phase 5C are complete and gated by `.github/workflows/phase5-druttis-family.yml` and `.github/workflows/phase5-jm-drum.yml`. The remainder of Phase 5C stays open until each classic family has its own source-derived preservation evidence.
 
 ### 5D — preservation matrix
 
