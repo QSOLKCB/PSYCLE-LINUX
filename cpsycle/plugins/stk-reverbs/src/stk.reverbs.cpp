@@ -139,11 +139,15 @@ void mi::Work(float *psamplesleft, float *psamplesright , int numsamples,int tra
 		return;
 
 	if(Vals[3] == 0) {
+		// Independent mode uses one persistent mono-input STK reverb instance
+		// per Psycle channel.  Each instance's first output is the channel's
+		// wet signal; selecting output 1 for the right instance incorrectly
+		// couples the wrapper's channel identity to STK's internal stereo tap.
 		switch(Vals[0]) {
 			case 0:
 				do {
 					*psamplesleft = jcrev[0].tick(StkFloat(*psamplesleft),0);
-					*psamplesright = jcrev[1].tick(StkFloat(*psamplesright),1);
+					*psamplesright = jcrev[1].tick(StkFloat(*psamplesright),0);
 					++psamplesleft;
 					++psamplesright;
 				} while(--numsamples);
@@ -151,7 +155,7 @@ void mi::Work(float *psamplesleft, float *psamplesright , int numsamples,int tra
 			case 1:
 				do {
 					*psamplesleft = nrev[0].tick(StkFloat(*psamplesleft),0);
-					*psamplesright = nrev[1].tick(StkFloat(*psamplesright),1);
+					*psamplesright = nrev[1].tick(StkFloat(*psamplesright),0);
 					++psamplesleft;
 					++psamplesright;
 				} while(--numsamples);
@@ -159,7 +163,7 @@ void mi::Work(float *psamplesleft, float *psamplesright , int numsamples,int tra
 			case 2:
 				do {
 					*psamplesleft = pcrrev[0].tick(StkFloat(*psamplesleft),0);
-					*psamplesright = pcrrev[1].tick(StkFloat(*psamplesright),1);
+					*psamplesright = pcrrev[1].tick(StkFloat(*psamplesright),0);
 					++psamplesleft;
 					++psamplesright;
 				} while(--numsamples);
