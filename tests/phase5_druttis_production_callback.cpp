@@ -228,6 +228,7 @@ int main()
 
     int rc = 0;
     if ((rc = expect_line(machine, callback, 44100.0, 120.0, 4.0, 24.0, 5512)) == 0 &&
+            (rc = expect_line(machine, callback, 44100.0, 35.0, 3.0, 24.0, 25200)) == 0 &&
             (rc = expect_line(machine, callback, 88200.0, 120.0, 4.0, 24.0, 11025)) == 0 &&
             (rc = expect_line(machine, callback, 88200.0, 137.0, 4.0, 24.0, 9656)) == 0 &&
             (rc = expect_line(machine, callback, 88200.0, 120.0, 8.0, 24.0, 5512)) == 0 &&
