@@ -3,8 +3,8 @@
 **
 ** Covers the three retained source-built wrappers that link against the
 ** supported Linux libstk-dev boundary: stk Plucked, stk Reverbs and stk Shakers.
-** Metadata hashes are emitted during the first dedicated observation run and
-** frozen only after the real Linux modules have been observed.
+** Complete parameter-table hashes are frozen from the first dedicated
+** observation of the real source-built Linux modules.
 */
 
 #include <algorithm>
@@ -43,13 +43,16 @@ struct Spec {
 const Spec SPECS[] = {
     {"stk Plucked", "stk Plucked", "stk Plucked",
         "Sartorius, Bohan and STK 4.2.0 developers", 0x0100,
-        psycle::plugin_interface::GENERATOR, 5, 1, Kind::Plucked, UINT64_C(0)},
+        psycle::plugin_interface::GENERATOR, 5, 1, Kind::Plucked,
+        UINT64_C(0x6656c2f630c6cab7)},
     {"stk Reverbs", "stk Reverbs", "stk Reverbs",
         "Sartorius and STK developers", 0x0110,
-        psycle::plugin_interface::EFFECT, 4, 1, Kind::Reverbs, UINT64_C(0)},
+        psycle::plugin_interface::EFFECT, 4, 1, Kind::Reverbs,
+        UINT64_C(0x6470b9b92b7da93d)},
     {"stk Shakers", "stk Shakers", "Shakers",
         "Sartorius, bohan and STK 4.5.0 developers", 0x0100,
-        psycle::plugin_interface::GENERATOR, 6, 1, Kind::Shakers, UINT64_C(0)},
+        psycle::plugin_interface::GENERATOR, 6, 1, Kind::Shakers,
+        UINT64_C(0x82538540e9128cf5)},
 };
 
 class TestCallback : public CFxCallback {
@@ -144,7 +147,7 @@ int verify_metadata(const Spec& spec, const CMachineInfo* info)
     const std::uint64_t actual = parameter_hash(info);
     std::printf("stk-metadata-hash[%s]=0x%016llx\n", spec.label,
         static_cast<unsigned long long>(actual));
-    if (spec.metadata_hash != 0 && actual != spec.metadata_hash)
+    if (actual != spec.metadata_hash)
         return fail(spec, "frozen parameter metadata hash changed");
     return 0;
 }
