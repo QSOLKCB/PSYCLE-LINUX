@@ -256,12 +256,16 @@ Phase 5B Pooplog-family preservation is complete for the nine retained source-bu
   - [x] Preserve deterministic FM synthesis, historical `0C80` volume scaling, the default 2414-sample smooth Note Off release and live 44.1 → 88.2 kHz envelope reconfiguration without rewriting oscillator/FM-routing equations.
   - [x] Preserve the historical `sustain < 16 => until noteoff` rule during live sample-rate changes for both VCA and modulation envelopes.
   - [x] Verify production `PluginCatcher` / `MachineFactory` discovery, complete 20-parameter version-1 preset persistence, fresh PSY3 reopen and Zephod SuperFM-to-Master topology.
-- [ ] Yezar machines
+- [x] Yezar machines
+  - [x] Build and gate the retained source-built `yezar_freeverb` implementation independently on Linux as the historical module `arguru-freeverb.so`.
+  - [x] Freeze the compatibility identity `Jezar Freeverb` / `Freeverb` / `Jezar`, version `0x0110`, effect/two-column geometry, catcher `arguru-freeverb:0`, and all five historical parameter records including the retained `Absortion` spelling.
+  - [x] Preserve exact Dry=320/Wet=0 unity plus wet-only stereo comb timing at 44.1 kHz (1116 left / 1139 right) and live 88.2 kHz `SequencerTick()` network reinitialization (2232 left / 2278 right) without rewriting Freeverb comb/allpass equations.
+  - [x] Verify all 5/5 public parameters with legal non-default values through version-1 preset restore and independent fresh PSY3 reopen, with zero opaque state and Jezar Freeverb-to-Master topology.
 - [ ] DW machines
 - [ ] STK-derived Psycle machines where licensing/provenance permits
 - [ ] Remaining retained native generators/effects in the audited r12005 set
 
-The Druttis, JM, JME and Zephod slices of Phase 5C are complete and gated by `.github/workflows/phase5-druttis-family.yml`, `.github/workflows/phase5-jm-drum.yml`, `.github/workflows/phase5-jme-family.yml` and `.github/workflows/phase5-zephod-superfm.yml`. The remainder of Phase 5C stays open until each classic family has its own source-derived preservation evidence.
+The Druttis, JM, JME, Zephod and Yezar slices of Phase 5C are complete and gated by `.github/workflows/phase5-druttis-family.yml`, `.github/workflows/phase5-jm-drum.yml`, `.github/workflows/phase5-jme-family.yml`, `.github/workflows/phase5-zephod-superfm.yml` and `.github/workflows/phase5-yezar-freeverb.yml`. The remainder of Phase 5C stays open until each classic family has its own source-derived preservation evidence.
 
 ### 5D — preservation matrix
 

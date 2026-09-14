@@ -26,12 +26,20 @@ void comb::setbuffer(int samples)
 		deletebuffer();
 	}
 	bufsize = samples;
-	buffer = (float*)dsp.memory_alloc(16, (bufsize + 3) & 0xFFFFFFFC);	
-	if(bufidx>=bufsize) bufidx = 0;
+	buffer = (float*)dsp.memory_alloc(16, (bufsize + 3) & 0xFFFFFFFC);
+	/* A resized buffer is a new delay line. recalculatebuffers() immediately
+	** mutes that new storage, so retaining the previous cursor would make the
+	** first post-reconfiguration delay depend on how many samples happened to
+	** be processed before the sample-rate change. */
+	bufidx = 0;
 }
 
 void comb::mute()
 {
+	/* Muting a rebuilt comb must discard the complete old tail. Clearing only
+	** the ring buffer while retaining filterstore leaks the previous damping
+	** state into the new allocation on the next process() call. */
+	filterstore = 0.0f;
 	dsp.clear(buffer, bufsize);
 }
 
