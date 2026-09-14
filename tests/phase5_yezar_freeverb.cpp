@@ -6,6 +6,7 @@
 ** wet impulse timing and live sample-rate reinitialization behavior.
 */
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -126,6 +127,19 @@ void configure(CMachineInterface* machine, const CMachineInfo* info,
     }
 }
 
+void process_blocks(CMachineInterface* machine, std::vector<float>* left,
+    std::vector<float>* right)
+{
+    std::size_t offset = 0;
+    while (offset < left->size()) {
+        const std::size_t remaining = left->size() - offset;
+        const int block = static_cast<int>(std::min<std::size_t>(remaining,
+            psycle::plugin_interface::MAX_BUFFER_LENGTH));
+        machine->Work(left->data() + offset, right->data() + offset, block, 1);
+        offset += static_cast<std::size_t>(block);
+    }
+}
+
 int verify_dry_unity(CMachineInterface* machine, const CMachineInfo* info)
 {
     TestCallback callback(44100);
@@ -157,7 +171,7 @@ int verify_wet_impulse_44100(CMachineInterface* machine, const CMachineInfo* inf
     right[0] = 1.0f;
 
     configure(machine, info, values, &callback);
-    machine->Work(left.data(), right.data(), static_cast<int>(left.size()), 1);
+    process_blocks(machine, &left, &right);
 
     for (int i = 0; i < 1116; ++i) {
         if (!near(left[static_cast<std::size_t>(i)], 0.0f)) {
@@ -191,7 +205,7 @@ int verify_rate_reinitialization(CMachineInterface* machine, const CMachineInfo*
     configure(machine, info, values, &callback);
     callback.set_sample_rate(88200);
     machine->SequencerTick();
-    machine->Work(left.data(), right.data(), static_cast<int>(left.size()), 1);
+    process_blocks(machine, &left, &right);
 
     for (int i = 0; i < 2232; ++i) {
         if (!near(left[static_cast<std::size_t>(i)], 0.0f)) {
