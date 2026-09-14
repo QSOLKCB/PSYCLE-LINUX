@@ -5,6 +5,8 @@
 
 Drum::Drum()
 {
+	OutVol=0;
+	Chan=-1;
 	AmpEnvStage=ST_NONOTE;
 	Started=false;
 }

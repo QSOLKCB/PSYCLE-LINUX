@@ -1,0 +1,38 @@
+name: Phase 5 JM Drum preservation
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-5/**'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  jm-drum:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run JM Drum preservation regression
+        run: |
+          chmod +x scripts/phase5-jm-drum-smoke.sh
+          scripts/phase5-jm-drum-smoke.sh phase5-jm-drum
+
+      - name: Upload JM Drum evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-jm-drum
+          path: phase5-jm-drum/
+          if-no-files-found: warn

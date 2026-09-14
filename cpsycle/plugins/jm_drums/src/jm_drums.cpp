@@ -106,7 +106,12 @@ mi::mi()
 {
 	Vals=new int[MacInfo.numParameters];
 
-	numtracks=0;
+	/* JM Drum owns a fixed 16-voice pool.  Keep Stop()/sample-rate changes tied
+	** to that actual pool and start the parameter-derived runtime state from a
+	** defined value before the host applies the historical defaults. */
+	numtracks=MAX_SIMUL_TRACKS;
+	globalpar=DrumPars();
+	currentSR=0;
 	for (int i=0;i<MAX_TRACKS;i++) allocatedvoice[i]=-1;
 
 }
@@ -301,7 +306,7 @@ void mi::Command()
 			"  Compatible 2.x : $00->0 $FF->OutVol\n\0"
 			);
 
-	pCB->MessBox(buffer,"·-=<[JAZ]> JMDrum Synth v." DRUM_VERSION "=-·",0);
+	pCB->MessBox(buffer,"Â·-=<[JAZ]> JMDrum Synth v." DRUM_VERSION "=-Â·",0);
 }
 
 void mi::Work(float *psamplesleft, float *psamplesright , int numsamples, int tracks)
