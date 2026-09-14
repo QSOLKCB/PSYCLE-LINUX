@@ -469,10 +469,20 @@ int verify_reverbs(const Spec& spec, const CMachineInfo* info,
         right[0] = 1.0f;
         process_blocks(machine, left, right);
         const double right_energy = mono_energy(right);
-        if (!finite_signal(left, right) || !std::isfinite(right_energy) ||
-                right_energy <= 1.0e-12 || !silent_signal(left, left, 1.0e-7f)) {
-            rc = fail(spec,
-                "right-input independent reverb lost finite isolated output");
+        const double left_energy = mono_energy(left);
+        std::printf(
+            "phase5-stk-family: Reverbs right-routing algorithm=%d right-energy=%.12g left-energy=%.12g\n",
+            algorithm, right_energy, left_energy);
+        if (!finite_signal(left, right)) {
+            rc = fail(spec, "right-input independent reverb produced non-finite output");
+            break;
+        }
+        if (!std::isfinite(right_energy) || right_energy <= 1.0e-12) {
+            rc = fail(spec, "right-input independent reverb produced no right output");
+            break;
+        }
+        if (!std::isfinite(left_energy) || !silent_signal(left, left, 1.0e-7f)) {
+            rc = fail(spec, "right-input independent reverb leaked into left output");
             break;
         }
     }
