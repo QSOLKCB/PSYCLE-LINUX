@@ -431,9 +431,12 @@ void mi::ParameterTweak(int par, int val)
 void mi::SequencerTick() 
 {
 	tickCounter=0;
-	if (currentSR != pCB->GetSamplingRate()) {
-		currentSR = pCB->GetSamplingRate();
+	const int32_t nextSR = pCB->GetSamplingRate();
+	if (currentSR != nextSR) {
+		const int32_t previousSR = currentSR;
+		currentSR = nextSR;
 		float srMult = currentSR/44100.0f;
+		float sampleRatio = previousSR > 0 ? (float)currentSR/(float)previousSR : 1.0f;
 		int i;
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].VCA.attack((int)(Vals[0]*srMult));
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].VCA.decay((int)(Vals[1]*srMult));
@@ -450,6 +453,19 @@ void mi::SequencerTick()
 			else Tracks[i].ENV.sustain((int)(Vals[7]*srMult));
 		}
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].ENV.release((int)(Vals[9]*srMult));
+
+		/* Driver reconfiguration does not stop machines. Preserve the wall-clock
+		** progress of any in-flight envelope and renormalize active oscillator
+		** frequency to the new sample rate instead of silently changing pitch. */
+		for (i=0; i<MAX_TRACKS ; i++) {
+			Tracks[i].VCA.retime(sampleRatio);
+			Tracks[i].ENV.retime(sampleRatio);
+			if (Tracks[i].VCA.envstate!=ENV_NONE || Tracks[i].ENV.envstate!=ENV_NONE) {
+				float Detune = (float)Vals[19]*0.0078125f;
+				Tracks[i].freq = (float)(440.0f*pow(2.0f,
+					((float)Tracks[i].Note+Detune)/12.0f))/float(currentSR);
+			}
+		}
 	}
 }
 
@@ -576,4 +592,3 @@ bool mi::DescribeValue(char * txt, const int param, const int value)
 
 	return false;
 }
-
