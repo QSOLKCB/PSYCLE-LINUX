@@ -8,6 +8,7 @@
 */
 
 #include <cstdio>
+#include <limits>
 
 #include <machine.h>
 #include <plugin_interface.h>
@@ -33,6 +34,7 @@ struct TimingCallback {
     double bpm;
     double lpb;
     double tpb;
+    double line_beats_override;
 };
 
 double callback_samplerate(void* context)
@@ -60,7 +62,9 @@ double callback_beatspersample(void* context)
 double callback_currbeatsperline(void* context)
 {
     const TimingCallback* self = static_cast<TimingCallback*>(context);
-    return 1.0 / self->lpb;
+    return self->line_beats_override > 0.0
+        ? self->line_beats_override
+        : 1.0 / self->lpb;
 }
 
 void timing_callback_init(TimingCallback& self)
@@ -82,6 +86,7 @@ void timing_callback_init(TimingCallback& self)
     self.bpm = 120.0;
     self.lpb = 4.0;
     self.tpb = 24.0;
+    self.line_beats_override = 0.0;
 }
 
 int expect_line(CMachineInterface& machine, TimingCallback& callback,
@@ -91,6 +96,7 @@ int expect_line(CMachineInterface& machine, TimingCallback& callback,
     callback.bpm = bpm;
     callback.lpb = lpb;
     callback.tpb = tpb;
+    callback.line_beats_override = 0.0;
     const int actual = machine.pCB->GetTickLength();
     if (actual != expected) {
         std::fprintf(stderr,
@@ -105,6 +111,43 @@ int expect_line(CMachineInterface& machine, TimingCallback& callback,
 }
 
 class DummyMachine : public CMachineInterface {};
+
+int expect_extreme_line_guards(CMachineInterface& machine, TimingCallback& callback)
+{
+    callback.sample_rate = 96000.0;
+    callback.bpm = 32.0;
+    callback.lpb = 4.0;
+    callback.tpb = 24.0;
+    callback.line_beats_override = 25000.0;
+
+    const double raw_samples = callback_currbeatsperline(&callback) /
+        callback_beatspersample(&callback);
+    const int max_tick_length = std::numeric_limits<int>::max();
+    const int clamped = machine.pCB->GetTickLength();
+    if (raw_samples <= (double)max_tick_length || clamped != max_tick_length) {
+        callback.line_beats_override = 0.0;
+        std::fprintf(stderr,
+            "phase5-druttis-production-callback: FAIL overflow guard raw=%.0f int-max=%d got=%d\n",
+            raw_samples, max_tick_length, clamped);
+        return 1;
+    }
+    std::printf(
+        "phase5-druttis-production-callback: overflow-clamp PASS sr=96000 bpm=32 line-beats=25000 raw-samples=%.0f samples=%d\n",
+        raw_samples, clamped);
+
+    callback.line_beats_override = std::numeric_limits<double>::infinity();
+    const int fallback = machine.pCB->GetTickLength();
+    callback.line_beats_override = 0.0;
+    if (fallback != 45000) {
+        std::fprintf(stderr,
+            "phase5-druttis-production-callback: FAIL nonfinite fallback expected=45000 got=%d\n",
+            fallback);
+        return 1;
+    }
+    std::printf(
+        "phase5-druttis-production-callback: nonfinite-fallback PASS samples=45000\n");
+    return 0;
+}
 
 int expect_headless_callback_fallback()
 {
@@ -233,6 +276,7 @@ int main()
             (rc = expect_line(machine, callback, 88200.0, 137.0, 4.0, 24.0, 9656)) == 0 &&
             (rc = expect_line(machine, callback, 88200.0, 120.0, 8.0, 24.0, 5512)) == 0 &&
             (rc = expect_line(machine, callback, 88200.0, 120.0, 4.0, 48.0, 11025)) == 0 &&
+            (rc = expect_extreme_line_guards(machine, callback)) == 0 &&
             (rc = expect_headless_callback_fallback()) == 0 &&
             (rc = expect_real_player_callback()) == 0) {
         std::printf("phase5-druttis-production-callback: PASS tracker-line-derived native timing\n");
