@@ -80,6 +80,9 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 "$NATIVE_BIN" "${PLUGINS[@]}" 2>&1 | tee "$NATIVE_LOG"
 "$STATE_BIN" "$OUT" "${PLUGINS[@]}" 2>&1 | tee "$STATE_LOG"
 
+grep -F 'stk-metadata-hash[stk Plucked]=0x6656c2f630c6cab7' "$NATIVE_LOG" >/dev/null
+grep -F 'stk-metadata-hash[stk Reverbs]=0x6470b9b92b7da93d' "$NATIVE_LOG" >/dev/null
+grep -F 'stk-metadata-hash[stk Shakers]=0x82538540e9128cf5' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-stk-family: machine PASS [stk Plucked]' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-stk-family: machine PASS [stk Reverbs]' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-stk-family: machine PASS [stk Shakers]' "$NATIVE_LOG" >/dev/null
@@ -93,6 +96,7 @@ grep -F 'phase5-stk-family-state: seed PASS [stk Reverbs] changed=4' "$STATE_LOG
 grep -F 'phase5-stk-family-state: seed PASS [stk Shakers] changed=6' "$STATE_LOG" >/dev/null
 grep -F 'phase5-stk-family-state: PASS machines=3' "$STATE_LOG" >/dev/null
 grep -F 'catchers: stk-plucked:0 stk-reverbs:0 stk-shakers:0' "$STATE_LOG" >/dev/null
+grep -F 'state: Plucked 5/5; Reverbs 4/4; Shakers 6/6; 0 opaque bytes' "$STATE_LOG" >/dev/null
 grep -F 'topology: 3/3 STK wrappers -> Master' "$STATE_LOG" >/dev/null
 
 [[ -s "$OUT/phase5-stk-family.psy" ]] || {
@@ -112,7 +116,10 @@ cat > "$SUMMARY" <<'EOF'
 - Three retained source-built STK wrappers audited: stk Plucked, stk Reverbs, stk Shakers.
 - Linux dependency boundary: distro `libstk-dev`; retained STK 4.5.0 archive remains provenance/history evidence.
 - All three build independently as Linux native-machine `.so` modules and clean only their own outputs: PASS
-- Native ABI identity/version/type/geometry and complete parameter tables observed through the real modules: PASS
+- Native ABI identity/version/type/geometry and complete parameter tables are frozen by exact hashes: PASS
+  - stk Plucked: `0x6656c2f630c6cab7`
+  - stk Reverbs: `0x6470b9b92b7da93d`
+  - stk Shakers: `0x82538540e9128cf5`
 - stk Plucked idle silence, historical 0C00 mute, Stop clearing and live 44.1 -> 88.2 kHz finite rendering: PASS
 - stk Reverbs exact Dry/Wet=0 bypass, all three algorithms, independent/mixed routing and live 44.1 -> 88.2 kHz finite rendering: PASS
 - stk Shakers historical note map 48..70, 0C00 mute, Stop silence and live 44.1 -> 88.2 kHz finite rendering: PASS
@@ -120,10 +127,6 @@ cat > "$SUMMARY" <<'EOF'
 - Public state: Plucked 5/5, Reverbs 4/4, Shakers 6/6; zero opaque bytes: PASS
 - Version-1 preset round-trip for each wrapper through a fresh MachineFactory instance: PASS
 - One-song three-machine fresh PSY3 reopen and all three wrapper -> Master topology edges: PASS
-
-The first dedicated run is an observation pass for the exact native parameter-table
-hashes. Those hashes must be frozen before the Phase 5C STK roadmap checkbox is
-marked complete.
 EOF
 
 cat "$SUMMARY"
