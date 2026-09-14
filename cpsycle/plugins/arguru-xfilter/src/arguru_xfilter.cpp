@@ -157,16 +157,19 @@ void mi::SetDelay(int delay) {
 }
 
 void mi::SetDelayTicks(int ticks) {
-	/* Delay time's historical maximum is 88200 samples at 44.1 kHz, i.e.
-	** two seconds. Lines mode normally reaches the same envelope (8 lines *
-	** 5512 samples * 2 ~= 88200). Keep that existing resource contract at
-	** every sample rate instead of allowing extreme tracker timing to grow
-	** unchecked multi-gigabyte buffers. Use 64-bit arithmetic before capping
-	** so the bound itself cannot be bypassed by signed-int overflow. */
+	/* Lines mode historically follows tracker timing and can legitimately exceed
+	** the sample-mode Delay parameter's two-second maximum at slow tempos. Keep
+	** that audible behavior, but stop pathological timing from growing the two
+	** legacy buffers without bound. Each buffer is allocated as
+	** memory_alloc(16, max_delay_samples), so a 2^20-sample ring consumes 16 MiB
+	** per channel / 32 MiB total. Reserve the historical 8-sample write-cursor
+	** headroom and cap only requests that exceed that explicit resource budget.
+	** Use 64-bit arithmetic before capping so signed-int overflow cannot bypass
+	** the bound. */
 	const int64_t requested_delay =
 		(int64_t)ticks * (int64_t)pCB->GetTickLength() * 2;
-	const int64_t max_resource_delay =
-		((int64_t)paraDelay.MaxValue * (int64_t)currentSR) / 44100;
+	const int64_t max_buffer_samples = (int64_t)1 << 20;
+	const int64_t max_resource_delay = max_buffer_samples - 8;
 	const int64_t bounded_delay = requested_delay > max_resource_delay
 		? max_resource_delay
 		: requested_delay;
