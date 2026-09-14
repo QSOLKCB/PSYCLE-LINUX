@@ -10,6 +10,7 @@
 
 #include <psycle/plugin_interface.hpp>
 #include <cstdio>
+#include <new>
 #include <stk/Stk.h>
 #include <stk/JCRev.h>
 #include <stk/NRev.h>
@@ -92,11 +93,27 @@ void mi::SequencerTick() {
 	if(samplerate != (StkFloat)pCB->GetSamplingRate()) {
 		samplerate = (StkFloat)pCB->GetSamplingRate();
 		Stk::setSampleRate(samplerate);
+
+		// STK's reverb delay topology is sized in each constructor from the
+		// then-current global sample rate.  Merely updating Stk::sampleRate()
+		// and T60 leaves the existing 44.1 kHz delay network intact, so rebuild
+		// both channel instances whenever the host rate changes.
 		StkFloat const t60 = StkFloat(Vals[1]) * 0.03125;
+		StkFloat const drywet = StkFloat(Vals[2]) * .01;
 		for(unsigned int i = 0; i < 2; ++i) {
+			jcrev[i].~JCRev();
+			new (&jcrev[i]) JCRev();
+			nrev[i].~NRev();
+			new (&nrev[i]) NRev();
+			pcrrev[i].~PRCRev();
+			new (&pcrrev[i]) PRCRev();
+
 			jcrev[i].setT60(t60);
 			nrev[i].setT60(t60);
 			pcrrev[i].setT60(t60);
+			jcrev[i].setEffectMix(drywet);
+			nrev[i].setEffectMix(drywet);
+			pcrrev[i].setEffectMix(drywet);
 		}
 	}
 }
