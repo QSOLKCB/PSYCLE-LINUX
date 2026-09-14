@@ -33,9 +33,21 @@ struct SeedValue {
 
 static const struct SeedValue SEEDS[] = {
 	{0u, 128},
+	{1u, 1024},
+	{2u, 2000},
 	{3u, 200},
+	{4u, 3000},
+	{5u, 64},
+	{6u, 2048},
+	{7u, 4096},
+	{8u, 128},
+	{9u, 5000},
 	{10u, 350},
+	{11u, 250},
+	{12u, 450},
 	{13u, 128},
+	{14u, -64},
+	{15u, 64},
 	{16u, 2},
 	{17u, 1},
 	{18u, 3},
@@ -112,12 +124,16 @@ static int verify_identity(psy_audio_Machine* machine)
 static int seed_parameters(psy_audio_Machine* machine)
 {
 	uintptr_t i;
-	for (i = 0; i < sizeof(SEEDS) / sizeof(SEEDS[0]); ++i) {
+	if (sizeof(SEEDS) / sizeof(SEEDS[0]) != PARAMETER_COUNT) {
+		return fail("seed table no longer covers every public parameter");
+	}
+	for (i = 0; i < PARAMETER_COUNT; ++i) {
 		psy_audio_MachineParam* param;
 		intptr_t minval;
 		intptr_t maxval;
 		const uintptr_t index = SEEDS[i].index;
 		const intptr_t value = SEEDS[i].value;
+		if (index != i) return fail("seed table parameter ordering changed");
 		param = psy_audio_machine_parameter(machine, index);
 		if (!param) return fail("seed parameter disappeared");
 		psy_audio_machine_parameter_range(machine, param, &minval, &maxval);
@@ -370,7 +386,7 @@ initial_cleanup:
 
 	printf("phase5-zephod-superfm-state: PASS\n");
 	printf("catcher: zephod-superfm:0\n");
-	printf("state: 20 public parameters, 0 opaque bytes\n");
+	printf("state: 20/20 public parameters seeded non-default, 0 opaque bytes\n");
 	printf("topology: Zephod SuperFM -> Master\n");
 	printf("song: %s\n", song_path);
 	return 0;
