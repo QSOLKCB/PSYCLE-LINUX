@@ -92,13 +92,14 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 "$NATIVE_BIN" "${PLUGINS[@]}" 2>&1 | tee "$NATIVE_LOG"
 "$STATE_BIN" "$OUT" "${PLUGINS[@]}" 2>&1 | tee "$STATE_LOG"
 
-# These are observation markers until the exact full metadata hashes are
-# frozen after the first source-built run.  The final preservation branch will
-# replace them with hash PASS markers before the roadmap item is checked.
-grep -F 'phase5-jme-family: metadata OBSERVE [Blitz 1.2.1]' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-jme-family: metadata OBSERVE [Blitz 1.6]' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-jme-family: metadata OBSERVE [GameFX 1.3.1]' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-jme-family: metadata OBSERVE [GameFX 1.6]' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-jme-family: metadata PASS [Blitz 1.2.1] parameters=112 version=0x0121 hash=0x93f6aa60b3378502' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-jme-family: metadata PASS [Blitz 1.6] parameters=112 version=0x0160 hash=0x194a11c1f2c71a31' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-jme-family: metadata PASS [GameFX 1.3.1] parameters=128 version=0x0131 hash=0x85b25fe270d3bdd0' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-jme-family: metadata PASS [GameFX 1.6] parameters=128 version=0x0160 hash=0x1a597c19c5c61a60' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-jme-family: tracker-command PASS [Blitz 1.2.1] command=0C80 note-on-scale=active' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-jme-family: tracker-command PASS [Blitz 1.6] command=0C80 note-on-scale=active' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-jme-family: tracker-command PASS [GameFX 1.3.1] command=0C80 note-on-scale=active' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-jme-family: tracker-command PASS [GameFX 1.6] command=0C80 note-on-scale=not-applied' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-jme-family: PASS' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-jme-family-state: PASS' "$STATE_LOG" >/dev/null
 
@@ -127,9 +128,10 @@ cat > "$SUMMARY" <<'EOF'
 - Direct clean removes each generated JME shared object: PASS
 - Historical native ABI exports (`GetInfo`, `CreateMachine`, `DeleteMachine`): PASS
 - Four distinct generator identities/versions/parameter geometries: PASS
-- Complete parameter metadata hashes: OBSERVATION PENDING FREEZE
+- Complete historical parameter metadata hashes for all four identities: PASS
 - Fresh default note rendering is finite, active and deterministic: PASS
-- Historical `0Cxx` tracker-volume behavior is active for all four identities: PASS
+- Blitz 1.2.1 / Blitz 1.6 / GameFX 1.3.1 retain `0C80` note-on amplitude scaling: PASS
+- GameFX 1.6 retains its later `InitEffect` path without `0C80` note-on amplitude scaling: PASS
 - Fresh 88.2 kHz target-rate rendering remains active: PASS
 - Production `PluginCatcher` identities (`blitz12:0`, `blitzn:0`, `gamefx13:0`, `gamefxn:0`): PASS
 - Production `MachineFactory` instantiation: PASS
@@ -139,7 +141,9 @@ cat > "$SUMMARY" <<'EOF'
 - Opaque state: none; persistence remains public historical parameters: PASS
 
 This gate intentionally preserves the older Blitz/GameFX identities alongside the
-newer 1.6 builds.  It does not alias old songs onto the newer machines.
+newer 1.6 builds.  It does not alias old songs onto the newer machines, and it
+preserves the version-specific tracker-command semantics rather than flattening
+them into one behavior.
 EOF
 
 cat "$SUMMARY"
