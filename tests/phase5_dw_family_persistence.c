@@ -47,7 +47,7 @@ typedef struct DwSpec {
 
 static const DwSpec SPECS[SPEC_COUNT] = {
 	{"dw eq", "dw-eq:0", "dw eq", "eq", "dw-eq", 12u, 12u, SEED_EQ},
-	{"dw granulizer", "dw-granulizer:0", "dw granulizer", "granulizer", "dw-granulizer", 50u, 39u, SEED_GRANULIZER},
+	{"dw granulizer", "dw-granulizer:0", "dw granulizer", "granulizer", "dw-granulizer", 50u, 36u, SEED_GRANULIZER},
 	{"dw IoPan", "dw-iopan:0", "dw IoPan", "IoPan", "dw-iopan", 4u, 4u, SEED_IOPAN},
 	{"dw Tremolo", "dw-tremolo:0", "dw Tremolo", "Tremolo", "dw-tremolo", 8u, 8u, SEED_TREMOLO},
 };
@@ -225,7 +225,7 @@ static int tweak_value(const DwSpec* spec, psy_audio_Machine* machine,
 	if (actual != requested) {
 		fprintf(stderr,
 			"phase5-dw-family-state: FAIL [%s]: seed %lu requested %ld got %ld\n",
-			spec->label, (unsigned long)index, (long)requested, (long)actual);
+				spec->label, (unsigned long)index, (long)requested, (long)actual);
 		return 1;
 	}
 	return 0;
@@ -250,6 +250,10 @@ static int seed_eq(const DwSpec* spec, psy_audio_Machine* machine,
 
 static int seed_granulizer(const DwSpec* spec, psy_audio_Machine* machine)
 {
+	/* 50 visible slots = 12 label/null structure slots + 36 directly writable
+	** state controls + runtime display values Limit amount (47) and Density (48).
+	** The runtime values are still captured in every preset/PSY3 snapshot, but
+	** they are not seeded as if they were user-writable controls. */
 	static const intptr_t seeds[50] = {
 		SKIP_SEED, 2000, 1200, 300, 400, 900, 800, 1, 4, SKIP_SEED,
 		SKIP_SEED, 10, 20, 30, 40, 50, 60, SKIP_SEED, 1, 2,
@@ -271,8 +275,6 @@ static int seed_granulizer(const DwSpec* spec, psy_audio_Machine* machine)
 
 static int seed_iopan(const DwSpec* spec, psy_audio_Machine* machine)
 {
-	/* Establish extents while Maintain=None/Allow Flip=Yes, then freeze the
-	** centered/no-flip final state. The resulting four values are all non-default. */
 	if (tweak_value(spec, machine, 0, 24) != 0 ||
 			tweak_value(spec, machine, 2, 104) != 0 ||
 			tweak_value(spec, machine, 3, 0) != 0 ||
@@ -564,7 +566,7 @@ initial_cleanup:
 
 	printf("phase5-dw-family-state: PASS machines=4\n");
 	printf("catchers: dw-eq:0 dw-granulizer:0 dw-iopan:0 dw-tremolo:0\n");
-	printf("state: EQ 12/12, Granulizer 39 writable non-default + runtime display state, IoPan 4/4, Tremolo 8/8; 0 opaque bytes\n");
+	printf("state: EQ 12/12, Granulizer 36 writable non-default + runtime display state, IoPan 4/4, Tremolo 8/8; 0 opaque bytes\n");
 	printf("topology: 4/4 DW effects -> Master\n");
 	printf("song: %s\n", song_path);
 	return 0;
