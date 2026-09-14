@@ -11,6 +11,7 @@ mkdir -p "$OUT"
 ABI_BIN="$OUT/phase5-druttis-family"
 STATE_BIN="$OUT/phase5-druttis-family-state"
 CALLBACK_BIN="$OUT/phase5-druttis-production-callback"
+CALLBACK_FIXTURE_OBJ="$OUT/phase5-druttis-player-callback-fixture.o"
 ABI_LOG="$OUT/phase5-druttis-family.log"
 STATE_LOG="$OUT/phase5-druttis-family-state.log"
 CALLBACK_LOG="$OUT/phase5-druttis-production-callback.log"
@@ -103,12 +104,21 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
     "$ROOT/tests/phase5_druttis_family_persistence.c" -o "$STATE_BIN" \
     "${COMMON_LIBDIRS[@]}" "${COMMON_LIBS[@]}" -lstdc++
 
-# This binary includes the legacy host headers, which intentionally retain
-# historical warning-heavy documentation/macros. Keep meaningful local errors
-# fatal without promoting inherited host-header warnings to build failures.
+# Construct the real Song -> Player -> MachineCallback chain in C. Psycle's
+# legacy Player headers deliberately retain C declarations that are not C++
+# clean on Linux, while the native CFxCallback ABI itself is C++.
+gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
+    "${COMMON_INCLUDES[@]}" -c \
+    "$ROOT/tests/phase5_druttis_player_callback_fixture.c" \
+    -o "$CALLBACK_FIXTURE_OBJ"
+
+# Keep the native ABI assertion in C++ and link it to the production C fixture.
+# Historical host headers are warning-heavy, so only meaningful local return
+# type errors are promoted here.
 g++ -std=c++17 -Wall -Wextra -Werror=return-type \
     "${COMMON_INCLUDES[@]}" \
-    "$ROOT/tests/phase5_druttis_production_callback.cpp" -o "$CALLBACK_BIN" \
+    "$ROOT/tests/phase5_druttis_production_callback.cpp" \
+    "$CALLBACK_FIXTURE_OBJ" -o "$CALLBACK_BIN" \
     "${COMMON_LIBDIRS[@]}" "${COMMON_LIBS[@]}"
 
 # Gate the exact PluginFxCallback timing adapter used by production native

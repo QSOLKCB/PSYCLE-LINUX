@@ -7,15 +7,22 @@
 ** that production plugins never receive.
 */
 
-#include <cmath>
 #include <cstdio>
 
-#include <audioconfig.h>
 #include <machine.h>
-#include <player.h>
 #include <plugin_interface.h>
-#include <properties.h>
-#include <song.h>
+
+extern "C" {
+void* phase5_druttis_player_callback_fixture_create(void);
+void phase5_druttis_player_callback_fixture_destroy(void*);
+psy_audio_MachineCallback* phase5_druttis_player_callback_fixture_callback(void*);
+double phase5_druttis_player_callback_fixture_samplerate(void*);
+double phase5_druttis_player_callback_fixture_bpm(void*);
+unsigned long phase5_druttis_player_callback_fixture_lpb(void*);
+unsigned long phase5_druttis_player_callback_fixture_tpb(void*);
+int phase5_druttis_player_callback_fixture_transport_tick_samples(void*);
+int phase5_druttis_player_callback_fixture_line_samples(void*);
+}
 
 namespace {
 
@@ -96,71 +103,48 @@ class DummyMachine : public CMachineInterface {};
 
 int expect_real_player_callback()
 {
-    psy_Property* config;
-    psy_audio_AudioConfig audioconfig;
-    psy_audio_MachineCallback callback;
-    psy_audio_Player player;
-    psy_audio_Song* song;
+    void* fixture;
+    psy_audio_MachineCallback* callback;
     DummyMachine machine;
     int rc = 0;
 
-    psy_audio_init();
-    config = psy_property_allocinit_key(NULL);
-    if (!config) {
-        psy_audio_dispose();
+    fixture = phase5_druttis_player_callback_fixture_create();
+    if (!fixture) {
         std::fprintf(stderr,
-            "phase5-druttis-production-callback: FAIL could not allocate player configuration\n");
+            "phase5-druttis-production-callback: FAIL could not create real player callback fixture\n");
         return 1;
     }
-
-    psy_audio_audioconfig_init(&audioconfig, config);
-    psy_audio_machinecallback_init(&callback);
-    psy_audio_player_init(&player, &callback, NULL,
-        psy_audio_audioconfig_base(&audioconfig),
-        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-
-    song = psy_audio_song_alloc_init(&player.machinefactory);
-    if (!song) {
-        psy_audio_player_dispose(&player);
-        psy_audio_audioconfig_dispose(&audioconfig);
-        psy_property_deallocate(config);
-        psy_audio_dispose();
+    callback = phase5_druttis_player_callback_fixture_callback(fixture);
+    if (!callback) {
+        phase5_druttis_player_callback_fixture_destroy(fixture);
         std::fprintf(stderr,
-            "phase5-druttis-production-callback: FAIL could not allocate production song\n");
+            "phase5-druttis-production-callback: FAIL real player callback fixture returned no callback\n");
         return 1;
     }
-
-    psy_audio_song_set_bpm(song, 120.0);
-    psy_audio_song_set_lpb(song, 4);
-    psy_audio_song_set_tpb(song, 24);
-    psy_audio_player_set_song(&player, song);
 
     mi_resetcallback(&machine);
-    mi_setcallback(&machine, &callback);
+    mi_setcallback(&machine, callback);
     if (!machine.pCB) {
         rc = 1;
         std::fprintf(stderr,
             "phase5-druttis-production-callback: FAIL production adapter was not installed for player callback\n");
     } else {
-        const double sample_rate = callback.vtable->samplerate(&callback);
-        const double bpm = callback.vtable->bpm(&callback);
-        const double beats_per_tick = callback.vtable->beatspertick(&callback);
-        const double beats_per_sample = callback.vtable->beatspersample(&callback);
-        const double beats_per_line = callback.vtable->currbeatsperline(&callback);
-        const int transport_tick_samples = (int)(beats_per_tick / beats_per_sample);
-        const int line_samples = (int)(beats_per_line / beats_per_sample);
+        const double sample_rate = phase5_druttis_player_callback_fixture_samplerate(fixture);
+        const double bpm = phase5_druttis_player_callback_fixture_bpm(fixture);
+        const unsigned long lpb = phase5_druttis_player_callback_fixture_lpb(fixture);
+        const unsigned long tpb = phase5_druttis_player_callback_fixture_tpb(fixture);
+        const int transport_tick_samples =
+            phase5_druttis_player_callback_fixture_transport_tick_samples(fixture);
+        const int line_samples = phase5_druttis_player_callback_fixture_line_samples(fixture);
         const int actual = machine.pCB->GetTickLength();
 
-        if (std::fabs(sample_rate - 44100.0) > 0.5 ||
-                std::fabs(bpm - 120.0) > 0.0001 ||
-                psy_audio_song_lpb(song) != 4 || psy_audio_song_tpb(song) != 24 ||
-                transport_tick_samples != 918 || line_samples != 5512 || actual != 5512) {
+        if ((int)sample_rate != 44100 || (int)bpm != 120 ||
+                lpb != 4 || tpb != 24 || transport_tick_samples != 918 ||
+                line_samples != 5512 || actual != 5512) {
             rc = 1;
             std::fprintf(stderr,
                 "phase5-druttis-production-callback: FAIL actual player callback sr=%.0f bpm=%.3f lpb=%lu tpb=%lu transport-tick=%d line=%d adapter=%d\n",
-                sample_rate, bpm,
-                (unsigned long)psy_audio_song_lpb(song),
-                (unsigned long)psy_audio_song_tpb(song),
+                sample_rate, bpm, lpb, tpb,
                 transport_tick_samples, line_samples, actual);
         } else {
             std::printf(
@@ -172,12 +156,7 @@ int expect_real_player_callback()
         mi_dispose(&machine);
         machine.pCB = nullptr;
     }
-    psy_audio_player_set_empty_song(&player);
-    psy_audio_song_deallocate(song);
-    psy_audio_player_dispose(&player);
-    psy_audio_audioconfig_dispose(&audioconfig);
-    psy_property_deallocate(config);
-    psy_audio_dispose();
+    phase5_druttis_player_callback_fixture_destroy(fixture);
     return rc;
 }
 
