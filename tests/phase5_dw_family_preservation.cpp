@@ -181,7 +181,9 @@ bool same_signal(const std::vector<float>& a_l, const std::vector<float>& a_r,
     const std::vector<float>& b_l, const std::vector<float>& b_r,
     float tolerance = 1.0e-5f)
 {
-    if (a_l.size() != b_l.size() || a_r.size() != b_r.size()) return false;
+    if (a_l.size() != b_l.size() || a_r.size() != b_r.size() ||
+            !finite_signal(a_l, a_r) || !finite_signal(b_l, b_r))
+        return false;
     for (std::size_t i = 0; i < a_l.size(); ++i) {
         if (std::fabs(a_l[i] - b_l[i]) > tolerance ||
                 std::fabs(a_r[i] - b_r[i]) > tolerance)
@@ -193,7 +195,8 @@ bool same_signal(const std::vector<float>& a_l, const std::vector<float>& a_r,
 double rms_difference(const std::vector<float>& a_l, const std::vector<float>& a_r,
     const std::vector<float>& b_l, const std::vector<float>& b_r)
 {
-    if (a_l.size() != b_l.size() || a_r.size() != b_r.size() || a_l.empty())
+    if (a_l.size() != b_l.size() || a_r.size() != b_r.size() || a_l.empty() ||
+            !finite_signal(a_l, a_r) || !finite_signal(b_l, b_r))
         return INFINITY;
     long double sum = 0.0;
     for (std::size_t i = 0; i < a_l.size(); ++i) {
@@ -201,7 +204,8 @@ double rms_difference(const std::vector<float>& a_l, const std::vector<float>& a
         const long double dr = static_cast<long double>(a_r[i]) - b_r[i];
         sum += dl * dl + dr * dr;
     }
-    return std::sqrt(static_cast<double>(sum / (2.0L * a_l.size())));
+    const double result = std::sqrt(static_cast<double>(sum / (2.0L * a_l.size())));
+    return std::isfinite(result) ? result : INFINITY;
 }
 
 int verify_eq(const Spec& spec, const CMachineInfo* info,
@@ -256,7 +260,9 @@ int verify_eq(const Spec& spec, const CMachineInfo* info,
     const double target_distance = rms_difference(live_l, live_r, target_l, target_r);
     const double stale_distance = rms_difference(live_l, live_r, stale_l, stale_r);
     if (!finite_signal(live_l, live_r) || !finite_signal(target_l, target_r) ||
-            target_distance > 1.0e-3 || stale_distance < 1.0e-2)
+            !finite_signal(stale_l, stale_r) || !std::isfinite(target_distance) ||
+            !std::isfinite(stale_distance) || target_distance > 1.0e-3 ||
+            stale_distance < 1.0e-2)
         rc = fail(spec, "live 88.2 kHz coefficient update no longer matches fresh target response");
     else
         std::printf("phase5-dw-family: EQ rate PASS target=%.8f stale=%.8f\n",
@@ -368,7 +374,10 @@ int verify_tremolo(const Spec& spec, const CMachineInfo* info,
     process_blocks(target, target_l, target_r);
     const double target_distance = rms_difference(live_l, live_r, target_l, target_r);
     const double stale_distance = rms_difference(live_l, live_r, stale_l, stale_r);
-    if (!finite_signal(live_l, live_r) || target_distance > 2.0e-4 || stale_distance < 1.0e-3)
+    if (!finite_signal(live_l, live_r) || !finite_signal(target_l, target_r) ||
+            !finite_signal(stale_l, stale_r) || !std::isfinite(target_distance) ||
+            !std::isfinite(stale_distance) || target_distance > 2.0e-4 ||
+            stale_distance < 1.0e-3)
         rc = fail(spec, "live LFO sample-rate scaling diverged from fresh 88.2 kHz wall-clock phase");
     else
         std::printf("phase5-dw-family: Tremolo rate PASS target=%.8f stale=%.8f\n",
