@@ -26,8 +26,11 @@ void allpass::setbuffer(int samples)
 		deletebuffer();
 	}
 	bufsize = samples;
-	buffer = (float*)dsp.memory_alloc(16, (bufsize + 3) & 0xFFFFFFFC);	
-	if(bufidx>=bufsize) bufidx = 0;
+	buffer = (float*)dsp.memory_alloc(16, (bufsize + 3) & 0xFFFFFFFC);
+	/* A resized buffer is a new delay line. recalculatebuffers() immediately
+	** mutes that new storage, so its cursor must restart at the beginning rather
+	** than inherit a position from the discarded allocation. */
+	bufidx = 0;
 }
 
 void allpass::mute()
