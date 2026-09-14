@@ -5,6 +5,8 @@
 #include "machine.h"
 #include "library.h"
 
+#include <cmath>
+#include <limits>
 #include <string.h>
 
 #include "../../detail/os.h"
@@ -43,9 +45,13 @@ class PluginFxCallback : public CFxCallback
 				/* Native Psycle machines historically call this a tick length, but
 				** the ABI value is the current tracker line duration. Host TPB is a
 				** finer transport clock (normally 24) and must not shorten the line
-				** seen by plugins (normally LPB 4). Preserve the historical integer
-				** sample count by truncating the exact line/sample ratio once. */
-				return (int)(beats_per_line / beats_per_sample);
+				** seen by plugins (normally LPB 4). Preserve historical truncation
+				** for genuinely fractional durations while moving one representable
+				** step upward first so an exact integral duration that landed one ULP
+				** low (for example 25199.999999999996) is not shortened by a sample. */
+				const double samples_per_line = beats_per_line / beats_per_sample;
+				return (int)std::nextafter(samples_per_line,
+					std::numeric_limits<double>::infinity());
 			}
 		}
 		const int samplerate = GetSamplingRate();
