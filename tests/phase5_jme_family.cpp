@@ -3,7 +3,7 @@
 **
 ** Loads the four retained JME generators through Psycle's historical native
 ** ABI and freezes identity/version/parameter geometry plus representative
-** deterministic note and tracker-volume behavior.  The 1.2/1.3 identities
+** deterministic note and tracker-command behavior.  The 1.2/1.3 identities
 ** remain separate from the later 1.6 builds.
 */
 
@@ -32,16 +32,18 @@ struct Spec {
     int parameters;
     int columns;
     std::uint64_t metadata_hash;
+    bool note_on_0c_scales;
 };
 
-/* Hashes are filled after the first source-built observation and then frozen.
-** A zero value is deliberately observation-only while bringing up the gate;
-** the smoke script refuses to mark the family complete until all are nonzero. */
 const Spec SPECS[] = {
-    {"Blitz 1.2.1", "Blitz 1.2.1", "Blitz", 0x0121, 112, 7, 0},
-    {"Blitz 1.6", "Blitz 1.6", "Blitz", 0x0160, 112, 7, 0},
-    {"GameFX 1.3.1", "GameFX ver. 1.3.1", "GameFX", 0x0131, 128, 8, 0},
-    {"GameFX 1.6", "GameFX ver. 1.6", "GameFX", 0x0160, 128, 8, 0},
+    {"Blitz 1.2.1", "Blitz 1.2.1", "Blitz", 0x0121, 112, 7,
+        UINT64_C(0x93f6aa60b3378502), true},
+    {"Blitz 1.6", "Blitz 1.6", "Blitz", 0x0160, 112, 7,
+        UINT64_C(0x194a11c1f2c71a31), true},
+    {"GameFX 1.3.1", "GameFX ver. 1.3.1", "GameFX", 0x0131, 128, 8,
+        UINT64_C(0x85b25fe270d3bdd0), true},
+    {"GameFX 1.6", "GameFX ver. 1.6", "GameFX", 0x0160, 128, 8,
+        UINT64_C(0x1a597c19c5c61a60), false},
 };
 
 class TestCallback : public CFxCallback {
@@ -133,12 +135,17 @@ int verify_metadata(const Spec& spec, const CMachineInfo* info)
         }
     }
     const std::uint64_t actual_hash = metadata_hash(info);
-    std::printf("phase5-jme-family: metadata OBSERVE [%s] parameters=%d version=0x%04x hash=0x%016llx\n",
+    if (actual_hash != spec.metadata_hash) {
+        std::fprintf(stderr,
+            "phase5-jme-family: FAIL [%s]: metadata hash expected 0x%016llx got 0x%016llx\n",
+            spec.label,
+            static_cast<unsigned long long>(spec.metadata_hash),
+            static_cast<unsigned long long>(actual_hash));
+        return 1;
+    }
+    std::printf("phase5-jme-family: metadata PASS [%s] parameters=%d version=0x%04x hash=0x%016llx\n",
         spec.label, info->numParameters, info->PlugVersion,
         static_cast<unsigned long long>(actual_hash));
-    if (spec.metadata_hash != 0 && actual_hash != spec.metadata_hash) {
-        return fail(spec, "complete parameter metadata hash changed");
-    }
     return 0;
 }
 
@@ -171,8 +178,6 @@ std::vector<float> render_note(CMachineInterface* machine, int samples,
                     !std::isfinite(right[static_cast<std::size_t>(i)])) {
                 return {};
             }
-            /* These retained generators are allowed to use stereo synthesis;
-            ** freeze the left stream for deterministic comparisons. */
             signal.push_back(left[static_cast<std::size_t>(i)]);
         }
         remaining -= block;
@@ -227,9 +232,6 @@ int load_plugin(const Spec& spec, const char* path, LoadedPlugin& out)
 CMachineInterface* make_machine(const Spec& spec, const LoadedPlugin& plugin,
     TestCallback& callback)
 {
-    /* Both Blitz and GameFX contain optional random waveforms.  Seed the
-    ** process PRNG before construction so two fresh comparison instances get
-    ** identical historical wavetable contents without changing production. */
     std::srand(0x4a4d45);
     CMachineInterface* machine = plugin.create();
     if (!machine || !machine->Vals) {
@@ -268,34 +270,46 @@ int verify_default_render(const Spec& spec, const LoadedPlugin& plugin)
 int verify_volume_command(const Spec& spec, const LoadedPlugin& plugin)
 {
     TestCallback callback_full(44100);
-    TestCallback callback_half(44100);
+    TestCallback callback_command(44100);
     CMachineInterface* full = make_machine(spec, plugin, callback_full);
-    CMachineInterface* half = make_machine(spec, plugin, callback_half);
-    if (!full || !half) {
+    CMachineInterface* commanded = make_machine(spec, plugin, callback_command);
+    if (!full || !commanded) {
         if (full) plugin.destroy(*full);
-        if (half) plugin.destroy(*half);
+        if (commanded) plugin.destroy(*commanded);
         return 1;
     }
     const std::vector<float> full_signal = render_note(full, 1024);
-    const std::vector<float> half_signal = render_note(half, 1024, 0x0C, 128);
+    const std::vector<float> commanded_signal = render_note(commanded, 1024, 0x0C, 128);
     const double full_rms = rms(full_signal);
-    const double half_rms = rms(half_signal);
+    const double commanded_rms = rms(commanded_signal);
     plugin.destroy(*full);
-    plugin.destroy(*half);
-    if (full_signal.empty() || half_signal.empty() || full_rms <= 0.01 ||
-            half_rms <= 0.0) {
-        return fail(spec, "0Cxx volume-command render failed");
+    plugin.destroy(*commanded);
+    if (full_signal.empty() || commanded_signal.empty() || full_rms <= 0.01 ||
+            commanded_rms <= 0.0) {
+        return fail(spec, "0Cxx tracker-command render failed");
     }
-    const double ratio = half_rms / full_rms;
-    /* Historical JME code scales 0Cxx on a 0..255 tracker byte. */
-    if (ratio < 0.47 || ratio > 0.54) {
-        std::fprintf(stderr,
-            "phase5-jme-family: FAIL [%s]: 0C80 RMS ratio %.6f outside retained half-volume envelope\n",
+    const double ratio = commanded_rms / full_rms;
+    if (spec.note_on_0c_scales) {
+        if (ratio < 0.47 || ratio > 0.55) {
+            std::fprintf(stderr,
+                "phase5-jme-family: FAIL [%s]: 0C80 RMS ratio %.6f outside retained scaled envelope\n",
+                spec.label, ratio);
+            return 1;
+        }
+        std::printf("phase5-jme-family: tracker-command PASS [%s] command=0C80 note-on-scale=active ratio=%.6f\n",
             spec.label, ratio);
-        return 1;
+    } else {
+        /* GameFX 1.6 routes the command through InitEffect() and no longer
+        ** applies it as the note-on amplitude multiplier used by 1.3.1. */
+        if (ratio < 0.99 || ratio > 1.01) {
+            std::fprintf(stderr,
+                "phase5-jme-family: FAIL [%s]: 0C80 RMS ratio %.6f changed from retained unscaled note-on behavior\n",
+                spec.label, ratio);
+            return 1;
+        }
+        std::printf("phase5-jme-family: tracker-command PASS [%s] command=0C80 note-on-scale=not-applied ratio=%.6f\n",
+            spec.label, ratio);
     }
-    std::printf("phase5-jme-family: volume-command PASS [%s] command=0C80 ratio=%.6f\n",
-        spec.label, ratio);
     return 0;
 }
 
@@ -344,6 +358,6 @@ int main(int argc, char** argv)
     std::printf("phase5-jme-family: PASS\n");
     std::printf("machines: Blitz 1.2.1 + Blitz 1.6 + GameFX 1.3.1 + GameFX 1.6\n");
     std::printf("abi: GetInfo/CreateMachine/DeleteMachine\n");
-    std::printf("dsp: deterministic default note + 0Cxx volume + 88.2 kHz target-rate render\n");
+    std::printf("dsp: deterministic default note + version-specific 0Cxx behavior + 88.2 kHz target-rate render\n");
     return 0;
 }
