@@ -58,7 +58,7 @@ done
 g++ -std=c++17 -Wall -Wextra -Werror \
   -I"$CPSYCLE/plugins" \
   "$ROOT/tests/phase5_stk_family_preservation.cpp" \
-  -ldl -o "$NATIVE_BIN"
+  -ldl -lstk -o "$NATIVE_BIN"
 
 # shellcheck disable=SC2207
 LUA_CFLAGS=($(pkg-config --cflags lua))
@@ -86,9 +86,9 @@ grep -F 'stk-metadata-hash[stk Shakers]=0x4c29aa201e9bb317' "$NATIVE_LOG" >/dev/
 grep -F 'phase5-stk-family: machine PASS [stk Plucked]' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-stk-family: machine PASS [stk Reverbs]' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-stk-family: machine PASS [stk Shakers]' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-stk-family: Plucked PASS idle=zero 0C00=zero Stop=zero live-rate=finite' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-stk-family: Reverbs PASS dry=unity algorithms=3 routing=independent+mixed live-rate=finite' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-stk-family: Shakers PASS map=48..70 0C00=zero Stop=zero live-rate=finite' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-stk-family: Plucked PASS idle=zero 0C00=zero Stop=zero live-rate=STK-reference' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-stk-family: Reverbs PASS dry=unity algorithms=STK-reference routing=bidirectional live-rate=STK-reference' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-stk-family: Shakers PASS map=48..70->STK-reference 0C00=zero Stop=zero live-rate=STK-reference' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-stk-family: PASS machines=3' "$NATIVE_LOG" >/dev/null
 
 grep -F 'phase5-stk-family-state: seed PASS [stk Plucked] changed=5' "$STATE_LOG" >/dev/null
@@ -97,6 +97,7 @@ grep -F 'phase5-stk-family-state: seed PASS [stk Shakers] changed=6' "$STATE_LOG
 grep -F 'phase5-stk-family-state: PASS machines=3' "$STATE_LOG" >/dev/null
 grep -F 'catchers: stk-plucked:0 stk-reverbs:0 stk-shakers:0' "$STATE_LOG" >/dev/null
 grep -F 'state: Plucked 5/5; Reverbs 4/4; Shakers 6/6; 0 opaque bytes' "$STATE_LOG" >/dev/null
+grep -F 'preset-factory: independent PluginCatcher/MachineFactory' "$STATE_LOG" >/dev/null
 grep -F 'topology: 3/3 STK wrappers -> Master' "$STATE_LOG" >/dev/null
 
 [[ -s "$OUT/phase5-stk-family.psy" ]] || {
@@ -120,12 +121,12 @@ cat > "$SUMMARY" <<'EOF'
   - stk Plucked: `0x55e20a3f7e90f611`
   - stk Reverbs: `0xf92219f73194a3ae`
   - stk Shakers: `0x4c29aa201e9bb317`
-- stk Plucked idle silence, historical 0C00 mute, Stop clearing and live 44.1 -> 88.2 kHz finite rendering: PASS
-- stk Reverbs exact Dry/Wet=0 bypass, all three algorithms, independent/mixed routing and live 44.1 -> 88.2 kHz finite rendering: PASS
-- stk Shakers historical note map 48..70, 0C00 mute, Stop silence and live 44.1 -> 88.2 kHz finite rendering: PASS
+- stk Plucked idle silence, historical 0C00 mute, Stop clearing, and live 44.1 -> 88.2 kHz rendering matched against direct system-STK behavior: PASS
+- stk Reverbs exact Dry/Wet=0 bypass, JCRev/NRev/PRCRev selector outputs matched against direct system-STK references, both directions of independent/mixed stereo routing, and live 44.1 -> 88.2 kHz system-STK reference rendering: PASS
+- stk Shakers all historical notes 48..70 matched against the frozen old->new instrument map using seeded direct system-STK references; 0C00 mute, Stop silence, and live 44.1 -> 88.2 kHz reference rendering: PASS
 - Production catcher identities: stk-plucked:0, stk-reverbs:0, stk-shakers:0: PASS
 - Public state: Plucked 5/5, Reverbs 4/4, Shakers 6/6; zero opaque bytes: PASS
-- Version-1 preset round-trip for each wrapper through a fresh MachineFactory instance: PASS
+- Version-1 preset round-trip for each wrapper through a separate independently registered PluginCatcher/MachineFactory stack: PASS
 - One-song three-machine fresh PSY3 reopen and all three wrapper -> Master topology edges: PASS
 EOF
 
