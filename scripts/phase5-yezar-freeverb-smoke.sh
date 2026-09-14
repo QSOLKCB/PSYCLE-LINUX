@@ -76,7 +76,7 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 grep -F 'phase5-yezar-freeverb: metadata PASS parameters=5 version=0x0110 identity=Jezar-Freeverb' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-yezar-freeverb: dry-unity PASS dry=320 wet=0' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-yezar-freeverb: wet-timing PASS sr=44100 first-left=1116 first-right=1139 amplitude=0.09' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-yezar-freeverb: rate-transition PASS sr=44100->88200 first-left=2232 first-right=2278 network=reinitialized' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-yezar-freeverb: rate-transition PASS sr=44100->88200 advanced=257 first-left=2232 first-right=2278 network=reinitialized' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-yezar-freeverb: PASS' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-yezar-freeverb-state: PASS' "$STATE_LOG" >/dev/null
 grep -F 'catcher: arguru-freeverb:0' "$STATE_LOG" >/dev/null
@@ -102,7 +102,7 @@ cat > "$SUMMARY" <<'EOF'
 - All five public parameter metadata records, including retained `Absortion` spelling: PASS
 - Dry=320 / Wet=0 exact unity behavior: PASS
 - Wet-only full-width stereo comb timing at 44.1 kHz (1116 left / 1139 right): PASS
-- Live 44.1 -> 88.2 kHz network reinitialization scales first comb timing to 2232 left / 2278 right: PASS
+- Live 44.1 -> 88.2 kHz transition after advancing the network by 257 samples rebuilds/mutes from cursor zero and preserves scaled first-comb timing at 2232 left / 2278 right: PASS
 - Production `PluginCatcher` identity `arguru-freeverb:0`: PASS
 - Production `MachineFactory` instantiation: PASS
 - All 5/5 public parameters seeded to legal non-default values before version-1 preset save/load: PASS
@@ -111,7 +111,8 @@ cat > "$SUMMARY" <<'EOF'
 - Opaque state: none; persistence remains the historical five public parameters: PASS
 
 This gate preserves the retained public-domain Jezar Freeverb implementation and
-its Psycle/Arguru module identity without rewriting the Freeverb DSP equations.
+its Psycle/Arguru module identity. Sample-rate buffer reallocation now restarts the
+newly allocated/muted delay-line cursors without changing the Freeverb DSP equations.
 EOF
 
 cat "$SUMMARY"
