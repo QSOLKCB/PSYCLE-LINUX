@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstring>
 #include <dlfcn.h>
+#include <vector>
 
 #include <psycle/plugin_interface.hpp>
 
@@ -257,6 +258,38 @@ int verify_lines_mode_tick_scaling(CMachineInterface* machine)
     return 0;
 }
 
+int verify_lines_mode_resource_cap(CMachineInterface* machine)
+{
+    /* A large but ABI-valid tick length must not make CrossDelay allocate from
+    ** the raw Lines product. Its historical Delay-time parameter already caps
+    ** the machine at 88200 samples (two seconds) at 44.1 kHz, so Lines mode
+    ** must use the same resource ceiling. A 100000-sample tick with three
+    ** lines requests 600000 raw samples but must render as an 88200-sample
+    ** delay instead. */
+    TestCallback callback(44100, 100000);
+    const int values[6] = {4, 0, 0, 256, 1, 3};
+    std::vector<float> left(88202, 0.0f);
+    std::vector<float> right(88202, 0.0f);
+    left[0] = 1.0f;
+    right[0] = 1.0f;
+
+    machine->pCB = &callback;
+    machine->Init();
+    apply_values(machine, values);
+    machine->Work(left.data(), right.data(), static_cast<int>(left.size()), 1);
+
+    for (std::size_t i = 0; i < left.size(); ++i) {
+        const float expected_left = (i == 88200) ? 1.0f : 0.0f;
+        const float expected_right = (i == 44100) ? 1.0f : 0.0f;
+        if (!near(left[i], expected_left) || !near(right[i], expected_right)) {
+            return fail("Lines mode resource ceiling changed");
+        }
+    }
+    std::printf(
+        "phase5-arguru-xfilter: resource-cap PASS requested=600000 bounded=88200\n");
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -296,6 +329,7 @@ int main(int argc, char** argv)
     CMachineInterface* sample_machine = nullptr;
     CMachineInterface* rate_machine = nullptr;
     CMachineInterface* lines_machine = nullptr;
+    CMachineInterface* resource_machine = nullptr;
 
     if (rc == 0) {
         dry_machine = create_machine();
@@ -329,7 +363,16 @@ int main(int argc, char** argv)
             rc = verify_lines_mode_tick_scaling(lines_machine);
         }
     }
+    if (rc == 0) {
+        resource_machine = create_machine();
+        if (!resource_machine || !resource_machine->Vals) {
+            rc = fail("CreateMachine did not provide a usable resource-cap instance");
+        } else {
+            rc = verify_lines_mode_resource_cap(resource_machine);
+        }
+    }
 
+    if (resource_machine) delete_machine(*resource_machine);
     if (lines_machine) delete_machine(*lines_machine);
     if (rate_machine) delete_machine(*rate_machine);
     if (sample_machine) delete_machine(*sample_machine);
@@ -345,6 +388,6 @@ int main(int argc, char** argv)
     std::printf("machine: Arguru CrossDelay\n");
     std::printf("parameters: 6\n");
     std::printf("abi: GetInfo/CreateMachine/DeleteMachine\n");
-    std::printf("dsp: dry unity + sample-delay stereo offset + sample-rate scaling + Lines mode\n");
+    std::printf("dsp: dry unity + sample-delay stereo offset + sample-rate scaling + Lines mode + bounded Lines resources\n");
     return 0;
 }
