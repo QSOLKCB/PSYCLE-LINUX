@@ -1,0 +1,50 @@
+name: Phase 5 BexPhase ring safety
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-5/**'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  bexphase-ring:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build sanitizer regression
+        run: |
+          mkdir -p phase5-bexphase-ring
+          g++ -std=c++17 -O1 -g \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -fPIC -shared \
+            -I cpsycle/plugins \
+            cpsycle/plugins/bexphase/src/bexphase.cpp \
+            -o phase5-bexphase-ring/bexphase.so -lm
+          g++ -std=c++17 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -I cpsycle/plugins \
+            tests/phase5_bexphase_ring_safety.cpp \
+            -ldl -o phase5-bexphase-ring/phase5-bexphase-ring
+
+      - name: Run BexPhase fixed-ring regression
+        env:
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          phase5-bexphase-ring/phase5-bexphase-ring \
+            phase5-bexphase-ring/bexphase.so | tee phase5-bexphase-ring/phase5-bexphase-ring.log
+          grep -Fqx \
+            'phase5-bexphase-ring: PASS tick=5512 refresh=8 requested=44096 ring=24576 processed=68672' \
+            phase5-bexphase-ring/phase5-bexphase-ring.log
+
+      - name: Upload BexPhase evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-bexphase-ring
+          path: phase5-bexphase-ring/
+          if-no-files-found: warn

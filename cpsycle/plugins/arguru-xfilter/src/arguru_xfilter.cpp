@@ -9,6 +9,7 @@
 // #include <psycle/helpers/dsp.hpp>
 // #include <universalis/stdlib/cstdint.hpp>
 // #include <universalis/os/aligned_alloc.hpp>
+#include <cstdint>
 #include <cstdio>
 
 using namespace psycle::plugin_interface;
@@ -67,8 +68,11 @@ class mi : public CMachineInterface {
 		void SetDelayTicks(int ticks);
 		void AllocateBuffers()
 		{
-			dbl = (float*)dsp.memory_alloc(16, max_delay_samples);
-			dbr = (float*)dsp.memory_alloc(16, max_delay_samples);
+			/* memory_alloc is count x element-size; alignment is supplied by the
+			** DSP backend.  CrossDelay historically passed 16 as the count, which
+			** over-allocated every float buffer by four times. */
+			dbl = (float*)dsp.memory_alloc(max_delay_samples, sizeof(float));
+			dbr = (float*)dsp.memory_alloc(max_delay_samples, sizeof(float));
 			dsp.clear(dbl, max_delay_samples);
 			dsp.clear(dbr, max_delay_samples);
 		}
@@ -135,10 +139,14 @@ void mi::ParameterTweak(int par, int val) {
 
 void mi::SetDelay(int delay) {
 	int delaySR = (int)(delay*(float)currentSR/44100.0f);
-	if (delaySR > max_delay_samples) {
+	/* The write cursor starts eight samples before the physical ring end, so
+	** only max_delay_samples - 8 samples are usable as a delay.  Grow before a
+	** requested delay reaches that reserved tail; otherwise dcl would go
+	** negative and be clamped to zero, shortening the audible delay. */
+	if (delaySR > max_delay_samples - 8) {
 		do {
 			max_delay_samples <<=1;
-		} while(delaySR > max_delay_samples);
+		} while(delaySR > max_delay_samples - 8);
 		DeallocateBuffers();
 		AllocateBuffers();
 	} else {
@@ -156,11 +164,30 @@ void mi::SetDelay(int delay) {
 }
 
 void mi::SetDelayTicks(int ticks) {
-	int delaySR = ticks*pCB->GetTickLength()*2;
-	if (delaySR > max_delay_samples) {
+	/* Lines mode historically follows tracker timing.  The host accepts BPM 32
+	** and LPB 1, while CrossDelay exposes up to eight Lines; with the retained
+	** x2 stereo-delay convention that makes 30 seconds the largest ordinary
+	** Lines delay (8 * 2 * 60 / 32).  Preserve that full supported envelope at
+	** the current sample rate and cap only timing stretched beyond it.  Use
+	** 64-bit arithmetic before capping so signed-int overflow cannot bypass the
+	** resource guard. */
+	const int64_t requested_delay =
+		(int64_t)ticks * (int64_t)pCB->GetTickLength() * 2;
+	const int64_t resource_samplerate = currentSR > 0
+		? (int64_t)currentSR
+		: (int64_t)44100;
+	const int64_t max_resource_delay = resource_samplerate * 30;
+	const int64_t bounded_delay = requested_delay > max_resource_delay
+		? max_resource_delay
+		: requested_delay;
+	int delaySR = bounded_delay > 0 ? (int)bounded_delay : 0;
+	/* max_delay_samples includes the eight samples reserved ahead of ccl.  Treat
+	** only the remainder as usable delay capacity when deciding whether the
+	** ring must grow. */
+	if (delaySR > max_delay_samples - 8) {
 		do {
 			max_delay_samples <<=1;
-		} while(delaySR > max_delay_samples);
+		} while(delaySR > max_delay_samples - 8);
 		DeallocateBuffers();
 		AllocateBuffers();
 	} else {
