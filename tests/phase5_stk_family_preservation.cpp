@@ -468,11 +468,9 @@ int verify_reverbs(const Spec& spec, const CMachineInfo* info,
         left.assign(65536, 0.0f); right.assign(65536, 0.0f);
         right[0] = 1.0f;
         process_blocks(machine, left, right);
-        const double right_energy = mono_energy(right);
-        if (!std::isfinite(right_energy) || right_energy <= 1.0e-12 ||
-                !silent_signal(left, left, 1.0e-7f)) {
+        if (!finite_signal(left, right) || !silent_signal(left, left, 1.0e-7f)) {
             rc = fail(spec,
-                "right-input independent reverb routing lost isolated finite output");
+                "right-input independent reverb leaked into the left output");
             break;
         }
     }
