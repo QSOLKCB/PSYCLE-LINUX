@@ -249,7 +249,7 @@ static int seed_machine(const StkSpec* spec, psy_audio_Machine* machine)
 }
 
 static int preset_roundtrip(const StkSpec* spec,
-	psy_audio_MachineFactory* factory, psy_audio_Machine* source,
+	psy_audio_MachineFactory* restore_factory, psy_audio_Machine* source,
 	const Snapshot* expected, const char* path)
 {
 	psy_audio_Presets saved;
@@ -299,9 +299,9 @@ static int preset_roundtrip(const StkSpec* spec,
 		rc = fail_spec(spec, "reloaded preset geometry changed");
 		goto cleanup;
 	}
-	fresh = make_machine(spec, factory);
+	fresh = make_machine(spec, restore_factory);
 	if (!fresh || verify_identity(spec, fresh) != 0) {
-		rc = fail_spec(spec, "fresh preset-restore machine creation failed");
+		rc = fail_spec(spec, "independent preset-restore machine creation failed");
 		goto cleanup;
 	}
 	psy_audio_machine_tweak_preset(fresh, reloaded);
@@ -351,6 +351,9 @@ int main(int argc, char** argv)
 	psy_audio_MachineCallback callback;
 	psy_audio_PluginCatcher catcher;
 	psy_audio_MachineFactory factory;
+	psy_audio_MachineCallback preset_callback;
+	psy_audio_PluginCatcher preset_catcher;
+	psy_audio_MachineFactory preset_factory;
 	psy_audio_Song* song = NULL;
 	psy_audio_Machine* machines[SPEC_COUNT] = {NULL, NULL, NULL};
 	Snapshot expected[SPEC_COUNT];
@@ -385,8 +388,15 @@ int main(int argc, char** argv)
 	psy_audio_plugincatcher_init(&catcher, NULL);
 	psy_audio_machinefactory_init(&factory, &callback, &catcher, NULL);
 	psy_audio_machinefactory_createwithoutproxy(&factory);
+
+	psy_audio_machinecallback_init(&preset_callback);
+	psy_audio_plugincatcher_init(&preset_catcher, NULL);
+	psy_audio_machinefactory_init(&preset_factory, &preset_callback, &preset_catcher, NULL);
+	psy_audio_machinefactory_createwithoutproxy(&preset_factory);
+
 	for (i = 0; i < SPEC_COUNT; ++i) {
-		if (register_native(&SPECS[i], &catcher, argv[i + 2]) != 0) {
+		if (register_native(&SPECS[i], &catcher, argv[i + 2]) != 0 ||
+				register_native(&SPECS[i], &preset_catcher, argv[i + 2]) != 0) {
 			rc = 1;
 			goto initial_cleanup;
 		}
@@ -405,7 +415,7 @@ int main(int argc, char** argv)
 				seed_machine(spec, machines[i]) != 0 ||
 				snapshot_from_machine(spec, machines[i], &expected[i]) != 0 ||
 				expected[i].data_size != 0 ||
-				preset_roundtrip(spec, &factory, machines[i], &expected[i], preset_paths[i]) != 0) {
+				preset_roundtrip(spec, &preset_factory, machines[i], &expected[i], preset_paths[i]) != 0) {
 			rc = 1;
 			goto song_cleanup;
 		}
@@ -467,6 +477,8 @@ song_cleanup:
 	}
 	if (song) psy_audio_song_deallocate(song);
 initial_cleanup:
+	psy_audio_machinefactory_dispose(&preset_factory);
+	psy_audio_plugincatcher_dispose(&preset_catcher);
 	psy_audio_machinefactory_dispose(&factory);
 	psy_audio_plugincatcher_dispose(&catcher);
 	psy_audio_dispose();
@@ -476,6 +488,7 @@ initial_cleanup:
 	printf("phase5-stk-family-state: PASS machines=3\n");
 	printf("catchers: stk-plucked:0 stk-reverbs:0 stk-shakers:0\n");
 	printf("state: Plucked 5/5; Reverbs 4/4; Shakers 6/6; 0 opaque bytes\n");
+	printf("preset-factory: independent PluginCatcher/MachineFactory\n");
 	printf("topology: 3/3 STK wrappers -> Master\n");
 	printf("song: %s\n", song_path);
 	return 0;
