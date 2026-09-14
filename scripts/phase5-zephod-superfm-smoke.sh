@@ -19,7 +19,9 @@ NATIVE_LOG="$OUT/phase5-zephod-superfm.log"
 STATE_LOG="$OUT/phase5-zephod-superfm-state.log"
 SUMMARY="$OUT/summary.md"
 
-rm -rf "$CPSYCLE/plugins/build"
+# Establish a clean SuperFM precondition without deleting the shared build
+# outputs of unrelated native machines.
+rm -f "$PLUGIN"
 
 # Prove the retained machine can build and clean without unrelated plugin side
 # effects before the larger production-state harness is assembled.
@@ -74,8 +76,8 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 grep -F 'phase5-zephod-superfm: metadata PASS parameters=20 version=0x0110' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-zephod-superfm: deterministic PASS' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-zephod-superfm: volume-command PASS command=0C80' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-zephod-superfm: noteoff PASS release-default=2414 tail=silent' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-zephod-superfm: rate-transition PASS sr=44100->88200 sustain<16=until-noteoff' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-zephod-superfm: noteoff PASS release-default=2414 active-through=' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-zephod-superfm: rate-transition PASS sr=44100->88200 in-flight=attack pitch=stable sustain<16=until-noteoff' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-zephod-superfm: PASS' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-zephod-superfm-state: PASS' "$STATE_LOG" >/dev/null
 
@@ -92,13 +94,13 @@ cat > "$SUMMARY" <<'EOF'
 # PSYCLE-LINUX Phase 5C Zephod SuperFM Preservation
 
 - Retained Zephod SuperFM (Arguru Remix) builds independently as `zephod-superfm.so`: PASS
-- Direct clean removes the generated shared object: PASS
+- Direct clean removes only the generated SuperFM shared object and leaves unrelated plugin outputs untouched: PASS
 - Historical native ABI exports (`GetInfo`, `CreateMachine`, `DeleteMachine`): PASS
 - Identity/version/type/two-column geometry and all 20 parameter metadata records: PASS
 - Fresh default FM rendering is finite, active and deterministic: PASS
 - Historical `0C80` tracker-volume scaling: PASS
-- Default smooth Note Off release reaches silence: PASS
-- Live 44.1 kHz -> 88.2 kHz envelope reconfiguration matches a fresh target-rate machine: PASS
+- Default 2414-sample smooth Note Off release remains active near its expected endpoint and reaches silence: PASS
+- Live 44.1 kHz -> 88.2 kHz reconfiguration preserves an in-flight attack envelope and active-note pitch: PASS
 - Sustain lengths below 16 retain historical `until noteoff` meaning across rate changes: PASS
 - Production `PluginCatcher` identity `zephod-superfm:0`: PASS
 - Production `MachineFactory` instantiation: PASS
