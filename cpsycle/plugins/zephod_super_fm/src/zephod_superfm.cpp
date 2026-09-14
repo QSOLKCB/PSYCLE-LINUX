@@ -437,12 +437,18 @@ void mi::SequencerTick()
 		int i;
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].VCA.attack((int)(Vals[0]*srMult));
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].VCA.decay((int)(Vals[1]*srMult));
-		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].VCA.sustain((int)(Vals[2]*srMult));
+		for (i=0; i<MAX_TRACKS ; i++) {
+			if (Vals[2]<16) Tracks[i].VCA.sustain(0);
+			else Tracks[i].VCA.sustain((int)(Vals[2]*srMult));
+		}
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].VCA.release((int)(Vals[4]*srMult));
 		
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].ENV.attack((int)(Vals[5]*srMult));
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].ENV.decay((int)(Vals[6]*srMult));
-		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].ENV.sustain((int)(Vals[7]*srMult));
+		for (i=0; i<MAX_TRACKS ; i++) {
+			if (Vals[7]<16) Tracks[i].ENV.sustain(0);
+			else Tracks[i].ENV.sustain((int)(Vals[7]*srMult));
+		}
 		for (i=0; i<MAX_TRACKS ; i++) Tracks[i].ENV.release((int)(Vals[9]*srMult));
 	}
 }
