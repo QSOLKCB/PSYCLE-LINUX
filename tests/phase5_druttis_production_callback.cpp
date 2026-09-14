@@ -122,18 +122,28 @@ int expect_extreme_line_guards(CMachineInterface& machine, TimingCallback& callb
 
     const double raw_samples = callback_currbeatsperline(&callback) /
         callback_beatspersample(&callback);
-    const int max_tick_length = std::numeric_limits<int>::max();
+    const int max_int = std::numeric_limits<int>::max();
+    const int legacy_tick_limit = max_int / 256;
     const int clamped = machine.pCB->GetTickLength();
-    if (raw_samples <= (double)max_tick_length || clamped != max_tick_length) {
+    const long long crossdelay_product = (long long)clamped * 8LL * 2LL;
+    const long long bexphase_product = (long long)clamped * 32LL;
+    const long long sublime_product = (long long)clamped * 256LL;
+
+    if (raw_samples <= (double)legacy_tick_limit || clamped != legacy_tick_limit ||
+            crossdelay_product > max_int || bexphase_product > max_int ||
+            sublime_product > max_int || crossdelay_product < 0 ||
+            bexphase_product < 0 || sublime_product < 0) {
         callback.line_beats_override = 0.0;
         std::fprintf(stderr,
-            "phase5-druttis-production-callback: FAIL overflow guard raw=%.0f int-max=%d got=%d\n",
-            raw_samples, max_tick_length, clamped);
+            "phase5-druttis-production-callback: FAIL legacy cap raw=%.0f cap=%d got=%d crossdelay=%lld bexphase=%lld sublime=%lld int-max=%d\n",
+            raw_samples, legacy_tick_limit, clamped,
+            crossdelay_product, bexphase_product, sublime_product, max_int);
         return 1;
     }
     std::printf(
-        "phase5-druttis-production-callback: overflow-clamp PASS sr=96000 bpm=32 line-beats=25000 raw-samples=%.0f samples=%d\n",
-        raw_samples, clamped);
+        "phase5-druttis-production-callback: legacy-cap PASS raw-samples=%.0f cap=%d crossdelay=%lld bexphase=%lld sublime=%lld\n",
+        raw_samples, clamped,
+        crossdelay_product, bexphase_product, sublime_product);
 
     callback.line_beats_override = std::numeric_limits<double>::infinity();
     const int fallback = machine.pCB->GetTickLength();
