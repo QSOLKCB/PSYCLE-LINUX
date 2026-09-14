@@ -41,17 +41,31 @@ class PluginFxCallback : public CFxCallback
 				callback->vtable->currbeatsperline && callback->vtable->beatspersample) {
 			const double beats_per_line = callback->vtable->currbeatsperline(callback);
 			const double beats_per_sample = callback->vtable->beatspersample(callback);
-			if (beats_per_line > 0.0 && beats_per_sample > 0.0) {
+			if (beats_per_line > 0.0 && beats_per_sample > 0.0 &&
+					std::isfinite(beats_per_line) && std::isfinite(beats_per_sample)) {
 				/* Native Psycle machines historically call this a tick length, but
 				** the ABI value is the current tracker line duration. Host TPB is a
 				** finer transport clock (normally 24) and must not shorten the line
 				** seen by plugins (normally LPB 4). Preserve historical truncation
 				** for genuinely fractional durations while moving one representable
 				** step upward first so an exact integral duration that landed one ULP
-				** low (for example 25199.999999999996) is not shortened by a sample. */
+				** low (for example 25199.999999999996) is not shortened by a sample.
+				** The native ABI returns int, so saturate valid oversized durations
+				** at INT_MAX instead of invoking undefined floating-to-int narrowing. */
 				const double samples_per_line = beats_per_line / beats_per_sample;
-				return (int)std::nextafter(samples_per_line,
+				const double max_tick_length =
+					(double)std::numeric_limits<int>::max();
+				if (!std::isfinite(samples_per_line) ||
+						samples_per_line > max_tick_length) {
+					return std::numeric_limits<int>::max();
+				}
+				const double stabilized_samples = std::nextafter(samples_per_line,
 					std::numeric_limits<double>::infinity());
+				if (!std::isfinite(stabilized_samples) ||
+						stabilized_samples > max_tick_length) {
+					return std::numeric_limits<int>::max();
+				}
+				return (int)stabilized_samples;
 			}
 		}
 		const int samplerate = GetSamplingRate();
@@ -193,16 +207,6 @@ void mi_unused2(CMachineInterface* mi, unsigned int const data)
 int mi_describevalue(CMachineInterface* mi, char* txt, int const param, int const value)
 {
 	return mi->DescribeValue(txt, param, value); 
-}
-
-int mi_hostevent(CMachineInterface* mi, int const eventNr, int const val1, float const val2)
-{
-	return mi->HostEvent(eventNr, val1, val2);
-}
-
-void mi_seqtick(CMachineInterface* mi, int channel, int note, int ins, int cmd, int val)
-{
-	mi->SeqTick(channel, note, ins, cmd, val);
 }
 
 void mi_unused3(CMachineInterface* mi)
