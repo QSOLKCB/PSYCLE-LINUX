@@ -46,17 +46,21 @@ class PluginFxCallback : public CFxCallback
 				/* Native Psycle machines historically call this a tick length, but
 				** the ABI value is the current tracker line duration. Host TPB is a
 				** finer transport clock (normally 24) and must not shorten the line
-				** seen by plugins (normally LPB 4). Preserve historical truncation
-				** for genuinely fractional durations while moving one representable
-				** step upward first so an exact integral duration that landed one ULP
-				** low (for example 25199.999999999996) is not shortened by a sample.
+				** seen by plugins (normally LPB 4).
+				**
+				** Preserve truncation for genuinely fractional durations, but snap a
+				** value that is only a few floating-point rounding steps from an exact
+				** integer to that integer first. Callback timing is formed by several
+				** arithmetic operations, so assuming the error is exactly one ULP is
+				** too strict (for example 263.9999999999999 must remain 264).
 				**
 				** Retained native machines perform further signed-int arithmetic on
 				** this ABI value. Sublime has the largest direct multiplier: Glide can
 				** multiply the tick length by 256 before shifting; Bexphase uses 32,
 				** and CrossDelay uses at most 8 lines * 2. Keep the host-exposed tick
-				** length at INT_MAX / 256 so all of those legacy products remain
-				** representable instead of overflowing after a nominally safe cast. */
+				** length at INT_MAX / 256 so those legacy products remain representable.
+				** CrossDelay separately enforces its historical two-second delay
+				** resource ceiling before growing buffers. */
 				const double samples_per_line = beats_per_line / beats_per_sample;
 				const int legacy_tick_limit =
 					std::numeric_limits<int>::max() / 256;
@@ -65,11 +69,21 @@ class PluginFxCallback : public CFxCallback
 						samples_per_line > max_tick_length) {
 					return legacy_tick_limit;
 				}
-				const double stabilized_samples = std::nextafter(samples_per_line,
-					std::numeric_limits<double>::infinity());
+
+				const double nearest_sample = std::round(samples_per_line);
+				const double snap_tolerance = 8.0 *
+					std::numeric_limits<double>::epsilon() *
+					std::fmax(1.0, std::fabs(nearest_sample));
+				const double stabilized_samples =
+					(std::fabs(samples_per_line - nearest_sample) <= snap_tolerance)
+						? nearest_sample
+						: samples_per_line;
 				if (!std::isfinite(stabilized_samples) ||
 						stabilized_samples > max_tick_length) {
 					return legacy_tick_limit;
+				}
+				if (stabilized_samples < 1.0) {
+					return 1;
 				}
 				return (int)stabilized_samples;
 			}
@@ -148,7 +162,8 @@ void mi_sequencertick(CMachineInterface* mi)
 void mi_parametertweak(CMachineInterface* mi, int par, int val)
 {
 	mi->ParameterTweak(par, val);
-}		
+}
+		
 
 void mi_work(CMachineInterface* mi, float * psamplesleft, float * psamplesright, int numsamples, int tracks)
 {
