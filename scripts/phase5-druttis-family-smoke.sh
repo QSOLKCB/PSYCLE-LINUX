@@ -127,10 +127,10 @@ g++ -std=c++17 -Wall -Wextra -Werror=return-type \
 # within a small floating-point tolerance while genuinely fractional durations
 # still truncate. Positive sub-sample durations floor to one sample. Oversized
 # finite durations are capped at INT_MAX/256 so retained signed-int consumers
-# remain arithmetically safe; CrossDelay separately enforces its historical
-# two-second resource ceiling before growing delay buffers. Non-finite timing
-# must fall back rather than narrow. The final marker uses a real Song -> Player
-# -> MachineCallback chain with the normal LPB=4 / TPB=24 split.
+# remain arithmetically safe; CrossDelay separately preserves the full ordinary
+# Lines envelope and caps only timing stretched beyond 30 seconds. Non-finite
+# timing must fall back rather than narrow. The final marker uses a real Song ->
+# Player -> MachineCallback chain with the normal LPB=4 / TPB=24 split.
 stdbuf -o0 -e0 "$CALLBACK_BIN" 2>&1 | tee "$CALLBACK_LOG"
 EXPECTED_CALLBACK_TIMING=(
     'phase5-druttis-production-callback: line PASS sr=44100 bpm=120 lpb=4 tpb=24 samples=5512'
@@ -221,7 +221,7 @@ cat > "$SUMMARY" <<'EOF'
 - Multi-ULP near-integral native timing snaps to the intended integer sample count: PASS
 - Positive sub-sample native timing floors to one sample, never zero: PASS
 - Oversized finite native line durations cap at `INT_MAX / 256` so retained legacy signed multipliers remain representable: PASS
-- CrossDelay enforces its historical two-second delay resource ceiling before buffer growth: PASS
+- CrossDelay preserves the full BPM32 / LPB1 / Lines8 ordinary timing envelope and caps only beyond 30 seconds: PASS
 - Non-finite native line timing is rejected before integer narrowing and uses fallback timing: PASS
 - 88.2 kHz / 120 BPM / LPB 4 native line = 11025 samples: PASS
 - Native line timing is independent of finer transport TPB: PASS
