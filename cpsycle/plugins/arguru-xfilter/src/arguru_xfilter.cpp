@@ -139,10 +139,14 @@ void mi::ParameterTweak(int par, int val) {
 
 void mi::SetDelay(int delay) {
 	int delaySR = (int)(delay*(float)currentSR/44100.0f);
-	if (delaySR > max_delay_samples) {
+	/* The write cursor starts eight samples before the physical ring end, so
+	** only max_delay_samples - 8 samples are usable as a delay.  Grow before a
+	** requested delay reaches that reserved tail; otherwise dcl would go
+	** negative and be clamped to zero, shortening the audible delay. */
+	if (delaySR > max_delay_samples - 8) {
 		do {
 			max_delay_samples <<=1;
-		} while(delaySR > max_delay_samples);
+		} while(delaySR > max_delay_samples - 8);
 		DeallocateBuffers();
 		AllocateBuffers();
 	} else {
@@ -177,10 +181,13 @@ void mi::SetDelayTicks(int ticks) {
 		? max_resource_delay
 		: requested_delay;
 	int delaySR = bounded_delay > 0 ? (int)bounded_delay : 0;
-	if (delaySR > max_delay_samples) {
+	/* max_delay_samples includes the eight samples reserved ahead of ccl.  Treat
+	** only the remainder as usable delay capacity when deciding whether the
+	** ring must grow. */
+	if (delaySR > max_delay_samples - 8) {
 		do {
 			max_delay_samples <<=1;
-		} while(delaySR > max_delay_samples);
+		} while(delaySR > max_delay_samples - 8);
 		DeallocateBuffers();
 		AllocateBuffers();
 	} else {
