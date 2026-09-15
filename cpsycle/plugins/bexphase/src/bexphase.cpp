@@ -207,6 +207,12 @@ void bexphase::Stop()  {
 }
 
 void bexphase::Work(float *psamplesleft, float *psamplesright , int numsamples, int tracks) {
+	/* Psycle normally provides positive blocks, but a zero-length callback is a
+	** valid boundary condition for a native machine.  The historical do/while
+	** body consumed one sample even when numsamples was zero and then decremented
+	** into negative values.  Treat an empty block as a strict no-op. */
+	if (numsamples <= 0) return;
+
 	do {
 		inbufr[inpoint] = *psamplesright; 
 		inbufl[inpoint] = *psamplesleft;

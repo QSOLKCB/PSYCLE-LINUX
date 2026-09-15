@@ -1,4 +1,4 @@
-name: Phase 5 BexPhase ring safety
+name: Phase 5 BexPhase preservation
 
 on:
   push:
@@ -8,14 +8,34 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  bexphase-ring:
+  bexphase:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build sanitizer regression
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run BexPhase preservation regression
+        shell: bash
+        run: |
+          set -o pipefail
+          chmod +x scripts/phase5-bexphase-smoke.sh
+          scripts/phase5-bexphase-smoke.sh phase5-bexphase \
+            2>&1 | tee "$RUNNER_TEMP/phase5-bexphase.log"
+
+      - name: Build sanitizer fixed-ring regression
         run: |
           mkdir -p phase5-bexphase-ring
           g++ -std=c++17 -O1 -g \
@@ -42,9 +62,12 @@ jobs:
             phase5-bexphase-ring/phase5-bexphase-ring.log
 
       - name: Upload BexPhase evidence
-        if: always()
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: phase5-bexphase-ring
-          path: phase5-bexphase-ring/
+          name: phase5-bexphase
+          path: |
+            phase5-bexphase/
+            phase5-bexphase-ring/
+            ${{ runner.temp }}/phase5-bexphase.log
           if-no-files-found: warn
