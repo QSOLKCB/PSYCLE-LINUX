@@ -27,18 +27,39 @@ Based on svn revision 10189
 #include <cmath>
 
 EffectCompressor::EffectCompressor():
-	mCurRate(44100.0),
+	mAttackTime(0.2),
+	mThresholdDB(-12.0),
+	mNoiseFloorDB(-40.0),
+	mRatio(2.0),
 	mNormalize(true),
-	mUsePeak(),
-	mCircle(),
-	mFollow1(),
-	mFollowLen()
+	mUsePeak(false),
+	mDecayTime(1.0),
+	mAttackFactor(1.0),
+	mAttackInverseFactor(1.0),
+	mDecayFactor(1.0),
+	mThreshold(std::pow(10.0, -12.0 / 20.0)),
+	mCompression(0.5),
+	mNoiseFloor(std::pow(10.0, -40.0 / 20.0)),
+	mNoiseCounter(100),
+	mGain(1.0),
+	mRMSSum(0.0),
+	mCircleSize(0),
+	mCirclePos(0),
+	mCircle(NULL),
+	mLastLevel(mThreshold),
+	mFollow1(NULL),
+	mFollowLen(0),
+	mCurRate(44100.0)
 {
-	setAttackSec(0.2);
-	setDecaySec(1.0);
-	setRatio(2.0);
-	setThresholddB(-12.0);
-	setNoiseFloordB(-40.0);
+	/* The historical constructor called setAttackSec()/setDecaySec() before
+	** mThreshold had been initialized, and setRatio() before mThresholdDB was
+	** initialized.  The host normally repaired those derived values later when
+	** Init() and the default ParameterTweak() calls ran, but construction itself
+	** still read indeterminate floating-point state.  Seed the documented
+	** defaults first and derive the exact same factors from those values. */
+	setAttackFactor();
+	setDecayFactor();
+	setGain(mNormalize);
 }
 
 EffectCompressor::~EffectCompressor() {
