@@ -58,8 +58,17 @@ for command_name in svn curl sha256sum find sort grep stat awk python3; do
   fi
 done
 
-rm -rf "$OUT"
-mkdir -p "$OUT/components"
+# The output path is caller-controlled, so never recursively clean or reuse it.
+# Requiring mkdir itself to create the directory makes broad paths such as /tmp,
+# $HOME, the checkout root, existing files, and symlinks fail safely before any
+# upstream retrieval begins. A contributor who wants to rerun the audit must
+# remove the prior dedicated receipt directory explicitly or choose a fresh path.
+if ! mkdir -- "$OUT"; then
+  echo "phase6-upstream-audit: refusing existing or invalid output path: $OUT" >&2
+  echo "choose a fresh output directory; this audit never deletes caller-supplied paths" >&2
+  exit 2
+fi
+mkdir -- "$OUT/components"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
