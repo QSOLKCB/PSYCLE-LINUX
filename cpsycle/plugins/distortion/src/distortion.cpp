@@ -110,6 +110,8 @@ PSYCLE__PLUGIN__INSTANTIATOR(Distortion)
 
 void Distortion::Work(Sample l[], Sample r[], int sample, int)
 {
+	if (sample <= 0) return;
+
 	switch((*this)[symmetric])
 	{
 	case no:
