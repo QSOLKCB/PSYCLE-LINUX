@@ -76,7 +76,7 @@ grep -Fqx 'phase5-moreamp-eq: band10 PASS active=1000Hz unstarred20=ignored mark
 grep -Fqx 'phase5-moreamp-eq: band31 PASS active=20Hz marker0=source-derived' "$NATIVE_LOG"
 grep -Fqx 'phase5-moreamp-eq: extra PASS cascade=two-pass differs=single marker0=source-derived' "$NATIVE_LOG"
 grep -Fqx 'phase5-moreamp-eq: nonpositive PASS extra=on zero+negative strict-noop' "$NATIVE_LOG"
-grep -Fqx 'phase5-moreamp-eq: samplerate PASS 20k-band active@44100 disabled@32000 history=reset' "$NATIVE_LOG"
+grep -Fqx 'phase5-moreamp-eq: samplerate PASS active1k=both 20k=44100-only history=reset markers=3' "$NATIVE_LOG"
 grep -Fqx 'phase5-moreamp-eq: PASS' "$NATIVE_LOG"
 
 grep -Fqx 'phase5-moreamp-eq-state: PASS' "$STATE_LOG"
@@ -93,7 +93,7 @@ cat > "$SUMMARY" <<'EOF'
 
 - Retained `moreamp_eq` source builds independently as `maeq.so`: PASS
 - Direct `make clean` removes the generated module from `cpsycle/plugins/build/`: PASS
-- Native ABI exports `GetInfo` / `CreateMachine` / `DeleteMachine`: PASS
+- Native ABI exports `GetInfo` / `CreateMachine` / `DeleteMachine`, with the deleter exercised through its exact reference signature: PASS
 - Historical identity `MoreAmp EQ` / `maEQ` / `Felipe Rivera/pmisteli/Sartorius`, version `0x0100`, effect type and three-column geometry: PASS
 - Complete 36-slot ABI surface: 35 state controls plus one labeled header: PASS
 - Constructor storage is seeded from all 36 published defaults before `Init()` and host default callbacks: PASS
@@ -104,7 +104,7 @@ cat > "$SUMMARY" <<'EOF'
 - 31-band mode activates the 20 Hz control with a source-derived first-sample response marker: PASS
 - Extra filtering preserves the retained second IIR cascade with a source-derived first-sample response marker: PASS
 - Extra-enabled zero and negative host callback sizes are strict no-ops: PASS
-- Live 44.1 kHz -> 32 kHz transition rebuilds coefficients, resets history, and disables the 20 kHz band above Nyquist: PASS
+- Live 44.1 kHz -> 32 kHz transition keeps 1 kHz active at both rates, disables the 20 kHz band above Nyquist, and resets pre-filled filter history as proven by three clean-history source-derived markers: PASS
 - Production `PluginCatcher` identity `maeq:0` and `MachineFactory` instantiation: PASS
 - Version-1 preset restore through an independent catcher/factory preserves all 36 slots with all 35 state controls non-default: PASS
 - Fresh PSY3 reopen preserves all stored values and the MoreAmp EQ -> Master topology edge: PASS
