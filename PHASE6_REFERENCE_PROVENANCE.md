@@ -145,7 +145,20 @@ artifact sha256: 937522f061519202bd07c1392e39fe420f45c94f2a3663aa2793181cf5bfe37
 
 That run established `universalis` as r12004 / 83 files / manifest `827586daad2efcfbc10466394670a4a0e5f208da94afb7b3bf72239d396a618e` at the repository-wide r12005 observation point.
 
-A final exact-head run is required after freezing that identity.
+### Finalized gate verification
+
+After freezing `universalis` and completing the subsequent provenance hardening (locale-stable manifests, explicit SVN peg revisions, fresh output-directory creation, exact receipts-only artifact allowlisting, success-only artifact upload, and fail-fast command preflight including `python3` and `sed`), the finalized audit gate was verified successfully on commit:
+
+```text
+commit:        5a66ad216414b847a246121737be2d48ef51e3b0
+workflow run:  35017503893
+result:        success
+artifact id:   10415898370
+artifact size: 62718 bytes
+artifact sha256: 35f9a581cfc72efe9cb74ecefb4ee16d7a7771bef990f930b4456b8b651bd190
+```
+
+That run exercised the finalized script/workflow gate and passed the exact receipts-only layout assertion before artifact upload. This evidence-recording documentation change does not modify the audit script or workflow.
 
 ## Licensing and import boundary
 
