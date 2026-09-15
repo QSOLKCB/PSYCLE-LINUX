@@ -33,15 +33,17 @@
 #define PARAM_DELAY_RIGHT 4u
 #define PARAM_SNAP 6u
 
-/* Under snap=839 (1/840-line grid), delay requests 100 and 200 are stored by
-** the historical machine as 101 and 201 because resize() rounds the inverse
-** representation up by one. Restoration must reconstruct those stored values,
-** not replay 101/201 as new requests and drift to 102/202. */
+/* The retained source computes delay_maximum as integer 65535/840 == 78 before
+** converting to Real. Under snap=839, request 4369 is therefore stored as
+** 4370, while request 13108 is stored as 13107. Reapplying either stored value
+** under the correct saved snap is idempotent and reproduces the same snapped
+** delay. Under the default snap=3 both values quantize differently, so this
+** fixture detects restore-order regressions as well as encoded-state drift. */
 static const intptr_t REQUEST_VALUES[PARAMETER_COUNT] = {
-	10000, 55000, 100, 45000, 200, 20000, 839
+	10000, 55000, 4369, 45000, 13108, 20000, 839
 };
 static const intptr_t EXPECTED_VALUES[PARAMETER_COUNT] = {
-	10000, 55000, 101, 45000, 201, 20000, 839
+	10000, 55000, 4370, 45000, 13107, 20000, 839
 };
 
 static int fail(const char* message)
@@ -122,23 +124,29 @@ static int tweak_request(psy_audio_Machine* machine, uintptr_t i)
 static int seed_parameters(psy_audio_Machine* machine)
 {
 	uintptr_t i;
+	intptr_t left;
+	intptr_t right;
 
 	/* Establish the saved 1/840-line grid before delay requests so the source
-	** machine produces the historical encoded values 101/201 from requests
-	** 100/200. Those values are unique to this fine grid and expose both wrong
-	** restore ordering and replay-as-request drift. */
+	** machine produces its real historical encoded values. */
 	if (tweak_request(machine, PARAM_SNAP) != 0) return 1;
 	for (i = 0; i < PARAMETER_COUNT; ++i) {
 		if (i == PARAM_SNAP) continue;
 		if (tweak_request(machine, i) != 0) return 1;
 	}
-	if (psy_audio_machine_parameter_scaled_value(machine,
-			psy_audio_machine_parameter(machine, PARAM_DELAY_LEFT)) !=
-			EXPECTED_VALUES[PARAM_DELAY_LEFT] ||
-			psy_audio_machine_parameter_scaled_value(machine,
-			psy_audio_machine_parameter(machine, PARAM_DELAY_RIGHT)) !=
-			EXPECTED_VALUES[PARAM_DELAY_RIGHT])
-		return fail("fine-grid source delay encoding changed");
+	left = psy_audio_machine_parameter_scaled_value(machine,
+		psy_audio_machine_parameter(machine, PARAM_DELAY_LEFT));
+	right = psy_audio_machine_parameter_scaled_value(machine,
+		psy_audio_machine_parameter(machine, PARAM_DELAY_RIGHT));
+	if (left != EXPECTED_VALUES[PARAM_DELAY_LEFT] ||
+			right != EXPECTED_VALUES[PARAM_DELAY_RIGHT]) {
+		fprintf(stderr,
+			"phase5-dalay-delay-state: FAIL: fine-grid source encoding expected left=%ld right=%ld got left=%ld right=%ld\n",
+			(long)EXPECTED_VALUES[PARAM_DELAY_LEFT],
+			(long)EXPECTED_VALUES[PARAM_DELAY_RIGHT],
+			(long)left, (long)right);
+		return 1;
+	}
 	return 0;
 }
 
@@ -365,7 +373,7 @@ initial_cleanup:
 
 	printf("phase5-dalay-delay-state: PASS\n");
 	printf("catcher: delay:0\n");
-	printf("state: 7/7 public parameters seeded non-default, snap=839 left=101 right=201 encoded-state-idempotent, 0 opaque bytes\n");
+	printf("state: 7/7 public parameters seeded non-default, snap=839 left=4370 right=13107 encoded-state-idempotent, 0 opaque bytes\n");
 	printf("preset-factory: independent\n");
 	printf("topology: ayeternal Dalay Delay -> Master\n");
 	printf("preset: %s\n", preset_path);
