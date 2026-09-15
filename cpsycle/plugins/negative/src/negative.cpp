@@ -38,6 +38,8 @@ PSYCLE__PLUGIN__INSTANTIATOR(Negative)
 
 void Negative::Work(Sample l[], Sample r[], int sample, int)
 {
+	if (sample <= 0) return;
+
 	while(sample--)
 	{
 		Work(l[sample]);
