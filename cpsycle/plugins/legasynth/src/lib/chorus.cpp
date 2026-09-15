@@ -24,6 +24,7 @@
 #include <cmath>
 
 Chorus::Chorus(){
+	mixfreq_hz=0;
 	delay_ms=3;
 	lfo_speed_hz=2;
 	lfo_depth_ms=0.1f;
@@ -41,6 +42,11 @@ Chorus::~Chorus(){
 }
 
 void Chorus::set_mixfreq(int i_mixfreq_hz) {
+	if (mixfreq_hz > 0 && i_mixfreq_hz > 0 && mixfreq_hz != i_mixfreq_hz) {
+		/* process() computes oscillator phase from lfo_index / mixfreq_hz.
+		** Keep that elapsed-time ratio continuous when the host changes rate. */
+		lfo_index *= static_cast<double>(i_mixfreq_hz) / mixfreq_hz;
+	}
 	mixfreq_hz=i_mixfreq_hz;
 	recalc_delay();
 }
