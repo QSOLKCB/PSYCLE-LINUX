@@ -181,6 +181,16 @@ Historical Psycle preset banks (`.prs`), including Arguru Synth 2f presets and o
 
 Developer/user documentation and diagrams. The canonical public baseline contains no `.psy` example songs.
 
+One particularly important retained source is:
+
+```text
+cpsycle/doc/cpsycle-developer-guide.txt
+```
+
+It is the **Psycle Developer Guide — C-Version, Feb 2021 (unfinished)** and records upstream architectural intent around MFC-Psycle compatibility, stepwise cross-platform separation, the audio/UI split, `Workspace`, `MachineFactory`, `PluginCatcher`, the 256-sample compatibility work size, tracker/sequencer timing, VST variable process intervals, the 64-channel native-plugin limit and the platform UI bridge. The imported Visual Studio 2019 solution also references the original `doc/cpsycle-developer-guide.docx`. See [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md) for the PSYCLE-LINUX interpretation and authority rule.
+
+Because the guide identifies itself as unfinished, pinned r12005 source and observed compatibility behavior take precedence where its prose and code differ.
+
 The eight historical `.psy` demo/example files found in r12005 were omitted from public archival and canonical refs because their composition/sample redistribution permissions are unresolved; their exact upstream paths are recorded in `UPSTREAM_OMISSIONS.md`. Phase 4 will create or adopt cleared redistributable `.psy` fixtures for compatibility testing.
 
 ## Vendored and External Material
