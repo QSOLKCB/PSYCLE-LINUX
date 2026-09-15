@@ -304,15 +304,6 @@ double max_difference(const Render& a, const Render& b)
     return maximum;
 }
 
-int load_soundfont(CMachineInterface* machine, TestCallback* callback)
-{
-    machine->Command();
-    FluidState state{};
-    machine->GetData(&state);
-    if (std::strcmp(state.sf_path, callback->soundfont().c_str()) != 0) return 1;
-    return 0;
-}
-
 int verify_audio_reference(CMachineInterface* machine, const CMachineInfo* info,
     const std::string& soundfont)
 {
