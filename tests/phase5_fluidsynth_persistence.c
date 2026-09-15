@@ -11,6 +11,7 @@
 #include <machinefactory.h>
 #include <machineinfo.h>
 #include <machines.h>
+#include <player.h>
 #include <plugin.h>
 #include <plugincatcher.h>
 #include <preset.h>
