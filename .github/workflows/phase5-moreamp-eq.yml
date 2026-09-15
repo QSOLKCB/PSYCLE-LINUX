@@ -1,0 +1,46 @@
+name: Phase 5 MoreAmp EQ preservation
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-5/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  moreamp-eq:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run MoreAmp EQ preservation regression
+        shell: bash
+        run: |
+          set -o pipefail
+          chmod +x scripts/phase5-moreamp-eq-smoke.sh
+          scripts/phase5-moreamp-eq-smoke.sh phase5-moreamp-eq \
+            2>&1 | tee "$RUNNER_TEMP/phase5-moreamp-eq.log"
+
+      - name: Upload MoreAmp EQ evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-moreamp-eq
+          path: |
+            phase5-moreamp-eq/
+            ${{ runner.temp }}/phase5-moreamp-eq.log
+          if-no-files-found: warn
