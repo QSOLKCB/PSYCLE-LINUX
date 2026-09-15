@@ -60,7 +60,7 @@ private:
 	float delay_samples;
 	float depth_samples;
   
-	int lfo_index; //lfo osc index
+	double lfo_index; // lfo oscillator sample-time index; may be rescaled on rate changes
 	int write_index; //write index.
 
 	std::vector<float> ringbuffer_l;
