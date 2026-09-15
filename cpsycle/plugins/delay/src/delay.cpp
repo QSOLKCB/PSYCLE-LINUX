@@ -90,13 +90,13 @@ public:
 protected:
 	/*override*/ void samples_per_second_changed()
 	{
-		parameter(left_delay);
-		parameter(right_delay);
+		resize(left, (*this)(left_delay));
+		resize(right, (*this)(right_delay));
 	}
 	/*override*/ void sequencer_ticks_per_second_changed()
 	{
-		parameter(left_delay);
-		parameter(right_delay);
+		resize(left, (*this)(left_delay));
+		resize(right, (*this)(right_delay));
 	}
 	enum Channels { left, right, channels };
 	std::vector<Real> buffers_ [channels];

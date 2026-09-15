@@ -72,6 +72,7 @@ jobs:
             libstk-dev \
             libsdl2-dev \
             libfluidsynth-dev \
+            python3-xlib \
             xvfb \
             xauth \
             xdotool
