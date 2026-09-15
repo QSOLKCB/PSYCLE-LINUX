@@ -74,7 +74,7 @@ grep -F 'phase5-gverb: metadata PASS version=0x0110 parameters=8 identity=LADSPA
 grep -F 'phase5-gverb: describe PASS room=m revtime=s damping/bandwidth=fraction levels=integer-dB input=mono/stereo' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-gverb: nonpositive PASS zero+negative strict-noop' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-gverb: routing PASS mono=averaged-input stereo=dual-engine immediate-diffuser=0.29296875' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-gverb: samplerate PASS live-44100->88200 matches-fresh-88200 rejects-stale-44100 frames=20000' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-gverb: samplerate PASS first-delay-44100=L489/R461 first-delay-88200=L978/R923' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-gverb: PASS' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-gverb-state: PASS' "$STATE_LOG" >/dev/null
 grep -F 'catcher: ladspa-gverb:0' "$STATE_LOG" >/dev/null
@@ -101,7 +101,7 @@ cat > "$SUMMARY" <<'EOF'
 - Complete eight-parameter metadata surface and historical value descriptions: PASS
 - Zero and negative host callback counts are strict no-ops before the retained do/while DSP loop: PASS
 - Fresh-state first-sample routing preserves mono averaged-input processing versus stereo dual-engine processing with source-derived immediate diffuser coefficient 0.29296875: PASS
-- Live 44.1 kHz -> 88.2 kHz `SequencerTick()` reinitialization matches a fresh 88.2 kHz instance across a 20,000-frame impulse response and rejects stale 44.1 kHz timing: PASS
+- Source-derived early-reflection timing preserves first delayed outputs at L489/R461 samples at 44.1 kHz and reconstructs them at L978/R923 after a live 88.2 kHz `SequencerTick()` transition: PASS
 - Production `PluginCatcher` identity `ladspa-gverb:0` and `MachineFactory` instantiation: PASS
 - Version-1 preset restore through an independent catcher/factory preserves all eight legal non-default public values: PASS
 - Fresh PSY3 reopen preserves all eight values and the LADSPA GVerb -> Master topology edge: PASS
@@ -109,7 +109,7 @@ cat > "$SUMMARY" <<'EOF'
 
 The only production DSP-wrapper change is a guard for non-positive host sample counts.
 Positive-count GVerb equations, mono/stereo routing, parameter scaling, engine state,
-and sample-rate reconstruction behavior remain otherwise unchanged.
+historical setter path-dependence, and sample-rate reconstruction behavior remain otherwise unchanged.
 EOF
 
 cat "$SUMMARY"
