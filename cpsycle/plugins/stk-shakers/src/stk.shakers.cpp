@@ -11,6 +11,7 @@
 #include <psycle/plugin_interface.hpp>
 #include <cstdio>
 #include <cmath>
+#include <new>
 #include <stk/Stk.h>
 #include <stk/Shakers.h>
 
@@ -75,7 +76,8 @@ private:
 
 	Shakers track[MAX_TRACKS];
 	bool noteonoff[MAX_TRACKS];
-	float				vol_ctrl[MAX_TRACKS];
+	float vol_ctrl[MAX_TRACKS];
+	StkFloat note_frequency[MAX_TRACKS];
 	StkFloat samplerate;
 };
 
@@ -100,8 +102,14 @@ void mi::Init()
 	Stk::setSampleRate(samplerate);
 	for(int i=0;i<MAX_TRACKS;i++)
 	{
+		// The track array is constructed before the host callback is attached.
+		// Reconstruct each STK object only after the real initial host rate is
+		// known so its cached coefficients are sized for that rate.
+		track[i].~Shakers();
+		new (&track[i]) Shakers();
 		noteonoff[i]=false;
 		vol_ctrl[i]=1.f;
+		note_frequency[i]=0.0;
 	}
 
 }
@@ -112,6 +120,7 @@ void mi::Stop()
 	{
 		track[c].noteOff(0.0f);
 		noteonoff[c]=false;
+		note_frequency[c]=0.0;
 	}
 
 }
@@ -123,6 +132,25 @@ void mi::SequencerTick()
 	{
 		samplerate = (StkFloat)pCB->GetSamplingRate();
 		Stk::setSampleRate(samplerate);
+
+		// STK Shakers caches sample-rate-dependent coefficients in each
+		// object. Rebuild every track at the new host rate and restore public
+		// controls. Shaker notes are one-shot events: noteonoff only means the
+		// track is being ticked, not that an audible hit is still active. Never
+		// replay that bookkeeping flag after a rate change; reconstruction
+		// intentionally discards any old one-shot synthesis state.
+		for(int c=0;c<MAX_TRACKS;c++)
+		{
+			track[c].~Shakers();
+			new (&track[c]) Shakers();
+			track[c].controlChange(2,(StkFloat)Vals[0]);
+			track[c].controlChange(4,(StkFloat)Vals[1]);
+			track[c].controlChange(11,(StkFloat)Vals[2]);
+			track[c].controlChange(1,(StkFloat)Vals[3]);
+			track[c].controlChange(128,(StkFloat)Vals[4]);
+			noteonoff[c]=false;
+			note_frequency[c]=0.0;
+		}
 	}
 }
 
@@ -228,7 +256,8 @@ void mi::SeqTick(int channel, int note, int ins, int cmd, int val)
 		int notechange = shakers_old_to_new[note-48];
 		//Convert it to frequency, in a way that shakers understand.
 		float freq= 220.f*pow(2.f, ((float)notechange+7.f)/12.f);
-		track[channel].noteOn(freq,10.f);
+		note_frequency[channel]=(StkFloat)freq;
+		track[channel].noteOn(note_frequency[channel],10.f);
 		noteonoff[channel]=true;
 	}
 
@@ -237,6 +266,7 @@ void mi::SeqTick(int channel, int note, int ins, int cmd, int val)
 	{
 		track[channel].noteOff(0.0);
 		noteonoff[channel]=false;
+		note_frequency[channel]=0.0;
 	}
 
 	//track[channel].tick();

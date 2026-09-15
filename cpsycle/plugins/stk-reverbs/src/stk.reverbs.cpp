@@ -10,6 +10,7 @@
 
 #include <psycle/plugin_interface.hpp>
 #include <cstdio>
+#include <new>
 #include <stk/Stk.h>
 #include <stk/JCRev.h>
 #include <stk/NRev.h>
@@ -86,17 +87,45 @@ void mi::Command() {
 void mi::Init() {
 	samplerate = (StkFloat)pCB->GetSamplingRate();
 	Stk::setSampleRate(samplerate);
+
+	// These members are constructed before the host callback is attached, so
+	// their delay networks may have been sized using STK's default/previous
+	// global rate. Reconstruct them after the real initial host rate is known.
+	for(unsigned int i = 0; i < 2; ++i) {
+		jcrev[i].~JCRev();
+		new (&jcrev[i]) JCRev();
+		nrev[i].~NRev();
+		new (&nrev[i]) NRev();
+		pcrrev[i].~PRCRev();
+		new (&pcrrev[i]) PRCRev();
+	}
 }
 
 void mi::SequencerTick() {
 	if(samplerate != (StkFloat)pCB->GetSamplingRate()) {
 		samplerate = (StkFloat)pCB->GetSamplingRate();
 		Stk::setSampleRate(samplerate);
+
+		// STK's reverb delay topology is sized in each constructor from the
+		// then-current global sample rate.  Merely updating Stk::sampleRate()
+		// and T60 leaves the existing delay network intact, so rebuild both
+		// channel instances whenever the host rate changes.
 		StkFloat const t60 = StkFloat(Vals[1]) * 0.03125;
+		StkFloat const drywet = StkFloat(Vals[2]) * .01;
 		for(unsigned int i = 0; i < 2; ++i) {
+			jcrev[i].~JCRev();
+			new (&jcrev[i]) JCRev();
+			nrev[i].~NRev();
+			new (&nrev[i]) NRev();
+			pcrrev[i].~PRCRev();
+			new (&pcrrev[i]) PRCRev();
+
 			jcrev[i].setT60(t60);
 			nrev[i].setT60(t60);
 			pcrrev[i].setT60(t60);
+			jcrev[i].setEffectMix(drywet);
+			nrev[i].setEffectMix(drywet);
+			pcrrev[i].setEffectMix(drywet);
 		}
 	}
 }
@@ -139,11 +168,15 @@ void mi::Work(float *psamplesleft, float *psamplesright , int numsamples,int tra
 		return;
 
 	if(Vals[3] == 0) {
+		// Independent mode uses one persistent mono-input STK reverb instance
+		// per Psycle channel.  Each instance's first output is the channel's
+		// wet signal; selecting output 1 for the right instance incorrectly
+		// couples the wrapper's channel identity to STK's internal stereo tap.
 		switch(Vals[0]) {
 			case 0:
 				do {
 					*psamplesleft = jcrev[0].tick(StkFloat(*psamplesleft),0);
-					*psamplesright = jcrev[1].tick(StkFloat(*psamplesright),1);
+					*psamplesright = jcrev[1].tick(StkFloat(*psamplesright),0);
 					++psamplesleft;
 					++psamplesright;
 				} while(--numsamples);
@@ -151,7 +184,7 @@ void mi::Work(float *psamplesleft, float *psamplesright , int numsamples,int tra
 			case 1:
 				do {
 					*psamplesleft = nrev[0].tick(StkFloat(*psamplesleft),0);
-					*psamplesright = nrev[1].tick(StkFloat(*psamplesright),1);
+					*psamplesright = nrev[1].tick(StkFloat(*psamplesright),0);
 					++psamplesleft;
 					++psamplesright;
 				} while(--numsamples);
@@ -159,7 +192,7 @@ void mi::Work(float *psamplesleft, float *psamplesright , int numsamples,int tra
 			case 2:
 				do {
 					*psamplesleft = pcrrev[0].tick(StkFloat(*psamplesleft),0);
-					*psamplesright = pcrrev[1].tick(StkFloat(*psamplesright),1);
+					*psamplesright = pcrrev[1].tick(StkFloat(*psamplesright),0);
 					++psamplesleft;
 					++psamplesright;
 				} while(--numsamples);

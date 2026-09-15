@@ -107,12 +107,22 @@ void mi::Init()
 {
 // Initialize your stuff here
 	
+	w_tracks.clear();
 	w_tracks.push_back( 0 ); // 
 	
 	samplerate = (StkFloat)pCB->GetSamplingRate();
 	Stk::setSampleRate(samplerate);
 	for(int i=0;i<MAX_TRACKS;i++)
 	{
+		// Plucked instances are allocated in the constructor before pCB is
+		// attached, so their delay-line capacity may reflect STK's previous
+		// global rate. Recreate them after the actual initial host rate is known.
+		delete track[i];
+		track[i] = new Plucked(
+			#if STK_VERSION != -1
+				20
+			#endif
+		);
 		track[i]->clear();
 		track[i]->noteOff(0.0);
 		adsr[i].setAllTimes(StkFloat(Vals[1]*0.000030517578125),
@@ -142,6 +152,20 @@ void mi::SequencerTick()
 		Stk::setSampleRate(samplerate);
 		for(int c=0;c<MAX_TRACKS;c++)
 		{
+			// stk::Plucked sizes its maximum delay line in the constructor from
+			// the then-current global STK sample rate and the 20 Hz floor. Merely
+			// changing Stk::sampleRate() leaves low notes clamped to the old
+			// capacity after an upward host-rate change. Recreate the physical
+			// model at the new rate; existing excitation state cannot be resized
+			// safely, so the rate transition intentionally starts a fresh voice.
+			delete track[c];
+			track[c] = new Plucked(
+				#if STK_VERSION != -1
+					20
+				#endif
+			);
+			track[c]->clear();
+			track[c]->noteOff(0.0);
 			adsr[c].setAllTimes(StkFloat(Vals[1]*0.000030517578125),
 									StkFloat(Vals[2]*0.000030517578125),
 									StkFloat(Vals[3]*0.000030517578125),
