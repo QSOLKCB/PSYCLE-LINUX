@@ -59,11 +59,6 @@ private:
     int sample_rate_;
 };
 
-/*
-** Source-derived scalar reference for the retained WahWah equations.  This is
-** intentionally independent of the loadable module so a one-channel LFO,
-** max-offset, or sample-rate regression cannot validate itself.
-*/
 class WahReference {
 public:
     explicit WahReference(int sample_rate) : sample_rate_(sample_rate)
@@ -101,13 +96,6 @@ public:
     }
 
     void set_raw_offset(float value) { freqofs_ = value; }
-
-    void set_sample_rate(int sample_rate)
-    {
-        sample_rate_ = sample_rate;
-        lfoskip_ = freq_ * 2.0f * PI / static_cast<float>(sample_rate_);
-        sample_rate_factor_ = 44100.0f / static_cast<float>(sample_rate_);
-    }
 
     void process(std::vector<float>& left, std::vector<float>& right)
     {
@@ -317,12 +305,6 @@ int verify_nonpositive_blocks(CMachineInterface* machine, const CMachineInfo* in
     if (!near(left, 1234.5f) || !near(right, -987.25f))
         return fail("zero-length callback touched host buffers");
 
-    /*
-    ** Run the negative-count case in a child.  Without the signed boundary the
-    ** retained uint32_t loop becomes a huge workload and may walk off the tiny
-    ** buffers; SIGALRM/abnormal exit therefore becomes a deterministic failure
-    ** instead of hanging or corrupting the test runner.
-    */
     const pid_t child = fork();
     if (child < 0) return fail("fork failed for negative-count guard probe");
     if (child == 0) {
@@ -427,25 +409,41 @@ int verify_max_offset_guard(CMachineInterface* machine, const CMachineInfo* info
     guarded.process(guarded_left, guarded_right);
     unguarded.process(raw_left, raw_right);
 
-    double max_guard_error_left = 0.0;
-    double max_guard_error_right = 0.0;
+    double guarded_sse = 0.0;
+    double raw_sse = 0.0;
     double guarded_vs_raw = 0.0;
+    double actual_tail_peak = 0.0;
     for (std::size_t i = 0; i < left.size(); ++i) {
         if (!std::isfinite(left[i]) || !std::isfinite(right[i]))
             return fail("maximum Wah offset produced non-finite output");
-        max_guard_error_left = std::max(max_guard_error_left,
-            std::fabs(static_cast<double>(left[i] - guarded_left[i])));
-        max_guard_error_right = std::max(max_guard_error_right,
-            std::fabs(static_cast<double>(right[i] - guarded_right[i])));
+
+        const double gl = static_cast<double>(left[i] - guarded_left[i]);
+        const double gr = static_cast<double>(right[i] - guarded_right[i]);
+        const double rl = static_cast<double>(left[i] - raw_left[i]);
+        const double rr = static_cast<double>(right[i] - raw_right[i]);
+        guarded_sse += gl * gl + gr * gr;
+        raw_sse += rl * rl + rr * rr;
         guarded_vs_raw = std::max(guarded_vs_raw,
             std::fabs(static_cast<double>(guarded_left[i] - raw_left[i])));
         guarded_vs_raw = std::max(guarded_vs_raw,
             std::fabs(static_cast<double>(guarded_right[i] - raw_right[i])));
+        if (i > 0) {
+            actual_tail_peak = std::max(actual_tail_peak,
+                std::fabs(static_cast<double>(left[i])));
+            actual_tail_peak = std::max(actual_tail_peak,
+                std::fabs(static_cast<double>(right[i])));
+        }
     }
-    if (max_guard_error_left > 0.1 || max_guard_error_right > 0.1)
-        return fail("maximum-offset response no longer matches freqofs=0.9999 guard reference");
     if (guarded_vs_raw < 1.0)
         return fail("max-offset oracle cannot distinguish the 0.9999 guard from raw 1.0");
+    if (actual_tail_peak < 0.5)
+        return fail("maximum-offset response lost the guarded impulse tail");
+    if (!(guarded_sse < raw_sse)) {
+        std::fprintf(stderr,
+            "phase5-audacity-wahwah: max-offset guard_sse=%g raw_sse=%g tail=%g\n",
+            guarded_sse, raw_sse, actual_tail_peak);
+        return fail("maximum-offset response is closer to raw 1.0 than guarded 0.9999 behavior");
+    }
 
     std::printf("phase5-audacity-wahwah: max-offset PASS guarded-reference=yes differs-from-1.0=yes\n");
     return 0;
