@@ -119,6 +119,14 @@ for component in "${COMPONENTS[@]}"; do
     | grep -Ei '\.(dll|exe|lib|a|so|psy|wav|mp3|ogg|zip|7z|obj)$' \
     | sort -u > "$component_out/redistribution-review-hints.txt" || true
 
+  # Retain short provenance-relevant text matches rather than source files. These
+  # are review hints only; they do not establish a license by themselves.
+  grep -RInaI -E \
+    'copyright|licen[cs]e|public domain|GNU (General|Lesser) Public|GPL|LGPL|MIT|BSD|Steinberg|ASIO SDK|VST (Plug|SDK)|Audacity|STK' \
+    "$export_dir" \
+    | sed "s#${export_dir}/##" \
+    | head -n 1500 > "$component_out/notice-hints.txt" || true
+
   review_hint_count="$(wc -l < "$component_out/redistribution-review-hints.txt" | tr -d ' ')"
 
   printf '| `%s` | `%s` | %s | `%s` | **PASS** | %s |\n' \
@@ -180,7 +188,7 @@ fi
   echo '## Safety / redistribution boundary'
   echo
   echo '- The SourceForge trees are exported only into a temporary directory.'
-  echo '- Only SVN metadata, per-file hashes, licensing-candidate paths, dependency-path hints and redistribution-review path hints are retained.'
+  echo '- Only SVN metadata, per-file hashes, licensing/dependency/notice hints and redistribution-review path hints are retained.'
   echo '- The original Psycle executable is downloaded only to verify identity and is deleted before artifact upload.'
   echo '- No upstream source tree, executable, song, plugin binary, SDK or asset is copied into the audit artifact.'
 } >> "$SUMMARY"
