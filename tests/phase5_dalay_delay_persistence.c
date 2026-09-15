@@ -3,7 +3,8 @@
 **
 ** Exercises the retained effect through PluginCatcher, MachineFactory,
 ** version-1 preset I/O and PSY3 save/reload with all seven public state
-** parameters set to legal non-default values.
+** parameters set to legal non-default values, including an eighth-line-only
+** delay that cannot survive accidental default quarter-line quantisation.
 */
 
 #include <stdio.h>
@@ -28,9 +29,11 @@
 #define SLOT 0u
 #define CATCHER_NAME "delay:0"
 #define PRESET_NAME "Phase 5 Dalay Delay"
+#define PARAM_DELAY_LEFT 2u
+#define PARAM_SNAP 6u
 
 static const intptr_t EXPECTED_VALUES[PARAMETER_COUNT] = {
-	10000, 55000, 841, 45000, 421, 20000, 7
+	10000, 55000, 106, 45000, 421, 20000, 7
 };
 
 static int fail(const char* message)
@@ -95,19 +98,35 @@ static int verify_identity(psy_audio_Machine* machine)
 	return 0;
 }
 
+static int tweak_expected(psy_audio_Machine* machine, uintptr_t i)
+{
+	psy_audio_MachineParam* param = psy_audio_machine_parameter(machine, i);
+	intptr_t minval;
+	intptr_t maxval;
+	if (!param) return fail("parameter surface is incomplete");
+	psy_audio_machine_parameter_range(machine, param, &minval, &maxval);
+	if (EXPECTED_VALUES[i] < minval || EXPECTED_VALUES[i] > maxval)
+		return fail("preservation seed is outside public range");
+	psy_audio_machine_parameter_tweak_scaled(machine, param, EXPECTED_VALUES[i]);
+	return 0;
+}
+
 static int seed_parameters(psy_audio_Machine* machine)
 {
 	uintptr_t i;
+
+	/* Establish the saved eighth-line grid before seeding delay values. Raw 106
+	** is the retained rounded representation of 1/8 line under snap=7, but it
+	** collapses to a different value under the default snap=3 quarter-line grid. */
+	if (tweak_expected(machine, PARAM_SNAP) != 0) return 1;
 	for (i = 0; i < PARAMETER_COUNT; ++i) {
-		psy_audio_MachineParam* param = psy_audio_machine_parameter(machine, i);
-		intptr_t minval;
-		intptr_t maxval;
-		if (!param) return fail("parameter surface is incomplete");
-		psy_audio_machine_parameter_range(machine, param, &minval, &maxval);
-		if (EXPECTED_VALUES[i] < minval || EXPECTED_VALUES[i] > maxval)
-			return fail("preservation seed is outside public range");
-		psy_audio_machine_parameter_tweak_scaled(machine, param, EXPECTED_VALUES[i]);
+		if (i == PARAM_SNAP) continue;
+		if (tweak_expected(machine, i) != 0) return 1;
 	}
+	if (psy_audio_machine_parameter_scaled_value(machine,
+			psy_audio_machine_parameter(machine, PARAM_DELAY_LEFT)) !=
+			EXPECTED_VALUES[PARAM_DELAY_LEFT])
+		return fail("eighth-line-only source seed was quantized away");
 	return 0;
 }
 
@@ -334,7 +353,7 @@ initial_cleanup:
 
 	printf("phase5-dalay-delay-state: PASS\n");
 	printf("catcher: delay:0\n");
-	printf("state: 7/7 public parameters seeded non-default, 0 opaque bytes\n");
+	printf("state: 7/7 public parameters seeded non-default, snap=7 left-delay=1/8-line-only, 0 opaque bytes\n");
 	printf("preset-factory: independent\n");
 	printf("topology: ayeternal Dalay Delay -> Master\n");
 	printf("preset: %s\n", preset_path);
