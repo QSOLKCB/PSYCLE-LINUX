@@ -257,6 +257,8 @@ mi::mi()
 {
 	// The constructor zone
 	Vals = new int[MacInfo.numParameters];
+	for (int i = 0; i < MacInfo.numParameters; ++i)
+		Vals[i] = MacInfo.Parameters[i]->DefValue;
 	gains = this->gains10;
 	//iir_cf = new sIIRCoefficients;
 	iir_cf = NULL;
