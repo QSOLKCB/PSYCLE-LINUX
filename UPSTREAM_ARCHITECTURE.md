@@ -8,9 +8,11 @@ The audited r12005 tree already contains an upstream text rendering of the C-Psy
 - title: **Psycle Developer Guide**
 - edition: **C-Version, Feb 2021 (unfinished)**
 
-The imported Visual Studio 2019 solution also records `doc/cpsycle-developer-guide.docx` as a documentation item. PSYCLE-LINUX therefore treats the retained text file as a primary upstream architectural reference for C-Psycle intent and terminology.
+The imported Visual Studio 2019 solution also records `doc/cpsycle-developer-guide.docx` as a documentation item. PSYCLE-LINUX therefore treats the retained text file as a primary upstream architectural reference for **C-Psycle intent and terminology**.
 
-This guide is **historical evidence, not a replacement specification**. It identifies itself as unfinished. When prose, source code and observed r12005 behavior disagree, the pinned r12005 source plus compatibility evidence take precedence. The guide is used to explain intent, architecture and compatibility constraints that the code alone may not make obvious.
+This guide is **historical evidence, not the final PSYCLE-LINUX implementation specification**. It identifies itself as unfinished, and upstream maintainer clarification has since made the lineage more precise: original `psycle/` is the behavioural/UI reference, the C++ `psycle-core` family is the leading candidate Linux engine, and `cpsycle/` is a later C reimplementation that remains valuable as a preservation/reference implementation.
+
+When C-Psycle prose, C-Psycle source and observed r12005 behaviour disagree, the pinned r12005 source plus reproducible C-Psycle evidence take precedence for claims about C-Psycle itself. When deciding the final Linux architecture or original-Psycle compatibility, original Psycle and the Phase 6 parity evidence take precedence over this guide.
 
 ## What the guide establishes
 
@@ -18,22 +20,22 @@ This guide is **historical evidence, not a replacement specification**. It ident
 
 The guide describes C-Psycle as a C-language variant intended to remain compatible with MFC-Psycle and share as many features as possible. It also describes cross-platform portability as a step-by-step separation of Win32-specific code from platform-independent code, with the UI and audio core already structured around that separation.
 
-This directly supports PSYCLE-LINUX's primary rule:
+This supports the project's compatibility-first rule:
 
 > **Port Psycle to Linux. Do not reinvent Psycle.**
 
-The port should repair and validate the existing architecture before considering replacement subsystems.
+It does **not** establish C-Psycle as the mandatory final architecture. Its implementations should be reused when they preserve original-Psycle behaviour or provide useful platform code, and retained as historical evidence where they intentionally diverge.
 
-### Audio engine and UI are separate subsystems
+### Audio engine and UI are separate C-Psycle subsystems
 
-The guide divides Psycle into two principal systems:
+The guide divides C-Psycle into two principal systems:
 
 - the audio engine;
 - the UI.
 
-DSP, container and file helpers support those systems, while audio and event drivers are loaded by the audio engine at runtime. This matches the retained source layout and supports keeping drivers and platform implementations behind explicit boundaries.
+DSP, container and file helpers support those systems, while audio and event drivers are loaded by the audio engine at runtime. This remains useful donor architecture and explains the retained C-Psycle source layout.
 
-### Workspace is the host integration point
+### Workspace is the C-Psycle host integration point
 
 The guide describes `Workspace` as connecting the host UI and player and holding references to:
 
@@ -45,60 +47,66 @@ The guide describes `Workspace` as connecting the host UI and player and holding
 - `psy_audio_PluginCatcher`;
 - `psy_audio_Song`.
 
-That model is important to the production compatibility tests in PSYCLE-LINUX: native-machine discovery, factory construction, song persistence and playback should be exercised through these real host-side objects rather than only through isolated plugin code.
+That model remains important to the completed C-Psycle compatibility tests in PSYCLE-LINUX: native-machine discovery, factory construction, song persistence and playback were exercised through these real host-side objects rather than only through isolated plugin code. Those tests can be reused as oracles where the same contracts exist in `psycle-core`.
 
-### The 256-sample work size is a compatibility contract
+### The 256-sample work size is a documented C-Psycle compatibility contract
 
-The guide explicitly explains that the player splits driver requests into `psy_audio_MAX_STREAM_SIZE` chunks of **256 samples** to maintain compatibility with Psycle plugins. It further splits work at tracker-line boundaries so machines can receive line-end/new-line notifications and `SeqTick()` events in the historical order.
+The guide explicitly explains that the C-Psycle player splits driver requests into `psy_audio_MAX_STREAM_SIZE` chunks of **256 samples** to maintain compatibility with Psycle plugins. It further splits work at tracker-line boundaries so machines can receive line-end/new-line notifications and `SeqTick()` events in the historical order.
 
-PSYCLE-LINUX therefore treats the 256-sample native-machine work boundary as historical compatibility behavior rather than an arbitrary implementation detail. Preservation tests may exercise smaller blocks, but must not casually remove or redefine this contract.
+PSYCLE-LINUX therefore preserves this as a frozen **C-Psycle/native-plugin compatibility fact** and as evidence to compare during Phase 6. It must not be silently imposed on `psycle-core` if original Psycle or the selected C++ engine demonstrates a different contract.
 
 ### C-Psycle deliberately bridges tracker timing into a sequencer model
 
-The guide documents the transition from a line/tick-oriented tracker engine to a beat-position/event sequencer. It explains line-boundary splitting, event timestamps, retrigger/delay event generation and sampler tick timers as compatibility machinery.
+The guide documents C-Psycle's transition from a line/tick-oriented tracker engine to a beat-position/event sequencer. It explains line-boundary splitting, event timestamps, retrigger/delay event generation and sampler tick timers as compatibility machinery.
 
-This is important when evaluating timing changes: modernizing the event engine does not justify discarding tracker-era timing semantics that native machines and old songs depend on.
+This is precisely where C-Psycle can diverge from original Psycle. Phase 6 must therefore compare this behaviour rather than treating the newer C-Psycle event model as authoritative by default.
 
 ### VST processing must tolerate variable block sizes
 
 The guide notes that tracker-line splitting can produce unequal processing intervals for VSTs and states that a VST plugin should handle arbitrary sample counts correctly.
 
-For Phase 6 plugin hosting, this is an upstream compatibility requirement: VST2 restoration must preserve Psycle's variable-block host behavior rather than forcing the tracker/sequencer to provide equal-sized VST blocks.
+For **Phase 9** plugin hosting, this remains useful compatibility evidence: restored VST2 hosting should accept variable positive process-block lengths generated by Psycle's tracker/timing model rather than depending on fixed blocks.
 
-### Native-machine polyphony is constrained to 64 physical channels
+### Native-machine polyphony is documented as 64 physical channels in C-Psycle
 
-The guide documents the 64-channel native-plugin limit and the use of `LogicalChannel` mapping when multiple sequence tracks would otherwise collide on the same physical plugin channels.
+The guide documents a 64-channel native-plugin limit and the use of `LogicalChannel` mapping when multiple sequence tracks would otherwise collide on the same physical plugin channels.
 
-PSYCLE-LINUX should preserve this limit where it is part of the native ABI/behavior instead of expanding it silently in a way that could change voice allocation or old-song behavior.
+PSYCLE-LINUX preserves this as a C-Psycle/native-machine contract and comparison point. Phase 6 must determine whether the same limit and mapping are part of original Psycle / `psycle-core` compatibility before treating them as final engine architecture.
 
-### The UI was intentionally built around a platform bridge
+### The C-Psycle UI was intentionally built around a platform bridge
 
-The guide describes the UI as a bridge with host-side components delegating to implementation-side objects, with Win32 being the developed implementation at the time. That is strong upstream evidence that a Unix/Linux implementation was expected to fit behind the existing UI abstraction rather than require a wholesale host redesign.
+The guide describes the C-Psycle UI as a bridge with host-side components delegating to implementation-side objects, with Win32 being the developed implementation at the time.
 
-### The 2021 build state explains the inherited Linux gap
+That is useful evidence that C-Psycle itself anticipated platform-specific UI implementations. It remains a donor/reference architecture, but it no longer dictates the final Linux UI path. The active roadmap now evaluates a Qt UI on top of the converged `psycle-core` engine because original Psycle's MFC UI cannot be carried directly to Linux.
+
+### The 2021 build state explains the inherited C-Psycle Linux gap
 
 The guide records that Visual Studio 2019 was the primary build, that plugins were not then built as part of that Windows C-Psycle setup and had to be taken from an MFC-Psycle release, and that the GCC build was "currently out of date".
 
-This historical state helps explain why r12005 already contains substantial cross-platform structure while still requiring extensive Linux build and native-machine preservation work.
+This historical state explains why r12005 contained substantial cross-platform structure while still requiring the Linux build/native-machine preservation program completed in Phases 0–5.
 
-## Roadmap consequences
+## Project consequences
 
-PSYCLE-LINUX uses this upstream guide as supporting evidence for the following project choices:
+PSYCLE-LINUX uses this guide as supporting evidence for the following choices:
 
-1. preserve the existing C-Psycle host/audio/UI architecture before considering rewrites;
-2. retain the 256-sample native-machine compatibility boundary;
-3. preserve tracker-line/`SeqTick()` timing semantics while validating the sequencer implementation;
-4. preserve the native 64-channel model unless a separately versioned compatibility design proves a safe extension;
-5. exercise `MachineFactory`, `PluginCatcher`, `Song` and real host persistence paths in compatibility tests;
-6. require restored VST hosting to accept Psycle's variable process-block sizes;
-7. keep plugin discovery/loading failures recoverable so optional or third-party plugins cannot prevent the host from starting;
-8. treat the existing platform/UI bridge as the preferred path for Linux integration.
+1. preserve the completed C-Psycle regression corpus and architecture notes as historical evidence;
+2. retain the documented 256-sample and 64-channel C-Psycle/native-machine contracts in the preservation corpus;
+3. compare C-Psycle tracker/`SeqTick()` timing against original Psycle instead of assuming equivalence;
+4. reuse `MachineFactory`, `PluginCatcher`, `Song` and related production-path tests where the next engine exposes equivalent contracts;
+5. require restored VST hosting in Phase 9 to tolerate variable positive process-block sizes;
+6. keep plugin discovery, instantiation and state-restoration failures recoverable;
+7. treat C-Psycle's X11/UI bridge as a donor/reference implementation, not the governing UI architecture;
+8. use Phase 6 `psycle-core` parity evidence to decide which C-Psycle implementations/tests are reusable and which remain C-Psycle-only history.
 
 ## Authority rule
 
-When using this document in reviews or future preservation work:
+When using this document in reviews or future work:
 
-1. **pinned r12005 source and observed behavior** are the executable compatibility reference;
-2. **the C-Psycle developer guide** is primary historical architecture/intent evidence;
-3. older branches, posts and release material are supporting historical donors;
-4. later PSYCLE-LINUX behavior changes require explicit tests and rationale rather than being inferred solely from unfinished prose.
+1. **original Psycle behaviour/source** is the primary compatibility target where legally and technically available;
+2. **trustworthy songs, formats and frozen machine/plugin contracts** provide reproducible historical evidence;
+3. **the selected `psycle-core` family** is the candidate engine to measure and repair, not an automatic authority;
+4. **C-Psycle source plus PSYCLE-LINUX's completed regression corpus** are independent donor/oracle evidence where semantics overlap;
+5. **the C-Psycle developer guide** is primary architecture/intent evidence for C-Psycle itself;
+6. older branches, posts and release material are supporting historical donors.
+
+Later PSYCLE-LINUX behaviour changes require explicit tests and rationale rather than being inferred solely from unfinished prose.
