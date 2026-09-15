@@ -1,0 +1,47 @@
+name: Phase 5 FluidSynth SF2 Player preservation
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-5/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fluidsynth:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev \
+            libfluidsynth-dev \
+            timgm6mb-soundfont
+
+      - name: Run FluidSynth preservation regression
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          set -o pipefail
+          chmod +x scripts/phase5-fluidsynth-smoke.sh
+          scripts/phase5-fluidsynth-smoke.sh phase5-fluidsynth \
+            2>&1 | tee "$RUNNER_TEMP/phase5-fluidsynth.log"
+
+      - name: Upload FluidSynth evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-fluidsynth
+          path: |
+            phase5-fluidsynth/
+            ${{ runner.temp }}/phase5-fluidsynth.log
