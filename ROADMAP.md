@@ -24,6 +24,8 @@ Direct clarification from long-time Psycle maintainer **JosepMa / JAZ** establis
 
 It is strongly tied to Microsoft Visual Studio and MFC, with additional Windows-oriented SDKs and libraries. It remains the primary **behavioural and UI reference**, but it is not a practical direct Linux implementation base without replacing substantial MFC UI/platform code.
 
+Because original Psycle evolved across releases, “original Psycle” is not by itself a reproducible oracle. Before any PASS / DIFFERENT compatibility claim is accepted, Phase 6 must identify the exact original-Psycle source revision and/or executable build used for that observation, record its provenance and checksum where practical, and document the runtime/observation method.
+
 ### First cross-platform reimplementation
 
 The first C++ reimplementation was split across projects/directories including:
@@ -60,11 +62,13 @@ It is **not discarded**, but it is no longer treated as the final implementation
 
 When compatibility questions arise, use this order:
 
-1. original Psycle behaviour/source where legally and technically available;
-2. reproducible historical songs/tests and preserved machine contracts;
+1. a **version-pinned original Psycle source/build and reproducible observation** where legally and technically available;
+2. reproducible historical songs/tests and preserved machine contracts tied to a known Psycle version where applicable;
 3. `psycle-core` family behaviour as the candidate cross-platform engine;
 4. C-Psycle source plus the extensive regression evidence built in this repository;
 5. retained developer documentation and historical branches/posts as architecture/intent evidence.
+
+If multiple original Psycle versions behave differently, the parity report must record that difference rather than collapsing them into one unnamed “original Psycle” result.
 
 The retained `cpsycle/doc/cpsycle-developer-guide.txt` remains important, but it is explicitly **C-Version, Feb 2021 (unfinished)**. See `UPSTREAM_ARCHITECTURE.md`.
 
@@ -223,16 +227,29 @@ Still important for the final product:
 
 **Goal:** determine exactly how close the existing C++ reimplementation already is to original Psycle before writing new engine or UI code.
 
-### 6A — acquire and pin the correct upstream source
+### 6A — pin both sides of the parity comparison
 
-The current repository does **not** yet import the `psycle-core` family.
+The current repository does **not** yet import the `psycle-core` family or an original-Psycle reference tree/build.
+
+#### Original Psycle reference
+
+Before any Phase 6 PASS / DIFFERENT result is accepted:
+
+- [ ] Select and record a **primary original Psycle reference version/build** for the parity matrix. Psycle 1.12 is an obvious candidate from maintainer clarification, but it is not considered pinned until the exact source revision/tag and/or executable build identity is recorded.
+- [ ] Record the authoritative origin URL/source location, release/version identifier, and SHA-256 (or equivalent immutable identity) for the chosen reference material where practical.
+- [ ] Audit the licence/redistribution status separately from the right to observe/test the reference. Do not commit original binaries, songs, SDKs, or assets merely because they are useful as an oracle.
+- [ ] Document the reproducible observation environment: OS/version or VM/Wine environment as appropriate, architecture, audio configuration where relevant, plugin set, and exact steps/fixtures used to obtain a result.
+- [ ] Prefer machine-readable receipts, hashes, renders, state dumps, or screenshots/logs over memory-only claims where the application permits them.
+- [ ] If an additional Psycle release is needed because behaviour changed across versions, identify it independently and record the matrix row as version-specific rather than overwriting the primary-reference result.
+
+#### `psycle-core` family
 
 - [ ] Identify the exact SourceForge revisions/paths for `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player` and `psycle-plugins` that form a coherent buildable state.
 - [ ] Record revision-pinned URLs and checksums where appropriate.
 - [ ] Audit licences and third-party boundaries before importing anything.
 - [ ] Preserve upstream notices/authorship.
 - [ ] Import or vendor only after the provenance boundary is clear.
-- [ ] Document the relationship between the selected C++ reimplementation snapshot and original Psycle versions it was intended to emulate.
+- [ ] Document the relationship between the selected C++ reimplementation snapshot and the pinned original Psycle version(s) it was intended to emulate.
 
 ### 6B — reproduce the historical Linux player build
 
@@ -246,9 +263,11 @@ The current repository does **not** yet import the `psycle-core` family.
 
 Compare:
 
-1. **original Psycle** — behavioural reference;
-2. **`psycle-core` family** — candidate Linux engine;
+1. **pinned original Psycle reference build/version** — behavioural reference;
+2. **pinned `psycle-core` family** — candidate Linux engine;
 3. **C-Psycle regression corpus** — independent donor/oracle where semantics overlap.
+
+Every PASS / DIFFERENT entry must identify the original-Psycle reference version/build and the observation artifact or procedure that supports it. “Original Psycle did X” without a versioned reference is not a reproducible matrix result.
 
 Audit at minimum:
 
@@ -272,11 +291,23 @@ Do **not** assume C-Psycle's event sequencer is authoritative when it differs fr
 ### 6D — parity report
 
 - [ ] Produce `PSYCLE_CORE_PARITY.md` with PASS / DIFFERENT / MISSING / UNKNOWN for each subsystem.
+- [ ] Record the original-Psycle version/build and evidence artifact/procedure for every PASS / DIFFERENT row.
 - [ ] Separate engine gaps from UI-only gaps.
 - [ ] Identify which existing C-Psycle tests can be ported unchanged, which need original-Psycle oracles, and which should remain C-Psycle-only historical tests.
 - [ ] Freeze the first implementation backlog from evidence rather than intuition.
 
-**Exit condition:** we know exactly what `psycle-core` already provides and what must change to reach original-Psycle playback compatibility.
+### 6E — active-track CI foundation
+
+As soon as the provenance-safe `psycle-core` family is imported, the new implementation path must have CI of its own rather than relying on the retained C-Psycle Phase 2–5 workflows.
+
+- [ ] Add a maintained GitHub Actions workflow that builds the pinned `psycle-core` family and `psycle-player` on the reference Linux runner.
+- [ ] Run deterministic/headless player smoke and all portable Phase 6 parity fixtures in CI.
+- [ ] Upload parity receipts/logs/renders needed to diagnose a failed comparison.
+- [ ] Make the active `psycle-core` build/parity workflow a required merge signal before Phase 7 implementation PRs are accepted.
+- [ ] Require every Phase 7 parity regression to execute in the maintained CI path; no release-blocking regression may remain local-only.
+- [ ] Extend the active-track CI as later phases arrive: Qt build/headless interaction smoke in Phase 8, and VST2 ABI/real-plugin/scanner/song-load containment tests in Phase 9.
+
+**Exit condition:** the original-Psycle reference and `psycle-core` inputs are pinned and reproducible; the parity matrix identifies exactly what `psycle-core` already provides and what must change; and the active engine/build/parity suite runs in maintained CI.
 
 ---
 
@@ -292,8 +323,10 @@ Do **not** assume C-Psycle's event sequencer is authoritative when it differs fr
 - [ ] Port/adapt Linux audio/MIDI drivers where the existing `psycle-audiodrivers` path is incomplete.
 - [ ] Reuse C-Psycle implementations only where behaviour is demonstrated equivalent or where they provide a clean Linux platform implementation independent of divergent tracker semantics.
 - [ ] Add regressions for every fixed parity gap.
+- [ ] Run every new parity regression in the maintained active-track GitHub Actions workflow before merge.
+- [ ] Keep the CI reference-version metadata synchronized with the parity report so a green result always identifies what original-Psycle behaviour it is protecting.
 
-**Exit condition:** the engine/player can reproduce representative original-Psycle songs within documented tolerances without requiring a GUI.
+**Exit condition:** the engine/player can reproduce representative behaviour from the pinned original-Psycle reference within documented tolerances without requiring a GUI, and the parity suite gates regressions in CI.
 
 ---
 
@@ -301,7 +334,7 @@ Do **not** assume C-Psycle's event sequencer is authoritative when it differs fr
 
 **Goal:** restore the recognizable Psycle application workflow on top of the compatible engine.
 
-Original `psycle/` remains the visual/interaction reference; its MFC implementation is not copied blindly into a Linux toolkit.
+The pinned original `psycle/` reference remains the visual/interaction reference; its MFC implementation is not copied blindly into a Linux toolkit.
 
 ### 8A — toolkit proof
 
@@ -310,6 +343,7 @@ Original `psycle/` remains the visual/interaction reference; its MFC implementat
 - [ ] Build a minimal Qt host shell against the converged engine.
 - [ ] Prove event loop, audio-engine ownership and clean shutdown.
 - [ ] Prove keyboard focus/input behaviour suitable for tracker editing.
+- [ ] Add Qt build/headless smoke coverage to the maintained active-track CI before expanding the UI surface.
 - [ ] Evaluate QML only where it offers a concrete advantage; do not require QML merely for modernity.
 
 ### 8B — core views
@@ -336,7 +370,7 @@ Implement in compatibility order:
 
 VST editor embedding or safe external-editor handling is intentionally **not** a Phase 8 exit requirement; it depends on the restored VST host lifecycle and is scheduled in Phase 9.
 
-**Exit condition:** a Psycle user can create, edit, play, save and reopen songs using a recognizably Psycle workflow on Linux with native machines and core engine features. Third-party VST editor integration is completed with the VST host in Phase 9.
+**Exit condition:** a Psycle user can create, edit, play, save and reopen songs using a recognizably Psycle workflow on Linux with native machines and core engine features, with the critical Qt host/build/interaction path protected by CI. Third-party VST editor integration is completed with the VST host in Phase 9.
 
 ---
 
@@ -359,6 +393,7 @@ VST editor embedding or safe external-editor handling is intentionally **not** a
 - [ ] Restore song-specific opaque/plugin state under the same containment boundary and timeout policy.
 - [ ] If a safely restored instance cannot be handed off without losing containment, keep that plugin behind the process boundary for runtime use.
 - [ ] Do not implicitly open third-party plugin editors during song load; editor creation is an explicit post-load action.
+- [ ] Exercise scanner crash, scanner hang, instantiation crash/hang, and state-restore crash/hang cases in CI.
 
 This containment is part of the Phase 9 song-loading guarantee, not an optional later enhancement. Broader runtime isolation may still be expanded for additional native/legacy formats, but plugin discovery and song-specific instantiation/state restore must not be able to terminate or indefinitely hang the main Psycle process.
 
@@ -378,10 +413,15 @@ Implementation plan:
 - [ ] Inventory only the VST2 ABI types/constants/opcodes/layouts actually required by the chosen engine/host.
 - [ ] Write independent project-authored compatibility definitions without copying Steinberg SDK source expressions.
 - [ ] Add `sizeof` / `offsetof` / calling-convention assertions.
-- [ ] Add a project-authored dummy VST2 test plugin.
+- [ ] Add a project-authored dummy VST2 test plugin for controlled ABI/error-path coverage.
 - [ ] Restore native Linux VST2 hosting behind that boundary.
 - [ ] Preserve Psycle's documented variable positive process-block lengths.
-- [ ] Verify MIDI, parameters, opaque state, presets and song reopen.
+- [ ] Select at least one **independently maintained free/open Linux VST2 plugin** from a pinned, provenance-documented source/build that does **not** compile against PSYCLE-LINUX's compatibility headers.
+- [ ] Do not commit proprietary Steinberg SDK material merely to build the independent validation plugin; use a legally/provenance-safe source/build path and record it.
+- [ ] Validate the independent plugin through the restored host with **real audio processing** (nontrivial process callback/audio path), not only discovery/metadata.
+- [ ] Where applicable, validate MIDI/note input, parameter changes, program/preset behaviour, opaque/chunk state, variable block lengths, song save/reopen, and missing-plugin fallback against that independent plugin.
+- [ ] Keep the project-authored dummy fixture and the independent real-plugin test as separate gates: the first diagnoses our ABI implementation; the second proves interoperability with an implementation that did not share our header definitions.
+- [ ] Add both the controlled ABI fixture and the independent real-plugin processing/state tests to maintained CI where licensing/distribution permits; otherwise build/fetch the pinned external fixture reproducibly during CI without vendoring restricted material.
 - [ ] Add VST editor embedding or safe external-editor handling only after the host lifecycle/state path is working.
 - [ ] Ensure editor creation/teardown failures are contained and cannot corrupt or terminate the main host.
 - [ ] Audit `.fxp` / `.fxb` behaviour.
@@ -402,7 +442,7 @@ Implementation plan:
 - [ ] Ensure bridge/plugin failure cannot terminate the main Psycle process.
 - [ ] Preserve historical plugin identity/state where technically and legally possible.
 
-**Exit condition:** plugin discovery and song loading survive missing, crashing or hanging third-party plugins; plugin state can be restored or replaced by a recoverable placeholder without terminating the host; native Linux VST2 interoperability and its editor lifecycle work behind the clean provenance boundary.
+**Exit condition:** plugin discovery and song loading survive missing, crashing or hanging third-party plugins; plugin state can be restored or replaced by a recoverable placeholder without terminating the host; native Linux VST2 interoperability is proven against both controlled project fixtures and at least one independent real plugin exercising audio processing; editor lifecycle works behind the clean provenance boundary; and the critical plugin-host/isolation regressions run in CI.
 
 ---
 
@@ -428,18 +468,20 @@ A 1.0 release means **usable, compatible Psycle on Linux**, not merely "it compi
 
 Required acceptance areas:
 
-- [ ] representative original `.psy` songs load and play correctly;
+- [ ] representative original `.psy` songs load and play correctly against explicitly identified reference versions;
 - [ ] engine parity matrix has no unexplained release-blocking differences;
 - [ ] tracker/Machine View workflow is usable and recognizably Psycle;
 - [ ] native-machine state and representative sound behaviour are preserved;
 - [ ] render/bounce → Sampler workflow works;
 - [ ] missing/broken plugins degrade safely;
 - [ ] plugin scanner/cache/quarantine and song-load instantiation/state-restore containment are dependable;
-- [ ] VST2 compatibility status and provenance boundary are documented;
+- [ ] VST2 compatibility status, independent real-plugin evidence, and provenance boundary are documented;
 - [ ] real audio/MIDI hardware paths are validated;
 - [ ] packaging/install/uninstall are reproducible;
 - [ ] long-session/stress testing is complete;
-- [ ] user and developer documentation are release quality.
+- [ ] user and developer documentation are release quality;
+- [ ] maintained CI covers the active engine/parity suite, Qt host smoke, plugin ABI/independent-plugin processing, and plugin failure-containment regressions;
+- [ ] release-blocking regressions are required merge checks or otherwise enforced before release—not merely documented local tests.
 
 ---
 
@@ -448,12 +490,12 @@ Required acceptance areas:
 Before adding or replacing a major dependency, subsystem, engine or UI path, ask:
 
 1. Does this move us closer to **original Psycle behaviour on Linux**?
-2. Is the behaviour established by original Psycle, a trustworthy song/test, or reproducible evidence?
+2. Is the behaviour established by a **version-pinned** original Psycle reference, a trustworthy song/test, or other reproducible evidence?
 3. Can an existing `psycle-core` implementation be repaired instead of rewritten?
 4. Can proven C-Psycle code/tests be reused without importing C-Psycle-specific behavioural divergence?
 5. Does the change preserve old songs, machines and plugin state?
 6. Does it reduce or contain startup/runtime failure risk?
 7. Is the licensing/provenance boundary clear?
-8. Can it be introduced incrementally and regression-tested?
+8. Can it be introduced incrementally and regression-tested in maintained CI?
 
 If the answer is unclear, preserve evidence first and avoid a broad rewrite.
