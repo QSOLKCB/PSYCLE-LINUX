@@ -96,25 +96,32 @@ void machine::ParameterTweak(int parameter, int value) {
 void machine::Work(float * left_samples, float * right_samples, int sample_count, int /*tracks*/) {
 	if (!change) {
 		if(!Vals[0]) return;
-		while(sample_count--) *left_samples++ = *right_samples++ = 0;
+		while(sample_count > 0) {
+			*left_samples++ = *right_samples++ = 0;
+			--sample_count;
+		}
 	} else if (Vals[0]){
 		// mute enabled
-		while(volume>0.01f && sample_count--) {
+		while(volume>0.01f && sample_count > 0) {
 			(*left_samples)*=volume; (*right_samples)*=volume;
 			left_samples++; right_samples++;
 			volume-=slope;
+			--sample_count;
 		}
-		sample_count++;
-		while(sample_count--) *left_samples++ = *right_samples++ = 0;
+		while(sample_count > 0) {
+			*left_samples++ = *right_samples++ = 0;
+			--sample_count;
+		}
 		if (volume<=0.01f) {
 			change=false;
 		}
 	} else {
 		// mute disabled
-		while(volume<0.99f && sample_count--) {
+		while(volume<0.99f && sample_count > 0) {
 			(*left_samples)*=volume; (*right_samples)*=volume;
 			left_samples++; right_samples++;
 			volume+=slope;
+			--sample_count;
 		}
 		if (volume>=0.99f) {
 			change=false;

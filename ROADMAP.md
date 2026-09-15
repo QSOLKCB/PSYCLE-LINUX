@@ -267,10 +267,15 @@ Phase 5B Pooplog-family preservation is complete for the nine retained source-bu
   - [x] Preserve representative historical DSP/timing behaviour: dw eq default unity and live 44.1 → 88.2 kHz coefficient reconfiguration, Granulizer fixed-grain 10→20-sample rate scaling with random modulation disabled, IoPan default unity/full channel flip, and Tremolo Depth=0 unity plus live wall-clock LFO rate scaling.
   - [x] Verify production catcher identities `dw-eq:0`, `dw-granulizer:0`, `dw-iopan:0` and `dw-tremolo:0`, including version-1 preset restore, one four-machine fresh PSY3 reopen and all four effect-to-Master topology edges.
   - [x] Preserve DW public state without inventing opaque payloads: EQ 12/12 state slots, Granulizer 38 `MPF_STATE` slots (36 writable controls plus two derived runtime values) while freezing its 12 structural label/null ABI slots only through metadata, IoPan 4/4 and Tremolo 8/8.
-- [ ] STK-derived Psycle machines where licensing/provenance permits
+- [x] STK-derived Psycle machines where licensing/provenance permits
 - [ ] Remaining retained native generators/effects in the audited r12005 set
+  - [x] Alk Muter
+    - [x] Build and gate the retained source independently on Linux as `alk-muter.so` and freeze native identity/version/type/geometry plus the complete one-parameter metadata surface.
+    - [x] Preserve exact default unity, historical click-avoiding mute/unmute timing at 44.1 kHz and the live 44.1 → 88.2 kHz `SequencerTick()` timing update.
+    - [x] Remove the historical one-sample out-of-bounds mute-tail write by making `Work()` consume exactly the host-supplied sample count; canary-guarded regression coverage freezes the block boundary.
+    - [x] Verify production catcher `alk-muter:0`, non-default Mute=1 version-1 preset restore, fresh PSY3 reopen and Alk Muter-to-Master topology with zero opaque state.
 
-The Druttis, JM, JME, Zephod, Yezar and DW slices of Phase 5C are complete and gated by `.github/workflows/phase5-druttis-family.yml`, `.github/workflows/phase5-jm-drum.yml`, `.github/workflows/phase5-jme-family.yml`, `.github/workflows/phase5-zephod-superfm.yml`, `.github/workflows/phase5-yezar-freeverb.yml` and `.github/workflows/phase5-dw-family.yml`. The remainder of Phase 5C stays open until each classic family has its own source-derived preservation evidence.
+The Druttis, JM, JME, Zephod, Yezar, DW and STK slices of Phase 5C are complete and gated by `.github/workflows/phase5-druttis-family.yml`, `.github/workflows/phase5-jm-drum.yml`, `.github/workflows/phase5-jme-family.yml`, `.github/workflows/phase5-zephod-superfm.yml`, `.github/workflows/phase5-yezar-freeverb.yml`, `.github/workflows/phase5-dw-family.yml` and `.github/workflows/phase5-stk-family.yml`. Alk Muter is the first completed focused slice of the final remaining-native audit and is gated by `.github/workflows/phase5-alk-muter.yml`; the parent remaining-native item stays open until the rest of the retained r12005 machine set has equivalent source-derived preservation evidence.
 
 ### 5D — preservation matrix
 

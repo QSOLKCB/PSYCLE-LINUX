@@ -1,0 +1,39 @@
+name: Phase 5 Alk Muter preservation
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-5/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  alk-muter:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run Alk Muter preservation regression
+        run: |
+          chmod +x scripts/phase5-alk-muter-smoke.sh
+          scripts/phase5-alk-muter-smoke.sh phase5-alk-muter
+
+      - name: Upload Alk Muter evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-alk-muter
+          path: phase5-alk-muter/
