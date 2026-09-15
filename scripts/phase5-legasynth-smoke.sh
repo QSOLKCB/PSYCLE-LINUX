@@ -71,6 +71,7 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 grep -Fqx 'phase5-legasynth: metadata PASS version=0x0020 slots=28 state=25 labels=3 identity=TB303' "$NATIVE_LOG"
 grep -Fqx 'phase5-legasynth: defaults PASS constructor=published-28-slot-state' "$NATIVE_LOG"
 grep -Fqx 'phase5-legasynth: describe PASS notes/cents lfo=sine/saw/square chorus=off/on delay/lfo/depth/amount' "$NATIVE_LOG"
+grep -Fqx 'phase5-legasynth: historical-oracle PASS note=48 rate=44100 markers=7 rms=4252.98775' "$NATIVE_LOG"
 grep -Fq 'phase5-legasynth: deterministic PASS note=48 rate=44100 rms=' "$NATIVE_LOG"
 grep -Fqx 'phase5-legasynth: velocity PASS command=0C80 scale=64/127' "$NATIVE_LOG"
 grep -Fqx 'phase5-legasynth: nonpositive PASS chorus=on zero+negative strict-noop' "$NATIVE_LOG"
@@ -96,7 +97,8 @@ cat > "$SUMMARY" <<'EOF'
 - Complete 28-slot ABI surface: 25 state controls plus three labeled section headers: PASS
 - Constructor storage is seeded from all 28 published defaults before host default callbacks: PASS
 - Representative historical descriptions for tuning, LFO waveform and chorus controls: PASS
-- Fresh default instances render deterministic active TB303 output: PASS
+- Default note-48 output matches seven frozen source-derived stereo sample markers plus RMS at 44.1 kHz: PASS
+- Fresh default instances remain mutually deterministic: PASS
 - Pattern command `0C80` preserves the historical velocity=64/127 scaling: PASS
 - Chorus-enabled zero and negative host callback sizes are strict no-ops: PASS
 - Chorus-enabled live sample-rate transition after 250 ms pre-roll preserves modulation phase, matches a fresh 88.2 kHz timebase and differs from stale 44.1 kHz synthesis: PASS
