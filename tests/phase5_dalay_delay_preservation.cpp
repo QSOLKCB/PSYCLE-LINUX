@@ -3,7 +3,7 @@
 **
 ** Loads the retained ayeternal Dalay Delay through Psycle's native ABI and
 ** freezes its identity, seven-parameter surface, snap semantics, stereo
-** line-delay timing and live host timing reconfiguration.
+** line-delay/feedback behavior and independent live host timing paths.
 */
 
 #include <algorithm>
@@ -30,6 +30,8 @@ constexpr int PARAM_DELAY_RIGHT = 4;
 constexpr int PARAM_FEEDBACK_RIGHT = 5;
 constexpr int PARAM_SNAP = 6;
 constexpr int INPUT_MAX = 65535;
+constexpr int FEEDBACK_LEFT_RAW = 49151;
+constexpr int FEEDBACK_RIGHT_RAW = 24576;
 constexpr float IMPULSE = 1024.0f;
 
 struct ExpectedParameter {
@@ -137,15 +139,21 @@ void initialize(CMachineInterface* machine, const CMachineInfo* info,
         machine->ParameterTweak(i, info->Parameters[i]->DefValue);
 }
 
+double scaled_bipolar(int raw)
+{
+    return static_cast<double>(raw) * 2.0 / static_cast<double>(INPUT_MAX) - 1.0;
+}
+
 void configure_delay(CMachineInterface* machine)
 {
-    /* snap=7 means 1/8-line quantisation.  Raw 841 and 421 map to exact
-    ** snapped delays of 1.0 and 0.5 tracker lines respectively. */
+    /* snap=7 means 1/8-line quantisation. Raw 841 and 421 map to exact
+    ** snapped delays of 1.0 and 0.5 tracker lines respectively. Distinct
+    ** nontrivial feedback values make each channel's second echo observable. */
     machine->ParameterTweak(PARAM_SNAP, 7);
     machine->ParameterTweak(PARAM_DRY, 32767);       // historical nearest-to-zero: -1/65535
     machine->ParameterTweak(PARAM_WET, 65535);       // +1
-    machine->ParameterTweak(PARAM_FEEDBACK_LEFT, 32767);
-    machine->ParameterTweak(PARAM_FEEDBACK_RIGHT, 32767);
+    machine->ParameterTweak(PARAM_FEEDBACK_LEFT, FEEDBACK_LEFT_RAW);
+    machine->ParameterTweak(PARAM_FEEDBACK_RIGHT, FEEDBACK_RIGHT_RAW);
     machine->ParameterTweak(PARAM_DELAY_LEFT, 841);  // 1 line after snap
     machine->ParameterTweak(PARAM_DELAY_RIGHT, 421); // 1/2 line after snap
 }
@@ -223,7 +231,7 @@ int verify_stereo_timing(CMachineInterface* machine, const TestCallback& callbac
     configure_delay(machine);
     const int expected_left = expected_ring_length(1.0, callback);
     const int expected_right = expected_ring_length(0.5, callback);
-    const int frames = expected_left + 300;
+    const int frames = 2 * expected_left + 300;
     std::vector<float> left(frames, 0.0f);
     std::vector<float> right(frames, 0.0f);
     left[0] = IMPULSE;
@@ -235,13 +243,19 @@ int verify_stereo_timing(CMachineInterface* machine, const TestCallback& callbac
         return fail("stereo snapped delay timing changed");
 
     const float epsilon = 1.0f / static_cast<float>(INPUT_MAX);
+    const float expected_left_second = static_cast<float>(IMPULSE *
+        scaled_bipolar(FEEDBACK_LEFT_RAW));
+    const float expected_right_second = static_cast<float>(IMPULSE *
+        scaled_bipolar(FEEDBACK_RIGHT_RAW));
     if (std::fabs(left[0] + IMPULSE * epsilon) > 1e-5f ||
             std::fabs(right[0] + IMPULSE * epsilon) > 1e-5f ||
             std::fabs(left[expected_left] - IMPULSE) > 1e-4f ||
-            std::fabs(right[expected_right] - IMPULSE) > 1e-4f)
-        return fail("dry/wet source-derived impulse amplitudes changed");
+            std::fabs(right[expected_right] - IMPULSE) > 1e-4f ||
+            std::fabs(left[2 * expected_left] - expected_left_second) > 1e-3f ||
+            std::fabs(right[2 * expected_right] - expected_right_second) > 1e-3f)
+        return fail("dry/wet or feedback source-derived impulse amplitudes changed");
 
-    std::printf("phase5-dalay-delay: stereo PASS left=%d right=%d dry-near-zero=-1/65535 wet=1\n",
+    std::printf("phase5-dalay-delay: stereo PASS left=%d right=%d feedback-left=32767/65535 feedback-right=-16383/65535 second-echo=yes\n",
         expected_left, expected_right);
     return 0;
 }
@@ -263,14 +277,20 @@ int render_target(CMachineInterface* machine, const TestCallback& callback,
     return 0;
 }
 
-int verify_live_timing(CMachineInterface* live, const CMachineInfo* info,
-    TestCallback& live_callback, CMachineInterface* fresh)
+int verify_timing_transition(CMachineInterface* live, CMachineInterface* fresh,
+    const CMachineInfo* info, int from_sample_rate, int from_bpm, int from_tpb,
+    int to_sample_rate, int to_bpm, int to_tpb, const char* label)
 {
+    TestCallback live_callback(from_sample_rate, from_bpm, from_tpb);
+    TestCallback fresh_callback(to_sample_rate, to_bpm, to_tpb);
+    initialize(live, info, &live_callback);
     configure_delay(live);
-    live_callback.set_timing(88200, 150, 8);
+
+    const int stale_left = expected_ring_length(1.0, live_callback);
+    const int stale_right = expected_ring_length(0.5, live_callback);
+    live_callback.set_timing(to_sample_rate, to_bpm, to_tpb);
     live->SequencerTick();
 
-    TestCallback fresh_callback(88200, 150, 8);
     initialize(fresh, info, &fresh_callback);
     configure_delay(fresh);
 
@@ -281,18 +301,34 @@ int verify_live_timing(CMachineInterface* live, const CMachineInfo* info,
     if (render_target(live, live_callback, live_left, live_right) != 0) return 1;
     if (render_target(fresh, fresh_callback, fresh_left, fresh_right) != 0) return 1;
     if (live_left != fresh_left || live_right != fresh_right)
-        return fail("live timing transition no longer matches a fresh target-timing instance");
+        return fail("isolated live timing transition no longer matches a fresh target instance");
 
     const int target_left = expected_ring_length(1.0, fresh_callback);
     const int target_right = expected_ring_length(0.5, fresh_callback);
-    TestCallback stale_callback(44100, 120, 4);
-    const int stale_left = expected_ring_length(1.0, stale_callback);
-    const int stale_right = expected_ring_length(0.5, stale_callback);
     if (target_left == stale_left || target_right == stale_right)
-        return fail("live timing oracle is not rate/timing-sensitive");
+        return fail("isolated live timing oracle is not sensitive to the changed input");
 
-    std::printf("phase5-dalay-delay: live-timing PASS 44.1k/120/4->88.2k/150/8 left=%d right=%d stale-left=%d stale-right=%d\n",
-        target_left, target_right, stale_left, stale_right);
+    std::printf("phase5-dalay-delay: timing-%s PASS left=%d right=%d stale-left=%d stale-right=%d\n",
+        label, target_left, target_right, stale_left, stale_right);
+    return 0;
+}
+
+int verify_live_timing_paths(CMachineInterface* rate_live, CMachineInterface* rate_fresh,
+    CMachineInterface* bpm_live, CMachineInterface* bpm_fresh,
+    CMachineInterface* tpb_live, CMachineInterface* tpb_fresh,
+    const CMachineInfo* info)
+{
+    if (verify_timing_transition(rate_live, rate_fresh, info,
+            44100, 120, 4, 88200, 120, 4, "sample-rate") != 0)
+        return 1;
+    if (verify_timing_transition(bpm_live, bpm_fresh, info,
+            88200, 120, 4, 88200, 150, 4, "bpm") != 0)
+        return 1;
+    if (verify_timing_transition(tpb_live, tpb_fresh, info,
+            88200, 150, 4, 88200, 150, 8, "tpb") != 0)
+        return 1;
+
+    std::printf("phase5-dalay-delay: live-timing PASS sample-rate+BPM+TPB independent\n");
     return 0;
 }
 
@@ -326,33 +362,45 @@ int main(int argc, char** argv)
     int rc = verify_metadata(info);
     CMachineInterface* descriptions = nullptr;
     CMachineInterface* timing = nullptr;
-    CMachineInterface* live = nullptr;
-    CMachineInterface* fresh = nullptr;
+    CMachineInterface* rate_live = nullptr;
+    CMachineInterface* rate_fresh = nullptr;
+    CMachineInterface* bpm_live = nullptr;
+    CMachineInterface* bpm_fresh = nullptr;
+    CMachineInterface* tpb_live = nullptr;
+    CMachineInterface* tpb_fresh = nullptr;
     TestCallback standard_callback(44100, 120, 4);
-    TestCallback live_callback(44100, 120, 4);
 
     if (rc == 0) {
         descriptions = create_machine();
         timing = create_machine();
-        live = create_machine();
-        fresh = create_machine();
-        if (!descriptions || !timing || !live || !fresh)
+        rate_live = create_machine();
+        rate_fresh = create_machine();
+        bpm_live = create_machine();
+        bpm_fresh = create_machine();
+        tpb_live = create_machine();
+        tpb_fresh = create_machine();
+        if (!descriptions || !timing || !rate_live || !rate_fresh ||
+                !bpm_live || !bpm_fresh || !tpb_live || !tpb_fresh)
             rc = fail("CreateMachine returned null");
     }
     if (rc == 0) {
         initialize(descriptions, info, &standard_callback);
         initialize(timing, info, &standard_callback);
-        initialize(live, info, &live_callback);
         rc = verify_descriptions(descriptions);
     }
     if (rc == 0) rc = verify_nonpositive(descriptions);
     if (rc == 0) rc = verify_stereo_timing(timing, standard_callback);
-    if (rc == 0) rc = verify_live_timing(live, info, live_callback, fresh);
+    if (rc == 0) rc = verify_live_timing_paths(rate_live, rate_fresh,
+        bpm_live, bpm_fresh, tpb_live, tpb_fresh, info);
 
     if (descriptions) delete_machine(*descriptions);
     if (timing) delete_machine(*timing);
-    if (live) delete_machine(*live);
-    if (fresh) delete_machine(*fresh);
+    if (rate_live) delete_machine(*rate_live);
+    if (rate_fresh) delete_machine(*rate_fresh);
+    if (bpm_live) delete_machine(*bpm_live);
+    if (bpm_fresh) delete_machine(*bpm_fresh);
+    if (tpb_live) delete_machine(*tpb_live);
+    if (tpb_fresh) delete_machine(*tpb_fresh);
     if (dlclose(library) != 0 && rc == 0) rc = fail("dlclose failed");
     if (rc != 0) return rc;
 
