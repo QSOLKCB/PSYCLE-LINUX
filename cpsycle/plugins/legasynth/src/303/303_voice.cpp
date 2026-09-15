@@ -26,6 +26,8 @@
 TB303_Voice::TB303_Voice():Voice(){
 	used_data=NULL;
 	base_freq=44100.f;
+	params.cutoff=0x7FFF;
+	params.resonance=0;
 
 	vco_inc=vco_k=vcf_rescoeff=0;
 	
