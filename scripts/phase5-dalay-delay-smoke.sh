@@ -71,12 +71,15 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 grep -F 'phase5-dalay-delay: metadata PASS version=0x0110 parameters=7 identity=ayeternal-Dalay-Delay' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dalay-delay: describe PASS left=1-line right=0.5-line snap=1/8 off=1/840' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dalay-delay: nonpositive PASS zero+negative strict-noop' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-dalay-delay: stereo PASS left=5513 right=2757 dry-near-zero=-1/65535 wet=1' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-dalay-delay: live-timing PASS 44.1k/120/4->88.2k/150/8 left=4411 right=2206 stale-left=5513 stale-right=2757' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-dalay-delay: stereo PASS left=5513 right=2757 feedback-left=32767/65535 feedback-right=-16383/65535 second-echo=yes' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-dalay-delay: timing-sample-rate PASS left=11026 right=5513 stale-left=5513 stale-right=2757' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-dalay-delay: timing-bpm PASS left=8821 right=4411 stale-left=11026 stale-right=5513' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-dalay-delay: timing-tpb PASS left=4411 right=2206 stale-left=8821 stale-right=4411' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-dalay-delay: live-timing PASS sample-rate+BPM+TPB independent' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dalay-delay: PASS' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dalay-delay-state: PASS' "$STATE_LOG" >/dev/null
 grep -F 'catcher: delay:0' "$STATE_LOG" >/dev/null
-grep -F 'state: 7/7 public parameters seeded non-default, 0 opaque bytes' "$STATE_LOG" >/dev/null
+grep -F 'state: 7/7 public parameters seeded non-default, snap=7 left-delay=1/8-line-only, 0 opaque bytes' "$STATE_LOG" >/dev/null
 grep -F 'preset-factory: independent' "$STATE_LOG" >/dev/null
 grep -F 'topology: ayeternal Dalay Delay -> Master' "$STATE_LOG" >/dev/null
 
@@ -100,16 +103,16 @@ cat > "$SUMMARY" <<'EOF'
 - Historical snap semantics preserve 1/8-line quantisation and the maximum `off 1 / 840 ticks (lines)` display: PASS
 - Zero and negative host callback counts are strict no-ops: PASS
 - At 44.1 kHz / 120 BPM / TPB 4, snapped 1-line left and 1/2-line right delays preserve source-derived ring lengths 5513 / 2757 samples, including the retained +1 ring sample: PASS
-- Near-zero dry retains the historical -1/65535 scaled value while Wet=1 produces the expected first delayed impulse: PASS
-- Live 44.1 kHz / 120 / 4 -> 88.2 kHz / 150 / 8 host timing reconfiguration matches a fresh target instance at 4411 / 2206 samples and differs from stale timing: PASS
+- Distinct nontrivial left/right feedback values are verified through their measurable second echoes: PASS
+- Sample-rate-only, BPM-only and TPB-only live timing transitions independently match fresh target instances and reject stale timing: PASS
 - Production `PluginCatcher` identity `delay:0` and `MachineFactory` instantiation: PASS
-- All 7/7 public parameters are preserved through a version-1 preset restored with an independent catcher/factory: PASS
-- Fresh PSY3 reopen restores all seven non-default values and the ayeternal Dalay Delay -> Master topology edge: PASS
+- All 7/7 public parameters, including a snap=7-only 1/8-line delay state, are preserved through a version-1 preset restored with an independent catcher/factory: PASS
+- Fresh PSY3 reopen restores the eighth-line-only state and the ayeternal Dalay Delay -> Master topology edge: PASS
 - Opaque state: none; persistence remains the historical seven public parameters: PASS
 
 The preservation slice does not rewrite Dalay Delay DSP equations or its line-snap model.
-The only production-source change is standalone build hygiene; the behavioral contract is
-frozen from the retained r12005 implementation.
+The strengthened gate independently exercises feedback and each host-timing input, and it
+requires persistence to restore a state that cannot survive accidental default-grid quantisation.
 EOF
 
 cat "$SUMMARY"
