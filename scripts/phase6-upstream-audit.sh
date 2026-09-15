@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Manifest hashes are content identities, so filename ordering must not depend on
+# the invoking machine's locale.
+export LC_ALL=C
+
 OUT="${1:-phase6-upstream-audit}"
 SVN_REVISION="12005"
 SVN_ROOT="https://svn.code.sf.net/p/psycle/code/trunk"
@@ -12,6 +16,7 @@ EXPECTED_REFERENCE_SHA256="f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de7277
 EXPECTED_REFERENCE_SIZE="9322919"
 
 COMPONENTS=(
+  universalis
   psycle-core
   psycle-audiodrivers
   psycle-helpers
@@ -19,7 +24,11 @@ COMPONENTS=(
   psycle-plugins
 )
 
+# Empty values are allowed only for a newly discovered component. The receipt
+# marks such a row DISCOVERY; the observed identity must be committed before
+# Phase 6A can be called frozen.
 declare -A EXPECTED_MANIFEST_SHA256=(
+  [universalis]=""
   [psycle-core]="eb25467bdfbdea7296fc2c8e01c802e3b2b977d95775ab363cc810309aee729b"
   [psycle-audiodrivers]="4518274595b58fa89f59ca9012198e4602bdabb32216193edc38fdbe7aef0ab1"
   [psycle-helpers]="13d05df94637cef8701fee0555bb4a9915fd082dcd531ae2b772c4a633f3f5db"
@@ -28,6 +37,7 @@ declare -A EXPECTED_MANIFEST_SHA256=(
 )
 
 declare -A EXPECTED_FILE_COUNT=(
+  [universalis]=""
   [psycle-core]="108"
   [psycle-audiodrivers]="36"
   [psycle-helpers]="68"
@@ -36,6 +46,7 @@ declare -A EXPECTED_FILE_COUNT=(
 )
 
 declare -A EXPECTED_LAST_CHANGED_REV=(
+  [universalis]=""
   [psycle-core]="10901"
   [psycle-audiodrivers]="12004"
   [psycle-helpers]="12004"
@@ -63,6 +74,7 @@ SUMMARY="$OUT/summary.md"
   echo "- Pinned repository revision: \`r$SVN_REVISION\`"
   echo "- Primary original-Psycle reference: \`$REFERENCE_VERSION $REFERENCE_ARCH\` / \`$REFERENCE_FILE\`"
   echo '- Imported source or original-Psycle binary retained in this artifact: **no**'
+  echo '- Manifest collation: `LC_ALL=C`'
   echo
   echo '## C++ reimplementation snapshot'
   echo
@@ -87,32 +99,38 @@ for component in "${COMPONENTS[@]}"; do
   manifest_sha="$(sha256sum "$component_out/files.sha256" | awk '{print $1}')"
   file_count="$(find "$export_dir" -type f -printf '.' | wc -c | tr -d ' ')"
   last_changed_rev="$(awk -F': ' '/^Last Changed Rev:/ {print $2}' "$component_out/svn-info.txt")"
+  frozen_status="**DISCOVERY**"
 
-  if [ "$manifest_sha" != "${EXPECTED_MANIFEST_SHA256[$component]}" ]; then
-    echo "phase6-upstream-audit: $component manifest SHA-256 mismatch" >&2
-    echo "expected: ${EXPECTED_MANIFEST_SHA256[$component]}" >&2
-    echo "actual:   $manifest_sha" >&2
-    exit 3
-  fi
-  if [ "$file_count" != "${EXPECTED_FILE_COUNT[$component]}" ]; then
-    echo "phase6-upstream-audit: $component file-count mismatch" >&2
-    echo "expected: ${EXPECTED_FILE_COUNT[$component]}" >&2
-    echo "actual:   $file_count" >&2
-    exit 4
-  fi
-  if [ "$last_changed_rev" != "${EXPECTED_LAST_CHANGED_REV[$component]}" ]; then
-    echo "phase6-upstream-audit: $component last-changed revision mismatch" >&2
-    echo "expected: ${EXPECTED_LAST_CHANGED_REV[$component]}" >&2
-    echo "actual:   $last_changed_rev" >&2
-    exit 5
+  if [ -n "${EXPECTED_MANIFEST_SHA256[$component]}" ]; then
+    if [ "$manifest_sha" != "${EXPECTED_MANIFEST_SHA256[$component]}" ]; then
+      echo "phase6-upstream-audit: $component manifest SHA-256 mismatch" >&2
+      echo "expected: ${EXPECTED_MANIFEST_SHA256[$component]}" >&2
+      echo "actual:   $manifest_sha" >&2
+      exit 3
+    fi
+    if [ "$file_count" != "${EXPECTED_FILE_COUNT[$component]}" ]; then
+      echo "phase6-upstream-audit: $component file-count mismatch" >&2
+      echo "expected: ${EXPECTED_FILE_COUNT[$component]}" >&2
+      echo "actual:   $file_count" >&2
+      exit 4
+    fi
+    if [ "$last_changed_rev" != "${EXPECTED_LAST_CHANGED_REV[$component]}" ]; then
+      echo "phase6-upstream-audit: $component last-changed revision mismatch" >&2
+      echo "expected: ${EXPECTED_LAST_CHANGED_REV[$component]}" >&2
+      echo "actual:   $last_changed_rev" >&2
+      exit 5
+    fi
+    frozen_status="**PASS**"
   fi
 
   find "$export_dir" -type f \
     \( -iname 'COPYING*' -o -iname 'LICENSE*' -o -iname 'LICENCE*' -o -iname 'NOTICE*' -o -iname 'AUTHORS*' -o -iname 'README*' \) \
     -printf '%P\n' | sort > "$component_out/licensing-candidates.txt"
 
+  # This is deliberately a broad filename/path hint, not a classifier. Match
+  # conventional names such as vsthost.cpp, asiodriver/, asio-2/, and SDK files.
   find "$export_dir" -type f -printf '%P\n' \
-    | grep -Ei '(^|/)(asio|vst|steinberg|boost|zlib|lua|ladspa|lv2|portaudio|stk|fluidsynth|fftw|libxml|7z)(/|$)' \
+    | grep -Ei '(asio|vst|steinberg|boost|zlib|lua|ladspa|lv2|portaudio|stk|fluidsynth|fftw|libxml|7z)' \
     | sort -u > "$component_out/dependency-path-hints.txt" || true
 
   find "$export_dir" -type f -printf '%P\n' \
@@ -129,8 +147,8 @@ for component in "${COMPONENTS[@]}"; do
 
   review_hint_count="$(wc -l < "$component_out/redistribution-review-hints.txt" | tr -d ' ')"
 
-  printf '| `%s` | `%s` | %s | `%s` | **PASS** | %s |\n' \
-    "$component" "$last_changed_rev" "$file_count" "$manifest_sha" "$review_hint_count" >> "$SUMMARY"
+  printf '| `%s` | `%s` | %s | `%s` | %s | %s |\n' \
+    "$component" "$last_changed_rev" "$file_count" "$manifest_sha" "$frozen_status" "$review_hint_count" >> "$SUMMARY"
 done
 
 REFERENCE_DIR="$OUT/original-psycle-reference"
