@@ -303,6 +303,44 @@ int verify_velocity_command(CMachineInterface* full, CMachineInterface* reduced,
     return 0;
 }
 
+int verify_distortion_active(CMachineInterface* enabled, CMachineInterface* bypassed,
+    const CMachineInfo* info)
+{
+    TestCallback cb_enabled(44100);
+    TestCallback cb_bypassed(44100);
+    apply_host_defaults(enabled, info, &cb_enabled);
+    apply_host_defaults(bypassed, info, &cb_bypassed);
+    enabled->ParameterTweak(5, 70);
+    StereoSignal with_distortion = render_note(enabled, 2048);
+    StereoSignal without_distortion = render_note(bypassed, 2048);
+    if (with_distortion.left.empty() || without_distortion.left.empty() ||
+            same_signal(with_distortion, without_distortion, 5.0e-4)) {
+        return fail("distortion=70 no longer changes the rendered note versus bypass");
+    }
+    std::printf("phase5-legasynth: distortion PASS amount=70 differs=bypass enabled-rms=%.6f bypass-rms=%.6f\n",
+        rms(with_distortion), rms(without_distortion));
+    return 0;
+}
+
+int verify_chorus_active(CMachineInterface* enabled, CMachineInterface* bypassed,
+    const CMachineInfo* info)
+{
+    TestCallback cb_enabled(44100);
+    TestCallback cb_bypassed(44100);
+    apply_host_defaults(enabled, info, &cb_enabled);
+    apply_host_defaults(bypassed, info, &cb_bypassed);
+    enabled->ParameterTweak(22, 1);
+    StereoSignal with_chorus = render_note(enabled, 4096);
+    StereoSignal without_chorus = render_note(bypassed, 4096);
+    if (with_chorus.left.empty() || without_chorus.left.empty() ||
+            same_signal(with_chorus, without_chorus, 5.0e-4)) {
+        return fail("chorus=on no longer changes the rendered note versus bypass");
+    }
+    std::printf("phase5-legasynth: chorus PASS enabled=on differs=bypass enabled-rms=%.6f bypass-rms=%.6f\n",
+        rms(with_chorus), rms(without_chorus));
+    return 0;
+}
+
 int verify_nonpositive_chorus(CMachineInterface* machine, const CMachineInfo* info)
 {
     TestCallback callback(44100);
@@ -377,7 +415,7 @@ int main(int argc, char** argv)
     if (verify_metadata(info)) return 1;
 
     std::vector<CMachineInterface*> machines;
-    for (int i = 0; i < 9; ++i) {
+    for (int i = 0; i < 13; ++i) {
         CMachineInterface* machine = create();
         if (!machine) return fail("CreateMachine returned null");
         machines.push_back(machine);
@@ -389,7 +427,9 @@ int main(int argc, char** argv)
             verify_deterministic_default(machines[1], machines[2], info) ||
             verify_velocity_command(machines[3], machines[4], info) ||
             verify_nonpositive_chorus(machines[5], info) ||
-            verify_rate_transition(machines[6], machines[7], machines[8], info)) {
+            verify_distortion_active(machines[6], machines[7], info) ||
+            verify_chorus_active(machines[8], machines[9], info) ||
+            verify_rate_transition(machines[10], machines[11], machines[12], info)) {
         rc = 1;
     }
 
