@@ -1,0 +1,46 @@
+name: Phase 5 LADSPA GVerb preservation
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-5/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gverb:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run GVerb preservation regression
+        shell: bash
+        run: |
+          set -o pipefail
+          chmod +x scripts/phase5-gverb-smoke.sh
+          scripts/phase5-gverb-smoke.sh phase5-gverb \
+            2>&1 | tee "$RUNNER_TEMP/phase5-gverb.log"
+
+      - name: Upload GVerb evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-gverb
+          path: |
+            phase5-gverb/
+            ${{ runner.temp }}/phase5-gverb.log
+          if-no-files-found: warn
