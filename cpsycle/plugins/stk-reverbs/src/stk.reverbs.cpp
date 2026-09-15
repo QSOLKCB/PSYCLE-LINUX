@@ -87,6 +87,18 @@ void mi::Command() {
 void mi::Init() {
 	samplerate = (StkFloat)pCB->GetSamplingRate();
 	Stk::setSampleRate(samplerate);
+
+	// These members are constructed before the host callback is attached, so
+	// their delay networks may have been sized using STK's default/previous
+	// global rate. Reconstruct them after the real initial host rate is known.
+	for(unsigned int i = 0; i < 2; ++i) {
+		jcrev[i].~JCRev();
+		new (&jcrev[i]) JCRev();
+		nrev[i].~NRev();
+		new (&nrev[i]) NRev();
+		pcrrev[i].~PRCRev();
+		new (&pcrrev[i]) PRCRev();
+	}
 }
 
 void mi::SequencerTick() {
@@ -96,8 +108,8 @@ void mi::SequencerTick() {
 
 		// STK's reverb delay topology is sized in each constructor from the
 		// then-current global sample rate.  Merely updating Stk::sampleRate()
-		// and T60 leaves the existing 44.1 kHz delay network intact, so rebuild
-		// both channel instances whenever the host rate changes.
+		// and T60 leaves the existing delay network intact, so rebuild both
+		// channel instances whenever the host rate changes.
 		StkFloat const t60 = StkFloat(Vals[1]) * 0.03125;
 		StkFloat const drywet = StkFloat(Vals[2]) * .01;
 		for(unsigned int i = 0; i < 2; ++i) {
