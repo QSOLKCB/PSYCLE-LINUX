@@ -26,6 +26,12 @@ struct ExpectedParameter {
     int default_value;
 };
 
+struct ExpectedSampleMarker {
+    std::size_t index;
+    float left;
+    float right;
+};
+
 const ExpectedParameter EXPECTED_PARAMETERS[] = {
     {"Coarse", "Coarse", -24, 24, psycle::plugin_interface::MPF_STATE, 0},
     {"Fine", "Fine", -100, 100, psycle::plugin_interface::MPF_STATE, 0},
@@ -56,6 +62,20 @@ const ExpectedParameter EXPECTED_PARAMETERS[] = {
     {"Amount", "Amoun t", 1, 100, psycle::plugin_interface::MPF_STATE, 64},
     {"Stereo Width", "Stereo Width", -127, 127, psycle::plugin_interface::MPF_STATE, -10},
 };
+
+/* Frozen from the retained default note-48 source path at 44.1 kHz after
+** deterministic initialization was restored. Spread-out markers cover the
+** oscillator/filter/envelope trajectory rather than only liveness. */
+const ExpectedSampleMarker DEFAULT_NOTE_MARKERS[] = {
+    {64, 2234.22974f, 2269.69360f},
+    {127, 5407.29053f, 5493.12061f},
+    {255, -4679.22314f, -4753.49658f},
+    {511, 5020.45459f, 5100.14404f},
+    {1023, -175.271317f, -178.053391f},
+    {1535, -1979.30615f, -2010.72363f},
+    {2047, 421.357361f, 428.045593f},
+};
+const double DEFAULT_NOTE_RMS = 4252.98775;
 
 class TestCallback : public CFxCallback {
 public:
@@ -240,17 +260,25 @@ int verify_deterministic_default(CMachineInterface* a, CMachineInterface* b,
     apply_host_defaults(b, info, &cb_b);
     StereoSignal first = render_note(a, 2048);
     StereoSignal second = render_note(b, 2048);
-    if (first.left.empty() || second.left.empty() || rms(first) < 1.0 ||
+    const double observed_rms = rms(first);
+    if (first.left.empty() || second.left.empty() || observed_rms < 1.0 ||
             !same_signal(first, second, 2.0e-4)) {
         return fail("fresh default LegaSynth instances are not deterministic/active");
     }
-    const std::size_t marker_indices[] = {64, 127, 255, 511, 1023, 1535, 2047};
-    std::printf("phase5-legasynth: oracle-candidate");
-    for (std::size_t index : marker_indices) {
-        std::printf(" i%zu=%.9g/%.9g", index, first.left[index], first.right[index]);
+    for (const ExpectedSampleMarker& marker : DEFAULT_NOTE_MARKERS) {
+        if (!near(first.left[marker.index], marker.left, 5.0e-2) ||
+                !near(first.right[marker.index], marker.right, 5.0e-2)) {
+            std::fprintf(stderr,
+                "phase5-legasynth: FAIL: historical sample marker %zu changed: got %.9g/%.9g expected %.9g/%.9g\n",
+                marker.index, first.left[marker.index], first.right[marker.index],
+                marker.left, marker.right);
+            return 1;
+        }
     }
-    std::printf(" rms=%.9g\n", rms(first));
-    std::printf("phase5-legasynth: deterministic PASS note=48 rate=44100 rms=%.6f\n", rms(first));
+    if (std::fabs(observed_rms - DEFAULT_NOTE_RMS) > 5.0e-2)
+        return fail("historical default-note RMS changed");
+    std::printf("phase5-legasynth: historical-oracle PASS note=48 rate=44100 markers=7 rms=4252.98775\n");
+    std::printf("phase5-legasynth: deterministic PASS note=48 rate=44100 rms=%.6f\n", observed_rms);
     return 0;
 }
 
