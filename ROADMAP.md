@@ -25,14 +25,17 @@ Primary donor locations remain:
 - `trunk/psycle-core` — shared engine/history donor;
 - `trunk/debian` — historical packaging/install-path donor.
 
+The retained upstream `cpsycle/doc/cpsycle-developer-guide.txt` is a primary architectural reference for C-Psycle intent. It is explicitly the **C-Version, Feb 2021 (unfinished)** guide, so pinned r12005 source and observed compatibility behavior remain authoritative if prose and code disagree. The guide documents MFC-Psycle compatibility as a goal, stepwise cross-platform separation, the audio/UI split, the platform UI bridge, 256-sample plugin work chunks, variable VST process intervals, and the 64-channel native-plugin limit. See `UPSTREAM_ARCHITECTURE.md` for the extracted project implications.
+
 Historical evidence also records native-machine ports, LADSPA, VST 2.4 hosting, sampler/resampling work, Mixer/send-return routing, MIDI, automation, offline rendering and engine/UI separation as real Psycle development directions.
 
 The compatibility rule for donor code remains:
 
 1. prefer working C-Psycle behavior;
-2. consult historical branches when intent or compatibility needs clarification;
-3. port donor implementations only with understood provenance/licensing;
-4. do not replace working subsystems merely because another toolkit or architecture is newer.
+2. use the retained C-Psycle developer guide as primary architecture/intent evidence, with source behavior taking precedence where the unfinished prose differs;
+3. consult historical branches when intent or compatibility needs clarification;
+4. port donor implementations only with understood provenance/licensing;
+5. do not replace working subsystems merely because another toolkit or architecture is newer.
 
 ---
 
@@ -234,6 +237,8 @@ The 5A–5C gates already establish the following matrix rows across representat
 - [ ] Broad missing-machine behavior, including useful placeholders without startup failure.
 - [ ] Historical-song compatibility using trustworthy, legally redistributable references where available.
 
+The upstream developer guide independently documents the player's 256-sample `psy_audio_MAX_STREAM_SIZE` split as a Psycle-plugin compatibility measure and the 64-channel native-plugin limit. Those are preservation constraints for 5D unless a separately versioned compatibility design proves a safe extension.
+
 5D should now consolidate the existing machine evidence rather than require every retained optional effect to become a default/core runtime dependency.
 
 Fix crashes, undefined behavior, 64-bit assumptions and serialization defects when evidence exposes them, but do not casually rewrite DSP equations and change the sound of old songs.
@@ -281,6 +286,7 @@ Implementation plan:
 - [ ] Add compile-time `sizeof` / `offsetof` / calling-convention assertions for the binary contract.
 - [ ] Add a project-authored dummy VST2 fixture so the host ABI can be tested without redistributing a proprietary SDK/plugin.
 - [ ] Restore the retained Psycle VST2 host behind this compatibility boundary on Linux.
+- [ ] Preserve Psycle's documented variable process-block behavior: tracker/newline splits may make VST process intervals unequal, and restored VST2 hosting must accept arbitrary positive sample counts correctly rather than forcing fixed blocks.
 - [ ] Test an externally obtained or source-built free/open Linux VST2 plugin.
 - [ ] Verify discovery/load, audio, pattern/MIDI playback, parameters, state, PSY3 reload and missing-plugin handling.
 - [ ] Audit `.fxp` / `.fxb` behavior.
