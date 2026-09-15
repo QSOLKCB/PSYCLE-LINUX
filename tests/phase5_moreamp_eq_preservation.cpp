@@ -28,7 +28,6 @@ constexpr int PARAM_B1250 = 18;
 constexpr int PARAM_B1600 = 19;
 constexpr int PARAM_B2000 = 20;
 constexpr int PARAM_B20000 = 30;
-constexpr int PARAM_DIV = 31;
 constexpr int PARAM_PREAMP = 32;
 constexpr int PARAM_BANDS = 33;
 constexpr int PARAM_EXTRA = 34;
@@ -162,18 +161,6 @@ bool same_signal(const StereoSignal& a, const StereoSignal& b,
             return false;
     }
     return true;
-}
-
-double max_difference(const StereoSignal& a, const StereoSignal& b)
-{
-    double result = 0.0;
-    for (std::size_t i = 0; i < a.left.size() && i < b.left.size(); ++i) {
-        result = std::fmax(result,
-            std::fabs(static_cast<double>(a.left[i] - b.left[i])));
-        result = std::fmax(result,
-            std::fabs(static_cast<double>(a.right[i] - b.right[i])));
-    }
-    return result;
 }
 
 double reference_preamp(int value)
