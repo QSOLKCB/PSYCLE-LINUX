@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document records the first redistribution/provenance review of the pinned C++ reimplementation snapshot used by Phase 6.
+This document records the first redistribution/provenance review of the pinned C++ reimplementation build-source snapshot used by Phase 6.
 
 Pinned repository revision:
 
@@ -17,7 +17,7 @@ The snapshot identity is frozen by `scripts/phase6-upstream-audit.sh`; see `PHAS
 
 **Public source import status: HOLD pending a sanitized import manifest.**
 
-The snapshot is reproducible and the notice-hint pass confirms that a large amount of the Psycle-authored C++ code carries explicit GPL-2-or-later notices. However, the five-tree snapshot also contains mixed-provenance material that must be omitted, quarantined, or separately documented before the source can be copied mechanically into this repository.
+The snapshot is reproducible and the notice-hint pass confirms that a large amount of the Psycle-authored C++ code carries explicit GPL-2-or-later notices. However, the complete six-component build-source set also contains mixed-provenance material that must be omitted, quarantined, or separately documented before the source can be copied mechanically into this repository.
 
 This is not a conclusion that the C++ reimplementation itself is non-redistributable. It is a conclusion that **the repository snapshot must be sanitized at file level**, exactly as the C-Psycle baseline was.
 
@@ -25,6 +25,7 @@ This is not a conclusion that the C++ reimplementation itself is non-redistribut
 
 | Component | Last changed at/before r12005 | Files | Manifest SHA-256 |
 | --- | ---: | ---: | --- |
+| `universalis` | r12004 | 83 | `827586daad2efcfbc10466394670a4a0e5f208da94afb7b3bf72239d396a618e` |
 | `psycle-core` | r10901 | 108 | `eb25467bdfbdea7296fc2c8e01c802e3b2b977d95775ab363cc810309aee729b` |
 | `psycle-audiodrivers` | r12004 | 36 | `4518274595b58fa89f59ca9012198e4602bdabb32216193edc38fdbe7aef0ab1` |
 | `psycle-helpers` | r12004 | 68 | `13d05df94637cef8701fee0555bb4a9915fd082dcd531ae2b772c4a633f3f5db` |
@@ -33,9 +34,17 @@ This is not a conclusion that the C++ reimplementation itself is non-redistribut
 
 `r12005` is the repository-wide observation revision. The component `Last Changed Rev` values simply record when each path last changed before that observation.
 
+`universalis` is part of the build-source snapshot because the historical C++ projects depend on it; omitting it would make the supposedly coherent player input incomplete.
+
 ## Notice-hint results
 
 The hardened audit does not retain the source files. It retains short provenance-relevant text matches so licensing and donor boundaries can be reviewed before import.
+
+### `universalis`
+
+The r12005 receipt contains 83 files and no binary/song redistribution hints. The source/header notice scan is dominated by explicit Psycle project **GPL-2-or-later** notices.
+
+`universalis` is therefore a required and comparatively clean support component for the first sanitized C++ engine/player baseline, subject to preservation of its upstream notices and any individual third-party notices surfaced during exact retained-file materialization.
 
 ### `psycle-core`
 
@@ -85,7 +94,7 @@ The Psycle-side `src/psycle/audiodrivers/asiointerface.*` files do carry GPL pro
 
 The executable source under `src/psycle/player/` carries **GPL-2-or-later Psycle project notices**. Project/qmake metadata has no separate license file but does not introduce a new binary or third-party payload in the receipt.
 
-This makes `psycle-player` a good first executable target once its required core/helper/API dependencies are imported safely.
+This makes `psycle-player` a good first executable target once `universalis` plus the required core/helper/API dependencies are imported safely.
 
 ### `psycle-helpers`
 
@@ -172,26 +181,27 @@ The official Psycle 1.12.0 release readme calls Psycle open source, records Argu
 
 That historical prose supports the project's open-source intent, but it is **not used as a blanket override for third-party files, SDK-derived expressions, binaries, songs or assets**.
 
-The file-level notice receipt is stronger for the candidate engine: much of the project-authored C++ source explicitly states GPL-2-or-later. The sanitized import should preserve those headers verbatim and add clear boundary notices for compatible third-party material where necessary.
+The file-level notice receipt is stronger for the candidate engine: much of the project-authored C++ source, including `universalis`, explicitly states GPL-2-or-later. The sanitized import should preserve those headers verbatim and add clear boundary notices for compatible third-party material where necessary.
 
 ## Proposed first sanitized-import policy
 
-The next import PR should be deliberately smaller than the five-tree SourceForge snapshot:
+The next import PR should be deliberately smaller than the complete six-component SourceForge snapshot:
 
-1. import the cleared Psycle-authored portions of `psycle-core`;
-2. import the cleared portions of `psycle-helpers` with their third-party notices preserved/restored;
-3. import `psycle-player`;
-4. import only Linux-relevant/cleared `psycle-audiodrivers` for the first build, with `src/asio/` quarantined;
-5. import only the minimum audited `psycle-plugins` API surface required by the engine/player build initially;
-6. keep the nine closed-source DLLs, three songs, Steinberg `gmnames.h`, Seib VST subtree and ASIO subtree out of that baseline;
-7. add exact omission/replacement arithmetic and a new C++ archival/canonical baseline identity;
-8. keep VST2 restoration in Phase 9 rather than using excluded historical SDK expressions to make Phase 6 compile.
+1. import `universalis` with its upstream notices preserved;
+2. import the cleared Psycle-authored portions of `psycle-core`;
+3. import the cleared portions of `psycle-helpers` with their third-party notices preserved/restored;
+4. import `psycle-player`;
+5. import only Linux-relevant/cleared `psycle-audiodrivers` for the first build, with `src/asio/` quarantined;
+6. import only the minimum audited `psycle-plugins` API surface required by the engine/player build initially;
+7. keep the nine closed-source DLLs, three songs, Steinberg `gmnames.h`, Seib VST subtree and ASIO subtree out of that baseline;
+8. add exact omission/replacement arithmetic and a new C++ archival/canonical baseline identity;
+9. keep VST2 restoration in Phase 9 rather than using excluded historical SDK expressions to make Phase 6 compile.
 
 ## Sanitized-import rule
 
 A future C++ import must:
 
-1. start from the frozen r12005 manifests;
+1. start from all six frozen r12005 manifests;
 2. preserve all retained authorship/license headers;
 3. record each omission/quarantine and reason;
 4. restore full compatible third-party permission notices where the source only contains abbreviated lineage text;
@@ -204,8 +214,9 @@ A future C++ import must:
 
 Completed in this PR:
 
-- [x] freeze the five component identities;
+- [x] freeze the complete six-component build-source identity, including required `universalis`;
 - [x] freeze the original Psycle 1.12.0 x86 executable identity;
+- [x] force locale-independent manifest ordering with `LC_ALL=C`;
 - [x] review file-name licensing/dependency/redistribution hints;
 - [x] review provenance-relevant source/header notice hints;
 - [x] identify closed-source binary exclusions;
@@ -221,4 +232,4 @@ Still required in the next import/build slice:
 - [ ] create the sanitized C++ archival/canonical baseline;
 - [ ] prove that baseline builds `psycle-player` on Linux or document the next narrow build blockers.
 
-**Result:** Phase 6A has produced a reproducible, conservative import boundary. The correct next step is a sanitized engine/player import and build audit—not a bulk five-tree copy and not Qt UI work yet.
+**Result:** Phase 6A has produced a reproducible, conservative import boundary. The correct next step is a sanitized engine/player import and build audit—not a bulk six-tree copy and not Qt UI work yet.
