@@ -458,27 +458,53 @@ int verify_sample_rate_transition(CMachineInterface* machine,
     TestCallback callback(44100);
     initialize(machine, info, &callback);
     machine->ParameterTweak(PARAM_BANDS, 1);
+    machine->ParameterTweak(PARAM_B1000, 64);
     machine->ParameterTweak(PARAM_B20000, 64);
 
-    const StereoSignal active44 = render_impulse(machine);
-    if (active44.left.empty()) return fail("44.1 kHz high-band render became non-finite");
-    const RefCoefficients c44 = reference_coefficients(44100, 20000.0, 1.0 / 3.0);
+    /* Seventeen samples deliberately leave nonzero 1 kHz filter history and
+    ** non-default history-ring indices before the rate transition. The 1 kHz
+    ** gain remains active at both rates, so the 32 kHz markers below prove
+    ** SequencerTick() cleared that old state rather than merely disabling the
+    ** 20 kHz band above the new Nyquist limit. */
+    const StereoSignal active44 = render_impulse(machine, 17);
+    if (active44.left.empty()) return fail("44.1 kHz pre-roll render became non-finite");
+    const RefCoefficients c1k44 = reference_coefficients(44100, 1000.0, 1.0 / 3.0);
+    const RefCoefficients c20k44 = reference_coefficients(44100, 20000.0, 1.0 / 3.0);
     const double x = IMPULSE * reference_preamp(0);
-    const double expected44 = x * 0.25 + c44.alpha * x * reference_gain(64);
+    const double gain = reference_gain(64);
+    const double expected44 = x * 0.25 +
+        (c1k44.alpha + c20k44.alpha) * x * gain;
     if (!near(active44.left[0], expected44, 2.0))
-        return fail("44.1 kHz 20 kHz-band first-sample oracle changed");
+        return fail("44.1 kHz 1 kHz + 20 kHz first-sample oracle changed");
 
+    std::srand(DITHER_SEED);
     callback.set_sample_rate(32000);
     machine->SequencerTick();
-    const StereoSignal disabled32 = render_impulse(machine);
-    if (disabled32.left.empty()) return fail("32 kHz transitioned render became non-finite");
-    if (!near(disabled32.left[0], IMPULSE, 0.2) ||
-            !near(disabled32.right[0], -IMPULSE * 0.5, 0.2))
-        return fail("20 kHz band was not disabled above the 32 kHz Nyquist limit");
-    if (near(active44.left[0], disabled32.left[0], 10.0))
+    const StereoSignal transitioned32 = render_impulse(machine);
+    if (transitioned32.left.empty())
+        return fail("32 kHz transitioned render became non-finite");
+
+    const RefCoefficients c1k32 = reference_coefficients(32000, 1000.0, 1.0 / 3.0);
+    const double y0 = c1k32.alpha * x;
+    const double y1 = c1k32.gamma * y0;
+    const double y2 = -c1k32.alpha * x + c1k32.gamma * y1 - c1k32.beta * y0;
+    const double expected32[3] = {
+        x * 0.25 + y0 * gain,
+        y1 * gain,
+        y2 * gain
+    };
+    for (int i = 0; i < 3; ++i) {
+        if (!near(transitioned32.left[i], expected32[i], 2.0)) {
+            std::fprintf(stderr,
+                "phase5-moreamp-eq: FAIL: 32 kHz clean-history marker %d expected %.9g got %.9g\n",
+                i, expected32[i], transitioned32.left[i]);
+            return 1;
+        }
+    }
+    if (near(active44.left[0], transitioned32.left[0], 10.0))
         return fail("sample-rate transition retained stale 44.1 kHz high-band coefficients");
 
-    std::printf("phase5-moreamp-eq: samplerate PASS 20k-band active@44100 disabled@32000 history=reset\n");
+    std::printf("phase5-moreamp-eq: samplerate PASS active1k=both 20k=44100-only history=reset markers=3\n");
     return 0;
 }
 
@@ -495,7 +521,7 @@ int main(int argc, char** argv)
 
     using GetInfoFn = const CMachineInfo* (*)();
     using CreateFn = CMachineInterface* (*)();
-    using DeleteFn = void (*)(CMachineInterface*);
+    using DeleteFn = psycle::plugin_interface::symbols::delete_machine_function;
     auto get_info = reinterpret_cast<GetInfoFn>(dlsym(handle, "GetInfo"));
     auto create = reinterpret_cast<CreateFn>(dlsym(handle, "CreateMachine"));
     auto destroy = reinterpret_cast<DeleteFn>(dlsym(handle, "DeleteMachine"));
@@ -523,7 +549,7 @@ int main(int argc, char** argv)
         rc = 1;
     }
 
-    for (CMachineInterface* machine : machines) destroy(machine);
+    for (CMachineInterface* machine : machines) destroy(*machine);
     dlclose(handle);
     if (rc == 0) std::printf("phase5-moreamp-eq: PASS\n");
     return rc;
