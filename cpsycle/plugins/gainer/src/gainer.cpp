@@ -62,6 +62,8 @@ class Gainer : public Plugin
 
 		/*override*/ void Work(Sample l[], Sample r[], int sample, int)
 		{
+			if (sample <= 0) return;
+
 			while(sample--)
 			{
 				Work(l[sample]);
