@@ -121,9 +121,6 @@ void mi::Init() {
 
 	lfoskip = freq * 2 * M_PI / pCB->GetSamplingRate();
 	skipcount = 0;
-	gain_l = gain_r = 0;
-	fbout_l = fbout_r = 0;
-
 	xn1_l = 0;
 	xn2_l = 0;
 	yn1_l = 0;
