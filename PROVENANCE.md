@@ -94,8 +94,6 @@ The fourteen Phase 1-added licensing/provenance files are:
 - `cpsycle/dsp/src/MODPLUG-FILTER-PROVENANCE.txt`;
 - `cpsycle/audio/src/SAMPULSE-PROVENANCE.txt`;
 
-
-
 The Scintilla restoration is required because all three imported Scintilla headers explicitly refer to a `License.txt` that is absent from the r12005 C-Psycle snapshot. The inventory records the mixed copyright provenance: `Scintilla.h` and `SciLexer.h` carry 1998-2003 notices, while `Sci_Position.h` carries a 2015 notice and refers to the same named Scintilla/SciTE license file.
 
 The LADSPA boundary file does not change `ladspa.h`; it makes the header's existing LGPL-2.1-or-later declaration explicit at the component boundary and points recipients to the complete license terms. Phase 1 also restores missing distribution/provenance notices for bundled Serpent, EXS24 For Renoise-derived code, LuaSocket, MobDebug/RemDebug, Inno Tools Downloader, libxml2-derived encoding code, PortAudio WASAPI portions, SDCC `strlwr`, Zephod SuperFM, the mixed-origin FFT implementation, and the ModPlug-derived IT filter. The musl MIT grant is restored directly in `cpsycle/detail/strcasestr.h`, so it does not add another file to the count.
@@ -105,6 +103,37 @@ The exact omission paths and deterministic reconstruction procedure are recorded
 The remainder of the baseline is intentionally mechanically close to r12005. The only Phase 1 source-expression replacements are the provenance-safe `orderedtable.lua` and `qsort.c` implementations, plus removal of the M3 aggregate-build entry necessitated by that component omission; no mass formatting, framework migration, DSP redesign, or general Linux compatibility patching is mixed into the audited baseline.
 
 Third-party material and historical build artifacts are inventoried in [THIRD_PARTY_INVENTORY.md](THIRD_PARTY_INVENTORY.md). An initial maintainer map is in [SOURCE_TREE.md](SOURCE_TREE.md).
+
+## Upstream Architectural Reference
+
+The retained r12005 documentation includes:
+
+- `cpsycle/doc/cpsycle-developer-guide.txt`
+- title: **Psycle Developer Guide**
+- edition: **C-Version, Feb 2021 (unfinished)**
+
+The imported Visual Studio 2019 solution also names `doc/cpsycle-developer-guide.docx` as a solution documentation item. This makes the retained text file strong upstream evidence of C-Psycle architectural intent and terminology, rather than a PSYCLE-LINUX reconstruction.
+
+The guide records, among other things:
+
+- compatibility with MFC-Psycle as an explicit C-Psycle goal;
+- step-by-step separation of Win32-specific and platform-independent code;
+- the audio-engine/UI subsystem split and runtime-loaded audio/event drivers;
+- `Workspace` ownership/references including `Player`, `MachineFactory`, `PluginCatcher` and `Song`;
+- the player's deliberate **256-sample** `psy_audio_MAX_STREAM_SIZE` split for Psycle-plugin compatibility;
+- tracker-line splitting and `SeqTick()` compatibility behavior inside the newer beat/event sequencer;
+- the expectation that VST plugins tolerate variable process-block lengths;
+- the **64-channel** native-plugin limit and `LogicalChannel` mapping;
+- the host/UI bridge intended to allow platform-specific implementations;
+- the 2021 state in which Visual Studio was current while GCC was described as out of date.
+
+Because the document labels itself unfinished, it is not treated as a frozen executable specification. The provenance/authority order is:
+
+1. pinned r12005 source plus reproducible observed behavior;
+2. the retained C-Psycle developer guide as primary architecture/intent evidence;
+3. older branches, posts, release notes and related historical donors as supporting context.
+
+Where the unfinished guide disagrees with the pinned source or a demonstrated compatibility contract, the source/behavior wins. See [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md) for the project-facing extraction of these constraints.
 
 ## Why This Baseline
 
