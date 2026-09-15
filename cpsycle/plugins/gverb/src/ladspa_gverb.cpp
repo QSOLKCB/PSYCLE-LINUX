@@ -175,6 +175,8 @@ void mi::ParameterTweak(int par, int val) {
 }
 
 void mi::Work(float *psamplesleft, float *psamplesright , int numsamples, int tracks) {
+	if (numsamples <= 0) return;
+
 	float const dry = DB_CO(Vals[4] * .001f);
 	
 	float outl = 0;
