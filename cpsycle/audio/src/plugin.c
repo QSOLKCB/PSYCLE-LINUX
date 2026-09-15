@@ -175,6 +175,13 @@ int pluginparam_label(psy_audio_PluginMachineParam* self, char* text)
 typedef CMachineInfo * (*GETINFO)(void);
 typedef CMachineInterface * (*CREATEMACHINE)(void);
 
+enum {
+	DALAY_DELAY_LEFT_DELAY = 2,
+	DALAY_DELAY_RIGHT_DELAY = 4,
+	DALAY_DELAY_SNAP = 6,
+	DALAY_DELAY_PARAMETER_COUNT = 7
+};
+
 /* prototypes */
 static void setcallback(psy_audio_Plugin*, psy_audio_MachineCallback);
 static psy_audio_Machine* clone(psy_audio_Plugin*);
@@ -211,6 +218,9 @@ static void psy_audio_plugin_tweak_preset(psy_audio_Plugin*, psy_audio_Preset*);
 static void disposeparameters(psy_audio_Plugin*);
 static void tweakdefaults(psy_audio_Plugin*, CMachineInfo* info);
 static void clearparameters(psy_audio_Plugin* self);
+static bool is_dalay_delay(psy_audio_Plugin* self);
+static bool restore_dalay_delay_parameter(psy_audio_Plugin* self,
+	uintptr_t index, intptr_t stored_value);
 /* programs */
 static void programname(psy_audio_Plugin*, uintptr_t bnkidx, uintptr_t prgidx, char* val);
 static uintptr_t numprograms(psy_audio_Plugin*);
@@ -349,7 +359,7 @@ void dispose(psy_audio_Plugin* self)
 	}
 	if (self->presets) {
 		psy_audio_presets_dispose(self->presets);
-		free(self->presets);
+		free(self->presets);		
 	}
 	disposeparameters(self);
 	psy_audio_logicalchannels_dispose(&self->logicalchannels);
@@ -367,6 +377,51 @@ void clearparameters(psy_audio_Plugin* self)
 	psy_table_dispose_all(&self->parameters, (psy_fp_disposefunc)
 		psy_audio_pluginmachineparam_dispose);	
 	psy_table_init(&self->parameters);
+}
+
+bool is_dalay_delay(psy_audio_Plugin* self)
+{
+	return self->plugininfo && self->plugininfo->name &&
+		self->plugininfo->shortname && self->plugininfo->author &&
+		self->plugininfo->plugversion == 0x0110 &&
+		strcmp(self->plugininfo->name, "ayeternal Dalay Delay") == 0 &&
+		strcmp(self->plugininfo->shortname, "Dalay Delay") == 0 &&
+		strcmp(self->plugininfo->author, "bohan") == 0;
+}
+
+bool restore_dalay_delay_parameter(psy_audio_Plugin* self,
+	uintptr_t index, intptr_t stored_value)
+{
+	psy_audio_MachineParam* param;
+	intptr_t minval;
+	intptr_t maxval;
+	intptr_t tweak_value;
+
+	if (index >= numparameters(self)) {
+		return FALSE;
+	}
+	param = psy_audio_machine_parameter(psy_audio_plugin_base(self), index);
+	if (!param) {
+		return FALSE;
+	}
+	psy_audio_machine_parameter_range(psy_audio_plugin_base(self),
+		param, &minval, &maxval);
+	if (stored_value < minval || stored_value > maxval) {
+		return FALSE;
+	}
+
+	/* Dalay Delay stores delay Vals as the snapped inverse plus one. During
+	** restoration the saved integer is already that encoded state, not a fresh
+	** user request. Undo only that encoding step before invoking the historical
+	** ParameterTweak path so it reconstructs the exact saved snapped value. */
+	tweak_value = stored_value;
+	if ((index == DALAY_DELAY_LEFT_DELAY ||
+			index == DALAY_DELAY_RIGHT_DELAY) && tweak_value > minval) {
+		--tweak_value;
+	}
+	psy_audio_machine_parameter_tweak_scaled(psy_audio_plugin_base(self),
+		param, tweak_value);
+	return TRUE;
 }
 
 void setcallback(psy_audio_Plugin* self, psy_audio_MachineCallback callback)
@@ -647,26 +702,53 @@ int loadspecific(psy_audio_Plugin* self, psy_audio_SongFile* songfile,
 		if ((status = psyfile_read(songfile->file, &numparams, sizeof(numparams)))) {
 			return status;
 		}
-		for (i = 0; i < numparams; ++i) {
-			int32_t temp;
-			psy_audio_MachineParam* param;
-			
-			if ((status = psyfile_read(songfile->file, &temp, sizeof(temp)))) {
-				return status;
-			}
-			if (i < numparameters(self)) {
-				intptr_t minval;
-				intptr_t maxval;
+		if (is_dalay_delay(self)) {
+			int32_t stored[DALAY_DELAY_PARAMETER_COUNT] = { 0 };
+			bool present[DALAY_DELAY_PARAMETER_COUNT] = { FALSE };
 
-				param = psy_audio_machine_parameter(psy_audio_plugin_base(self), i);
-				if (param) {
-					psy_audio_machine_parameter_range(psy_audio_plugin_base(self),
-						param, &minval, &maxval);
-					// skip out of range values (mfc-psycle behaviour), because
-					// tweak will set them to min or maxval
-					if (temp >= minval && temp <= maxval) {
-						psy_audio_machine_parameter_tweak_scaled(
-							psy_audio_plugin_base(self), param, temp);
+			/* This is restoration, not live automation: establish the saved snap
+			** grid before decoding the stored delay state. */
+			for (i = 0; i < numparams; ++i) {
+				int32_t temp;
+				if ((status = psyfile_read(songfile->file, &temp, sizeof(temp)))) {
+					return status;
+				}
+				if (i < DALAY_DELAY_PARAMETER_COUNT) {
+					stored[i] = temp;
+					present[i] = TRUE;
+				}
+			}
+			if (present[DALAY_DELAY_SNAP]) {
+				restore_dalay_delay_parameter(self, DALAY_DELAY_SNAP,
+					stored[DALAY_DELAY_SNAP]);
+			}
+			for (i = 0; i < DALAY_DELAY_PARAMETER_COUNT; ++i) {
+				if (i != DALAY_DELAY_SNAP && present[i]) {
+					restore_dalay_delay_parameter(self, i, stored[i]);
+				}
+			}
+		} else {
+			for (i = 0; i < numparams; ++i) {
+				int32_t temp;
+				psy_audio_MachineParam* param;
+				
+				if ((status = psyfile_read(songfile->file, &temp, sizeof(temp)))) {
+					return status;
+				}
+				if (i < numparameters(self)) {
+					intptr_t minval;
+					intptr_t maxval;
+
+					param = psy_audio_machine_parameter(psy_audio_plugin_base(self), i);
+					if (param) {
+						psy_audio_machine_parameter_range(psy_audio_plugin_base(self),
+							param, &minval, &maxval);
+						// skip out of range values (mfc-psycle behaviour), because
+						// tweak will set them to min or maxval
+						if (temp >= minval && temp <= maxval) {
+							psy_audio_machine_parameter_tweak_scaled(
+								psy_audio_plugin_base(self), param, temp);
+						}
 					}
 				}
 			}
@@ -807,18 +889,35 @@ void psy_audio_plugin_tweak_preset(psy_audio_Plugin* self, psy_audio_Preset* pre
 {
 	if (preset) {
 		psy_TableIterator it;
+		const bool dalay_delay = is_dalay_delay(self);
+
+		if (dalay_delay &&
+				psy_table_exists(&preset->parameters, DALAY_DELAY_SNAP)) {
+			/* Preset restore has an explicit state boundary. Establish the saved
+			** grid first; ordinary snap automation never enters this path. */
+			restore_dalay_delay_parameter(self, DALAY_DELAY_SNAP,
+				psy_audio_preset_value(preset, DALAY_DELAY_SNAP));
+		}
 
 		for (it = psy_table_begin(&preset->parameters);
 			!psy_tableiterator_equal(&it, psy_table_end());
 			psy_tableiterator_inc(&it)) {
-			psy_audio_MachineParam* param;
+			if (dalay_delay) {
+				const uintptr_t index = psy_tableiterator_key(&it);
+				if (index != DALAY_DELAY_SNAP) {
+					restore_dalay_delay_parameter(self, index,
+						(intptr_t)psy_tableiterator_value(&it));
+				}
+			} else {
+				psy_audio_MachineParam* param;
 
-			param = psy_audio_machine_tweak_parameter(
-				psy_audio_plugin_base(self), psy_tableiterator_key(&it));
-			if (param) {
-				psy_audio_machine_parameter_tweak_scaled(
-					psy_audio_plugin_base(self), param,
-					(intptr_t)psy_tableiterator_value(&it));
+				param = psy_audio_machine_tweak_parameter(
+					psy_audio_plugin_base(self), psy_tableiterator_key(&it));
+				if (param) {
+					psy_audio_machine_parameter_tweak_scaled(
+						psy_audio_plugin_base(self), param,
+						(intptr_t)psy_tableiterator_value(&it));
+				}
 			}
 		}
 		if (preset->data && preset->datasize == datasize(self)) {
@@ -833,6 +932,8 @@ uintptr_t currprogram(psy_audio_Plugin* self)
 		? (int)self->currprog
 		: 0;
 }
+
+void bankname(psy_audio_Plugin* self, uintptr_t bnkidx, uintptr_t prgidx, char* val);
 
 void bankname(psy_audio_Plugin* self, uintptr_t bnkidx, char* val)
 {
