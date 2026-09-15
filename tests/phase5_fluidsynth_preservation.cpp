@@ -272,6 +272,8 @@ Render render_reference(int sample_rate, const std::string& soundfont, int count
     fluid_settings_t* settings = nullptr;
     fluid_synth_t* synth = make_reference(sample_rate, soundfont, &settings);
     if (!synth) return result;
+    /* Psycle's retained SeqTick() sets MIDI CC7 to 127 before note-on. */
+    fluid_synth_cc(synth, 0, 0x07, 127);
     fluid_synth_noteon(synth, 0, 60, 127);
     fluid_synth_write_float(synth, count, result.left.data(), 0, 1,
         result.right.data(), 0, 1);
@@ -316,11 +318,17 @@ int verify_audio_reference(CMachineInterface* machine, const CMachineInfo* info,
         return fail("SoundFont path was not retained in opaque state");
     Render candidate = render_plugin(machine, 512);
     Render reference = render_reference(44100, soundfont, 512);
+    const double candidate_rms = rms(candidate);
+    const double reference_rms = rms(reference);
     const double diff = max_difference(candidate, reference);
-    if (rms(candidate) < 1.0 || !std::isfinite(diff) || diff > 0.5)
+    if (candidate_rms < 1.0 || !std::isfinite(diff) || diff > 0.5) {
+        std::fprintf(stderr,
+            "phase5-fluidsynth: audio diagnostics candidate-rms=%.6f reference-rms=%.6f maxdiff=%.6f\n",
+            candidate_rms, reference_rms, diff);
         return fail("44.1 kHz wrapper output diverged from direct FluidSynth reference");
+    }
     std::printf("phase5-fluidsynth: audio PASS sf2=TimGM6mb note=60 velocity=127 rate=44100 direct-reference=yes rms=%.6f maxdiff=%.6f\n",
-        rms(candidate), diff);
+        candidate_rms, diff);
     return 0;
 }
 
@@ -338,8 +346,12 @@ int verify_live_rate(CMachineInterface* machine, const CMachineInfo* info,
     const double target_diff = max_difference(candidate, reference88);
     const double stale_diff = max_difference(candidate, stale44);
     if (!std::isfinite(target_diff) || target_diff > 0.5 ||
-            !std::isfinite(stale_diff) || stale_diff < 1.0)
+            !std::isfinite(stale_diff) || stale_diff < 1.0) {
+        std::fprintf(stderr,
+            "phase5-fluidsynth: samplerate diagnostics candidate-rms=%.6f target-rms=%.6f stale-rms=%.6f target-maxdiff=%.6f stale44-maxdiff=%.6f\n",
+            rms(candidate), rms(reference88), rms(stale44), target_diff, stale_diff);
         return fail("live sample-rate update does not match direct 88.2 kHz reference");
+    }
     std::printf("phase5-fluidsynth: samplerate PASS live=44100->88200 direct-reference=yes target-maxdiff=%.6f stale44-maxdiff=%.6f\n",
         target_diff, stale_diff);
     return 0;
