@@ -70,11 +70,11 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 
 grep -F 'phase5-audacity-wahwah: metadata PASS version=0x0120 parameters=5 identity=Audacity-WahWah' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-audacity-wahwah: describe PASS lfo=1.5Hz phase=90deg depth=70 resonance=2.5 offset=331Hz' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-audacity-wahwah: zero-block PASS strict-noop' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-audacity-wahwah: stereo PASS opposed-modulation=yes finite=yes' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-audacity-wahwah: nonpositive PASS zero+negative strict-noop' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-audacity-wahwah: stereo PASS left=reference right=reference opposed=yes' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-audacity-wahwah: depth-zero PASS stereo-symmetric=yes' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-audacity-wahwah: max-offset PASS value=100 finite=yes' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-audacity-wahwah: live-rate PASS 44.1->88.2k fresh-reference=yes rate-sensitive=yes' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-audacity-wahwah: max-offset PASS guarded-reference=yes differs-from-1.0=yes' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-audacity-wahwah: live-rate PASS left=fresh88 right=fresh88 both-rate-sensitive=yes' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-audacity-wahwah: PASS' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-audacity-wahwah-state: PASS' "$STATE_LOG" >/dev/null
 grep -F 'catcher: wahwah:0' "$STATE_LOG" >/dev/null
@@ -99,11 +99,11 @@ cat > "$SUMMARY" <<'EOF'
 - Native ABI exports `GetInfo` / `CreateMachine` / `DeleteMachine`: PASS
 - Historical identity `Audacity WahWah` / `WahWah` / `Nasca Octavian Paul/Sartorius`, version `0x0120`, effect type and one-column geometry: PASS
 - Complete five-parameter metadata surface and historical value descriptions: PASS
-- Zero-length host callbacks are strict no-ops before signed sample counts can be converted to the retained unsigned chunk loop: PASS
-- Default opposed-channel Wah modulation remains finite and stereo-separated: PASS
+- Zero and negative host callback counts are independently exercised as strict no-ops before signed sample counts can enter the retained unsigned chunk loop: PASS
+- Both left and right default Wah responses match an independent source-derived opposed-LFO reference: PASS
 - Depth=0 collapses modulation while preserving symmetric stereo filtering: PASS
-- The historical max-offset guard remains finite at public value 100: PASS
-- Live 44.1 -> 88.2 kHz `SequencerTick()` scaling matches a fresh 88.2 kHz instance and the oracle is rate-sensitive: PASS
+- The public max-offset response matches the historical `freqofs=0.9999` guard and is demonstrably different from an unguarded raw `1.0` reference: PASS
+- Live 44.1 -> 88.2 kHz `SequencerTick()` scaling matches a fresh 88.2 kHz instance independently on both channels, and both channel oracles are rate-sensitive: PASS
 - Production `PluginCatcher` identity `wahwah:0` and `MachineFactory` instantiation: PASS
 - All 5/5 public parameters are preserved through a version-1 preset restored with an independent catcher/factory: PASS
 - Fresh PSY3 reopen restores all five non-default values and the Audacity WahWah -> Master topology edge: PASS
