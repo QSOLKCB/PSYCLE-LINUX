@@ -1,0 +1,71 @@
+name: Phase 6 upstream provenance audit
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'PHASE6_REFERENCE_PROVENANCE.md'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'ROADMAP.md'
+      - '.github/workflows/phase6-upstream-provenance.yml'
+  pull_request:
+    paths:
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'PHASE6_REFERENCE_PROVENANCE.md'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'ROADMAP.md'
+      - '.github/workflows/phase6-upstream-provenance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6-upstream-provenance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provenance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install provenance tools
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            subversion
+
+      - name: Run Phase 6 upstream audit
+        shell: bash
+        run: |
+          chmod +x scripts/phase6-upstream-audit.sh
+          scripts/phase6-upstream-audit.sh phase6-upstream-audit
+          cat phase6-upstream-audit/summary.md
+
+      - name: Assert audit artifact contains receipts only
+        shell: bash
+        run: |
+          if find phase6-upstream-audit -type f \
+            \( -iname '*.exe' -o -iname '*.dll' -o -iname '*.so' -o -iname '*.psy' -o -iname '*.zip' -o -iname '*.7z' \) \
+            -print -quit | grep -q .; then
+            echo 'Phase 6 audit artifact unexpectedly contains redistributed source/binary material.' >&2
+            exit 1
+          fi
+
+      - name: Upload Phase 6 provenance receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6-upstream-provenance
+          path: phase6-upstream-audit/
+          if-no-files-found: error
+          retention-days: 30
