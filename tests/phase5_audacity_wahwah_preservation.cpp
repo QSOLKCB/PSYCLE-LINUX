@@ -7,6 +7,8 @@
 #include <cstdio>
 #include <cstring>
 #include <dlfcn.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <vector>
 
 #include <psycle/plugin_interface.hpp>
@@ -17,6 +19,9 @@ using psycle::plugin_interface::CMachineInterface;
 using psycle::plugin_interface::CMachineParameter;
 
 namespace {
+
+constexpr float PI = 3.14159265359f;
+constexpr unsigned int LFO_SKIP_SAMPLES = 30;
 
 struct ExpectedParameter {
     const char* name;
@@ -52,6 +57,170 @@ public:
 
 private:
     int sample_rate_;
+};
+
+/*
+** Source-derived scalar reference for the retained WahWah equations.  This is
+** intentionally independent of the loadable module so a one-channel LFO,
+** max-offset, or sample-rate regression cannot validate itself.
+*/
+class WahReference {
+public:
+    explicit WahReference(int sample_rate) : sample_rate_(sample_rate)
+    {
+        init();
+        set_parameter(0, 15);
+        set_parameter(1, 0);
+        set_parameter(2, 70);
+        set_parameter(3, 25);
+        set_parameter(4, 30);
+    }
+
+    void set_parameter(int par, int value)
+    {
+        switch (par) {
+        case 0:
+            freq_ = static_cast<float>(value) * 0.1f;
+            lfoskip_ = freq_ * 2.0f * PI / static_cast<float>(sample_rate_);
+            break;
+        case 1:
+            phase_ = static_cast<float>(value) * (PI / 180.0f);
+            break;
+        case 2:
+            depth_ = static_cast<float>(value) * 0.01f;
+            break;
+        case 3:
+            res_ = 1.0f / (static_cast<float>(value) * 0.2f);
+            break;
+        case 4:
+            freqofs_ = value == 100 ? 0.9999f : static_cast<float>(value) * 0.01f;
+            break;
+        default:
+            break;
+        }
+    }
+
+    void set_raw_offset(float value) { freqofs_ = value; }
+
+    void set_sample_rate(int sample_rate)
+    {
+        sample_rate_ = sample_rate;
+        lfoskip_ = freq_ * 2.0f * PI / static_cast<float>(sample_rate_);
+        sample_rate_factor_ = 44100.0f / static_cast<float>(sample_rate_);
+    }
+
+    void process(std::vector<float>& left, std::vector<float>& right)
+    {
+        if (left.size() != right.size() || left.empty()) return;
+        unsigned int numsamples = static_cast<unsigned int>(left.size());
+        const float depth_mul_1_minus_freqofs = depth_ * (1.0f - freqofs_) * 0.5f;
+
+        if (skipcount_ == 0) recalc_filter(depth_mul_1_minus_freqofs);
+
+        std::size_t cursor = 0;
+        do {
+            const float recip_l = a0_l_ / (a0_l_ * a0_r_);
+            const float recip_r = a0_r_ / (a0_l_ * a0_r_);
+            unsigned int cont = std::min(
+                LFO_SKIP_SAMPLES - (skipcount_ % LFO_SKIP_SAMPLES), numsamples);
+            skipcount_ += cont;
+            numsamples -= cont;
+
+            while (cont--) {
+                const float in_l = left[cursor];
+                const float in_r = right[cursor];
+
+                const float out_l =
+                    (b0_l_ * in_l + b1_l_ * xn1_l_ + b2_l_ * xn2_l_ -
+                     a1_l_ * yn1_l_ - a2_l_ * yn2_l_) * recip_r;
+                xn2_l_ = xn1_l_;
+                xn1_l_ = in_l;
+                yn2_l_ = yn1_l_;
+                yn1_l_ = out_l;
+
+                const float out_r =
+                    (b0_r_ * in_r + b1_r_ * xn1_r_ + b2_r_ * xn2_r_ -
+                     a1_r_ * yn1_r_ - a2_r_ * yn2_r_) * recip_l;
+                xn2_r_ = xn1_r_;
+                xn1_r_ = in_r;
+                yn2_r_ = yn1_r_;
+                yn1_r_ = out_r;
+
+                left[cursor] = out_l;
+                right[cursor] = out_r;
+                ++cursor;
+            }
+            recalc_filter(depth_mul_1_minus_freqofs);
+        } while (numsamples);
+    }
+
+private:
+    void init()
+    {
+        freq_ = 1.5f;
+        phase_ = 0.0f;
+        depth_ = 0.7f;
+        freqofs_ = 0.3f;
+        res_ = 2.5f;
+        lfoskip_ = freq_ * 2.0f * PI / static_cast<float>(sample_rate_);
+        skipcount_ = 0;
+        xn1_l_ = xn2_l_ = yn1_l_ = yn2_l_ = 0.0f;
+        xn1_r_ = xn2_r_ = yn1_r_ = yn2_r_ = 0.0f;
+        b0_l_ = b1_l_ = b2_l_ = a0_l_ = a1_l_ = a2_l_ = 0.0f;
+        b0_r_ = b1_r_ = b2_r_ = a0_r_ = a1_r_ = a2_r_ = 0.0f;
+        sample_rate_factor_ = 44100.0f / static_cast<float>(sample_rate_);
+    }
+
+    void recalc_filter(float depth_mul_1_minus_freqofs)
+    {
+        float calc_1_time = static_cast<float>(skipcount_) * lfoskip_ + phase_;
+        if (calc_1_time > 4.0f * PI) {
+            skipcount_ -= static_cast<unsigned int>(
+                static_cast<int>(static_cast<float>(sample_rate_) / freq_));
+            calc_1_time = static_cast<float>(skipcount_) * lfoskip_ + phase_;
+        }
+
+        const float sintime = std::sin(calc_1_time);
+        const float costime = std::cos(calc_1_time);
+
+        float frequency = 1.0f + costime;
+        frequency = frequency * depth_mul_1_minus_freqofs + freqofs_;
+        frequency = std::exp((frequency - 1.0f) * 6.0f);
+        float omega = PI * frequency * sample_rate_factor_;
+        float sn = std::sin(omega);
+        float cs = std::cos(omega);
+        float alpha = sn * res_;
+        b1_l_ = 1.0f - cs;
+        b2_l_ = b0_l_ = b1_l_ * 0.5f;
+        a0_l_ = 1.0f + alpha;
+        a1_l_ = -2.0f * cs;
+        a2_l_ = 1.0f - alpha;
+
+        frequency = 1.0f - sintime;
+        frequency = frequency * depth_mul_1_minus_freqofs + freqofs_;
+        frequency = std::exp((frequency - 1.0f) * 6.0f);
+        omega = PI * frequency * sample_rate_factor_;
+        sn = std::sin(omega);
+        cs = std::cos(omega);
+        alpha = sn * res_;
+        b1_r_ = 1.0f - cs;
+        b2_r_ = b0_r_ = b1_r_ * 0.5f;
+        a0_r_ = 1.0f + alpha;
+        a1_r_ = -2.0f * cs;
+        a2_r_ = 1.0f - alpha;
+    }
+
+    int sample_rate_;
+    float phase_;
+    float lfoskip_;
+    unsigned int skipcount_;
+    float xn1_l_, xn2_l_, yn1_l_, yn2_l_;
+    float xn1_r_, xn2_r_, yn1_r_, yn2_r_;
+    float b0_l_, b1_l_, b2_l_, a0_l_, a1_l_, a2_l_;
+    float b0_r_, b1_r_, b2_r_, a0_r_, a1_r_, a2_r_;
+    float freq_;
+    float depth_, freqofs_, res_;
+    float sample_rate_factor_;
 };
 
 int fail(const char* message)
@@ -137,16 +306,41 @@ int verify_descriptions(CMachineInterface* machine, const CMachineInfo* info)
     return 0;
 }
 
-int verify_zero_block(CMachineInterface* machine, const CMachineInfo* info)
+int verify_nonpositive_blocks(CMachineInterface* machine, const CMachineInfo* info)
 {
     TestCallback callback(44100);
     configure_defaults(machine, info, &callback);
+
     float left = 1234.5f;
     float right = -987.25f;
     machine->Work(&left, &right, 0, 1);
     if (!near(left, 1234.5f) || !near(right, -987.25f))
         return fail("zero-length callback touched host buffers");
-    std::printf("phase5-audacity-wahwah: zero-block PASS strict-noop\n");
+
+    /*
+    ** Run the negative-count case in a child.  Without the signed boundary the
+    ** retained uint32_t loop becomes a huge workload and may walk off the tiny
+    ** buffers; SIGALRM/abnormal exit therefore becomes a deterministic failure
+    ** instead of hanging or corrupting the test runner.
+    */
+    const pid_t child = fork();
+    if (child < 0) return fail("fork failed for negative-count guard probe");
+    if (child == 0) {
+        float child_left = 4321.25f;
+        float child_right = -2468.5f;
+        alarm(2);
+        machine->Work(&child_left, &child_right, -1, 1);
+        const bool unchanged = near(child_left, 4321.25f) && near(child_right, -2468.5f);
+        _exit(unchanged ? 0 : 3);
+    }
+
+    int status = 0;
+    if (waitpid(child, &status, 0) != child)
+        return fail("waitpid failed for negative-count guard probe");
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+        return fail("negative callback count escaped the signed host-boundary guard");
+
+    std::printf("phase5-audacity-wahwah: nonpositive PASS zero+negative strict-noop\n");
     return 0;
 }
 
@@ -155,26 +349,36 @@ int verify_stereo_lfo(CMachineInterface* machine, const CMachineInfo* info)
     TestCallback callback(44100);
     configure_defaults(machine, info, &callback);
 
-    std::vector<float> left(512, 0.0f);
-    std::vector<float> right(512, 0.0f);
-    left[0] = right[0] = 12000.0f;
+    std::vector<float> left(512, 0.0f), right(512, 0.0f);
+    std::vector<float> ref_left(512, 0.0f), ref_right(512, 0.0f);
+    left[0] = right[0] = ref_left[0] = ref_right[0] = 12000.0f;
+
+    WahReference reference(44100);
     machine->Work(left.data(), right.data(), static_cast<int>(left.size()), 1);
+    reference.process(ref_left, ref_right);
 
-    double max_difference = 0.0;
-    double energy = 0.0;
+    double max_left_error = 0.0;
+    double max_right_error = 0.0;
+    double reference_channel_difference = 0.0;
     for (std::size_t i = 0; i < left.size(); ++i) {
-        if (!std::isfinite(left[i]) || !std::isfinite(right[i]))
-            return fail("default WahWah produced non-finite output");
-        max_difference = std::max(max_difference,
-            std::fabs(static_cast<double>(left[i] - right[i])));
-        energy += static_cast<double>(left[i]) * left[i] +
-            static_cast<double>(right[i]) * right[i];
+        if (!std::isfinite(left[i]) || !std::isfinite(right[i]) ||
+                !std::isfinite(ref_left[i]) || !std::isfinite(ref_right[i]))
+            return fail("default WahWah/reference produced non-finite output");
+        max_left_error = std::max(max_left_error,
+            std::fabs(static_cast<double>(left[i] - ref_left[i])));
+        max_right_error = std::max(max_right_error,
+            std::fabs(static_cast<double>(right[i] - ref_right[i])));
+        reference_channel_difference = std::max(reference_channel_difference,
+            std::fabs(static_cast<double>(ref_left[i] - ref_right[i])));
     }
-    if (energy <= 0.0) return fail("default WahWah impulse produced no output");
-    if (max_difference < 1.0e-3)
-        return fail("opposed stereo Wah modulation collapsed to mono");
+    if (max_left_error > 0.1)
+        return fail("left Wah modulation no longer matches the source-derived reference");
+    if (max_right_error > 0.1)
+        return fail("right Wah modulation no longer matches the source-derived reference");
+    if (reference_channel_difference < 1.0e-3)
+        return fail("source-derived opposed stereo reference unexpectedly collapsed to mono");
 
-    std::printf("phase5-audacity-wahwah: stereo PASS opposed-modulation=yes finite=yes\n");
+    std::printf("phase5-audacity-wahwah: stereo PASS left=reference right=reference opposed=yes\n");
     return 0;
 }
 
@@ -208,15 +412,42 @@ int verify_max_offset_guard(CMachineInterface* machine, const CMachineInfo* info
     machine->Vals[4] = 100;
     machine->ParameterTweak(4, 100);
 
-    std::vector<float> left(1024, 0.0f);
-    std::vector<float> right(1024, 0.0f);
-    left[0] = right[0] = 16000.0f;
+    std::vector<float> left(1024, 0.0f), right(1024, 0.0f);
+    std::vector<float> guarded_left(1024, 0.0f), guarded_right(1024, 0.0f);
+    std::vector<float> raw_left(1024, 0.0f), raw_right(1024, 0.0f);
+    left[0] = right[0] = guarded_left[0] = guarded_right[0] =
+        raw_left[0] = raw_right[0] = 16000.0f;
+
+    WahReference guarded(44100);
+    guarded.set_parameter(4, 100);
+    WahReference unguarded(44100);
+    unguarded.set_raw_offset(1.0f);
+
     machine->Work(left.data(), right.data(), static_cast<int>(left.size()), 1);
+    guarded.process(guarded_left, guarded_right);
+    unguarded.process(raw_left, raw_right);
+
+    double max_guard_error_left = 0.0;
+    double max_guard_error_right = 0.0;
+    double guarded_vs_raw = 0.0;
     for (std::size_t i = 0; i < left.size(); ++i) {
         if (!std::isfinite(left[i]) || !std::isfinite(right[i]))
-            return fail("maximum Wah offset lost its finite cutoff guard");
+            return fail("maximum Wah offset produced non-finite output");
+        max_guard_error_left = std::max(max_guard_error_left,
+            std::fabs(static_cast<double>(left[i] - guarded_left[i])));
+        max_guard_error_right = std::max(max_guard_error_right,
+            std::fabs(static_cast<double>(right[i] - guarded_right[i])));
+        guarded_vs_raw = std::max(guarded_vs_raw,
+            std::fabs(static_cast<double>(guarded_left[i] - raw_left[i])));
+        guarded_vs_raw = std::max(guarded_vs_raw,
+            std::fabs(static_cast<double>(guarded_right[i] - raw_right[i])));
     }
-    std::printf("phase5-audacity-wahwah: max-offset PASS value=100 finite=yes\n");
+    if (max_guard_error_left > 0.1 || max_guard_error_right > 0.1)
+        return fail("maximum-offset response no longer matches freqofs=0.9999 guard reference");
+    if (guarded_vs_raw < 1.0)
+        return fail("max-offset oracle cannot distinguish the 0.9999 guard from raw 1.0");
+
+    std::printf("phase5-audacity-wahwah: max-offset PASS guarded-reference=yes differs-from-1.0=yes\n");
     return 0;
 }
 
@@ -244,23 +475,31 @@ int verify_live_rate(CMachineInterface* transitioned, CMachineInterface* fresh88
     fresh88->Work(ref88_l.data(), ref88_r.data(), 512, 1);
     fresh44->Work(ref44_l.data(), ref44_r.data(), 512, 1);
 
-    double max_transition_error = 0.0;
-    double max_rate_difference = 0.0;
+    double transition_error_left = 0.0;
+    double transition_error_right = 0.0;
+    double rate_difference_left = 0.0;
+    double rate_difference_right = 0.0;
     for (int i = 0; i < 512; ++i) {
-        if (!std::isfinite(trans_l[i]) || !std::isfinite(ref88_l[i]) ||
-                !std::isfinite(ref44_l[i]))
-            return fail("sample-rate gate produced non-finite output");
-        max_transition_error = std::max(max_transition_error,
-            std::fabs(static_cast<double>(trans_l[i] - ref88_l[i])));
-        max_rate_difference = std::max(max_rate_difference,
-            std::fabs(static_cast<double>(ref44_l[i] - ref88_l[i])));
-    }
-    if (max_transition_error > 1.0e-3)
-        return fail("live 44.1->88.2 kHz state does not match fresh 88.2 kHz response");
-    if (max_rate_difference < 1.0e-2)
-        return fail("rate oracle is not sensitive to WahWah sample-rate scaling");
+        if (!std::isfinite(trans_l[i]) || !std::isfinite(trans_r[i]) ||
+                !std::isfinite(ref88_l[i]) || !std::isfinite(ref88_r[i]) ||
+                !std::isfinite(ref44_l[i]) || !std::isfinite(ref44_r[i]))
+            return fail("sample-rate gate produced non-finite stereo output");
 
-    std::printf("phase5-audacity-wahwah: live-rate PASS 44.1->88.2k fresh-reference=yes rate-sensitive=yes\n");
+        transition_error_left = std::max(transition_error_left,
+            std::fabs(static_cast<double>(trans_l[i] - ref88_l[i])));
+        transition_error_right = std::max(transition_error_right,
+            std::fabs(static_cast<double>(trans_r[i] - ref88_r[i])));
+        rate_difference_left = std::max(rate_difference_left,
+            std::fabs(static_cast<double>(ref44_l[i] - ref88_l[i])));
+        rate_difference_right = std::max(rate_difference_right,
+            std::fabs(static_cast<double>(ref44_r[i] - ref88_r[i])));
+    }
+    if (transition_error_left > 1.0e-3 || transition_error_right > 1.0e-3)
+        return fail("live 44.1->88.2 kHz stereo state does not match fresh 88.2 kHz response");
+    if (rate_difference_left < 1.0e-2 || rate_difference_right < 1.0e-2)
+        return fail("stereo rate oracle is not sensitive on both WahWah channels");
+
+    std::printf("phase5-audacity-wahwah: live-rate PASS left=fresh88 right=fresh88 both-rate-sensitive=yes\n");
     return 0;
 }
 
@@ -301,7 +540,7 @@ int main(int argc, char** argv)
     };
 
     CMachineInterface* describe = nullptr;
-    CMachineInterface* zero = nullptr;
+    CMachineInterface* nonpositive = nullptr;
     CMachineInterface* stereo = nullptr;
     CMachineInterface* depth0 = nullptr;
     CMachineInterface* maxoff = nullptr;
@@ -315,9 +554,9 @@ int main(int argc, char** argv)
         else rc = verify_descriptions(describe, info);
     }
     if (rc == 0) {
-        zero = make();
-        if (!zero || !zero->Vals) rc = fail("CreateMachine returned unusable zero-block instance");
-        else rc = verify_zero_block(zero, info);
+        nonpositive = make();
+        if (!nonpositive || !nonpositive->Vals) rc = fail("CreateMachine returned unusable nonpositive-block instance");
+        else rc = verify_nonpositive_blocks(nonpositive, info);
     }
     if (rc == 0) {
         stereo = make();
