@@ -202,6 +202,45 @@ int verify_nonpositive(CMachineInterface* machine)
     return 0;
 }
 
+int verify_live_snap_is_prospective(CMachineInterface* machine)
+{
+    char text[128];
+    machine->ParameterTweak(PARAM_DRY, 32767);
+    machine->ParameterTweak(PARAM_WET, 65535);
+    machine->ParameterTweak(PARAM_FEEDBACK_LEFT, 32767);
+
+    /* Under the default snap=3 quarter-line grid, raw 106 is below 1/4 line
+    ** and therefore quantizes to the historical zero-line state. Changing
+    ** snap alone must not reinterpret that already-live delay. */
+    machine->ParameterTweak(PARAM_DELAY_LEFT, 106);
+    std::memset(text, 0, sizeof(text));
+    if (!machine->DescribeValue(text, PARAM_DELAY_LEFT, 0) ||
+            std::strcmp(text, "0 ticks (lines)") != 0)
+        return fail("default-grid off-grid delay did not quantize to zero");
+
+    machine->ParameterTweak(PARAM_SNAP, 7);
+    std::memset(text, 0, sizeof(text));
+    if (!machine->DescribeValue(text, PARAM_DELAY_LEFT, 0) ||
+            std::strcmp(text, "0 ticks (lines)") != 0)
+        return fail("changing snap reinterpreted an existing live delay");
+
+    float left[] = {IMPULSE, 0.0f, 0.0f};
+    float right[] = {0.0f, 0.0f, 0.0f};
+    machine->Work(left, right, 3, 1);
+    if (std::fabs(left[1] - IMPULSE) > 1e-4f)
+        return fail("changing snap resized the existing zero-line delay");
+
+    /* The new grid still applies to future delay tweaks. */
+    machine->ParameterTweak(PARAM_DELAY_LEFT, 106);
+    std::memset(text, 0, sizeof(text));
+    if (!machine->DescribeValue(text, PARAM_DELAY_LEFT, 0) ||
+            std::strcmp(text, "0.125 ticks (lines)") != 0)
+        return fail("new snap grid did not apply to a future delay tweak");
+
+    std::printf("phase5-dalay-delay: snap-live PASS existing=0-line future-tweak=0.125-line\n");
+    return 0;
+}
+
 void process_in_host_blocks(CMachineInterface* machine,
     std::vector<float>& left, std::vector<float>& right)
 {
@@ -361,6 +400,7 @@ int main(int argc, char** argv)
     const CMachineInfo* info = get_info();
     int rc = verify_metadata(info);
     CMachineInterface* descriptions = nullptr;
+    CMachineInterface* snap_live = nullptr;
     CMachineInterface* timing = nullptr;
     CMachineInterface* rate_live = nullptr;
     CMachineInterface* rate_fresh = nullptr;
@@ -372,6 +412,7 @@ int main(int argc, char** argv)
 
     if (rc == 0) {
         descriptions = create_machine();
+        snap_live = create_machine();
         timing = create_machine();
         rate_live = create_machine();
         rate_fresh = create_machine();
@@ -379,21 +420,24 @@ int main(int argc, char** argv)
         bpm_fresh = create_machine();
         tpb_live = create_machine();
         tpb_fresh = create_machine();
-        if (!descriptions || !timing || !rate_live || !rate_fresh ||
+        if (!descriptions || !snap_live || !timing || !rate_live || !rate_fresh ||
                 !bpm_live || !bpm_fresh || !tpb_live || !tpb_fresh)
             rc = fail("CreateMachine returned null");
     }
     if (rc == 0) {
         initialize(descriptions, info, &standard_callback);
+        initialize(snap_live, info, &standard_callback);
         initialize(timing, info, &standard_callback);
         rc = verify_descriptions(descriptions);
     }
     if (rc == 0) rc = verify_nonpositive(descriptions);
+    if (rc == 0) rc = verify_live_snap_is_prospective(snap_live);
     if (rc == 0) rc = verify_stereo_timing(timing, standard_callback);
     if (rc == 0) rc = verify_live_timing_paths(rate_live, rate_fresh,
         bpm_live, bpm_fresh, tpb_live, tpb_fresh, info);
 
     if (descriptions) delete_machine(*descriptions);
+    if (snap_live) delete_machine(*snap_live);
     if (timing) delete_machine(*timing);
     if (rate_live) delete_machine(*rate_live);
     if (rate_fresh) delete_machine(*rate_fresh);
