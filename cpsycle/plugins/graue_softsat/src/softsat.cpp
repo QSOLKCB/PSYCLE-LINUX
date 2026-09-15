@@ -91,6 +91,8 @@ private:
 PSYCLE__PLUGIN__INSTANTIATOR(mi, MacInfo)
 
 mi::mi()
+	: gradation(1024.0f / 2049.0f)
+	, range(32768.0f / ((gradation + 1.0f) / 2.0f))
 {
 	Vals = new int[MacInfo.numParameters];
 }
@@ -118,6 +120,8 @@ void mi::ParameterTweak(int par, int val)
 
 void mi::Work(float *psamplesleft, float *psamplesright, int numsamples, int tracks)
 {
+	if (numsamples <= 0) return;
+
 	do {
 		float sl = *psamplesleft / range;
 		float sr = *psamplesright / range;
