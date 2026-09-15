@@ -66,7 +66,7 @@ The retained C-Psycle documentation includes the **Psycle Developer Guide — C-
 
 It documents C-Psycle's own architecture, including the audio/UI split, platform bridge, 256-sample Psycle-plugin compatibility chunks, variable VST process intervals and the historical 64-channel native-plugin limit.
 
-See [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md) for how that guide is used. Because the guide is explicitly unfinished, demonstrated source behaviour remains authoritative where prose and code disagree.
+See [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md) for how that guide is used. Because the guide is explicitly unfinished, demonstrated source behaviour remains authoritative for claims about C-Psycle, while original Psycle remains the compatibility target for the final Linux product.
 
 ## Next Implementation Milestone
 
@@ -93,7 +93,7 @@ The public repository intentionally excludes the historical Steinberg-derived:
 
 The plan is to independently implement only the VST2 ABI surface actually required by Psycle, without copying Steinberg SDK source expressions. The existing Psycle-owned host code and our current compatibility research remain useful donors.
 
-Plugin discovery must also be safer than the historical all-in-process model: a bad native plugin or VST should not be able to hang or crash Psycle simply because it is present at startup. Planned work includes metadata caching, incremental rescans, out-of-process probing, timeouts, crash quarantine and recoverable placeholders for missing/broken plugins.
+Plugin discovery must also be safer than the historical all-in-process model: a bad native plugin or VST should not be able to hang or crash Psycle simply because it is present at startup **or because a song attempts to instantiate it and restore opaque state**. Planned Phase 9 work therefore includes metadata caching, incremental rescans, out-of-process probing, timeouts, crash quarantine, isolated song-load instantiation/state restoration, and recoverable placeholders for missing or failing plugins.
 
 ## Porting Principles
 
@@ -102,10 +102,10 @@ Plugin discovery must also be safer than the historical all-in-process model: a 
 - **Preserve the workflow.** Tracker editing, Machine View, routing, instruments, samples, presets and `.psy` compatibility are core identity.
 - **Reuse proven work.** C-Psycle tests and Linux code should be reused where they accurately test or implement shared behaviour.
 - **Patch before replace.** Prefer narrow compatibility fixes to speculative rewrites.
-- **Contain plugin failure.** Optional or third-party plugins must not make startup fragile.
+- **Contain plugin failure.** Optional or third-party plugins must not make startup or song loading fragile.
 - **Keep provenance explicit.** Upstream authorship, licensing boundaries and donor relationships must remain auditable.
 
-See [PORTING.md](PORTING.md) for the project's engineering rules and [ROADMAP.md](ROADMAP.md) for the implementation plan.
+See [PORTING.md](PORTING.md) for the project's engineering rules and [ROADMAP.md](ROADMAP.md) for the implementation plan. Those documents use the same original-Psycle → `psycle-core` → C-Psycle evidence hierarchy.
 
 ## Current Repository Baseline
 
