@@ -16,6 +16,7 @@
 #include <machines.h>
 #include <player.h>
 #include <plugin.h>
+#include <plugin_interface.h>
 #include <plugincatcher.h>
 #include <preset.h>
 #include <presetio.h>
