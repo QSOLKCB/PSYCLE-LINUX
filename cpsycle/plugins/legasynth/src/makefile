@@ -16,6 +16,7 @@ debug: CFLAGS = -DDEBUG -g3
 debug: $(OUTPUTFILE)
 
 $(OUTPUTFILE): $(obj)
+	mkdir -p $(OUTPUTDIR)
 	$(CC) $(CFLAGS) $(LIBDIRS) $(INC) -fPIC -o $(OUTPUTDIR)$@ $^ $(LDFLAGS)
 	
 %.o: %.cpp
@@ -23,5 +24,4 @@ $(OUTPUTFILE): $(obj)
 	
 .PHONY: clean	
 clean:
-	rm -f $(obj) $(OUTPUTFILE)
-
+	rm -f $(obj) $(OUTPUTFILE) $(OUTPUTDIR)$(OUTPUTFILE)
