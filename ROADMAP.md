@@ -330,19 +330,21 @@ Implement in compatibility order:
 
 - [ ] Keyboard mappings and tracker navigation.
 - [ ] Machine creation/wiring/mute/bypass interactions.
-- [ ] Native/VST editor embedding or safe external editor handling.
+- [ ] Native-machine editor integration.
 - [ ] Drag/drop, clipboard and file-dialog behaviour where historically important.
 - [ ] Preserve the compact desktop-workstation character rather than redesigning Psycle as a generic modern DAW.
 
-**Exit condition:** a Psycle user can create, edit, play, save and reopen songs using a recognizably Psycle workflow on Linux.
+VST editor embedding or safe external-editor handling is intentionally **not** a Phase 8 exit requirement; it depends on the restored VST host lifecycle and is scheduled in Phase 9.
+
+**Exit condition:** a Psycle user can create, edit, play, save and reopen songs using a recognizably Psycle workflow on Linux with native machines and core engine features. Third-party VST editor integration is completed with the VST host in Phase 9.
 
 ---
 
 ## Phase 9 — Plugin Hosting, VST2 Compatibility, and Isolation
 
-**Goal:** restore the third-party plugin ecosystem real Psycle projects relied on, without restoring the historical startup fragility.
+**Goal:** restore the third-party plugin ecosystem real Psycle projects relied on without restoring historical startup or song-loading fragility.
 
-### 9A — startup-safe discovery
+### 9A — startup-safe discovery and song-load containment
 
 - [ ] Define a persistent plugin metadata cache keyed by path plus change detection.
 - [ ] Start from cached metadata without instantiating every plugin on every boot.
@@ -353,10 +355,14 @@ Implement in compatibility order:
 - [ ] Quarantine repeatedly failing binaries with a user-visible reason.
 - [ ] Allow retry/unquarantine/rescan.
 - [ ] Preserve missing/quarantined song nodes as recoverable placeholders.
+- [ ] Instantiate third-party plugins for song loading under a crash/hang-contained worker or bridge boundary before attaching them to the live graph.
+- [ ] Restore song-specific opaque/plugin state under the same containment boundary and timeout policy.
+- [ ] If a safely restored instance cannot be handed off without losing containment, keep that plugin behind the process boundary for runtime use.
+- [ ] Do not implicitly open third-party plugin editors during song load; editor creation is an explicit post-load action.
 
-Longer term, consider runtime process isolation for especially fragile legacy plugins.
+This containment is part of the Phase 9 song-loading guarantee, not an optional later enhancement. Broader runtime isolation may still be expanded for additional native/legacy formats, but plugin discovery and song-specific instantiation/state restore must not be able to terminate or indefinitely hang the main Psycle process.
 
-### 9B — clean-room VST2 ABI boundary
+### 9B — clean-room VST2 ABI boundary and host restoration
 
 Established facts from the C-Psycle audit:
 
@@ -376,6 +382,8 @@ Implementation plan:
 - [ ] Restore native Linux VST2 hosting behind that boundary.
 - [ ] Preserve Psycle's documented variable positive process-block lengths.
 - [ ] Verify MIDI, parameters, opaque state, presets and song reopen.
+- [ ] Add VST editor embedding or safe external-editor handling only after the host lifecycle/state path is working.
+- [ ] Ensure editor creation/teardown failures are contained and cannot corrupt or terminate the main host.
 - [ ] Audit `.fxp` / `.fxb` behaviour.
 - [ ] Implement `vstfxstore`-equivalent structures only if an audited dependency requires them.
 - [ ] Complete a licensing/provenance review before release.
@@ -386,6 +394,7 @@ Implementation plan:
 - [ ] Evaluate LV2 integration against the final engine architecture.
 - [ ] Evaluate VST3 after classic compatibility is stable.
 - [ ] Evaluate CLAP after classic compatibility is stable.
+- [ ] Apply the same discovery/song-load containment rules to every third-party format admitted to the release surface.
 
 ### 9D — optional Windows legacy bridge
 
@@ -393,7 +402,7 @@ Implementation plan:
 - [ ] Ensure bridge/plugin failure cannot terminate the main Psycle process.
 - [ ] Preserve historical plugin identity/state where technically and legally possible.
 
-**Exit condition:** real Psycle plugin workflows are available without making startup or song loading fragile.
+**Exit condition:** plugin discovery and song loading survive missing, crashing or hanging third-party plugins; plugin state can be restored or replaced by a recoverable placeholder without terminating the host; native Linux VST2 interoperability and its editor lifecycle work behind the clean provenance boundary.
 
 ---
 
@@ -425,7 +434,7 @@ Required acceptance areas:
 - [ ] native-machine state and representative sound behaviour are preserved;
 - [ ] render/bounce → Sampler workflow works;
 - [ ] missing/broken plugins degrade safely;
-- [ ] plugin scanner/cache/quarantine behaviour is dependable;
+- [ ] plugin scanner/cache/quarantine and song-load instantiation/state-restore containment are dependable;
 - [ ] VST2 compatibility status and provenance boundary are documented;
 - [ ] real audio/MIDI hardware paths are validated;
 - [ ] packaging/install/uninstall are reproducible;
