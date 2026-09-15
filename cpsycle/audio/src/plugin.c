@@ -359,7 +359,7 @@ void dispose(psy_audio_Plugin* self)
 	}
 	if (self->presets) {
 		psy_audio_presets_dispose(self->presets);
-		free(self->presets);		
+		free(self->presets);
 	}
 	disposeparameters(self);
 	psy_audio_logicalchannels_dispose(&self->logicalchannels);
@@ -932,8 +932,6 @@ uintptr_t currprogram(psy_audio_Plugin* self)
 		? (int)self->currprog
 		: 0;
 }
-
-void bankname(psy_audio_Plugin* self, uintptr_t bnkidx, uintptr_t prgidx, char* val);
 
 void bankname(psy_audio_Plugin* self, uintptr_t bnkidx, char* val)
 {
