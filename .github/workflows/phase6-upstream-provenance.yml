@@ -1,0 +1,141 @@
+name: Phase 6 upstream provenance audit
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'PHASE6_REFERENCE_PROVENANCE.md'
+      - 'PHASE6_CPP_IMPORT_AUDIT.md'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'ROADMAP.md'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'PORTING.md'
+      - '.gitignore'
+      - '.github/workflows/phase6-upstream-provenance.yml'
+  pull_request:
+    paths:
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'PHASE6_REFERENCE_PROVENANCE.md'
+      - 'PHASE6_CPP_IMPORT_AUDIT.md'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'ROADMAP.md'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'PORTING.md'
+      - '.gitignore'
+      - '.github/workflows/phase6-upstream-provenance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6-upstream-provenance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provenance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install provenance tools
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            subversion
+
+      - name: Run Phase 6 upstream audit
+        shell: bash
+        run: |
+          chmod +x scripts/phase6-upstream-audit.sh
+          scripts/phase6-upstream-audit.sh phase6-upstream-audit
+          cat phase6-upstream-audit/summary.md
+
+      - name: Assert exact receipts-only artifact layout
+        shell: bash
+        run: |
+          expected="$(mktemp)"
+          actual="$(mktemp)"
+          trap 'rm -f "$expected" "$actual"' EXIT
+
+          cat > "$expected" <<'EOF'
+          d components
+          d components/psycle-audiodrivers
+          d components/psycle-core
+          d components/psycle-helpers
+          d components/psycle-player
+          d components/psycle-plugins
+          d components/universalis
+          d original-psycle-reference
+          f components/psycle-audiodrivers/dependency-path-hints.txt
+          f components/psycle-audiodrivers/files.sha256
+          f components/psycle-audiodrivers/licensing-candidates.txt
+          f components/psycle-audiodrivers/notice-hints.txt
+          f components/psycle-audiodrivers/redistribution-review-hints.txt
+          f components/psycle-audiodrivers/svn-info.txt
+          f components/psycle-core/dependency-path-hints.txt
+          f components/psycle-core/files.sha256
+          f components/psycle-core/licensing-candidates.txt
+          f components/psycle-core/notice-hints.txt
+          f components/psycle-core/redistribution-review-hints.txt
+          f components/psycle-core/svn-info.txt
+          f components/psycle-helpers/dependency-path-hints.txt
+          f components/psycle-helpers/files.sha256
+          f components/psycle-helpers/licensing-candidates.txt
+          f components/psycle-helpers/notice-hints.txt
+          f components/psycle-helpers/redistribution-review-hints.txt
+          f components/psycle-helpers/svn-info.txt
+          f components/psycle-player/dependency-path-hints.txt
+          f components/psycle-player/files.sha256
+          f components/psycle-player/licensing-candidates.txt
+          f components/psycle-player/notice-hints.txt
+          f components/psycle-player/redistribution-review-hints.txt
+          f components/psycle-player/svn-info.txt
+          f components/psycle-plugins/dependency-path-hints.txt
+          f components/psycle-plugins/files.sha256
+          f components/psycle-plugins/licensing-candidates.txt
+          f components/psycle-plugins/notice-hints.txt
+          f components/psycle-plugins/redistribution-review-hints.txt
+          f components/psycle-plugins/svn-info.txt
+          f components/universalis/dependency-path-hints.txt
+          f components/universalis/files.sha256
+          f components/universalis/licensing-candidates.txt
+          f components/universalis/notice-hints.txt
+          f components/universalis/redistribution-review-hints.txt
+          f components/universalis/svn-info.txt
+          f original-psycle-reference/architecture.txt
+          f original-psycle-reference/final-url.txt
+          f original-psycle-reference/sha256.txt
+          f original-psycle-reference/size-bytes.txt
+          f original-psycle-reference/version.txt
+          f summary.md
+          EOF
+
+          LC_ALL=C sort -o "$expected" "$expected"
+          find phase6-upstream-audit -mindepth 1 -printf '%y %P\n' \
+            | LC_ALL=C sort > "$actual"
+
+          if ! diff -u "$expected" "$actual"; then
+            echo 'Phase 6 audit artifact does not match the exact receipts-only allowlist.' >&2
+            echo 'Unexpected source, binary, song, asset, symlink, directory, or receipt path will not be uploaded.' >&2
+            exit 1
+          fi
+
+      - name: Upload Phase 6 provenance receipt
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6-upstream-provenance
+          path: phase6-upstream-audit/
+          if-no-files-found: error
+          retention-days: 30

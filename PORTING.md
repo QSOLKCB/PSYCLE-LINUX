@@ -9,10 +9,10 @@ The target is the behaviour and workflow of **original Psycle**. Historical reim
 The current source roles are:
 
 - `psycle/` — original C++/MFC Psycle; primary behavioural and UI reference where it can be observed or inspected lawfully;
-- `psycle-core` + `psycle-audiodrivers` + `psycle-helpers` + `psycle-player` + `psycle-plugins` — earlier C++ cross-platform reimplementation and the leading candidate Linux engine base;
+- `universalis` + `psycle-core` + `psycle-audiodrivers` + `psycle-helpers` + `psycle-player` + `psycle-plugins` — the pinned six-component C++ build-source family for the candidate Linux engine/player path;
 - `cpsycle/` — later C reimplementation, retained as a preservation baseline, Linux donor, regression corpus and compatibility oracle where semantics overlap.
 
-The immediate implementation task is therefore to audit and converge the `psycle-core` family toward original-Psycle behaviour before building the full Linux tracker UI.
+Phase 6A has completed the reference/provenance pin. The immediate implementation task is now **Phase 6B: create a sanitized import of the pinned C++ build-source family and reproduce the historical Linux `psycle-player` build** before behavioural convergence or full UI work.
 
 ## Core Rule
 
@@ -42,9 +42,9 @@ When behaviour must change, the reason and compatibility impact should be docume
 
 When implementations disagree, use evidence in this order:
 
-1. original Psycle source/behaviour where legally and technically available;
+1. the pinned original Psycle source/build and reproducible behaviour where legally and technically available;
 2. trustworthy historical songs, documented formats and frozen compatibility contracts;
-3. `psycle-core` behaviour as the candidate engine to be measured and repaired, not assumed correct;
+3. the pinned C++ candidate-engine family as the implementation to be measured and repaired, not assumed correct;
 4. C-Psycle source and the PSYCLE-LINUX regression corpus where semantics overlap;
 5. upstream developer documentation, historical branches/posts and release notes as architecture/intent evidence.
 
@@ -54,9 +54,9 @@ The retained C-Psycle developer guide is explicitly **C-Version, Feb 2021 (unfin
 
 ### 1. Preserve every imported baseline
 
-An upstream import should remain mechanically close to the selected pinned snapshot. Avoid combining source acquisition with cleanup, formatting, naming changes or architectural rewrites.
+An upstream import should remain mechanically close to the selected pinned snapshot after documented sanitization. Avoid combining source acquisition with cleanup, formatting, naming changes or architectural rewrites.
 
-The audited C-Psycle r12005 baseline remains immutable historical evidence. Any future `psycle-core` family import must receive its own revision pinning, licensing/provenance audit and mechanically comparable archival state.
+The audited C-Psycle r12005 baseline remains immutable historical evidence. The future C++ family import must receive its own mechanically comparable sanitized archival state and canonical baseline identity.
 
 ### 2. Reproduce before replacing
 
@@ -91,7 +91,7 @@ Large unrelated refactors should be separate PRs.
 
 Prefer PRs scoped to one concern, for example:
 
-- `psycle-core` provenance/import;
+- sanitized C++ provenance/import;
 - player build compatibility;
 - one timing or sampler parity gap;
 - ALSA/JACK/MIDI integration;
@@ -117,21 +117,30 @@ C-Psycle provides:
 - Linux driver and UI implementation donors;
 - VST2 provenance research and plugin-safety lessons.
 
-Reuse C-Psycle code or tests only when the behaviour is demonstrated equivalent to original Psycle or when the code is a platform implementation independent of C-Psycle-specific semantics. Do not import its event/sequencer behaviour into `psycle-core` merely because it is newer.
+Reuse C-Psycle code or tests only when the behaviour is demonstrated equivalent to original Psycle or when the code is a platform implementation independent of C-Psycle-specific semantics. Do not import its event/sequencer behaviour into the C++ candidate merely because it is newer.
 
 ## Engine Policy
 
-The leading engine candidate is the `psycle-core` family identified by upstream maintainer clarification.
+The leading engine candidate is the pinned six-component C++ build-source family established in Phase 6A.
 
-Before modifying it:
+Phase 6A has already:
 
-1. identify a coherent set of upstream revisions for `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player` and `psycle-plugins`;
-2. audit licensing and third-party boundaries;
-3. reproduce the historical Debian/Linux player build;
-4. establish a parity matrix against original Psycle;
-5. separate engine gaps from UI-only gaps.
+1. pinned **Psycle 1.12.0 x86** as the primary original-Psycle behavioural reference;
+2. pinned SourceForge SVN **r12005** for `universalis`, `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player`, and `psycle-plugins`;
+3. frozen per-component file counts, last-changed revisions, and locale-stable manifest hashes;
+4. documented the first licensing/provenance boundary and concrete exclusions/quarantines.
 
-Do not rewrite an engine subsystem until the parity audit demonstrates why repair is insufficient.
+Before behavioural modification of that engine, Phase 6B must:
+
+1. materialize the exact retained-file list and omission/replacement arithmetic from the frozen six-component manifests;
+2. preserve or restore complete compatible third-party permission/provenance notices for retained helper/API code;
+3. create separate sanitized archival/canonical baseline identities;
+4. import only provenance-cleared source, keeping the documented VST/ASIO/closed-binary/song quarantines out;
+5. reproduce the historical Debian/Linux `psycle-player` build and record narrow compiler/linker/runtime blockers;
+6. establish deterministic/headless player execution where practical;
+7. only then begin moving parity-matrix rows out of `UNKNOWN` and separate engine gaps from UI-only gaps.
+
+Do not rewrite an engine subsystem until the parity evidence demonstrates why repair is insufficient.
 
 ## Build-System Policy
 
@@ -159,7 +168,7 @@ Do not redesign Psycle into a generic modern DAW merely to adopt a newer toolkit
 
 ## Audio and MIDI Policy
 
-During the `psycle-core` audit, prefer the existing `psycle-audiodrivers` lineage where it is coherent and compatible, while using C-Psycle's ALSA/JACK/ALSA-MIDI/SDL2 work as donor/reference material where useful.
+During the C++ engine audit/build work, prefer the existing `psycle-audiodrivers` lineage where it is coherent and compatible, while using C-Psycle's ALSA/JACK/ALSA-MIDI/SDL2 work as donor/reference material where useful.
 
 Required Linux acceptance eventually includes:
 
@@ -233,7 +242,8 @@ When touching upstream files:
 - keep third-party code boundaries visible;
 - do not silently change licensing notices;
 - avoid adding bundled dependencies when system packages are practical;
-- keep separate upstream families and provenance records distinguishable.
+- keep separate upstream families and provenance records distinguishable;
+- reconcile every Phase 6B retained path against the frozen Phase 6A manifests and omission/quarantine inventory.
 
 ## Definition of a Good Porting PR
 

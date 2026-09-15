@@ -15,23 +15,27 @@ Please read [PORTING.md](PORTING.md), [ROADMAP.md](ROADMAP.md), [PROVENANCE.md](
 The repository now distinguishes three upstream roles:
 
 - **original `psycle/`** — behavioural and UI reference;
-- **`psycle-core` family** — candidate cross-platform/Linux engine to audit and converge;
+- **`universalis` + the `psycle-core` family** — pinned candidate C++ build-source path for the Linux engine/player;
 - **`cpsycle/`** — preserved C reimplementation, Linux donor, compatibility laboratory, and regression corpus.
 
-The current repository imports only the audited C-Psycle r12005 baseline. The `psycle-core` family and any original-Psycle reference material must be provenance-audited and pinned before being imported or used as reproducible release evidence.
+Phase 6A is complete. It pinned Psycle 1.12.0 x86 as the primary behavioural reference and froze the complete SourceForge SVN r12005 C++ build-source set: `universalis`, `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player`, and `psycle-plugins`.
+
+The C++ source is still **not imported** into this repository. The active task is Phase 6B: materialize the exact sanitized retained-file set, preserve/restore required notices, import only provenance-cleared source, and reproduce the historical Linux `psycle-player` build.
 
 ### What We Need Most Now
 
-The active priority is **Phase 6 — `psycle-core` Provenance and Parity Audit**. Useful contributions include:
+The active priority is **Phase 6B — sanitized import and historical Linux player build**. Useful contributions include:
 
-- identifying a reproducible, version-pinned **original Psycle reference** and documenting its provenance, hash/version identity, runtime environment, and observation method;
-- identifying coherent SourceForge revisions for `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player`, and `psycle-plugins`;
-- licensing/provenance review for those sources before import;
+- materializing the exact retained-file list and omission/replacement arithmetic from the frozen six-component r12005 manifests;
+- reviewing and preserving complete compatible third-party permission/provenance notices for retained helper/API code;
+- creating separate sanitized archival/canonical baseline identities for the C++ family without changing the frozen C-Psycle baseline;
+- importing only provenance-cleared `universalis`, core, helper, player, Linux-relevant audio-driver, and minimum plugin/API source needed for the first build;
+- keeping the documented VST/ASIO/closed-binary/song quarantines out of that first baseline;
 - reproducing the historical Debian/Linux `psycle-player` build;
-- modern GCC/Clang compatibility fixes required by that build, once the source is pinned;
-- deterministic parity fixtures for `.psy` loading, timing, sampler behaviour, mixer/routing, plugin state, MIDI, and rendering;
+- modern GCC/Clang compatibility fixes required by that build, once the sanitized source is imported;
+- establishing active-track GitHub Actions CI for the imported C++ build/player path;
+- deterministic parity fixtures for `.psy` loading, timing, sampler behaviour, mixer/routing, plugin state, MIDI, and rendering once the player executes;
 - adapting the existing C-Psycle regression corpus where it tests a genuinely shared compatibility contract;
-- establishing active-track GitHub Actions CI so `psycle-core` build/parity regressions gate later work;
 - legally redistributable historical songs, samples, presets, and reference fixtures with clear provenance;
 - historical documentation and reproducible behaviour reports that identify the exact Psycle version/build observed.
 
@@ -48,7 +52,7 @@ C-Psycle fixes are still welcome when they preserve the existing regression corp
 
 For functional changes, include:
 
-1. the subsystem and upstream tree being changed (`psycle-core`, C-Psycle donor code, Qt host, plugin host, etc.);
+1. the subsystem and upstream tree being changed (`universalis`, `psycle-core`, C-Psycle donor code, Qt host, plugin host, etc.);
 2. the exact source revision/commit being tested;
 3. the Linux distribution and version used;
 4. CPU architecture;
@@ -69,17 +73,18 @@ For historical executable/reference evidence, do not upload or redistribute bina
 
 Good examples for the active track:
 
-- `phase6: pin psycle-core donor revisions and provenance`
+- `phase6b: materialize sanitized C++ import manifest`
+- `phase6b: import cleared universalis and core baseline`
 - `player: fix GCC build without changing playback semantics`
 - `sampler: add original-Psycle timing parity fixture`
 - `songio: preserve machine state on legacy .psy reload`
-- `ci: run psycle-core parity smoke on Ubuntu`
+- `ci: run C++ player parity smoke on Ubuntu`
 - `qt: add tracker keyboard-focus proof after engine parity`
 - `vst2: add ABI layout assertions and independent plugin fixture`
 
 Poor proposals include:
 
-- importing an unpinned upstream tree and immediately modifying it;
+- importing the full six-tree SourceForge snapshot without applying the documented sanitization boundary;
 - starting the full Qt tracker before the engine parity audit identifies the required contracts;
 - replacing the engine instead of measuring the existing `psycle-core` implementation;
 - replacing the build system and refactoring every directory in the same PR;
@@ -110,7 +115,9 @@ When introducing third-party or historical code, binaries, assets, or reference 
 - whether it is committed to the repository or used only as an external observation/reference;
 - the runtime/build environment needed to reproduce the observation.
 
-See [LICENSING.md](LICENSING.md) and [PROVENANCE.md](PROVENANCE.md).
+Phase 6B imports must also reconcile every retained path against the frozen Phase 6A manifests and the documented omission/quarantine list.
+
+See [PHASE6_REFERENCE_PROVENANCE.md](PHASE6_REFERENCE_PROVENANCE.md), [PHASE6_CPP_IMPORT_AUDIT.md](PHASE6_CPP_IMPORT_AUDIT.md), [LICENSING.md](LICENSING.md), and [PROVENANCE.md](PROVENANCE.md).
 
 ## Bug Reports and Parity Reports
 
@@ -144,7 +151,7 @@ Do not upload copyrighted commercial samples, plugins, presets, songs, or propri
 
 The best evidence is reproducible and version-specific:
 
-- a pinned original-Psycle source revision or identified executable build observed in a documented environment;
+- the pinned original-Psycle source revision or identified executable build observed in a documented environment;
 - a minimal `.psy` fixture;
 - a tiny generated sample;
 - a deterministic machine graph;
@@ -162,9 +169,9 @@ Where exact output cannot be reproduced across architectures, document the expec
 
 New active-track regressions must not remain local-only tests.
 
-Once the `psycle-core` family is imported, PRs that change the active engine must run the relevant build and parity tests in GitHub Actions. As later phases become active, their critical tests must join the merge-gating suite as well, including:
+The Phase 6A receipt-only provenance workflow already protects the frozen reference identities. Once the sanitized C++ family is imported in Phase 6B, PRs that change the active engine must run the relevant build and parity tests in GitHub Actions. As later phases become active, their critical tests must join the merge-gating suite as well, including:
 
-- `psycle-core` build/player/parity tests;
+- C++ engine/`psycle-player` build and parity tests;
 - Qt host build and headless interaction smoke where practical;
 - plugin ABI, independent real-plugin processing, scanner timeout/crash, song-load containment, and state-restore regressions.
 
@@ -209,10 +216,10 @@ The independent plugin test must exercise real audio processing in addition to a
 Prefer concise messages describing the subsystem and reason, for example:
 
 ```text
-phase6: pin original Psycle reference build
+phase6b: sanitize C++ player baseline
 core: fix 64-bit playback counter without changing timing
 songio: preserve machine state on legacy .psy reload
-ci: gate psycle-core timing parity
+ci: gate C++ timing parity
 qt: prove tracker focus routing
 vst2: validate host against independent Linux plugin
 ```

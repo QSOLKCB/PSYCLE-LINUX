@@ -15,14 +15,14 @@ Direct clarification from long-time Psycle maintainer **JosepMa / JAZ** has made
 The relevant upstream trees have different roles:
 
 - **`psycle/`** — the original Psycle application: C++, Microsoft Visual Studio and MFC, plus Windows-oriented SDKs and libraries. This is the primary behavioural and UI reference, but MFC makes it unsuitable as a direct Linux implementation base.
-- **`psycle-core` + `psycle-audiodrivers` + `psycle-helpers` + `psycle-player` + `psycle-plugins`** — the first C++ reimplementation. It was buildable on Debian Linux and could play most songs, but was not fully playback-compatible and provided a player rather than the complete tracker application. This is now the leading candidate engine base for a faithful Linux Psycle.
+- **`universalis` + `psycle-core` + `psycle-audiodrivers` + `psycle-helpers` + `psycle-player` + `psycle-plugins`** — the historical C++ cross-platform build-source family used by the earlier reimplementation/player path. It was buildable on Debian Linux and could play most songs, but was not fully playback-compatible and provided a player rather than the complete tracker application. This is now the leading candidate engine base for a faithful Linux Psycle.
 - **`cpsycle/`** — the later C reimplementation with its own UI toolkit, tracker and event/sequencer architecture. It intentionally diverged in some areas and historically relied on Psycle-built plugins where its own plugin builds were incomplete.
 
 That distinction changes the implementation strategy.
 
 **C-Psycle is no longer treated as the literal implementation base for the final Linux Psycle.** The extensive work already completed against `cpsycle/` remains valuable as a preservation corpus, compatibility laboratory, behavioural oracle, Linux-port reference, and regression suite.
 
-The next implementation step is therefore **not a UI rewrite**. It is a controlled compatibility audit of the `psycle-core` family against original Psycle behaviour, using the C-Psycle regressions where they provide useful independent evidence.
+Phase 6A has now pinned the original-Psycle reference and the complete six-component C++ build-source snapshot. The next implementation step is **Phase 6B: materialize a provenance-safe sanitized C++ baseline and reproduce the historical Linux `psycle-player` build** before any engine convergence or Qt UI work.
 
 ## Dedication
 
@@ -33,7 +33,7 @@ PSYCLE-LINUX is dedicated to the memory of **Juan Antonio Arguelles Rius (Arguru
 The project now has three explicit source roles:
 
 1. **Original Psycle is the compatibility reference.** Preserve its song behaviour, workflow, machine semantics and user-facing identity.
-2. **`psycle-core` is the candidate Linux engine.** Audit it first, then close demonstrated compatibility gaps instead of rebuilding the engine from scratch.
+2. **The pinned C++ build-source family is the candidate Linux engine path.** Import it conservatively, reproduce the player build, then close demonstrated compatibility gaps instead of rebuilding the engine from scratch.
 3. **C-Psycle is a tested donor and oracle.** Reuse its Linux work, tests, architectural lessons and independently validated machine behaviour where that helps restore original-Psycle compatibility.
 
 Modernization is allowed when it solves a real Linux, reliability, security, packaging or maintainability problem without casually changing historical behaviour.
@@ -54,7 +54,8 @@ Completed work includes:
 - source-derived DSP/state/timing regression oracles;
 - FluidSynth SF2 Player preservation;
 - explicit VST2 licensing/provenance boundaries;
-- startup-safety planning for future third-party plugin scanning.
+- startup-safety planning for future third-party plugin scanning;
+- Phase 6A provenance pinning of Psycle 1.12.0 x86 and the six-component r12005 C++ build-source snapshot, with an explicit sanitized-import boundary.
 
 None of that work is discarded by the architecture correction. It becomes the compatibility evidence used to evaluate and harden the next engine path.
 
@@ -70,14 +71,20 @@ See [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md) for how that guide is u
 
 ## Next Implementation Milestone
 
-The next phase is a **`psycle-core` compatibility and provenance audit**:
+**Phase 6A is complete.** The project has pinned:
 
-1. identify and pin the exact upstream revisions of `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player` and `psycle-plugins` that should be evaluated;
-2. establish their licensing/provenance before importing or adapting code;
-3. reproduce the historical Debian/Linux player build;
-4. compare song loading, playback, timing, sampler behaviour, machine/plugin state, routing and rendering against original Psycle expectations;
-5. reuse existing C-Psycle regression tests where they test shared compatibility contracts;
-6. produce a concrete parity-gap matrix before writing a new tracker UI.
+- **Psycle 1.12.0 x86** as the primary original-Psycle behavioural reference, including its official SourceForge origin, exact size and SHA-256;
+- the complete SourceForge SVN **r12005** C++ build-source set: `universalis`, `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player`, and `psycle-plugins`;
+- the first public-import exclusions/quarantines and provenance requirements.
+
+The active milestone is now **Phase 6B — sanitized import and historical Linux player build**:
+
+1. materialize the exact retained-file list and omission/replacement arithmetic from the frozen six-component manifests;
+2. preserve or restore complete compatible third-party permission/provenance notices for retained helper/API code;
+3. create separate sanitized archival/canonical baseline identities for the C++ family;
+4. import only the provenance-cleared source needed for the first engine/player build, keeping quarantined VST/ASIO/binary/song material out;
+5. reproduce the historical Debian/Linux `psycle-player` build and record narrow compiler/linker/runtime blockers;
+6. establish deterministic/headless playback where practical and then begin moving parity-matrix rows out of `UNKNOWN` with reproducible evidence.
 
 Only after the engine is sufficiently compatible should the project implement the full Linux tracker UI. **Qt is the leading candidate** because the original MFC UI cannot be carried directly to Linux; Qt Widgets should be evaluated first for faithful desktop behaviour, with QML remaining an option where it provides a demonstrated advantage.
 
@@ -105,7 +112,7 @@ Plugin discovery must also be safer than the historical all-in-process model: a 
 - **Contain plugin failure.** Optional or third-party plugins must not make startup or song loading fragile.
 - **Keep provenance explicit.** Upstream authorship, licensing boundaries and donor relationships must remain auditable.
 
-See [PORTING.md](PORTING.md) for the project's engineering rules and [ROADMAP.md](ROADMAP.md) for the implementation plan. Those documents use the same original-Psycle → `psycle-core` → C-Psycle evidence hierarchy.
+See [PORTING.md](PORTING.md) for the project's engineering rules and [ROADMAP.md](ROADMAP.md) for the implementation plan. Those documents use the same original-Psycle → C++ candidate → C-Psycle evidence hierarchy.
 
 ## Current Repository Baseline
 
@@ -119,9 +126,9 @@ The currently imported and audited source baseline remains:
 
 This baseline is retained as a preservation/reference asset. It is **not** being relabelled as the original Psycle implementation.
 
-The `psycle-core` family is not yet imported into the current repository; its exact upstream source identity and licensing/provenance will be established before implementation work begins.
+The C++ candidate family is still **not imported** into the repository. Phase 6A has already established its exact six-component r12005 identities and first licensing/provenance boundary; Phase 6B must now materialize the sanitized retained-file set before any public source import.
 
-See [PROVENANCE.md](PROVENANCE.md), [UPSTREAM_OMISSIONS.md](UPSTREAM_OMISSIONS.md), [THIRD_PARTY_INVENTORY.md](THIRD_PARTY_INVENTORY.md), [SOURCE_TREE.md](SOURCE_TREE.md), and [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md).
+See [PHASE6_REFERENCE_PROVENANCE.md](PHASE6_REFERENCE_PROVENANCE.md), [PHASE6_CPP_IMPORT_AUDIT.md](PHASE6_CPP_IMPORT_AUDIT.md), [PSYCLE_CORE_PARITY.md](PSYCLE_CORE_PARITY.md), [PROVENANCE.md](PROVENANCE.md), [UPSTREAM_OMISSIONS.md](UPSTREAM_OMISSIONS.md), [THIRD_PARTY_INVENTORY.md](THIRD_PARTY_INVENTORY.md), [SOURCE_TREE.md](SOURCE_TREE.md), and [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md).
 
 ## Licensing
 
@@ -129,13 +136,13 @@ The PSYCLE-LINUX repository scaffolding and original project material are provid
 
 Imported Psycle/C-Psycle source retains its own upstream licensing and component-specific notices. Importing upstream source does **not** relicense it under Apache-2.0.
 
-Any future `psycle-core` import must receive the same provenance and licensing audit before becoming part of the public repository.
+The pending C++ import must follow the Phase 6A provenance boundary: retain cleared upstream notices, restore complete compatible third-party notices where necessary, and keep quarantined/restricted material out of the public sanitized baseline.
 
 See [LICENSING.md](LICENSING.md) for project policy.
 
 ## Contributing
 
-Contributions are welcome, especially from people familiar with original Psycle behaviour, old `.psy` songs, `psycle-core`, tracker workflows, Linux audio, native machines, VST hosting, or the historical project.
+Contributions are welcome, especially from people familiar with original Psycle behaviour, old `.psy` songs, the C++ `psycle-core` lineage, tracker workflows, Linux audio, native machines, VST hosting, or the historical project.
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening implementation PRs.
 
