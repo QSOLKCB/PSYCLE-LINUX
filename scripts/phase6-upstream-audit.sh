@@ -24,11 +24,8 @@ COMPONENTS=(
   psycle-plugins
 )
 
-# Empty values are allowed only for a newly discovered component. The receipt
-# marks such a row DISCOVERY; the observed identity must be committed before
-# Phase 6A can be called frozen.
 declare -A EXPECTED_MANIFEST_SHA256=(
-  [universalis]=""
+  [universalis]="827586daad2efcfbc10466394670a4a0e5f208da94afb7b3bf72239d396a618e"
   [psycle-core]="eb25467bdfbdea7296fc2c8e01c802e3b2b977d95775ab363cc810309aee729b"
   [psycle-audiodrivers]="4518274595b58fa89f59ca9012198e4602bdabb32216193edc38fdbe7aef0ab1"
   [psycle-helpers]="13d05df94637cef8701fee0555bb4a9915fd082dcd531ae2b772c4a633f3f5db"
@@ -37,7 +34,7 @@ declare -A EXPECTED_MANIFEST_SHA256=(
 )
 
 declare -A EXPECTED_FILE_COUNT=(
-  [universalis]=""
+  [universalis]="83"
   [psycle-core]="108"
   [psycle-audiodrivers]="36"
   [psycle-helpers]="68"
@@ -46,7 +43,7 @@ declare -A EXPECTED_FILE_COUNT=(
 )
 
 declare -A EXPECTED_LAST_CHANGED_REV=(
-  [universalis]=""
+  [universalis]="12004"
   [psycle-core]="10901"
   [psycle-audiodrivers]="12004"
   [psycle-helpers]="12004"
@@ -99,28 +96,24 @@ for component in "${COMPONENTS[@]}"; do
   manifest_sha="$(sha256sum "$component_out/files.sha256" | awk '{print $1}')"
   file_count="$(find "$export_dir" -type f -printf '.' | wc -c | tr -d ' ')"
   last_changed_rev="$(awk -F': ' '/^Last Changed Rev:/ {print $2}' "$component_out/svn-info.txt")"
-  frozen_status="**DISCOVERY**"
 
-  if [ -n "${EXPECTED_MANIFEST_SHA256[$component]}" ]; then
-    if [ "$manifest_sha" != "${EXPECTED_MANIFEST_SHA256[$component]}" ]; then
-      echo "phase6-upstream-audit: $component manifest SHA-256 mismatch" >&2
-      echo "expected: ${EXPECTED_MANIFEST_SHA256[$component]}" >&2
-      echo "actual:   $manifest_sha" >&2
-      exit 3
-    fi
-    if [ "$file_count" != "${EXPECTED_FILE_COUNT[$component]}" ]; then
-      echo "phase6-upstream-audit: $component file-count mismatch" >&2
-      echo "expected: ${EXPECTED_FILE_COUNT[$component]}" >&2
-      echo "actual:   $file_count" >&2
-      exit 4
-    fi
-    if [ "$last_changed_rev" != "${EXPECTED_LAST_CHANGED_REV[$component]}" ]; then
-      echo "phase6-upstream-audit: $component last-changed revision mismatch" >&2
-      echo "expected: ${EXPECTED_LAST_CHANGED_REV[$component]}" >&2
-      echo "actual:   $last_changed_rev" >&2
-      exit 5
-    fi
-    frozen_status="**PASS**"
+  if [ "$manifest_sha" != "${EXPECTED_MANIFEST_SHA256[$component]}" ]; then
+    echo "phase6-upstream-audit: $component manifest SHA-256 mismatch" >&2
+    echo "expected: ${EXPECTED_MANIFEST_SHA256[$component]}" >&2
+    echo "actual:   $manifest_sha" >&2
+    exit 3
+  fi
+  if [ "$file_count" != "${EXPECTED_FILE_COUNT[$component]}" ]; then
+    echo "phase6-upstream-audit: $component file-count mismatch" >&2
+    echo "expected: ${EXPECTED_FILE_COUNT[$component]}" >&2
+    echo "actual:   $file_count" >&2
+    exit 4
+  fi
+  if [ "$last_changed_rev" != "${EXPECTED_LAST_CHANGED_REV[$component]}" ]; then
+    echo "phase6-upstream-audit: $component last-changed revision mismatch" >&2
+    echo "expected: ${EXPECTED_LAST_CHANGED_REV[$component]}" >&2
+    echo "actual:   $last_changed_rev" >&2
+    exit 5
   fi
 
   find "$export_dir" -type f \
@@ -147,8 +140,8 @@ for component in "${COMPONENTS[@]}"; do
 
   review_hint_count="$(wc -l < "$component_out/redistribution-review-hints.txt" | tr -d ' ')"
 
-  printf '| `%s` | `%s` | %s | `%s` | %s | %s |\n' \
-    "$component" "$last_changed_rev" "$file_count" "$manifest_sha" "$frozen_status" "$review_hint_count" >> "$SUMMARY"
+  printf '| `%s` | `%s` | %s | `%s` | **PASS** | %s |\n' \
+    "$component" "$last_changed_rev" "$file_count" "$manifest_sha" "$review_hint_count" >> "$SUMMARY"
 done
 
 REFERENCE_DIR="$OUT/original-psycle-reference"
