@@ -2,9 +2,17 @@
 
 ## Purpose
 
-PSYCLE-LINUX is a **port and preservation project**, not a clean-sheet rewrite.
+PSYCLE-LINUX is a **compatibility and preservation project**, not a clean-sheet DAW rewrite.
 
-The upstream C-Psycle code already contains Linux-facing architecture. Our job is to make that architecture work reliably on modern systems, repair gaps, and modernize only where necessary.
+The target is the behaviour and workflow of **original Psycle**. Historical reimplementations are valuable donors and test oracles, but none is automatically authoritative merely because it already builds on Linux.
+
+The current source roles are:
+
+- `psycle/` — original C++/MFC Psycle; primary behavioural and UI reference where it can be observed or inspected lawfully;
+- `psycle-core` + `psycle-audiodrivers` + `psycle-helpers` + `psycle-player` + `psycle-plugins` — earlier C++ cross-platform reimplementation and the leading candidate Linux engine base;
+- `cpsycle/` — later C reimplementation, retained as a preservation baseline, Linux donor, regression corpus and compatibility oracle where semantics overlap.
+
+The immediate implementation task is therefore to audit and converge the `psycle-core` family toward original-Psycle behaviour before building the full Linux tracker UI.
 
 ## Core Rule
 
@@ -14,52 +22,68 @@ Every substantial change should be judged against that rule.
 
 ## Compatibility Contract
 
-Where practical, the Linux port should preserve:
+Where practical, the Linux port should preserve original Psycle's:
 
 - `.psy` song compatibility;
 - Machine View semantics and routing;
 - pattern editor behaviour and tracker commands;
-- sequencer timing and transport behaviour;
-- sampler behaviour;
-- native machine identity, parameters, presets, and state;
+- timing, transport and sequence/order behaviour;
+- Sampler/XMSampler behaviour;
+- native machine identity, parameters, presets and state;
+- plugin identity, parameters and opaque state;
 - historical project loading behaviour;
-- user-facing concepts and terminology that are part of Psycle's workflow.
+- user-facing concepts, keyboard habits and terminology that are part of Psycle's workflow.
 
 Compatibility does not require preserving crashes, undefined behaviour, insecure code, obsolete platform assumptions, or bugs that prevent the program from functioning on modern Linux.
 
-When behaviour must change, the reason should be documented.
+When behaviour must change, the reason and compatibility impact should be documented and tested.
+
+## Evidence and Authority
+
+When implementations disagree, use evidence in this order:
+
+1. original Psycle source/behaviour where legally and technically available;
+2. trustworthy historical songs, documented formats and frozen compatibility contracts;
+3. `psycle-core` behaviour as the candidate engine to be measured and repaired, not assumed correct;
+4. C-Psycle source and the PSYCLE-LINUX regression corpus where semantics overlap;
+5. upstream developer documentation, historical branches/posts and release notes as architecture/intent evidence.
+
+The retained C-Psycle developer guide is explicitly **C-Version, Feb 2021 (unfinished)**. It explains C-Psycle architecture and several useful compatibility constraints, but it does not make C-Psycle the final implementation authority. See `UPSTREAM_ARCHITECTURE.md`.
 
 ## Change Strategy
 
-### 1. Preserve the baseline
+### 1. Preserve every imported baseline
 
-The first upstream import should remain mechanically close to the selected r12005 snapshot. Avoid combining source import with cleanup, formatting, naming changes, or architectural rewrites.
+An upstream import should remain mechanically close to the selected pinned snapshot. Avoid combining source acquisition with cleanup, formatting, naming changes or architectural rewrites.
+
+The audited C-Psycle r12005 baseline remains immutable historical evidence. Any future `psycle-core` family import must receive its own revision pinning, licensing/provenance audit and mechanically comparable archival state.
 
 ### 2. Reproduce before replacing
 
-Before replacing an existing subsystem:
+Before replacing or substantially changing an existing subsystem:
 
 1. build it;
-2. observe the failure;
-3. identify the narrowest cause;
-4. patch it if practical;
-5. add a regression test or reproducible fixture where possible.
+2. observe the behaviour or failure;
+3. compare it against the original-Psycle contract;
+4. identify the narrowest cause of any difference;
+5. patch the candidate implementation if practical;
+6. add a regression test or reproducible fixture.
 
-Replacement is justified when repair would be less maintainable, unsafe, or fundamentally incompatible with current Linux.
+Replacement is justified when repair would be less maintainable, unsafe, legally unsuitable, or fundamentally incompatible with current Linux.
 
 ### 3. Prefer narrow compatibility patches
 
-Good early porting changes include:
+Good implementation changes include:
 
 - fixing compiler errors caused by modern language/toolchain rules;
-- replacing removed system APIs with equivalent supported APIs;
+- replacing removed platform APIs with equivalent supported APIs;
 - correcting pointer-width and integer-width assumptions;
 - fixing Linux filesystem/path handling;
 - repairing linker ordering and dependency detection;
-- fixing X11 lifetime/event bugs;
-- correcting audio-device enumeration and buffer handling;
-- repairing ALSA/JACK/MIDI initialization and shutdown;
-- making plugin discovery follow Linux path conventions.
+- correcting audio/MIDI device handling;
+- closing measured song/timing/sampler/mixer compatibility gaps;
+- making plugin discovery, instantiation and state restoration failure-safe;
+- adding an independently authored compatibility boundary where a historical SDK cannot be redistributed.
 
 Large unrelated refactors should be separate PRs.
 
@@ -67,39 +91,53 @@ Large unrelated refactors should be separate PRs.
 
 Prefer PRs scoped to one concern, for example:
 
-- build-system compatibility;
-- X11 host startup;
-- ALSA output;
-- JACK output;
-- MIDI input;
-- `.psy` loading;
-- one native-machine family;
-- plugin discovery.
+- `psycle-core` provenance/import;
+- player build compatibility;
+- one timing or sampler parity gap;
+- ALSA/JACK/MIDI integration;
+- `.psy` loading or persistence;
+- one native-machine compatibility family;
+- Qt tracker input/focus;
+- plugin discovery or process isolation;
+- clean-room VST2 ABI compatibility.
 
-A port is easier to trust when each behavioural change has a visible reason.
+A port is easier to trust when each behavioural change has a visible reason and oracle.
 
-## Existing Linux Architecture to Preserve First
+## C-Psycle Preservation Policy
 
-The selected r12005 tree already contains:
+The work already completed against `cpsycle/` is retained, not discarded.
 
-- `ui/src/imps/x11/` — X11 UI implementation;
-- `driver/alsa/` — ALSA audio backend;
-- `driver/alsamidi/` — ALSA MIDI backend;
-- `driver/jack/` — JACK backend;
-- `driver/sdl2/` — SDL2 backend;
-- `driver/evjoystick/` — Linux event joystick support;
-- Lua UI/script components;
-- Lilv/LV2-related integration points;
-- `player/` / `psyplayer`;
-- native plugin source and presets.
+C-Psycle provides:
 
-Those are the first places to repair and validate. A replacement architecture should not be introduced merely because another framework is newer.
+- a modern-Linux build/runtime reference;
+- a broad native-machine preservation corpus;
+- PSY2/PSY3, preset and opaque-state regressions;
+- sampler/render workflow tests;
+- timing and tracker-command evidence;
+- Linux driver and UI implementation donors;
+- VST2 provenance research and plugin-safety lessons.
+
+Reuse C-Psycle code or tests only when the behaviour is demonstrated equivalent to original Psycle or when the code is a platform implementation independent of C-Psycle-specific semantics. Do not import its event/sequencer behaviour into `psycle-core` merely because it is newer.
+
+## Engine Policy
+
+The leading engine candidate is the `psycle-core` family identified by upstream maintainer clarification.
+
+Before modifying it:
+
+1. identify a coherent set of upstream revisions for `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player` and `psycle-plugins`;
+2. audit licensing and third-party boundaries;
+3. reproduce the historical Debian/Linux player build;
+4. establish a parity matrix against original Psycle;
+5. separate engine gaps from UI-only gaps.
+
+Do not rewrite an engine subsystem until the parity audit demonstrates why repair is insufficient.
 
 ## Build-System Policy
 
-The existing makefiles are part of the baseline and should be made usable before any broad build-system migration.
+Preserve a reproducible build path for each imported upstream family before considering migration.
 
-A later move to CMake, Meson, or another system may be considered when it provides a concrete benefit such as:
+A later move to CMake, Meson or another system may be considered when it provides a concrete benefit such as:
 
 - reliable dependency detection across distributions;
 - reproducible builds;
@@ -107,58 +145,61 @@ A later move to CMake, Meson, or another system may be considered when it provid
 - test integration;
 - maintainability that cannot reasonably be achieved with the existing build.
 
-A build-system migration must not also become a source-code rewrite.
+A build-system migration must not also become an engine or UI rewrite.
 
 ## UI Policy
 
-The existing Linux UI path is X11-based. The first target is therefore a functional X11 Psycle host.
+The UI compatibility target is **original Psycle's interaction model**, not C-Psycle's X11 implementation.
 
-Wayland-native work may be evaluated later, but X11 compatibility through XWayland is acceptable for early milestones if it delivers a stable native Linux Psycle sooner.
+The C-Psycle X11/UI bridge remains useful donor and historical evidence, but it is no longer the mandatory first UI architecture for the final product.
 
-Do not replace the Psycle interaction model merely to adopt a modern UI toolkit.
+After engine parity is strong enough, **Qt is the leading Linux UI candidate** because the original MFC UI cannot be carried directly to Linux. Start by proving Qt Widgets for tracker keyboard focus, custom painting, Machine View, parameter/editor windows and desktop-window behaviour. Evaluate QML only where it offers a demonstrated advantage.
 
-## Audio Policy
+Do not redesign Psycle into a generic modern DAW merely to adopt a newer toolkit.
 
-Initial priority:
+## Audio and MIDI Policy
 
-1. ALSA;
-2. JACK;
+During the `psycle-core` audit, prefer the existing `psycle-audiodrivers` lineage where it is coherent and compatible, while using C-Psycle's ALSA/JACK/ALSA-MIDI/SDL2 work as donor/reference material where useful.
+
+Required Linux acceptance eventually includes:
+
+1. ALSA audio;
+2. JACK / PipeWire-JACK;
 3. ALSA MIDI;
-4. SDL2 where useful.
+4. any additional backend only when it solves a demonstrated problem.
 
-PipeWire compatibility should first be achieved through its established ALSA/JACK compatibility paths. A native PipeWire backend is optional and should be added only if it provides a demonstrated benefit.
+A native PipeWire backend is optional; established ALSA/JACK compatibility paths are sufficient unless testing shows otherwise.
 
 ## Plugin Policy
 
-Native Psycle machines are part of the core port, not an optional plugin ecosystem.
+Native Psycle machines and third-party plugin hosting are both historically important, but they have different trust boundaries.
 
-External plugin formats should be handled in this order:
+For native machines:
 
-1. repair what the existing Linux code already supports;
-2. establish reliable discovery and failure handling;
-3. preserve song compatibility;
-4. only then evaluate new formats.
+- preserve historical identity and state contracts;
+- reuse the completed C-Psycle preservation corpus as an oracle where the ABI/behaviour matches original Psycle;
+- avoid adding every retained optional machine to the default runtime surface merely because source exists.
 
-LV2 should be audited early because the r12005 code already contains Lilv-related integration.
+For third-party plugins:
 
-VST2 requires a separate licensing and preservation review. Do not add SDK material casually.
+1. restore the format/host boundary required by real songs;
+2. make discovery incremental and cacheable;
+3. probe untrusted binaries out of process;
+4. make plugin instantiation and song-specific state restoration crash/hang-contained;
+5. preserve missing/quarantined nodes as recoverable placeholders;
+6. only then broaden format support.
 
-VST3 and CLAP are possible later additions, not prerequisites for a working Psycle Linux port.
+VST2 is a deliberate compatibility target. The public repository must not casually restore omitted Steinberg SDK-derived source. Phase 9 tracks a project-authored clean-room ABI boundary, VST2 hosting, editor integration and process isolation.
+
+VST3 and CLAP are later evaluations, not prerequisites for a faithful initial Linux Psycle.
 
 ## Native Machine Policy
 
 Historical native machines should retain their names and identity unless a technical or legal constraint requires otherwise.
 
-The Arguru machines in the selected baseline are explicit preservation targets:
+The completed C-Psycle preservation gates freeze representative metadata, DSP/timing behaviour, preset/state persistence and song reopen contracts. Those tests are evidence, but original Psycle remains the higher-level behavioural target when a reimplementation diverges.
 
-- Compressor
-- Distortion
-- Goaslicer
-- Reverb
-- Synth 2f
-- XFilter
-
-Changes to DSP code should be minimized until baseline behaviour can be measured. Compiler fixes, undefined-behaviour fixes, and platform-width fixes should be separated from intentional DSP changes wherever possible.
+Changes to DSP code should be minimized until behaviour can be measured. Compiler fixes, undefined-behaviour fixes and platform-width fixes should be separated from intentional sound changes wherever possible.
 
 ## Testing Policy
 
@@ -166,18 +207,20 @@ Porting tests should prefer behaviour over implementation detail.
 
 Useful regression targets include:
 
-- application launch and clean shutdown;
-- backend enumeration;
-- audio initialization;
-- MIDI input;
+- headless/player song playback;
 - `.psy` parsing and load;
 - save/load round trips;
-- native-machine discovery;
-- machine-state serialization;
+- timing/BPM/LPB/tracker commands;
+- Sampler/XMSampler output;
+- mixer/master/routing semantics;
+- native-machine discovery and state;
+- plugin parameter/opaque-state restoration;
 - deterministic or tolerance-based audio renders;
-- example songs from the upstream source where redistribution terms permit.
+- plugin crash/hang containment;
+- Qt tracker focus/input and Machine View interactions;
+- historical songs contributed or redistributable with clear permission.
 
-Historical songs from community members are especially valuable when contributed with clear permission.
+C-Psycle regressions should be ported only where they test a shared contract; otherwise retain them as C-Psycle historical tests.
 
 ## Source Hygiene
 
@@ -189,16 +232,18 @@ When touching upstream files:
 - explain compatibility changes in commit messages;
 - keep third-party code boundaries visible;
 - do not silently change licensing notices;
-- avoid adding bundled dependencies when system packages are practical.
+- avoid adding bundled dependencies when system packages are practical;
+- keep separate upstream families and provenance records distinguishable.
 
 ## Definition of a Good Porting PR
 
-A good PR answers five questions:
+A good PR answers:
 
-1. **What Psycle behaviour was broken or unavailable on Linux?**
-2. **Why did the existing implementation fail?**
-3. **What is the smallest maintainable fix?**
-4. **How was compatibility tested?**
-5. **What remains intentionally unchanged?**
+1. **What original Psycle behaviour is being preserved or restored?**
+2. **Which implementation is being changed, and why did it differ or fail on Linux?**
+3. **What evidence establishes the expected behaviour?**
+4. **What is the smallest maintainable fix?**
+5. **How was compatibility tested?**
+6. **What remains intentionally unchanged or deferred?**
 
 If a PR cannot answer those questions, its scope may be too broad.
