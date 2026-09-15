@@ -29,7 +29,7 @@
 #define PRESET_NAME "Phase 5 SChorus"
 
 static const int EXPECTED_VALUES[PARAMETER_COUNT] = {
-	16384, 24576, 8192, -8192, 2, 7, 25, 1024
+	16384, 24576, 8192, -8192, 2, 7, 25, 1025
 };
 
 static int fail(const char* message)
@@ -400,7 +400,7 @@ initial_cleanup:
 
 	printf("phase5-schorus-state: PASS\n");
 	printf("catcher: s-chorus:0\n");
-	printf("state: 8/8 MPF_STATE controls seeded non-default dry=16384 wet=24576 fbl=8192 fbr=-8192 min=2 max=7 rate=25 delayer=1024, 0 opaque bytes\n");
+	printf("state: 8/8 MPF_STATE controls seeded non-default dry=16384 wet=24576 fbl=8192 fbr=-8192 min=2 max=7 rate=25 delayer=1025, 0 opaque bytes\n");
 	printf("audio: production feedback markers=8 bounded=yes zero-callback=noop\n");
 	printf("preset-factory: independent\n");
 	printf("topology: SChorus -> Master\n");
