@@ -86,6 +86,10 @@ PSYCLE__PLUGIN__INSTANTIATOR(mi, MacInfo)
 mi::mi()
 {
 	Vals = new int[MacInfo.numParameters];
+	for (int i = 0; i < MacInfo.numParameters; ++i)
+	{
+		Vals[i] = MacInfo.Parameters[i]->DefValue;
+	}
 	DM_l = new float[MAXIMUM_DELAY];
 	DM_r = new float[MAXIMUM_DELAY];
 	for (int i=0;i<MAXIMUM_DELAY;i++)
@@ -120,7 +124,12 @@ void mi::SequencerTick()
 {
 	if(samplerate!=pCB->GetSamplingRate())
 	{
-		samplerate = pCB->GetSamplingRate();
+		int const new_samplerate = pCB->GetSamplingRate();
+		if (samplerate > 0)
+		{
+			sweep *= (float)new_samplerate / (float)samplerate;
+		}
+		samplerate = new_samplerate;
 	
 		min_sweep = (float)(Vals[4] * .001 * samplerate);
 		max_sweep = (float)(Vals[5] * .001 * samplerate);
@@ -150,6 +159,8 @@ void mi::ParameterTweak(int par, int val)
 
 void mi::Work(float *psamplesleft, float *psamplesright , int numsamples, int tracks)
 {
+	if (numsamples <= 0) return;
+
 	float const dry								=(float)(Vals[0])*0.00006103515625f;
 	float const wet								=(float)(Vals[1])*0.000030517578125f;
 	float const fbl								=(float)(Vals[2])*0.000030517578125f;
