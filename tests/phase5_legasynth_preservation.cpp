@@ -204,6 +204,13 @@ StereoSignal render_note(CMachineInterface* machine, int samples,
     return signal;
 }
 
+void advance_chorus(CMachineInterface* machine, int samples)
+{
+    std::vector<float> left(samples, 0.0f);
+    std::vector<float> right(samples, 0.0f);
+    machine->Work(left.data(), right.data(), samples, 0);
+}
+
 bool same_signal(const StereoSignal& a, const StereoSignal& b,
     double tolerance = 1.0e-4)
 {
@@ -237,6 +244,12 @@ int verify_deterministic_default(CMachineInterface* a, CMachineInterface* b,
             !same_signal(first, second, 2.0e-4)) {
         return fail("fresh default LegaSynth instances are not deterministic/active");
     }
+    const std::size_t marker_indices[] = {64, 127, 255, 511, 1023, 1535, 2047};
+    std::printf("phase5-legasynth: oracle-candidate");
+    for (std::size_t index : marker_indices) {
+        std::printf(" i%zu=%.9g/%.9g", index, first.left[index], first.right[index]);
+    }
+    std::printf(" rms=%.9g\n", rms(first));
     std::printf("phase5-legasynth: deterministic PASS note=48 rate=44100 rms=%.6f\n", rms(first));
     return 0;
 }
@@ -293,6 +306,14 @@ int verify_rate_transition(CMachineInterface* live, CMachineInterface* target,
     live->ParameterTweak(22, 1);
     target->ParameterTweak(22, 1);
     stale->ParameterTweak(22, 1);
+
+    /* Advance only the chorus for 250 ms at each native rate. The zero input
+    ** keeps the delay rings empty while making the accumulated LFO phase
+    ** nonzero. A correct rate transition must preserve that physical phase. */
+    advance_chorus(live, 11025);
+    advance_chorus(target, 22050);
+    advance_chorus(stale, 11025);
+
     live_cb.set_sample_rate(88200);
     live->SequencerTick();
     StereoSignal live_signal = render_note(live, 2048);
@@ -301,9 +322,9 @@ int verify_rate_transition(CMachineInterface* live, CMachineInterface* target,
     if (live_signal.left.empty() || target_signal.left.empty() || stale_signal.left.empty() ||
             !same_signal(live_signal, target_signal, 5.0e-4) ||
             same_signal(live_signal, stale_signal, 5.0e-4)) {
-        return fail("chorus-enabled live sample-rate transition no longer matches fresh 88.2 kHz synthesis");
+        return fail("pre-rolled chorus/voice rate transition no longer matches fresh 88.2 kHz timebase");
     }
-    std::printf("phase5-legasynth: samplerate PASS chorus=on live=44100->88200 matches=fresh-88200 differs=44100\n");
+    std::printf("phase5-legasynth: samplerate PASS chorus=on preroll=250ms live=44100->88200 matches=fresh-88200 differs=44100\n");
     return 0;
 }
 
