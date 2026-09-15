@@ -74,7 +74,7 @@ grep -Fqx 'phase5-legasynth: describe PASS notes/cents lfo=sine/saw/square choru
 grep -Fq 'phase5-legasynth: deterministic PASS note=48 rate=44100 rms=' "$NATIVE_LOG"
 grep -Fqx 'phase5-legasynth: velocity PASS command=0C80 scale=64/127' "$NATIVE_LOG"
 grep -Fqx 'phase5-legasynth: nonpositive PASS chorus=on zero+negative strict-noop' "$NATIVE_LOG"
-grep -Fqx 'phase5-legasynth: samplerate PASS live=44100->88200 matches=fresh-88200 differs=44100' "$NATIVE_LOG"
+grep -Fqx 'phase5-legasynth: samplerate PASS chorus=on live=44100->88200 matches=fresh-88200 differs=44100' "$NATIVE_LOG"
 grep -Fqx 'phase5-legasynth: PASS' "$NATIVE_LOG"
 
 grep -Fqx 'phase5-legasynth-state: PASS' "$STATE_LOG"
@@ -99,7 +99,7 @@ cat > "$SUMMARY" <<'EOF'
 - Fresh default instances render deterministic active TB303 output: PASS
 - Pattern command `0C80` preserves the historical velocity=64/127 scaling: PASS
 - Chorus-enabled zero and negative host callback sizes are strict no-ops: PASS
-- Live sample-rate transition from 44.1 kHz to 88.2 kHz matches a fresh 88.2 kHz synth and differs from stale 44.1 kHz synthesis: PASS
+- Chorus-enabled live sample-rate transition from 44.1 kHz to 88.2 kHz matches a fresh 88.2 kHz synth and differs from stale 44.1 kHz synthesis: PASS
 - Production `PluginCatcher` identity `legasynth-303:0` and `MachineFactory` instantiation: PASS
 - Version-1 preset restore through an independent catcher/factory preserves all 28 stored slots with 25 non-default state controls: PASS
 - Fresh PSY3 reopen preserves all stored values and the LegaSynth TB303 -> Master topology edge: PASS
