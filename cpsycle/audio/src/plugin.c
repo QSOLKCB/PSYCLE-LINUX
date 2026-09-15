@@ -176,8 +176,6 @@ typedef CMachineInfo * (*GETINFO)(void);
 typedef CMachineInterface * (*CREATEMACHINE)(void);
 
 enum {
-	DALAY_DELAY_LEFT_DELAY = 2,
-	DALAY_DELAY_RIGHT_DELAY = 4,
 	DALAY_DELAY_SNAP = 6,
 	DALAY_DELAY_PARAMETER_COUNT = 7
 };
@@ -395,7 +393,6 @@ bool restore_dalay_delay_parameter(psy_audio_Plugin* self,
 	psy_audio_MachineParam* param;
 	intptr_t minval;
 	intptr_t maxval;
-	intptr_t tweak_value;
 
 	if (index >= numparameters(self)) {
 		return FALSE;
@@ -410,17 +407,11 @@ bool restore_dalay_delay_parameter(psy_audio_Plugin* self,
 		return FALSE;
 	}
 
-	/* Dalay Delay stores delay Vals as the snapped inverse plus one. During
-	** restoration the saved integer is already that encoded state, not a fresh
-	** user request. Undo only that encoding step before invoking the historical
-	** ParameterTweak path so it reconstructs the exact saved snapped value. */
-	tweak_value = stored_value;
-	if ((index == DALAY_DELAY_LEFT_DELAY ||
-			index == DALAY_DELAY_RIGHT_DELAY) && tweak_value > minval) {
-		--tweak_value;
-	}
+	/* This value came from Dalay Delay's own public Vals array. Once the saved
+	** snap grid is established it is already an idempotent representation of
+	** the snapped delay, so restoration must replay it unchanged. */
 	psy_audio_machine_parameter_tweak_scaled(psy_audio_plugin_base(self),
-		param, tweak_value);
+		param, stored_value);
 	return TRUE;
 }
 
@@ -707,7 +698,7 @@ int loadspecific(psy_audio_Plugin* self, psy_audio_SongFile* songfile,
 			bool present[DALAY_DELAY_PARAMETER_COUNT] = { FALSE };
 
 			/* This is restoration, not live automation: establish the saved snap
-			** grid before decoding the stored delay state. */
+			** grid before replaying the stored public state. */
 			for (i = 0; i < numparams; ++i) {
 				int32_t temp;
 				if ((status = psyfile_read(songfile->file, &temp, sizeof(temp)))) {
