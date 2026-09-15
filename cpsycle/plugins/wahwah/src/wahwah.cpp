@@ -236,6 +236,7 @@ inline void mi::RecalcFilter( const float depth_mul_1_minus_freqofs )
 // Work... where all is cooked 
 void mi::Work(float *psamplesleft, float *psamplesright , int numsamples_in, int tracks)
 {
+	if (numsamples_in <= 0) return;
 	uint32_t numsamples = static_cast<uint32_t>(numsamples_in);
 	const float depth_mul_1_minus_freqofs = depth * (1.f - freqofs) * .5f;
 
@@ -286,7 +287,7 @@ bool mi::DescribeValue(char* txt,int const param, int const value)
 			std::sprintf(txt,"%.1f Hz",(float)value*.1f);
 			return true;
 		case 1:
-			std::sprintf(txt,"%i°",value);
+			std::sprintf(txt,"%iÂ°",value);
 			return true;
 		case 2:
 			std::sprintf(txt,"%i%%",value);
