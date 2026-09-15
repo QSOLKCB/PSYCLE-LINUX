@@ -29,12 +29,18 @@ jobs:
             libstk-dev
 
       - name: Run STK family preservation regression
+        shell: bash
         run: |
+          set -o pipefail
           chmod +x scripts/phase5-stk-family-smoke.sh
-          scripts/phase5-stk-family-smoke.sh phase5-stk-family
+          scripts/phase5-stk-family-smoke.sh phase5-stk-family \
+            2>&1 | tee "$RUNNER_TEMP/phase5-stk-family.log"
 
       - name: Upload STK family evidence
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: phase5-stk-family
-          path: phase5-stk-family/
+          path: |
+            phase5-stk-family/
+            ${{ runner.temp }}/phase5-stk-family.log
