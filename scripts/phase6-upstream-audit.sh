@@ -2,13 +2,14 @@
 set -euo pipefail
 
 OUT="${1:-phase6-upstream-audit}"
-SVN_REVISION="${PSYCLE_SVN_REVISION:-12005}"
-SVN_ROOT="${PSYCLE_SVN_ROOT:-https://svn.code.sf.net/p/psycle/code/trunk}"
+SVN_REVISION="12005"
+SVN_ROOT="https://svn.code.sf.net/p/psycle/code/trunk"
 REFERENCE_VERSION="1.12.0"
 REFERENCE_ARCH="x86"
 REFERENCE_FILE="PsycleInstallerx86-1.12.0.exe"
 REFERENCE_URL="https://sourceforge.net/projects/psycle/files/psycle/1.12/${REFERENCE_FILE}/download"
-EXPECTED_REFERENCE_SHA256="${PSYCLE_REFERENCE_SHA256:-}"
+EXPECTED_REFERENCE_SHA256="f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
+EXPECTED_REFERENCE_SIZE="9322919"
 
 COMPONENTS=(
   psycle-core
@@ -18,7 +19,31 @@ COMPONENTS=(
   psycle-plugins
 )
 
-for command_name in svn curl sha256sum find sort grep stat awk; do
+declare -A EXPECTED_MANIFEST_SHA256=(
+  [psycle-core]="eb25467bdfbdea7296fc2c8e01c802e3b2b977d95775ab363cc810309aee729b"
+  [psycle-audiodrivers]="4518274595b58fa89f59ca9012198e4602bdabb32216193edc38fdbe7aef0ab1"
+  [psycle-helpers]="13d05df94637cef8701fee0555bb4a9915fd082dcd531ae2b772c4a633f3f5db"
+  [psycle-player]="6fd4fb58b3841b89cafd69c1c4a6c4f5c95864f1d7edb6e6f999621bfadecb6f"
+  [psycle-plugins]="a8d66a18e363229ad9ff13b688149fec4682da8b177afb757c064491123de888"
+)
+
+declare -A EXPECTED_FILE_COUNT=(
+  [psycle-core]="108"
+  [psycle-audiodrivers]="36"
+  [psycle-helpers]="68"
+  [psycle-player]="7"
+  [psycle-plugins]="634"
+)
+
+declare -A EXPECTED_LAST_CHANGED_REV=(
+  [psycle-core]="10901"
+  [psycle-audiodrivers]="12004"
+  [psycle-helpers]="12004"
+  [psycle-player]="10725"
+  [psycle-plugins]="12004"
+)
+
+for command_name in svn curl sha256sum find sort grep stat awk python3; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "phase6-upstream-audit: missing required command: $command_name" >&2
     exit 2
@@ -41,8 +66,8 @@ SUMMARY="$OUT/summary.md"
   echo
   echo '## C++ reimplementation snapshot'
   echo
-  echo '| Component | SVN path | Last-changed revision | Files | Manifest SHA-256 |'
-  echo '| --- | --- | ---: | ---: | --- |'
+  echo '| Component | Last-changed revision | Files | Manifest SHA-256 | Frozen identity | Review hints |'
+  echo '| --- | ---: | ---: | --- | --- | ---: |'
 } > "$SUMMARY"
 
 for component in "${COMPONENTS[@]}"; do
@@ -63,16 +88,41 @@ for component in "${COMPONENTS[@]}"; do
   file_count="$(find "$export_dir" -type f -printf '.' | wc -c | tr -d ' ')"
   last_changed_rev="$(awk -F': ' '/^Last Changed Rev:/ {print $2}' "$component_out/svn-info.txt")"
 
+  if [ "$manifest_sha" != "${EXPECTED_MANIFEST_SHA256[$component]}" ]; then
+    echo "phase6-upstream-audit: $component manifest SHA-256 mismatch" >&2
+    echo "expected: ${EXPECTED_MANIFEST_SHA256[$component]}" >&2
+    echo "actual:   $manifest_sha" >&2
+    exit 3
+  fi
+  if [ "$file_count" != "${EXPECTED_FILE_COUNT[$component]}" ]; then
+    echo "phase6-upstream-audit: $component file-count mismatch" >&2
+    echo "expected: ${EXPECTED_FILE_COUNT[$component]}" >&2
+    echo "actual:   $file_count" >&2
+    exit 4
+  fi
+  if [ "$last_changed_rev" != "${EXPECTED_LAST_CHANGED_REV[$component]}" ]; then
+    echo "phase6-upstream-audit: $component last-changed revision mismatch" >&2
+    echo "expected: ${EXPECTED_LAST_CHANGED_REV[$component]}" >&2
+    echo "actual:   $last_changed_rev" >&2
+    exit 5
+  fi
+
   find "$export_dir" -type f \
     \( -iname 'COPYING*' -o -iname 'LICENSE*' -o -iname 'LICENCE*' -o -iname 'NOTICE*' -o -iname 'AUTHORS*' -o -iname 'README*' \) \
     -printf '%P\n' | sort > "$component_out/licensing-candidates.txt"
 
   find "$export_dir" -type f -printf '%P\n' \
-    | grep -Ei '(^|/)(asio|vst|boost|zlib|lua|ladspa|lv2|portaudio|stk|fluidsynth|fftw|libxml|7z)(/|$)' \
+    | grep -Ei '(^|/)(asio|vst|steinberg|boost|zlib|lua|ladspa|lv2|portaudio|stk|fluidsynth|fftw|libxml|7z)(/|$)' \
     | sort -u > "$component_out/dependency-path-hints.txt" || true
 
-  printf '| `%s` | `%s` | `%s` | %s | `%s` |\n' \
-    "$component" "$url" "$last_changed_rev" "$file_count" "$manifest_sha" >> "$SUMMARY"
+  find "$export_dir" -type f -printf '%P\n' \
+    | grep -Ei '\.(dll|exe|lib|a|so|psy|wav|mp3|ogg|zip|7z|obj)$' \
+    | sort -u > "$component_out/redistribution-review-hints.txt" || true
+
+  review_hint_count="$(wc -l < "$component_out/redistribution-review-hints.txt" | tr -d ' ')"
+
+  printf '| `%s` | `%s` | %s | `%s` | **PASS** | %s |\n' \
+    "$component" "$last_changed_rev" "$file_count" "$manifest_sha" "$review_hint_count" >> "$SUMMARY"
 done
 
 REFERENCE_DIR="$OUT/original-psycle-reference"
@@ -103,11 +153,17 @@ printf '%s\n' "$reference_size" > "$REFERENCE_DIR/size-bytes.txt"
 printf '%s\n' "$REFERENCE_VERSION" > "$REFERENCE_DIR/version.txt"
 printf '%s\n' "$REFERENCE_ARCH" > "$REFERENCE_DIR/architecture.txt"
 
-if [ -n "$EXPECTED_REFERENCE_SHA256" ] && [ "$reference_sha" != "$EXPECTED_REFERENCE_SHA256" ]; then
+if [ "$reference_sha" != "$EXPECTED_REFERENCE_SHA256" ]; then
   echo "phase6-upstream-audit: original reference SHA-256 mismatch" >&2
   echo "expected: $EXPECTED_REFERENCE_SHA256" >&2
   echo "actual:   $reference_sha" >&2
-  exit 3
+  exit 6
+fi
+if [ "$reference_size" != "$EXPECTED_REFERENCE_SIZE" ]; then
+  echo "phase6-upstream-audit: original reference size mismatch" >&2
+  echo "expected: $EXPECTED_REFERENCE_SIZE" >&2
+  echo "actual:   $reference_size" >&2
+  exit 7
 fi
 
 {
@@ -119,17 +175,13 @@ fi
   echo "- SourceForge origin: $REFERENCE_URL"
   echo "- Downloaded size: \`$reference_size\` bytes"
   echo "- SHA-256: \`$reference_sha\`"
-  if [ -n "$EXPECTED_REFERENCE_SHA256" ]; then
-    echo '- SHA-256 pin verification: **PASS**'
-  else
-    echo '- SHA-256 pin verification: **DISCOVERY RUN** — commit this observed hash before treating it as frozen.'
-  fi
+  echo '- SHA-256 and size pin verification: **PASS**'
   echo
   echo '## Safety / redistribution boundary'
   echo
   echo '- The SourceForge trees are exported only into a temporary directory.'
-  echo '- Only SVN metadata, per-file hashes, licensing-candidate paths and dependency-path hints are retained.'
-  echo '- The original Psycle executable is downloaded only to compute identity and is deleted before artifact upload.'
+  echo '- Only SVN metadata, per-file hashes, licensing-candidate paths, dependency-path hints and redistribution-review path hints are retained.'
+  echo '- The original Psycle executable is downloaded only to verify identity and is deleted before artifact upload.'
   echo '- No upstream source tree, executable, song, plugin binary, SDK or asset is copied into the audit artifact.'
 } >> "$SUMMARY"
 
