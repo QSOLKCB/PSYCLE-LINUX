@@ -178,7 +178,7 @@ from the VST2-related sources.
 
 This is expected evidence from the Phase 1 licensing boundary: the legacy Steinberg-derived VST2 headers were intentionally omitted from the public baseline, but the current Linux audio makefile still compiles the VST2 translation units unconditionally.
 
-The correct next step is **not** to restore unverified SDK headers. The Linux build needs an explicit feature boundary that excludes legacy VST2 hosting when those headers are unavailable. VST2 preservation remains a separately documented Phase 6 question.
+The correct next step is **not** to restore unverified SDK headers. The C-Psycle build needs an explicit feature boundary that excludes legacy VST2 hosting when those headers are unavailable. VST2 restoration for the final Linux target is now tracked separately in **Phase 9 — Plugin Hosting, VST2 Compatibility, and Isolation**.
 
 ## Build-order and path assumptions
 
@@ -221,7 +221,7 @@ This does not currently stop `make`, but it is a concrete historical makefile de
 cpsycle/ui/src/imps/x11/
 ```
 
-This is an important Phase 2 result: the project does **not** need a new GUI toolkit merely to obtain a modern Linux compilation baseline.
+This is an important result **for the C-Psycle preservation baseline**: its existing Linux UI architecture was viable and did not need a new toolkit merely to establish a modern Linux runtime. It is not a policy requirement that the final original-Psycle-compatible product retain C-Psycle's X11 UI; the active roadmap evaluates Qt after `psycle-core` engine parity.
 
 Warnings remain, notably incompatible callback-pointer types and ignored `fread` results. They are recorded rather than globally suppressed.
 
@@ -254,13 +254,13 @@ The audit compiles driver source far enough to reach linking for:
 - SDL2;
 - event joystick.
 
-The observed failures are output-directory/core-library prerequisites described as B-01/B-02, not missing Linux API headers. This is evidence that the existing driver architecture remains usable as the starting point.
+The observed failures are output-directory/core-library prerequisites described as B-01/B-02, not missing Linux API headers. This is evidence that C-Psycle's driver implementations remain useful donors/reference code for the final Linux target.
 
 ## `psyplayer` result
 
-The standalone player build is present and reproducible as a distinct target, but its build hierarchy depends on `container`, `dsp` and `audio`. It currently stops at the known core prerequisites before `psyplayer` can link and is therefore reported as `BLOCKED`.
+The standalone C-Psycle player build is present and reproducible as a distinct target, but its build hierarchy depends on `container`, `dsp` and `audio`. It currently stops at the known core prerequisites before `psyplayer` can link and is therefore reported as `BLOCKED`.
 
-This makes `psyplayer` a good Phase 3 smoke target once C-01, D-01, A-01 and the VST2 feature boundary are repaired.
+This made C-Psycle `psyplayer` a useful Phase 3 smoke target. The active Phase 6 now separately audits the earlier C++ `psycle-player` family as the candidate engine/player path.
 
 ## Warning classes recorded for follow-up
 
@@ -277,26 +277,28 @@ Warnings that affect file parsing or function-pointer type safety deserve focuse
 
 ## What Phase 2 establishes
 
-1. The documented development packages are obtainable on a current Ubuntu reference runner.
-2. The historical make-based architecture is still executable and diagnosable; replacing it wholesale is not justified by the audit.
+1. The documented C-Psycle development packages are obtainable on a current Ubuntu reference runner.
+2. The historical C-Psycle make-based architecture is executable and diagnosable; replacing it wholesale was not required to preserve and test that implementation.
 3. X11/Xft, Lua UI, thread, script and file layers already build.
-4. The first blockers are narrow source-contract and feature-boundary issues rather than architectural failures.
+4. The first C-Psycle blockers were narrow source-contract and feature-boundary issues rather than architectural failures.
 5. Linux driver source reaches linking with modern ALSA/JACK/SDL2 headers.
-6. `psyplayer`, host and plugin failures are largely downstream of a small number of core blockers.
+6. C-Psycle `psyplayer`, host and plugin failures were largely downstream of a small number of core blockers.
 7. The VST2 failure is an intentional licensing/build-feature boundary, not a reason to reintroduce omitted SDK-derived headers.
 8. The audit can be rerun without stale driver artifacts influencing results, and its generated summary preserves `PASS` / `FAIL` / `BLOCKED` causality.
 
+These conclusions remain historical evidence about the C-Psycle baseline. They do not select C-Psycle over the `psycle-core` family as the final Linux architecture.
+
 ## Handoff to Phase 3
 
-Phase 3 should begin with small compatibility PRs in this order:
+The original C-Psycle Phase 3 handoff was:
 
 1. resolve C-01 and the Linux `stricmp` portability warning;
 2. resolve D-01 without changing DSP behaviour;
 3. resolve A-01;
-4. make legacy VST2 compilation conditional on an explicitly available/legal VST2 SDK boundary;
+4. make legacy VST2 compilation conditional on an explicitly available/legal VST2 boundary;
 5. make individual driver output paths self-contained;
-6. rebuild `psyplayer` before the full host;
+6. rebuild C-Psycle `psyplayer` before the full host;
 7. rebuild drivers and native machines;
 8. launch the existing X11 host and begin runtime/audio validation.
 
-No evidence from Phase 2 supports rewriting Psycle, replacing X11, replacing the audio architecture, or abandoning the existing native machines.
+That C-Psycle preservation path was subsequently carried forward and is now represented by the completed Phases 3–5 corpus in `ROADMAP.md`. The active implementation track begins at Phase 6 with the `psycle-core` provenance/parity audit.
