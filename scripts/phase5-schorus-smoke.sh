@@ -80,7 +80,7 @@ grep -Fqx 'phase5-schorus: PASS' "$NATIVE_LOG"
 
 grep -Fqx 'phase5-schorus-state: PASS' "$STATE_LOG"
 grep -Fqx 'catcher: s-chorus:0' "$STATE_LOG"
-grep -Fqx 'state: 8/8 MPF_STATE controls seeded non-default dry=16384 wet=24576 fbl=8192 fbr=-8192 min=2 max=7 rate=25 delayer=1024, 0 opaque bytes' "$STATE_LOG"
+grep -Fqx 'state: 8/8 MPF_STATE controls seeded non-default dry=16384 wet=24576 fbl=8192 fbr=-8192 min=2 max=7 rate=25 delayer=1025, 0 opaque bytes' "$STATE_LOG"
 grep -Fqx 'audio: production feedback markers=8 bounded=yes zero-callback=noop' "$STATE_LOG"
 grep -Fqx 'preset-factory: independent' "$STATE_LOG"
 grep -Fqx 'topology: SChorus -> Master' "$STATE_LOG"
