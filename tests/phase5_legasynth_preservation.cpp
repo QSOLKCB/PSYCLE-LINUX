@@ -290,6 +290,9 @@ int verify_rate_transition(CMachineInterface* live, CMachineInterface* target,
     apply_host_defaults(live, info, &live_cb);
     apply_host_defaults(target, info, &target_cb);
     apply_host_defaults(stale, info, &stale_cb);
+    live->ParameterTweak(22, 1);
+    target->ParameterTweak(22, 1);
+    stale->ParameterTweak(22, 1);
     live_cb.set_sample_rate(88200);
     live->SequencerTick();
     StereoSignal live_signal = render_note(live, 2048);
@@ -298,9 +301,9 @@ int verify_rate_transition(CMachineInterface* live, CMachineInterface* target,
     if (live_signal.left.empty() || target_signal.left.empty() || stale_signal.left.empty() ||
             !same_signal(live_signal, target_signal, 5.0e-4) ||
             same_signal(live_signal, stale_signal, 5.0e-4)) {
-        return fail("live sample-rate transition no longer matches fresh 88.2 kHz synthesis");
+        return fail("chorus-enabled live sample-rate transition no longer matches fresh 88.2 kHz synthesis");
     }
-    std::printf("phase5-legasynth: samplerate PASS live=44100->88200 matches=fresh-88200 differs=44100\n");
+    std::printf("phase5-legasynth: samplerate PASS chorus=on live=44100->88200 matches=fresh-88200 differs=44100\n");
     return 0;
 }
 
