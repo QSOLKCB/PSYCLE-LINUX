@@ -36,6 +36,8 @@ The first C++ reimplementation was split across projects/directories including:
 - `psycle-player`
 - `psycle-plugins`
 
+The historical C++ build also depends on the top-level `universalis` support project, so Phase 6 pins it as part of the coherent build-source snapshot.
+
 According to maintainer clarification, that reimplementation was buildable on Debian Linux and could play most Psycle songs, but it was not fully up to date with original Psycle playback and provided a player rather than the full tracker application.
 
 **This family is now the leading candidate engine base for a faithful Linux Psycle.**
@@ -229,32 +231,37 @@ Still important for the final product:
 
 ### 6A — pin both sides of the parity comparison
 
-The current repository does **not** yet import the `psycle-core` family or an original-Psycle reference tree/build.
+The repository still does **not** import the C++ engine family or the original-Psycle executable. Phase 6A pins their identities and records the public-import boundary without redistributing either input.
 
 #### Original Psycle reference
 
-Before any Phase 6 PASS / DIFFERENT result is accepted:
+- [x] Select and record the primary original Psycle reference version/build: **Psycle 1.12.0 x86** / `PsycleInstallerx86-1.12.0.exe`.
+- [x] Record the authoritative SourceForge origin, release/version identity, exact size, and SHA-256.
+- [x] Separate observation rights from redistribution: the executable is downloaded transiently for identity verification and is never committed or uploaded as an artifact.
+- [x] Document the reproducible observation environment/evidence requirements, including native-Windows preference and secondary Wine handling.
+- [x] Require machine-readable receipts, hashes, renders, dumps, screenshots/logs, or another reproducible procedure rather than memory-only claims.
+- [x] Require additional Psycle releases to be identified independently and recorded as version-specific observations rather than overwriting the primary reference.
 
-- [ ] Select and record a **primary original Psycle reference version/build** for the parity matrix. Psycle 1.12 is an obvious candidate from maintainer clarification, but it is not considered pinned until the exact source revision/tag and/or executable build identity is recorded.
-- [ ] Record the authoritative origin URL/source location, release/version identifier, and SHA-256 (or equivalent immutable identity) for the chosen reference material where practical.
-- [ ] Audit the licence/redistribution status separately from the right to observe/test the reference. Do not commit original binaries, songs, SDKs, or assets merely because they are useful as an oracle.
-- [ ] Document the reproducible observation environment: OS/version or VM/Wine environment as appropriate, architecture, audio configuration where relevant, plugin set, and exact steps/fixtures used to obtain a result.
-- [ ] Prefer machine-readable receipts, hashes, renders, state dumps, or screenshots/logs over memory-only claims where the application permits them.
-- [ ] If an additional Psycle release is needed because behaviour changed across versions, identify it independently and record the matrix row as version-specific rather than overwriting the primary-reference result.
+#### C++ reimplementation build-source snapshot
 
-#### `psycle-core` family
+- [x] Identify the coherent SourceForge SVN r12005 build-source set: `universalis`, `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player`, and `psycle-plugins`.
+- [x] Record revision-pinned paths, per-component file counts, last-changed revisions, and locale-stable SHA-256 manifest identities.
+- [x] Audit first-pass licensing, dependency, notice, binary/song, and third-party boundaries before importing anything.
+- [x] Record upstream authorship/license evidence and require retained notices to survive the future sanitized import.
+- [x] Identify concrete exclusions/quarantines, including closed-source DLLs, unresolved songs, Steinberg-derived material, the Seib VST subtree, and the Windows ASIO subtree.
+- [x] Define a conservative sanitized-import policy and keep public source import on **HOLD** until the exact retained-file/omission manifest is materialized.
+- [x] Document the relationship between the pinned C++ candidate, the Psycle 1.12.0 behavioural reference, and the separate C-Psycle r12005 oracle.
 
-- [ ] Identify the exact SourceForge revisions/paths for `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player` and `psycle-plugins` that form a coherent buildable state.
-- [ ] Record revision-pinned URLs and checksums where appropriate.
-- [ ] Audit licences and third-party boundaries before importing anything.
-- [ ] Preserve upstream notices/authorship.
-- [ ] Import or vendor only after the provenance boundary is clear.
-- [ ] Document the relationship between the selected C++ reimplementation snapshot and the pinned original Psycle version(s) it was intended to emulate.
+**Phase 6A status: complete.** The two parity inputs are reproducibly pinned and the first public-import boundary is documented. Source materialization/build work starts in Phase 6B.
 
-### 6B — reproduce the historical Linux player build
+### 6B — sanitized import and historical Linux player build
 
+- [ ] Materialize the exact retained-file list and omission/replacement arithmetic from the frozen six-component manifests.
+- [ ] Restore/add complete compatible third-party permission/provenance notices required by retained helper/API code.
+- [ ] Create separate sanitized archival/canonical baseline identities for the C++ family without changing `cpsycle-r12005-baseline`.
+- [ ] Import only the provenance-cleared source needed for the first engine/player build; keep quarantined VST/ASIO/binary/song material out.
 - [ ] Reproduce the Debian/Linux build path without redesigning it first.
-- [ ] Build `psycle-player` and its required core/audio-driver/helper/plugin components.
+- [ ] Build `psycle-player` and its required `universalis`/core/audio-driver/helper/plugin components.
 - [ ] Record compiler/linker/runtime blockers.
 - [ ] Establish deterministic CLI/headless playback where practical.
 - [ ] Confirm which historical `.psy` versions load.
@@ -264,7 +271,7 @@ Before any Phase 6 PASS / DIFFERENT result is accepted:
 Compare:
 
 1. **pinned original Psycle reference build/version** — behavioural reference;
-2. **pinned `psycle-core` family** — candidate Linux engine;
+2. **pinned C++ build-source family** — candidate Linux engine;
 3. **C-Psycle regression corpus** — independent donor/oracle where semantics overlap.
 
 Every PASS / DIFFERENT entry must identify the original-Psycle reference version/build and the observation artifact or procedure that supports it. “Original Psycle did X” without a versioned reference is not a reproducible matrix result.
@@ -298,16 +305,16 @@ Do **not** assume C-Psycle's event sequencer is authoritative when it differs fr
 
 ### 6E — active-track CI foundation
 
-As soon as the provenance-safe `psycle-core` family is imported, the new implementation path must have CI of its own rather than relying on the retained C-Psycle Phase 2–5 workflows.
+As soon as the provenance-safe C++ family is imported, the new implementation path must have CI of its own rather than relying on the retained C-Psycle Phase 2–5 workflows.
 
-- [ ] Add a maintained GitHub Actions workflow that builds the pinned `psycle-core` family and `psycle-player` on the reference Linux runner.
+- [ ] Add a maintained GitHub Actions workflow that builds the pinned C++ family and `psycle-player` on the reference Linux runner.
 - [ ] Run deterministic/headless player smoke and all portable Phase 6 parity fixtures in CI.
 - [ ] Upload parity receipts/logs/renders needed to diagnose a failed comparison.
-- [ ] Make the active `psycle-core` build/parity workflow a required merge signal before Phase 7 implementation PRs are accepted.
+- [ ] Make the active C++ engine build/parity workflow a required merge signal before Phase 7 implementation PRs are accepted.
 - [ ] Require every Phase 7 parity regression to execute in the maintained CI path; no release-blocking regression may remain local-only.
 - [ ] Extend the active-track CI as later phases arrive: Qt build/headless interaction smoke in Phase 8, and VST2 ABI/real-plugin/scanner/song-load containment tests in Phase 9.
 
-**Exit condition:** the original-Psycle reference and `psycle-core` inputs are pinned and reproducible; the parity matrix identifies exactly what `psycle-core` already provides and what must change; and the active engine/build/parity suite runs in maintained CI.
+**Exit condition:** the original-Psycle reference and C++ candidate inputs are pinned and reproducible; the parity matrix identifies exactly what the candidate engine already provides and what must change; and the active engine/build/parity suite runs in maintained CI.
 
 ---
 
