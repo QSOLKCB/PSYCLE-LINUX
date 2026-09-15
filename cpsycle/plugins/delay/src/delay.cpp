@@ -83,26 +83,32 @@ public:
 		}
 	}
 
-	Delay() : Plugin(information()) { }
+	Delay() : Plugin(information())
+	{
+		requested_delay_values_[left] = information().parameter(left_delay).DefValue;
+		requested_delay_values_[right] = information().parameter(right_delay).DefValue;
+	}
 	/*override*/ void init();
 	/*override*/ void Work(Sample l [], Sample r [], int samples, int);
 	/*override*/ void parameter(const int &);
 protected:
 	/*override*/ void samples_per_second_changed()
 	{
-		parameter(left_delay);
-		parameter(right_delay);
+		resize(left, (*this)(left_delay));
+		resize(right, (*this)(right_delay));
 	}
 	/*override*/ void sequencer_ticks_per_second_changed()
 	{
-		parameter(left_delay);
-		parameter(right_delay);
+		resize(left, (*this)(left_delay));
+		resize(right, (*this)(right_delay));
 	}
 	enum Channels { left, right, channels };
 	std::vector<Real> buffers_ [channels];
 	std::vector<Real>::iterator buffer_iterators_ [channels];
+	int requested_delay_values_ [channels];
 	inline void Work(std::vector<Real> & buffer, std::vector<Real>::iterator & buffer_iterator, Sample & input, const Sample & feedback);
-	inline void resize(const int & channel, const int & parameter);
+	inline void apply_requested_delay(const int & channel, const int & parameter,
+		const int & requested_value);
 	inline void resize(const int & channel, const Real & delay);
 };
 
@@ -119,18 +125,35 @@ void Delay::parameter(const int & parameter)
 	switch(parameter)
 	{
 	case left_delay:
-		resize(left, left_delay);
+		requested_delay_values_[left] = (*this)[left_delay];
+		apply_requested_delay(left, left_delay, requested_delay_values_[left]);
 		break;
 	case right_delay:
-		resize(right, right_delay);
+		requested_delay_values_[right] = (*this)[right_delay];
+		apply_requested_delay(right, right_delay, requested_delay_values_[right]);
+		break;
+	case snap:
+		/* Presets and PSY3 restore public parameters in index order, so a delay
+		** can arrive while the default snap grid is still active.  If that
+		** earlier quantisation changed the requested raw value, reapply the
+		** retained request now that the saved snap value has arrived.  Exact
+		** on-grid delays remain untouched, preserving historical behavior. */
+		if ((*this)[left_delay] != requested_delay_values_[left])
+			apply_requested_delay(left, left_delay, requested_delay_values_[left]);
+		if ((*this)[right_delay] != requested_delay_values_[right])
+			apply_requested_delay(right, right_delay, requested_delay_values_[right]);
 		break;
 	}
 }
 
-inline void Delay::resize(const int & channel, const int & parameter)
+inline void Delay::apply_requested_delay(const int & channel,
+	const int & parameter, const int & requested_value)
 {
 	const int snap1((*this)[snap] + 1);
-	const Real snap_delay(static_cast<int>((*this)(parameter) * snap1) / static_cast<Real>(snap1));
+	const Real requested_delay(information().parameter(parameter).scale.apply(
+		static_cast<Real>(requested_value)));
+	const Real snap_delay(static_cast<int>(requested_delay * snap1) /
+		static_cast<Real>(snap1));
 	(*this)(parameter) = snap_delay;
 	(*this)[parameter] = information().parameter(parameter).scale.apply_inverse(snap_delay) + 1; // Round up.
 	resize(channel, snap_delay);
