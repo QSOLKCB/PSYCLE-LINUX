@@ -81,12 +81,16 @@ SUMMARY="$OUT/summary.md"
 
 for component in "${COMPONENTS[@]}"; do
   url="$SVN_ROOT/$component"
+  pinned_url="${url}@${SVN_REVISION}"
   component_out="$OUT/components/$component"
   export_dir="$WORK/$component"
   mkdir -p "$component_out"
 
-  svn info -r "$SVN_REVISION" "$url" > "$component_out/svn-info.txt"
-  svn export --quiet --force -r "$SVN_REVISION" "$url" "$export_dir"
+  # Use an explicit peg revision as well as an operative revision so a future
+  # rename/delete/replacement at HEAD cannot make the frozen historical node
+  # unreachable to this audit.
+  svn info -r "$SVN_REVISION" "$pinned_url" > "$component_out/svn-info.txt"
+  svn export --quiet --force -r "$SVN_REVISION" "$pinned_url" "$export_dir"
 
   (
     cd "$export_dir"

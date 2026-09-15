@@ -10,6 +10,10 @@ on:
       - 'PHASE6_CPP_IMPORT_AUDIT.md'
       - 'PSYCLE_CORE_PARITY.md'
       - 'ROADMAP.md'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'PORTING.md'
+      - '.gitignore'
       - '.github/workflows/phase6-upstream-provenance.yml'
   pull_request:
     paths:
@@ -18,6 +22,10 @@ on:
       - 'PHASE6_CPP_IMPORT_AUDIT.md'
       - 'PSYCLE_CORE_PARITY.md'
       - 'ROADMAP.md'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'PORTING.md'
+      - '.gitignore'
       - '.github/workflows/phase6-upstream-provenance.yml'
   workflow_dispatch:
 
@@ -64,7 +72,7 @@ jobs:
           fi
 
       - name: Upload Phase 6 provenance receipt
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: phase6-upstream-provenance
