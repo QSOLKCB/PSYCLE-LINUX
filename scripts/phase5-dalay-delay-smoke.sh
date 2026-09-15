@@ -80,7 +80,7 @@ grep -F 'phase5-dalay-delay: live-timing PASS sample-rate+BPM+TPB independent' "
 grep -F 'phase5-dalay-delay: PASS' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dalay-delay-state: PASS' "$STATE_LOG" >/dev/null
 grep -F 'catcher: delay:0' "$STATE_LOG" >/dev/null
-grep -F 'state: 7/7 public parameters seeded non-default, snap=839 left=101 right=201 encoded-state-idempotent, 0 opaque bytes' "$STATE_LOG" >/dev/null
+grep -F 'state: 7/7 public parameters seeded non-default, snap=839 left=4370 right=13107 encoded-state-idempotent, 0 opaque bytes' "$STATE_LOG" >/dev/null
 grep -F 'preset-factory: independent' "$STATE_LOG" >/dev/null
 grep -F 'topology: ayeternal Dalay Delay -> Master' "$STATE_LOG" >/dev/null
 
@@ -108,13 +108,13 @@ cat > "$SUMMARY" <<'EOF'
 - Distinct nontrivial left/right feedback values are verified through their measurable second echoes: PASS
 - Sample-rate-only, BPM-only and TPB-only live timing transitions independently match fresh target instances and reject stale timing: PASS
 - Production `PluginCatcher` identity `delay:0` and `MachineFactory` instantiation: PASS
-- Preset and PSY3 restore establish saved snap before delay state and decode Dalay Delay's historical `+1` stored representation instead of replaying it as a new request: PASS
-- Fine-grid snap=839 requests 100/200 save as 101/201 and restore exactly as 101/201 without reopen drift: PASS
+- Preset and PSY3 restore establish saved snap before replaying Dalay Delay's stored delay values: PASS
+- The retained integer-derived delay scale is frozen explicitly: snap=839 requests 4369/13108 encode as 4370/13107, and those stored values restore exactly without drift: PASS
 - Fresh PSY3 reopen restores all seven non-default values and the ayeternal Dalay Delay -> Master topology edge: PASS
 - Opaque state: none; persistence remains the historical seven public parameters: PASS
 
 The preservation slice does not rewrite Dalay Delay DSP equations or its line-snap formula.
-Live snap behavior remains prospective-only. Restore-specific ordering/decoding is confined to
+Live snap behavior remains prospective-only. Restore-specific ordering is confined to
 production preset and PSY3 state restoration, where the host has an explicit restore boundary.
 EOF
 
