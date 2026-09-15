@@ -51,7 +51,7 @@ declare -A EXPECTED_LAST_CHANGED_REV=(
   [psycle-plugins]="12004"
 )
 
-for command_name in svn curl sha256sum find sort grep stat awk python3; do
+for command_name in svn curl sha256sum find sort grep sed stat awk python3; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "phase6-upstream-audit: missing required command: $command_name" >&2
     exit 2
