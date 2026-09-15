@@ -75,6 +75,8 @@ grep -Fqx 'phase5-legasynth: historical-oracle PASS note=48 rate=44100 markers=7
 grep -Fq 'phase5-legasynth: deterministic PASS note=48 rate=44100 rms=' "$NATIVE_LOG"
 grep -Fqx 'phase5-legasynth: velocity PASS command=0C80 scale=64/127' "$NATIVE_LOG"
 grep -Fqx 'phase5-legasynth: nonpositive PASS chorus=on zero+negative strict-noop' "$NATIVE_LOG"
+grep -Fq 'phase5-legasynth: distortion PASS amount=70 differs=bypass enabled-rms=' "$NATIVE_LOG"
+grep -Fq 'phase5-legasynth: chorus PASS enabled=on differs=bypass enabled-rms=' "$NATIVE_LOG"
 grep -Fqx 'phase5-legasynth: samplerate PASS chorus=on preroll=250ms live=44100->88200 matches=fresh-88200 differs=44100' "$NATIVE_LOG"
 grep -Fqx 'phase5-legasynth: PASS' "$NATIVE_LOG"
 
@@ -100,6 +102,8 @@ cat > "$SUMMARY" <<'EOF'
 - Default note-48 output matches seven frozen source-derived stereo sample markers plus RMS at 44.1 kHz: PASS
 - Fresh default instances remain mutually deterministic: PASS
 - Pattern command `0C80` preserves the historical velocity=64/127 scaling: PASS
+- Distortion amount 70 produces a render distinct from an otherwise-identical bypassed instance: PASS
+- Chorus enabled produces a render distinct from an otherwise-identical bypassed instance: PASS
 - Chorus-enabled zero and negative host callback sizes are strict no-ops: PASS
 - Chorus-enabled live sample-rate transition after 250 ms pre-roll preserves modulation phase, matches a fresh 88.2 kHz timebase and differs from stale 44.1 kHz synthesis: PASS
 - Production `PluginCatcher` identity `legasynth-303:0` and `MachineFactory` instantiation: PASS
