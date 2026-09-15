@@ -25,6 +25,22 @@ NATIVE_LOG="$OUT/phase5-stk-family.log"
 STATE_LOG="$OUT/phase5-stk-family-state.log"
 SUMMARY="$OUT/summary.md"
 
+require_log_marker() {
+  local log="$1"
+  local expected="$2"
+  local label="$3"
+
+  if grep -F -- "$expected" "$log" >/dev/null; then
+    return 0
+  fi
+
+  echo "phase5-stk-family-smoke: missing expected $label marker" >&2
+  printf 'expected: %s\n' "$expected" >&2
+  echo "observed preservation markers from $log:" >&2
+  grep -E '(^stk-metadata-hash\[|^phase5-stk-family(:|-state:)|^catchers:|^state:|^preset-factory:|^topology:)' "$log" >&2 || true
+  return 1
+}
+
 # Prove each retained STK wrapper builds against the supported Linux libstk-dev
 # boundary, cleans its own generated module, and rebuilds independently.
 for i in "${!PLUGIN_DIRS[@]}"; do
@@ -80,25 +96,25 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 "$NATIVE_BIN" "${PLUGINS[@]}" 2>&1 | tee "$NATIVE_LOG"
 "$STATE_BIN" "$OUT" "${PLUGINS[@]}" 2>&1 | tee "$STATE_LOG"
 
-grep -F 'stk-metadata-hash[stk Plucked]=0x55e20a3f7e90f611' "$NATIVE_LOG" >/dev/null
-grep -F 'stk-metadata-hash[stk Reverbs]=0xf92219f73194a3ae' "$NATIVE_LOG" >/dev/null
-grep -F 'stk-metadata-hash[stk Shakers]=0x4c29aa201e9bb317' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-stk-family: machine PASS [stk Plucked]' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-stk-family: machine PASS [stk Reverbs]' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-stk-family: machine PASS [stk Shakers]' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-stk-family: Plucked PASS idle=zero 0C00=zero Stop=zero live-rate=STK-reference' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-stk-family: Reverbs PASS dry=unity algorithms=STK-reference routing=bidirectional live-rate=STK-reference' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-stk-family: Shakers PASS map=48..70->STK-reference 0C00=zero Stop=zero live-rate=STK-reference' "$NATIVE_LOG" >/dev/null
-grep -F 'phase5-stk-family: PASS machines=3' "$NATIVE_LOG" >/dev/null
+require_log_marker "$NATIVE_LOG" 'stk-metadata-hash[stk Plucked]=0x55e20a3f7e90f611' 'stk Plucked metadata hash'
+require_log_marker "$NATIVE_LOG" 'stk-metadata-hash[stk Reverbs]=0xf92219f73194a3ae' 'stk Reverbs metadata hash'
+require_log_marker "$NATIVE_LOG" 'stk-metadata-hash[stk Shakers]=0x4c29aa201e9bb317' 'stk Shakers metadata hash'
+require_log_marker "$NATIVE_LOG" 'phase5-stk-family: machine PASS [stk Plucked]' 'stk Plucked machine PASS'
+require_log_marker "$NATIVE_LOG" 'phase5-stk-family: machine PASS [stk Reverbs]' 'stk Reverbs machine PASS'
+require_log_marker "$NATIVE_LOG" 'phase5-stk-family: machine PASS [stk Shakers]' 'stk Shakers machine PASS'
+require_log_marker "$NATIVE_LOG" 'phase5-stk-family: Plucked PASS idle=zero 0C00=zero Stop=zero live-rate=STK-reference' 'stk Plucked semantic PASS'
+require_log_marker "$NATIVE_LOG" 'phase5-stk-family: Reverbs PASS dry=unity algorithms=STK-reference routing=bidirectional-fresh-state live-rate=STK-reference' 'stk Reverbs semantic PASS'
+require_log_marker "$NATIVE_LOG" 'phase5-stk-family: Shakers PASS map=48..70->STK-reference 0C00=zero Stop=zero live-rate=STK-reference' 'stk Shakers semantic PASS'
+require_log_marker "$NATIVE_LOG" 'phase5-stk-family: PASS machines=3' 'native family PASS'
 
-grep -F 'phase5-stk-family-state: seed PASS [stk Plucked] changed=5' "$STATE_LOG" >/dev/null
-grep -F 'phase5-stk-family-state: seed PASS [stk Reverbs] changed=4' "$STATE_LOG" >/dev/null
-grep -F 'phase5-stk-family-state: seed PASS [stk Shakers] changed=6' "$STATE_LOG" >/dev/null
-grep -F 'phase5-stk-family-state: PASS machines=3' "$STATE_LOG" >/dev/null
-grep -F 'catchers: stk-plucked:0 stk-reverbs:0 stk-shakers:0' "$STATE_LOG" >/dev/null
-grep -F 'state: Plucked 5/5; Reverbs 4/4; Shakers 6/6; 0 opaque bytes' "$STATE_LOG" >/dev/null
-grep -F 'preset-factory: independent PluginCatcher/MachineFactory' "$STATE_LOG" >/dev/null
-grep -F 'topology: 3/3 STK wrappers -> Master' "$STATE_LOG" >/dev/null
+require_log_marker "$STATE_LOG" 'phase5-stk-family-state: seed PASS [stk Plucked] changed=5' 'stk Plucked persistence seed PASS'
+require_log_marker "$STATE_LOG" 'phase5-stk-family-state: seed PASS [stk Reverbs] changed=4' 'stk Reverbs persistence seed PASS'
+require_log_marker "$STATE_LOG" 'phase5-stk-family-state: seed PASS [stk Shakers] changed=6' 'stk Shakers persistence seed PASS'
+require_log_marker "$STATE_LOG" 'phase5-stk-family-state: PASS machines=3' 'persistence family PASS'
+require_log_marker "$STATE_LOG" 'catchers: stk-plucked:0 stk-reverbs:0 stk-shakers:0' 'catcher identities'
+require_log_marker "$STATE_LOG" 'state: Plucked 5/5; Reverbs 4/4; Shakers 6/6; 0 opaque bytes' 'public state counts'
+require_log_marker "$STATE_LOG" 'preset-factory: independent PluginCatcher/MachineFactory' 'independent preset factory'
+require_log_marker "$STATE_LOG" 'topology: 3/3 STK wrappers -> Master' 'song topology'
 
 [[ -s "$OUT/phase5-stk-family.psy" ]] || {
   echo "STK family PSY3 evidence missing" >&2
@@ -122,7 +138,7 @@ cat > "$SUMMARY" <<'EOF'
   - stk Reverbs: `0xf92219f73194a3ae`
   - stk Shakers: `0x4c29aa201e9bb317`
 - stk Plucked idle silence, historical 0C00 mute, Stop clearing, and live 44.1 -> 88.2 kHz rendering matched against direct system-STK behavior: PASS
-- stk Reverbs exact Dry/Wet=0 bypass, JCRev/NRev/PRCRev selector outputs matched against direct system-STK references, both directions of independent/mixed stereo routing, and live 44.1 -> 88.2 kHz system-STK reference rendering: PASS
+- stk Reverbs exact Dry/Wet=0 bypass, JCRev/NRev/PRCRev selector outputs matched against direct system-STK references, both directions of independent/mixed stereo routing from fresh state, and live 44.1 -> 88.2 kHz system-STK reference rendering: PASS
 - stk Shakers all historical notes 48..70 matched against the frozen old->new instrument map using seeded direct system-STK references; 0C00 mute, Stop silence, and live 44.1 -> 88.2 kHz reference rendering: PASS
 - Production catcher identities: stk-plucked:0, stk-reverbs:0, stk-shakers:0: PASS
 - Public state: Plucked 5/5, Reverbs 4/4, Shakers 6/6; zero opaque bytes: PASS
