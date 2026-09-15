@@ -156,7 +156,7 @@ void audacity_phaser::ParameterTweak(int par, int val) {
 bool audacity_phaser::DescribeValue(char * txt, int const param, int const value) {
 	switch(param) {
 		case 0: std::sprintf(txt,"%.1f Hz",(float)value*.1f); return true;
-		case 1: std::sprintf(txt,"%i°",value); return true;
+		case 1: std::sprintf(txt,"%iÂ°",value); return true;
 		case 2: std::sprintf(txt,"%i%%",value); return true;
 		case 3: std::sprintf(txt,"%i",(value%2==1)?value-1:value); return true;
 		case 4: std::sprintf(txt,"%i%%:%i%%",(100-value),value); return true;
@@ -167,6 +167,11 @@ bool audacity_phaser::DescribeValue(char * txt, int const param, int const value
 
 // Work... where all is cooked
 void audacity_phaser::Work(float *psamplesleft, float *psamplesright , int numsamples, int tracks) {
+	/* The historical loop is a do/while(--numsamples), so an empty host block
+	** would otherwise execute once and then count downward forever.  Positive
+	** blocks retain the original processing equations exactly. */
+	if(numsamples <= 0) return;
+
 	float static anti_denormal = 1.0e-20f;
 
 	do {
