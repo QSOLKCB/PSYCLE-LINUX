@@ -87,6 +87,8 @@ void mi::ParameterTweak(int par, int val) {
 
 void mi::Work(float *psamples, float *psamplesright , int numsamples, int tracks)
 {
+	if (numsamples <= 0) return;
+
 	float s, ss;
 	int   n;
 	do
