@@ -71,6 +71,7 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 grep -F 'phase5-dalay-delay: metadata PASS version=0x0110 parameters=7 identity=ayeternal-Dalay-Delay' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dalay-delay: describe PASS left=1-line right=0.5-line snap=1/8 off=1/840' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dalay-delay: nonpositive PASS zero+negative strict-noop' "$NATIVE_LOG" >/dev/null
+grep -F 'phase5-dalay-delay: snap-live PASS existing=0-line future-tweak=0.125-line' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dalay-delay: stereo PASS left=5513 right=2757 feedback-left=32767/65535 feedback-right=-16383/65535 second-echo=yes' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dalay-delay: timing-sample-rate PASS left=11026 right=5513 stale-left=5513 stale-right=2757' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dalay-delay: timing-bpm PASS left=8821 right=4411 stale-left=11026 stale-right=5513' "$NATIVE_LOG" >/dev/null
@@ -79,7 +80,7 @@ grep -F 'phase5-dalay-delay: live-timing PASS sample-rate+BPM+TPB independent' "
 grep -F 'phase5-dalay-delay: PASS' "$NATIVE_LOG" >/dev/null
 grep -F 'phase5-dalay-delay-state: PASS' "$STATE_LOG" >/dev/null
 grep -F 'catcher: delay:0' "$STATE_LOG" >/dev/null
-grep -F 'state: 7/7 public parameters seeded non-default, snap=7 left-delay=1/8-line-only, 0 opaque bytes' "$STATE_LOG" >/dev/null
+grep -F 'state: 7/7 public parameters seeded non-default, snap=839 left=101 right=201 encoded-state-idempotent, 0 opaque bytes' "$STATE_LOG" >/dev/null
 grep -F 'preset-factory: independent' "$STATE_LOG" >/dev/null
 grep -F 'topology: ayeternal Dalay Delay -> Master' "$STATE_LOG" >/dev/null
 
@@ -101,18 +102,20 @@ cat > "$SUMMARY" <<'EOF'
 - Historical identity `ayeternal Dalay Delay` / `Dalay Delay` / `bohan`, version `0x0110`, effect type and four-column geometry: PASS
 - Complete seven-parameter metadata surface and historical value descriptions: PASS
 - Historical snap semantics preserve 1/8-line quantisation and the maximum `off 1 / 840 ticks (lines)` display: PASS
+- Changing live `snap to` does not reinterpret or resize an already-quantized delay; the new grid applies only to a later delay tweak: PASS
 - Zero and negative host callback counts are strict no-ops: PASS
 - At 44.1 kHz / 120 BPM / TPB 4, snapped 1-line left and 1/2-line right delays preserve source-derived ring lengths 5513 / 2757 samples, including the retained +1 ring sample: PASS
 - Distinct nontrivial left/right feedback values are verified through their measurable second echoes: PASS
 - Sample-rate-only, BPM-only and TPB-only live timing transitions independently match fresh target instances and reject stale timing: PASS
 - Production `PluginCatcher` identity `delay:0` and `MachineFactory` instantiation: PASS
-- All 7/7 public parameters, including a snap=7-only 1/8-line delay state, are preserved through a version-1 preset restored with an independent catcher/factory: PASS
-- Fresh PSY3 reopen restores the eighth-line-only state and the ayeternal Dalay Delay -> Master topology edge: PASS
+- Preset and PSY3 restore establish saved snap before delay state and decode Dalay Delay's historical `+1` stored representation instead of replaying it as a new request: PASS
+- Fine-grid snap=839 requests 100/200 save as 101/201 and restore exactly as 101/201 without reopen drift: PASS
+- Fresh PSY3 reopen restores all seven non-default values and the ayeternal Dalay Delay -> Master topology edge: PASS
 - Opaque state: none; persistence remains the historical seven public parameters: PASS
 
-The preservation slice does not rewrite Dalay Delay DSP equations or its line-snap model.
-The strengthened gate independently exercises feedback and each host-timing input, and it
-requires persistence to restore a state that cannot survive accidental default-grid quantisation.
+The preservation slice does not rewrite Dalay Delay DSP equations or its line-snap formula.
+Live snap behavior remains prospective-only. Restore-specific ordering/decoding is confined to
+production preset and PSY3 state restoration, where the host has an explicit restore boundary.
 EOF
 
 cat "$SUMMARY"
