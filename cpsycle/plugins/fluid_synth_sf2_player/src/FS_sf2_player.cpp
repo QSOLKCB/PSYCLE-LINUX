@@ -281,7 +281,7 @@ class mi : public CMachineInterface {
 		fluid_preset_t* preset;
 
 		int sf_id;
-		int banks[129],progs[129];
+		int banks[256],progs[256];
 		
 		int max_bank_index;
 
@@ -298,9 +298,14 @@ class mi : public CMachineInterface {
 
 PSYCLE__PLUGIN__INSTANTIATOR(mi, MacInfo)
 
-mi::mi() {
+mi::mi()
+	: settings(NULL), synth(NULL), preset(NULL), sf_id(0), max_bank_index(-1),
+	  new_sf(true), samplerate(0) {
 	Vals = new int[MacInfo.numParameters];
-	new_sf = true;
+	for(int i = 0; i < MacInfo.numParameters; ++i)
+		Vals[i] = MacInfo.Parameters[i]->DefValue;
+	std::memset(banks, 0, sizeof(banks));
+	std::memset(progs, 0, sizeof(progs));
 }
 
 
@@ -327,7 +332,7 @@ void mi::Init() {
 
 	globalpar.reverb_on = paraReverbOn.DefValue;
 	globalpar.roomsize  = paraReverbRoom.DefValue;      
-	globalpar.damping   = paraReverb.DefValue;          
+	globalpar.damping   = paraReverbDamp.DefValue;          
 	globalpar.width     = paraReverbWidth.DefValue;             
 	globalpar.r_level   = paraReverbLevel.DefValue;     
 
@@ -347,11 +352,10 @@ void mi::Init() {
 	c_level  = (double) globalpar.c_level * .001;
 	speed    = (double) globalpar.speed * .1;
 	depth_ms = (double) globalpar.depth_ms;
-
 	
-	globalpar.polyphony = 128;
-	globalpar.interpolation = FLUID_INTERP_DEFAULT;
-	globalpar.gain = 64;
+	globalpar.polyphony = paraPolyphony.DefValue;
+	globalpar.interpolation = paraInter.DefValue;
+	globalpar.gain = paraGain.DefValue;
 
 	settings = new_fluid_settings();
 	
@@ -413,15 +417,20 @@ void mi::SetParams() {
 }
 
 void mi::SequencerTick() {
-	if(samplerate != pCB->GetSamplingRate()) {
+	const int new_samplerate = pCB->GetSamplingRate();
+	if(samplerate != new_samplerate) {
+		samplerate = new_samplerate;
 		fluid_settings_setnum(settings, "synth.sample-rate", samplerate);
 		fluid_synth_set_sample_rate(synth, samplerate);
 	}
 }
 void mi::PutData(void* pData) {
-	sf_id = 0;
+	if (pData == NULL) {
+		pCB->MessBox("WARNING!\nThis fileversion does not match current plugin's fileversion.\nYour settings are probably fucked.","FluidSynth",0);
+		return;
+	}
 	int loadingVersion = ((SYNPAR*)pData)->version;
-	if (pData == NULL || loadingVersion > FILEVERSION) {
+	if (loadingVersion > FILEVERSION) {
 		pCB->MessBox("WARNING!\nThis fileversion does not match current plugin's fileversion.\nYour settings are probably fucked.","FluidSynth",0);
 		return;
 	}
@@ -435,6 +444,11 @@ void mi::PutData(void* pData) {
 	}
 	std::memcpy(&globalpar, pData, readsize);
 	globalpar.version = FILEVERSION;
+	globalpar.SFPathName[MAX_PATH_A_LA_CON - 1] = '\0';
+	if(globalpar.curChannel < paraChannel.MinValue || globalpar.curChannel > paraChannel.MaxValue) {
+		pCB->MessBox("WARNING!\nInvalid FluidSynth channel in plugin state.","FluidSynth",0);
+		return;
+	}
 
 	new_sf = false;
 
@@ -511,11 +525,8 @@ void mi::ParameterTweak(int par, int val) {
 						Vals[e_paraBank] = b;
 						break;
 					}
-				//banks[Vals[e_paraBank]] = (*(preset)->get_banknum)(preset);
-				globalpar.instr[globalpar.curChannel].bank = 
-					fluid_preset_get_banknum(preset);
-				Vals[e_paraProgram] = globalpar.instr[globalpar.curChannel].prog = 
-					fluid_preset_get_num(preset);
+				globalpar.instr[globalpar.curChannel].bank = fluid_preset_get_banknum(preset);
+				Vals[e_paraProgram] = globalpar.instr[globalpar.curChannel].prog = fluid_preset_get_num(preset);
 			} else {
 				Vals[e_paraProgram] = paraProgram.MaxValue;
 			}
@@ -525,15 +536,15 @@ void mi::ParameterTweak(int par, int val) {
 			fluid_synth_pitch_wheel_sens(synth, globalpar.curChannel, globalpar.instr[globalpar.curChannel].wheel);
 			break;
 		case e_paraBank:
-			if(max_bank_index != 1) {
-				if (Vals[e_paraBank]>max_bank_index) {
-					Vals[e_paraBank] = max_bank_index;
-				}
+			if(max_bank_index >= 0) {
+				if (Vals[e_paraBank] > max_bank_index) Vals[e_paraBank] = max_bank_index;
+				if (Vals[e_paraBank] < 0) Vals[e_paraBank] = 0;
 				globalpar.instr[globalpar.curChannel].bank = banks[Vals[e_paraBank]];
 				globalpar.instr[globalpar.curChannel].prog = Vals[e_paraProgram] = progs[globalpar.instr[globalpar.curChannel].bank];
-
 				fluid_synth_bank_select(synth, globalpar.curChannel, globalpar.instr[globalpar.curChannel].bank);
 				fluid_synth_program_change(synth, globalpar.curChannel, globalpar.instr[globalpar.curChannel].prog);
+			} else {
+				globalpar.instr[globalpar.curChannel].bank = val;
 			}
 			break;
 		case e_paraProgram:
@@ -555,7 +566,6 @@ void mi::ParameterTweak(int par, int val) {
 #else
 			fluid_synth_set_reverb_on(synth, globalpar.reverb_on);
 #endif
-			
 			if(globalpar.reverb_on) {
 #if FS_API_VERSION >= 0x0202
 				fluid_synth_set_reverb_group_roomsize(synth, -1, roomsize);
@@ -739,6 +749,7 @@ void mi::ParameterTweak(int par, int val) {
 }
 
 void mi::Work(float *psamplesleft, float *psamplesright , int numsamples,int tracks) {
+	if(numsamples <= 0) return;
 	if(sf_id > 0) {
 		float *xpl, *xpr;
 		xpl = psamplesleft;
@@ -834,7 +845,7 @@ bool mi::DescribeValue(char* txt,int const param, int const value) {
 }
 
 void mi::SeqTick(int channel, int note, int ins, int cmd, int val) {
-	if(ins >= MAXINSTR || channel >= MAX_TRACKS)
+	if(ins < 0 || ins >= MAXINSTR || channel < 0 || channel >= MAX_TRACKS)
 	{
 		pCB->MessBox("Outside range","outside range",1);
 		return;
@@ -852,7 +863,8 @@ void mi::SeqTick(int channel, int note, int ins, int cmd, int val) {
 		}
 	}
 	else if(note==NOTE_NOTEOFF) {
-		fluid_synth_noteoff(synth, ins, lastnote[ins][channel]);
+		if(lastnote[ins][channel] != 255)
+			fluid_synth_noteoff(synth, ins, lastnote[ins][channel]);
 		lastnote[ins][channel] = 255;
 	}
 	else if(note==NOTE_NONE && lastnote[ins][channel] != 255) 
@@ -873,10 +885,11 @@ void mi::Command() {
 }
 
 bool mi::LoadSF(const char * sf_file) {
+	if(!sf_file || !sf_file[0]) return false;
 	std::string loadfile = sf_file;
 	if(!fluid_is_soundfont(sf_file)) {
 		char buffer[1024];
-		std::sprintf(buffer, "It's not a SoundFont file or file %s not found! Please, locate it.", sf_file);
+		std::snprintf(buffer, sizeof(buffer), "It's not a SoundFont file or file %s not found! Please, locate it.", sf_file);
 		pCB->MessBox(buffer, "SF2 Loader",0);
 		buffer[0]='\0';
 		bool open=pCB->FileBox(true,(char*)"SF2 (*.sf2)|*.sf2|All Files (*.*)|*.*||",buffer);
@@ -884,6 +897,10 @@ bool mi::LoadSF(const char * sf_file) {
 			return false;
 		}
 		loadfile = buffer;
+	}
+	if(loadfile.size() >= MAX_PATH_A_LA_CON) {
+		pCB->MessBox("SoundFont path is too long for the historical FluidSynth state format.", "SF2 Loader", 0);
+		return false;
 	}
 	if(sf_id) {
 		Stop();
@@ -902,30 +919,31 @@ bool mi::LoadSF(const char * sf_file) {
 
 	max_bank_index = -1;
 
-	for(int i = 0; i < 129; ++i) {
+	for(int i = 0; i < 256; ++i) {
 		banks[i] = 0;
 		progs[i] = 0;
 	}
 	
 	const int midi_chan = fluid_synth_count_midi_channels(synth);
-	for(int i = 0; i < midi_chan; ++i) {
+	for(int i = 0; i < midi_chan && i < MAXINSTR; ++i) {
 		preset = fluid_synth_get_channel_preset(synth, i);
 		if(preset != NULL) {
-			if(cur_bank != fluid_preset_get_banknum(preset)) {
-				cur_bank = fluid_preset_get_banknum(preset);
-				++max_bank_index;
+			const int banknum = fluid_preset_get_banknum(preset);
+			if(cur_bank != banknum) {
+				cur_bank = banknum;
+				if(max_bank_index < 255) ++max_bank_index;
 				banks[max_bank_index] = cur_bank;
-				progs[cur_bank] = fluid_preset_get_num(preset);
+				if(cur_bank >= 0 && cur_bank < 256) progs[cur_bank] = fluid_preset_get_num(preset);
 				if(new_sf) {
 					globalpar.instr[i].bank = banks[max_bank_index];
-					globalpar.instr[i].prog = progs[banks[max_bank_index]];
+					globalpar.instr[i].prog = (cur_bank >= 0 && cur_bank < 256) ? progs[cur_bank] : fluid_preset_get_num(preset);
 				}
 			}
 		}
 	}
 	// set channel to the first available instrument
 	if(new_sf)
-		for(int i = 0; i < midi_chan; ++i) {
+		for(int i = 0; i < midi_chan && i < MAXINSTR; ++i) {
 			preset = fluid_synth_get_channel_preset(synth, i);
 			if(preset != NULL) {
 				Vals[e_paraChannel] = globalpar.curChannel = i;
@@ -935,31 +953,28 @@ bool mi::LoadSF(const char * sf_file) {
 			}
 		}
 
-	std::sprintf(globalpar.SFPathName, loadfile.c_str());
+	std::snprintf(globalpar.SFPathName, sizeof(globalpar.SFPathName), "%s", loadfile.c_str());
 
 	return true;
 }
 void mi::MidiEvent(int channel, int midievent, int value) {
+	if(channel < 0 || channel >= MAXINSTR) return;
 	switch(midievent) {
 		case 0x80: fluid_synth_noteoff(synth, channel, value>>8);break;
 		case 0x90: fluid_synth_noteon(synth, channel, value>>8, value&0xFF);break;
 		case 0xB0: fluid_synth_cc(synth,channel, value>>8,value&0xFF);break;
 		case 0xC0: {
 			int val = value>>8;
-			if(channel == Vals[globalpar.curChannel]) {
-				Vals[e_paraProgram] = val;
-			}
-			globalpar.instr[globalpar.curChannel].prog = val;
+			if(channel == globalpar.curChannel) Vals[e_paraProgram] = val;
+			globalpar.instr[channel].prog = val;
 			fluid_synth_program_change(synth, channel, val);
 			break;
 			}
 		case 0xD0: fluid_synth_channel_pressure(synth, channel, value>>8);break;
 		case 0xE0: {
 			int val = ((value&0x7F)<<7) + ((value&0x7F00)>>8);
-			if(channel == Vals[globalpar.curChannel]) {
-				Vals[e_paraPitchBend] = val;
-			}
-			globalpar.instr[globalpar.curChannel].pitch = val;
+			if(channel == globalpar.curChannel) Vals[e_paraPitchBend] = val;
+			globalpar.instr[channel].pitch = val;
 			fluid_synth_pitch_bend(synth, channel, val);
 			break;
 			}
