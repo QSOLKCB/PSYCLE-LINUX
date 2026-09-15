@@ -3,8 +3,8 @@
 **
 ** Exercises the retained effect through PluginCatcher, MachineFactory,
 ** version-1 preset I/O and PSY3 save/reload with all seven public state
-** parameters set to legal non-default values, including an eighth-line-only
-** delay that cannot survive accidental default quarter-line quantisation.
+** parameters set to legal non-default values, including fine-grid delay state
+** whose stored representation differs from the original user request.
 */
 
 #include <stdio.h>
@@ -30,10 +30,18 @@
 #define CATCHER_NAME "delay:0"
 #define PRESET_NAME "Phase 5 Dalay Delay"
 #define PARAM_DELAY_LEFT 2u
+#define PARAM_DELAY_RIGHT 4u
 #define PARAM_SNAP 6u
 
+/* Under snap=839 (1/840-line grid), delay requests 100 and 200 are stored by
+** the historical machine as 101 and 201 because resize() rounds the inverse
+** representation up by one. Restoration must reconstruct those stored values,
+** not replay 101/201 as new requests and drift to 102/202. */
+static const intptr_t REQUEST_VALUES[PARAMETER_COUNT] = {
+	10000, 55000, 100, 45000, 200, 20000, 839
+};
 static const intptr_t EXPECTED_VALUES[PARAMETER_COUNT] = {
-	10000, 55000, 106, 45000, 421, 20000, 7
+	10000, 55000, 101, 45000, 201, 20000, 839
 };
 
 static int fail(const char* message)
@@ -98,16 +106,16 @@ static int verify_identity(psy_audio_Machine* machine)
 	return 0;
 }
 
-static int tweak_expected(psy_audio_Machine* machine, uintptr_t i)
+static int tweak_request(psy_audio_Machine* machine, uintptr_t i)
 {
 	psy_audio_MachineParam* param = psy_audio_machine_parameter(machine, i);
 	intptr_t minval;
 	intptr_t maxval;
 	if (!param) return fail("parameter surface is incomplete");
 	psy_audio_machine_parameter_range(machine, param, &minval, &maxval);
-	if (EXPECTED_VALUES[i] < minval || EXPECTED_VALUES[i] > maxval)
+	if (REQUEST_VALUES[i] < minval || REQUEST_VALUES[i] > maxval)
 		return fail("preservation seed is outside public range");
-	psy_audio_machine_parameter_tweak_scaled(machine, param, EXPECTED_VALUES[i]);
+	psy_audio_machine_parameter_tweak_scaled(machine, param, REQUEST_VALUES[i]);
 	return 0;
 }
 
@@ -115,18 +123,22 @@ static int seed_parameters(psy_audio_Machine* machine)
 {
 	uintptr_t i;
 
-	/* Establish the saved eighth-line grid before seeding delay values. Raw 106
-	** is the retained rounded representation of 1/8 line under snap=7, but it
-	** collapses to a different value under the default snap=3 quarter-line grid. */
-	if (tweak_expected(machine, PARAM_SNAP) != 0) return 1;
+	/* Establish the saved 1/840-line grid before delay requests so the source
+	** machine produces the historical encoded values 101/201 from requests
+	** 100/200. Those values are unique to this fine grid and expose both wrong
+	** restore ordering and replay-as-request drift. */
+	if (tweak_request(machine, PARAM_SNAP) != 0) return 1;
 	for (i = 0; i < PARAMETER_COUNT; ++i) {
 		if (i == PARAM_SNAP) continue;
-		if (tweak_expected(machine, i) != 0) return 1;
+		if (tweak_request(machine, i) != 0) return 1;
 	}
 	if (psy_audio_machine_parameter_scaled_value(machine,
 			psy_audio_machine_parameter(machine, PARAM_DELAY_LEFT)) !=
-			EXPECTED_VALUES[PARAM_DELAY_LEFT])
-		return fail("eighth-line-only source seed was quantized away");
+			EXPECTED_VALUES[PARAM_DELAY_LEFT] ||
+			psy_audio_machine_parameter_scaled_value(machine,
+			psy_audio_machine_parameter(machine, PARAM_DELAY_RIGHT)) !=
+			EXPECTED_VALUES[PARAM_DELAY_RIGHT])
+		return fail("fine-grid source delay encoding changed");
 	return 0;
 }
 
@@ -353,7 +365,7 @@ initial_cleanup:
 
 	printf("phase5-dalay-delay-state: PASS\n");
 	printf("catcher: delay:0\n");
-	printf("state: 7/7 public parameters seeded non-default, snap=7 left-delay=1/8-line-only, 0 opaque bytes\n");
+	printf("state: 7/7 public parameters seeded non-default, snap=839 left=101 right=201 encoded-state-idempotent, 0 opaque bytes\n");
 	printf("preset-factory: independent\n");
 	printf("topology: ayeternal Dalay Delay -> Master\n");
 	printf("preset: %s\n", preset_path);
