@@ -48,12 +48,13 @@ protected:
 
 PSYCLE__PLUGIN__INSTANTIATOR(Crasher)
 
-void Crasher::Work(Sample l[], Sample r[], int sample, int)
+void Crasher::Work(Sample l[], Sample r[], int samples, int)
 {
-	while(sample--)
+	while (samples > 0)
 	{
-		Work(l[sample]);
-		Work(r[sample]);
+		--samples;
+		Work(l[samples]);
+		Work(r[samples]);
 	}
 	crash(); ///////////////////////// <--- crash !!!
 }
