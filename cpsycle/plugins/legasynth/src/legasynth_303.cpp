@@ -125,6 +125,8 @@ mi::mi()
 {
 	psy_dsp_init();
 	Vals=new int[MacInfo.numParameters];
+	for(int i=0;i<MacInfo.numParameters;i++)
+		Vals[i]=MacInfo.Parameters[i]->DefValue;
 }
 
 mi::~mi()
@@ -258,6 +260,8 @@ void mi::Command()
 // Work... where all is cooked 
 void mi::Work(float *psamplesleft, float *psamplesright , int numsamples,int tracks)
 {
+	if(numsamples <= 0) return;
+
 	double const range = 0.0000152587890625; // change range from 32bits to 16bits (TODO ?)
 	float const dist = (float) Vals[5] * 0.005f;
 	for(int c=0;c<tracks;c++)
