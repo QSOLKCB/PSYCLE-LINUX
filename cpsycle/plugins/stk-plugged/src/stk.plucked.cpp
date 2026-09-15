@@ -107,12 +107,22 @@ void mi::Init()
 {
 // Initialize your stuff here
 	
+	w_tracks.clear();
 	w_tracks.push_back( 0 ); // 
 	
 	samplerate = (StkFloat)pCB->GetSamplingRate();
 	Stk::setSampleRate(samplerate);
 	for(int i=0;i<MAX_TRACKS;i++)
 	{
+		// Plucked instances are allocated in the constructor before pCB is
+		// attached, so their delay-line capacity may reflect STK's previous
+		// global rate. Recreate them after the actual initial host rate is known.
+		delete track[i];
+		track[i] = new Plucked(
+			#if STK_VERSION != -1
+				20
+			#endif
+		);
 		track[i]->clear();
 		track[i]->noteOff(0.0);
 		adsr[i].setAllTimes(StkFloat(Vals[1]*0.000030517578125),
