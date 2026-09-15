@@ -66,7 +66,7 @@ audio/src/vstfxstore.h
 
 Their headers identify them as based on or originating from Steinberg VST Plug-Ins SDK 2.4 material. Because legacy VST2 SDK redistribution rights are not being assumed, these files are not mirrored in the public baseline.
 
-This omission is deliberate and does not change the Phase 1 objective. VST2 hosting is not required for the first native Linux host and is tracked as a separate preservation/licensing question in Phase 6.
+This omission is deliberate and does not change the Phase 1 objective. VST2 hosting is tracked as a separate preservation/licensing and interoperability task in **Phase 9 — Plugin Hosting, VST2 Compatibility, and Isolation**; the public repository must not restore these omitted SDK-derived files merely to enable it.
 
 ## 7-Zip Prebuilt Windows Binaries
 

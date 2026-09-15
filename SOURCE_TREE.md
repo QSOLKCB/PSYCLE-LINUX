@@ -2,7 +2,7 @@
 
 This document is a maintainer-oriented map of the imported C-Psycle baseline under `cpsycle/`.
 
-It describes the source as received from upstream. It is **not** a proposal to reorganize the tree.
+It describes the source as received from upstream. It is **not** a proposal to reorganize the tree, and it is **not the active implementation architecture for the final Linux tracker**. Under the current roadmap, C-Psycle is retained as a preservation/reference implementation, Linux donor and regression oracle; the active implementation track audits and converges the `psycle-core` family before building the Phase 8 Qt tracker UI.
 
 ## Build Entry Points
 
@@ -36,7 +36,7 @@ The existing Linux-oriented driver makefile targets:
 - JACK;
 - Linux event joystick.
 
-The top-level upstream README already documents Linux dependencies and a native `make` workflow. Phase 2 begins from these files rather than replacing them.
+The top-level upstream README already documents Linux dependencies and a native `make` workflow. Phase 2 began from these files rather than replacing them; that work belongs to the completed C-Psycle preservation track.
 
 ## Core Runtime and Libraries
 
@@ -70,15 +70,15 @@ Scripting support shared by host/player components.
 
 ### `ui/`
 
-Cross-platform UI abstraction and implementations.
+Cross-platform C-Psycle UI abstraction and implementations.
 
-Of particular importance to the Linux port:
+The retained Linux implementation is:
 
 ```text
 cpsycle/ui/src/imps/x11/
 ```
 
-This existing X11 implementation is the starting point for the native Linux UI. Phase 1 does not replace it with a new toolkit.
+This X11 implementation was the starting point for the **completed C-Psycle Linux preservation/runtime track** and remains useful as historical Linux-port evidence and a possible implementation donor. It is **not** the active UI target for the final PSYCLE-LINUX application. The current roadmap first audits/converges the `psycle-core` engine family and then builds the recognizable tracker UI in **Phase 8 using Qt, with Qt Widgets evaluated first**. Do not start new final-product UI work on the C-Psycle X11 layer merely because it is present in this imported baseline.
 
 ### `luaui/`
 
@@ -100,7 +100,7 @@ Application, installer and UI image/icon resources.
 
 ### `host/`
 
-The main Psycle application/host implementation.
+The main C-Psycle application/host implementation.
 
 The host makefile builds shared support modules and `host/src`, producing the native host executable copied by the top-level makefile to:
 
@@ -112,7 +112,7 @@ The host tree also contains substantial historical Windows resources/project met
 
 ### `player/`
 
-Standalone/smaller player target using the shared audio engine and support libraries.
+Standalone/smaller C-Psycle player target using the shared audio engine and support libraries.
 
 The top-level build copies the resulting executable to:
 
@@ -120,7 +120,7 @@ The top-level build copies the resulting executable to:
 cpsycle/psyplayer
 ```
 
-`psyplayer` is an important Phase 2 audit target because it may exercise core song/audio code with less UI complexity than the full host.
+`psyplayer` was an important Phase 2 C-Psycle audit target because it exercised core song/audio code with less UI complexity than the full host. It remains preservation evidence; the active Phase 6 player work targets the separately pinned `psycle-player` / `psycle-core` family.
 
 ## Audio and Input Drivers
 
@@ -169,7 +169,7 @@ cpsycle/plugins/arguru-synth-2f/
 cpsycle/plugins/arguru-xfilter/
 ```
 
-These are not candidates for replacement merely because they are old. Their behaviour, parameter/state handling and compatibility with historical songs will be validated later in the roadmap.
+These are not candidates for replacement merely because they are old. Their behaviour, parameter/state handling and compatibility evidence are preserved by the completed Phase 5 regression corpus.
 
 ## Presets, Songs and Documentation
 
@@ -189,9 +189,9 @@ cpsycle/doc/cpsycle-developer-guide.txt
 
 It is the **Psycle Developer Guide — C-Version, Feb 2021 (unfinished)** and records upstream architectural intent around MFC-Psycle compatibility, stepwise cross-platform separation, the audio/UI split, `Workspace`, `MachineFactory`, `PluginCatcher`, the 256-sample compatibility work size, tracker/sequencer timing, VST variable process intervals, the 64-channel native-plugin limit and the platform UI bridge. The imported Visual Studio 2019 solution also references the original `doc/cpsycle-developer-guide.docx`. See [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md) for the PSYCLE-LINUX interpretation and authority rule.
 
-Because the guide identifies itself as unfinished, pinned r12005 source and observed compatibility behavior take precedence where its prose and code differ.
+Because the guide identifies itself as unfinished, pinned r12005 source and observed compatibility behavior take precedence where its prose and code differ. Those conclusions describe C-Psycle; they do not override the active original-Psycle → `psycle-core` → Qt implementation plan.
 
-The eight historical `.psy` demo/example files found in r12005 were omitted from public archival and canonical refs because their composition/sample redistribution permissions are unresolved; their exact upstream paths are recorded in `UPSTREAM_OMISSIONS.md`. Phase 4 will create or adopt cleared redistributable `.psy` fixtures for compatibility testing.
+The eight historical `.psy` demo/example files found in r12005 were omitted from public archival and canonical refs because their composition/sample redistribution permissions are unresolved; their exact upstream paths are recorded in `UPSTREAM_OMISSIONS.md`. Cleared project-authored fixtures created during the completed compatibility work remain the safe public regression basis unless historical material is separately cleared.
 
 ## Vendored and External Material
 
@@ -224,7 +224,7 @@ Build/packaging support, including Windows installer material.
 
 The root and many subdirectories contain historical Visual Studio solution/project files (`.sln`, `.vcxproj`, `.vcproj`, `.filters`, `.dsw`, `.dsp`).
 
-They remain useful provenance and may help distinguish Windows-only assumptions, but the Linux port does not depend on them as its primary build system.
+They remain useful provenance and may help distinguish Windows-only assumptions. They describe this imported C-Psycle baseline and do not determine the build/UI architecture selected for the active `psycle-core` implementation track.
 
 ## Tests and Small Utilities
 
@@ -240,12 +240,12 @@ Low-level/detail helpers used by the codebase.
 
 Phase 1 deliberately retains old build/platform artifacts when redistribution is permitted. Examples include compiled help and historical package metadata under `external-packages/`, installer assets and the Visual Studio `resource.aps` file. The upstream 7-Zip `7z.exe` and `7z.dll` binaries are intentionally omitted; see [UPSTREAM_OMISSIONS.md](UPSTREAM_OMISSIONS.md).
 
-They are **identified**, not cleaned up, in this phase. Deletion or replacement belongs in a later, evidence-driven change if it materially helps the Linux port.
+They are **identified**, not cleaned up, in the preservation baseline. Deletion or replacement belongs in a later, evidence-driven change if it materially helps compatibility work.
 
 ## Maintainer Rule
 
-When touching the imported tree, ask first:
+When touching the imported `cpsycle/` tree, ask first:
 
-> Is this change required to make existing Psycle behaviour work correctly on Linux?
+> Is this change required to preserve, test, or reuse demonstrated Psycle-compatible behaviour on Linux?
 
-If a source move, rename, framework migration or broad cleanup is not required to answer that question, it should not be mixed into an early porting fix.
+Do not treat presence in the C-Psycle baseline as authority to redirect the active `psycle-core`/Qt implementation track. Source moves, renames, framework migrations or broad cleanup should still stay out of narrow preservation/compatibility fixes unless evidence requires them.

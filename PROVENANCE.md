@@ -1,6 +1,6 @@
 # Source Provenance
 
-PSYCLE-LINUX is a continuation and Linux-porting effort built from the existing Psycle/C-Psycle source lineage. This file records the baseline selected for the project and the rules for preserving its history.
+PSYCLE-LINUX is a continuation and Linux-porting effort built from the existing Psycle source lineage. This file records the source baselines selected for the project and the rules for preserving their history.
 
 ## Selected Initial Baseline
 
@@ -37,6 +37,18 @@ Expected result:
 ```
 
 A raw `svn export` reproduces the r12005 source revision but is not expected to have the ZIP archive's byte-for-byte checksum because the archive container/metadata differ. Future upstream snapshots must receive their own provenance record rather than silently replacing this baseline.
+
+### Architectural role of this baseline
+
+The r12005 C-Psycle baseline remains the project's first audited preservation corpus, but it is **not now claimed to be the final implementation base for original Psycle on Linux**.
+
+Upstream maintainer clarification distinguishes:
+
+- `psycle/` — original C++/MFC Psycle and the primary behavioural/UI reference;
+- the `psycle-core` family — earlier C++ cross-platform reimplementation and current candidate Linux engine;
+- `cpsycle/` — later C reimplementation, retained here as a tested donor/reference implementation and regression corpus.
+
+The current repository does not yet import the `psycle-core` family. Phase 6 of `ROADMAP.md` requires revision pinning, licensing/provenance review and a coherent-build audit before any such source is imported. That future import must receive its own provenance record and must not mutate the frozen C-Psycle baseline identity below.
 
 ## Upstream Identity, Sanitized Archive, and Canonical Audited Baseline
 
@@ -112,7 +124,7 @@ The retained r12005 documentation includes:
 - title: **Psycle Developer Guide**
 - edition: **C-Version, Feb 2021 (unfinished)**
 
-The imported Visual Studio 2019 solution also names `doc/cpsycle-developer-guide.docx` as a solution documentation item. This makes the retained text file strong upstream evidence of C-Psycle architectural intent and terminology, rather than a PSYCLE-LINUX reconstruction.
+The imported Visual Studio 2019 solution also names `doc/cpsycle-developer-guide.docx` as a solution documentation item. This makes the retained text file strong upstream evidence of **C-Psycle** architectural intent and terminology, rather than a PSYCLE-LINUX reconstruction.
 
 The guide records, among other things:
 
@@ -121,19 +133,22 @@ The guide records, among other things:
 - the audio-engine/UI subsystem split and runtime-loaded audio/event drivers;
 - `Workspace` ownership/references including `Player`, `MachineFactory`, `PluginCatcher` and `Song`;
 - the player's deliberate **256-sample** `psy_audio_MAX_STREAM_SIZE` split for Psycle-plugin compatibility;
-- tracker-line splitting and `SeqTick()` compatibility behavior inside the newer beat/event sequencer;
+- tracker-line splitting and `SeqTick()` compatibility behaviour inside the newer beat/event sequencer;
 - the expectation that VST plugins tolerate variable process-block lengths;
 - the **64-channel** native-plugin limit and `LogicalChannel` mapping;
 - the host/UI bridge intended to allow platform-specific implementations;
 - the 2021 state in which Visual Studio was current while GCC was described as out of date.
 
-Because the document labels itself unfinished, it is not treated as a frozen executable specification. The provenance/authority order is:
+Because the document labels itself unfinished and describes the later C reimplementation, it is not treated as a frozen specification for the final Linux product. The project-wide compatibility/evidence order is:
 
-1. pinned r12005 source plus reproducible observed behavior;
-2. the retained C-Psycle developer guide as primary architecture/intent evidence;
-3. older branches, posts, release notes and related historical donors as supporting context.
+1. original Psycle source/behaviour where legally and technically available;
+2. trustworthy historical songs, documented formats and frozen machine/plugin contracts;
+3. the selected `psycle-core` family as the candidate engine to measure and repair;
+4. C-Psycle source plus the PSYCLE-LINUX regression corpus where semantics overlap;
+5. the retained C-Psycle developer guide as primary architecture/intent evidence for C-Psycle itself;
+6. older branches, posts, release notes and related historical donors as supporting context.
 
-Where the unfinished guide disagrees with the pinned source or a demonstrated compatibility contract, the source/behavior wins. See [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md) for the project-facing extraction of these constraints.
+For claims specifically about the r12005 C-Psycle baseline, pinned r12005 source and reproducible C-Psycle behaviour remain authoritative over unfinished prose. See [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md) for the project-facing extraction of these constraints.
 
 ## Why This Baseline
 
@@ -154,9 +169,9 @@ The r12005 C-Psycle tree already contains substantial cross-platform and Linux-s
 - `luascripts/`
 - `doc/`
 
-The top-level makefile already defines host, plugin, driver, and player targets. The Linux driver makefile includes SDL2, ALSA, ALSA MIDI, JACK, and Linux event joystick targets. The host and UI build files reference X11/Xft and related libraries.
+The top-level makefile already defines host, plugin, driver and player targets. The Linux driver makefile includes SDL2, ALSA, ALSA MIDI, JACK and Linux event joystick targets. The host and UI build files reference X11/Xft and related libraries.
 
-This means PSYCLE-LINUX should begin by repairing and validating existing Linux architecture, not by throwing it away.
+That made C-Psycle a strong first preservation/Linux-validation baseline and enabled the completed Phases 0–5 regression program. It does **not** mean the final product must retain C-Psycle's engine, sequencer or X11 UI architecture. The active roadmap now audits the earlier C++ `psycle-core` family as the candidate engine while keeping all C-Psycle work as donor and compatibility evidence.
 
 ## Upstream Authorship
 
@@ -179,11 +194,11 @@ It identifies, among others:
 - James Redfern — `alkenstein`
 - and additional contributors recorded in the upstream file.
 
-The upstream `AUTHORS` file, copyright headers, and per-plugin notices are authoritative and must be preserved with imported source.
+The upstream `AUTHORS` file, copyright headers and per-plugin notices are authoritative and must be preserved with imported source.
 
 ## Arguru Machines in r12005
 
-The selected source snapshot contains source directories for the following Arguru machines:
+The selected C-Psycle snapshot contains source directories for the following Arguru machines:
 
 - `plugins/arguru-compressor/`
 - `plugins/arguru-distortion/`
@@ -192,25 +207,26 @@ The selected source snapshot contains source directories for the following Argur
 - `plugins/arguru-synth-2f/`
 - `plugins/arguru-xfilter/`
 
-These are historical components of Psycle and explicit compatibility/preservation targets for PSYCLE-LINUX.
+These remain historical preservation/compatibility targets. Their completed regression evidence may be reused when the selected `psycle-core`/plugin family exposes equivalent identities and contracts.
 
 ## Import Rules
 
 When upstream source is introduced or refreshed in PSYCLE-LINUX:
 
 1. preserve the directory structure as closely as practical in the raw import;
-2. preserve `AUTHORS`, `COPYING`, copyright headers, README files, and component notices;
+2. preserve `AUTHORS`, `COPYING`, copyright headers, README files and component notices;
 3. do not mass-format or mechanically rename source in the import commit;
 4. do not claim PSYCLE-LINUX authorship over upstream code;
 5. record every intentionally omitted upstream file and why;
-6. keep the pinned upstream revision/checksum identity separate from the sanitized archival ref and audited public-baseline tag when redistribution corrections are required;
+6. keep pinned upstream revision/checksum identities separate from sanitized archival refs and audited public-baseline tags when redistribution corrections are required;
 7. keep third-party source boundaries and licensing visible;
-8. record later upstream cherry-picks or source refreshes separately rather than moving the r12005 baseline identity.
+8. record later upstream cherry-picks or source refreshes separately rather than moving frozen baseline identities;
+9. give each separately imported upstream family (`cpsycle`, future `psycle-core`, etc.) its own provenance record rather than conflating their histories.
 
-Phase 1 satisfies these rules with SourceForge SVN `r12005` plus the recorded ZIP SHA-256 as the exact upstream identity, `archive/cpsycle-r12005-sanitized-import` for the public mechanically comparable source state after all omissions, and `cpsycle-r12005-baseline` for the audited public state. The canonical tag is not to be moved after Phase 1 is merged and frozen.
+Phase 1 satisfies these rules for C-Psycle with SourceForge SVN `r12005` plus the recorded ZIP SHA-256 as the exact upstream identity, `archive/cpsycle-r12005-sanitized-import` for the public mechanically comparable source state after all omissions, and `cpsycle-r12005-baseline` for the audited public state. The canonical tag is not to be moved after Phase 1 is merged and frozen.
 
 ## Historical Community
 
-Psycle was more than its source repository. Developers, testers, musicians, plugin authors, and users shared builds, songs, machines, bug reports, and knowledge through the project's community channels, including the historical `#Psycle` IRC community.
+Psycle was more than its source repository. Developers, testers, musicians, plugin authors and users shared builds, songs, machines, bug reports and knowledge through the project's community channels, including the historical `#Psycle` IRC community.
 
 PSYCLE-LINUX aims to preserve that history respectfully while producing a maintainable Linux port.
