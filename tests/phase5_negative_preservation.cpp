@@ -15,8 +15,15 @@
 #include <limits>
 #include <sstream>
 
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wignored-qualifiers"
+#endif
 #include <psycle/plugin.hpp>
 #include "../cpsycle/plugins/negative/src/negative.cpp"
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 using psycle::plugin::Plugin;
 
