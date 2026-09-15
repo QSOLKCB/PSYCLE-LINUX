@@ -413,6 +413,8 @@ int verify_max_offset_guard(CMachineInterface* machine, const CMachineInfo* info
     double raw_sse = 0.0;
     double guarded_vs_raw = 0.0;
     double actual_tail_peak = 0.0;
+    double max_guard_error_left = 0.0;
+    double max_guard_error_right = 0.0;
     for (std::size_t i = 0; i < left.size(); ++i) {
         if (!std::isfinite(left[i]) || !std::isfinite(right[i]))
             return fail("maximum Wah offset produced non-finite output");
@@ -423,6 +425,8 @@ int verify_max_offset_guard(CMachineInterface* machine, const CMachineInfo* info
         const double rr = static_cast<double>(right[i] - raw_right[i]);
         guarded_sse += gl * gl + gr * gr;
         raw_sse += rl * rl + rr * rr;
+        max_guard_error_left = std::max(max_guard_error_left, std::fabs(gl));
+        max_guard_error_right = std::max(max_guard_error_right, std::fabs(gr));
         guarded_vs_raw = std::max(guarded_vs_raw,
             std::fabs(static_cast<double>(guarded_left[i] - raw_left[i])));
         guarded_vs_raw = std::max(guarded_vs_raw,
@@ -438,6 +442,12 @@ int verify_max_offset_guard(CMachineInterface* machine, const CMachineInfo* info
         return fail("max-offset oracle cannot distinguish the 0.9999 guard from raw 1.0");
     if (actual_tail_peak < 0.5)
         return fail("maximum-offset response lost the guarded impulse tail");
+    if (max_guard_error_left > 1.0e-3 || max_guard_error_right > 1.0e-3) {
+        std::fprintf(stderr,
+            "phase5-audacity-wahwah: max-offset absolute-error left=%g right=%g\n",
+            max_guard_error_left, max_guard_error_right);
+        return fail("maximum-offset response no longer absolutely matches guarded 0.9999 behavior");
+    }
     if (!(guarded_sse < raw_sse)) {
         std::fprintf(stderr,
             "phase5-audacity-wahwah: max-offset guard_sse=%g raw_sse=%g tail=%g\n",
@@ -445,7 +455,7 @@ int verify_max_offset_guard(CMachineInterface* machine, const CMachineInfo* info
         return fail("maximum-offset response is closer to raw 1.0 than guarded 0.9999 behavior");
     }
 
-    std::printf("phase5-audacity-wahwah: max-offset PASS guarded-reference=yes differs-from-1.0=yes\n");
+    std::printf("phase5-audacity-wahwah: max-offset PASS guarded-reference=absolute differs-from-1.0=yes\n");
     return 0;
 }
 
