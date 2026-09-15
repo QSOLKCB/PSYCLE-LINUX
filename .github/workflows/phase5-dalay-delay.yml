@@ -1,0 +1,46 @@
+name: Phase 5 Dalay Delay preservation
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-5/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dalay-delay:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run Dalay Delay preservation regression
+        shell: bash
+        run: |
+          set -o pipefail
+          chmod +x scripts/phase5-dalay-delay-smoke.sh
+          scripts/phase5-dalay-delay-smoke.sh phase5-dalay-delay \
+            2>&1 | tee "$RUNNER_TEMP/phase5-dalay-delay.log"
+
+      - name: Upload Dalay Delay evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-dalay-delay
+          path: |
+            phase5-dalay-delay/
+            ${{ runner.temp }}/phase5-dalay-delay.log
+          if-no-files-found: warn
