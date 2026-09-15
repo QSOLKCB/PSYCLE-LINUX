@@ -121,6 +121,9 @@ void mi::Init() {
 
 	lfoskip = freq * 2 * M_PI / pCB->GetSamplingRate();
 	skipcount = 0;
+	gain_l = gain_r = 0;
+	fbout_l = fbout_r = 0;
+
 	xn1_l = 0;
 	xn2_l = 0;
 	yn1_l = 0;
@@ -236,6 +239,7 @@ inline void mi::RecalcFilter( const float depth_mul_1_minus_freqofs )
 // Work... where all is cooked 
 void mi::Work(float *psamplesleft, float *psamplesright , int numsamples_in, int tracks)
 {
+	if (numsamples_in <= 0) return;
 	uint32_t numsamples = static_cast<uint32_t>(numsamples_in);
 	const float depth_mul_1_minus_freqofs = depth * (1.f - freqofs) * .5f;
 
@@ -286,7 +290,7 @@ bool mi::DescribeValue(char* txt,int const param, int const value)
 			std::sprintf(txt,"%.1f Hz",(float)value*.1f);
 			return true;
 		case 1:
-			std::sprintf(txt,"%i°",value);
+			std::sprintf(txt,"%iÂ°",value);
 			return true;
 		case 2:
 			std::sprintf(txt,"%i%%",value);
