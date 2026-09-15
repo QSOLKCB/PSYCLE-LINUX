@@ -21,9 +21,11 @@ PLUGINS=(
 
 NATIVE_BIN="$OUT/phase5-stk-family"
 STARTUP_RATE_BIN="$OUT/phase5-stk-startup-rate"
+PLUCKED_LOW_RATE_BIN="$OUT/phase5-stk-plucked-low-rate"
 STATE_BIN="$OUT/phase5-stk-family-state"
 NATIVE_LOG="$OUT/phase5-stk-family.log"
 STARTUP_RATE_LOG="$OUT/phase5-stk-startup-rate.log"
+PLUCKED_LOW_RATE_LOG="$OUT/phase5-stk-plucked-low-rate.log"
 STATE_LOG="$OUT/phase5-stk-family-state.log"
 SUMMARY="$OUT/summary.md"
 
@@ -83,6 +85,11 @@ g++ -std=c++17 -Wall -Wextra -Werror \
   "$ROOT/tests/phase5_stk_startup_rate.cpp" \
   -ldl -lstk -o "$STARTUP_RATE_BIN"
 
+g++ -std=c++17 -Wall -Wextra -Werror \
+  -I"$CPSYCLE/plugins" \
+  "$ROOT/tests/phase5_stk_plucked_low_rate.cpp" \
+  -ldl -lstk -o "$PLUCKED_LOW_RATE_BIN"
+
 # shellcheck disable=SC2207
 LUA_CFLAGS=($(pkg-config --cflags lua))
 # shellcheck disable=SC2207
@@ -102,6 +109,7 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
 
 "$NATIVE_BIN" "${PLUGINS[@]}" 2>&1 | tee "$NATIVE_LOG"
 "$STARTUP_RATE_BIN" "${PLUGINS[@]}" 2>&1 | tee "$STARTUP_RATE_LOG"
+"$PLUCKED_LOW_RATE_BIN" "${PLUGINS[0]}" 2>&1 | tee "$PLUCKED_LOW_RATE_LOG"
 "$STATE_BIN" "$OUT" "${PLUGINS[@]}" 2>&1 | tee "$STATE_LOG"
 
 require_log_marker "$NATIVE_LOG" 'stk-metadata-hash[stk Plucked]=0x55e20a3f7e90f611' 'stk Plucked metadata hash'
@@ -120,6 +128,10 @@ require_log_marker "$STARTUP_RATE_LOG" 'phase5-stk-startup-rate: Reverbs PASS in
 require_log_marker "$STARTUP_RATE_LOG" 'phase5-stk-startup-rate: Shakers PASS initial=96k-STK-reference' 'stk Shakers non-default startup rate'
 require_log_marker "$STARTUP_RATE_LOG" 'phase5-stk-startup-rate: Shakers PASS stale-rate-change=no-retrigger' 'stk Shakers stale one-shot rate change'
 require_log_marker "$STARTUP_RATE_LOG" 'phase5-stk-startup-rate: PASS machines=3' 'startup-rate family PASS'
+
+require_log_marker "$PLUCKED_LOW_RATE_LOG" 'phase5-stk-plucked-low-rate: PASS live=44.1->88.2k note=24 STK-reference' 'stk Plucked low-note live-rate capacity'
+require_log_marker "$PLUCKED_LOW_RATE_LOG" 'phase5-stk-plucked-low-rate: PASS startup=96k note=24 STK-reference' 'stk Plucked low-note startup-rate capacity'
+require_log_marker "$PLUCKED_LOW_RATE_LOG" 'phase5-stk-plucked-low-rate: PASS' 'stk Plucked low-note rate family PASS'
 
 require_log_marker "$STATE_LOG" 'phase5-stk-family-state: seed PASS [stk Plucked] changed=5' 'stk Plucked persistence seed PASS'
 require_log_marker "$STATE_LOG" 'phase5-stk-family-state: seed PASS [stk Reverbs] changed=4' 'stk Reverbs persistence seed PASS'
@@ -152,6 +164,7 @@ cat > "$SUMMARY" <<'EOF'
   - stk Reverbs: `0xf92219f73194a3ae`
   - stk Shakers: `0x4c29aa201e9bb317`
 - stk Plucked idle silence, historical 0C00 mute, Stop clearing, and live 44.1 -> 88.2 kHz rendering matched against direct system-STK behavior: PASS
+- stk Plucked low-note delay capacity is independently gated with note 24 across both live 44.1 -> 88.2 kHz and fresh 96 kHz startup; both must match freshly constructed direct STK references and deliberately exceed a stale 44.1 kHz Plucked delay-line capacity: PASS
 - stk Reverbs exact Dry/Wet=0 bypass, JCRev/NRev/PRCRev selector outputs matched against direct system-STK references, both directions of independent/mixed stereo routing from fresh state, and live 44.1 -> 88.2 kHz system-STK reference rendering: PASS
 - stk Shakers all historical notes 48..70 matched against the frozen old->new instrument map using seeded direct system-STK references; 0C00 mute, Stop silence, and live 44.1 -> 88.2 kHz reference rendering: PASS
 - Fresh non-default startup at 96 kHz for Plucked, Reverbs, and Shakers matched direct system-STK references after forcing the pre-construction STK global rate to 44.1 kHz: PASS
