@@ -115,6 +115,28 @@ cleanup() {
 }
 trap cleanup EXIT
 
+request_window_close() {
+    /usr/bin/python3 - "$1" <<'PY'
+import sys
+from Xlib import X, display, protocol
+
+d = display.Display()
+w = d.create_resource_object("window", int(sys.argv[1]))
+delete = d.intern_atom("WM_DELETE_WINDOW")
+
+if delete not in (w.get_wm_protocols() or []):
+    raise SystemExit("Window does not advertise WM_DELETE_WINDOW")
+
+w.send_event(protocol.event.ClientMessage(
+    window=w,
+    client_type=d.intern_atom("WM_PROTOCOLS"),
+    data=(32, [delete, X.CurrentTime, 0, 0, 0]),
+))
+d.sync()
+d.close()
+PY
+}
+
 # Give the native X11 host a bounded window in which to initialize its UI,
 # scan/load runtime modules and enter the event loop. Fail immediately if the
 # process exits before presenting a Psycle window.
@@ -210,7 +232,7 @@ if [ "$(xdotool getwindowfocus)" != "$editor_id" ]; then
     echo 'Machine parameter frame could not receive X11 focus.' >&2
     exit 1
 fi
-xdotool windowclose "$editor_id"
+request_window_close "$editor_id"
 for _ in $(seq 1 30); do
     if ! xdotool search --onlyvisible --name '^80 :' >/dev/null 2>&1; then
         break
@@ -232,6 +254,13 @@ fi
 xdotool windowfocus "$window_id"
 xdotool key --clearmodifiers --window "$window_id" F3
 sleep 0.25
+if ! kill -0 "$psycle_pid" 2>/dev/null; then
+    rc=0
+    wait "$psycle_pid" || rc=$?
+    echo "Psycle exited after closing Master / opening Tracker (exit $rc)." >&2
+    tail -n 160 "$LOG" >&2 || true
+    exit 1
+fi
 xdotool key --clearmodifiers --window "$window_id" z
 xdotool key --clearmodifiers --window "$window_id" Tab
 xdotool key --clearmodifiers --window "$window_id" x
@@ -284,7 +313,7 @@ if ! kill -0 "$psycle_pid" >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! xdotool windowclose "$window_id"; then
+if ! request_window_close "$window_id"; then
     echo 'Could not request a normal X11 close for Psycle.' >&2
     exit 1
 fi
