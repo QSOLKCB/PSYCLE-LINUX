@@ -7,17 +7,17 @@
 This matrix compares three separately identified evidence sources:
 
 1. **Original Psycle 1.12.0 x86** — primary behavioural reference;
-2. **`psycle-core` family at SourceForge SVN r12005** — candidate Linux engine snapshot;
+2. **five-component C++ family at SourceForge SVN r12005** — candidate Linux engine snapshot;
 3. **C-Psycle r12005 regression corpus** — independent donor/oracle where semantics overlap.
 
-See [PHASE6_REFERENCE_PROVENANCE.md](PHASE6_REFERENCE_PROVENANCE.md) for the acquisition and authority rules.
+See [PHASE6_REFERENCE_PROVENANCE.md](PHASE6_REFERENCE_PROVENANCE.md) for the frozen identities and [PHASE6_CPP_IMPORT_AUDIT.md](PHASE6_CPP_IMPORT_AUDIT.md) for the current import HOLD.
 
 ## Evidence rule
 
 A row may change from `UNKNOWN` only when the result records:
 
 - exact original-Psycle reference build/version when original behaviour is claimed;
-- exact `psycle-core` snapshot identity;
+- exact candidate C++ snapshot identity;
 - fixture/input identity;
 - observation procedure;
 - produced receipt, hash, render, dump, log, or other reproducible evidence;
@@ -35,13 +35,19 @@ A row may change from `UNKNOWN` only when the result records:
 
 | Role | Identity | Status |
 | --- | --- | --- |
-| Original Psycle | `Psycle 1.12.0 x86 / PsycleInstallerx86-1.12.0.exe` | SHA-256 discovery pending Phase 6 provenance CI |
-| Candidate C++ engine | SourceForge SVN `r12005`: `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player`, `psycle-plugins` | tree manifests pending Phase 6 provenance CI |
+| Original Psycle | `Psycle 1.12.0 x86 / PsycleInstallerx86-1.12.0.exe` — 9,322,919 bytes — SHA-256 `f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769` | **PINNED**; observation procedures still to be executed |
+| `psycle-core` | SVN r12005 / 108 files / manifest `eb25467bdfbdea7296fc2c8e01c802e3b2b977d95775ab363cc810309aee729b` | **PINNED FOR AUDIT**; public import HOLD |
+| `psycle-audiodrivers` | SVN r12005 / 36 files / manifest `4518274595b58fa89f59ca9012198e4602bdabb32216193edc38fdbe7aef0ab1` | **PINNED FOR AUDIT**; public import HOLD |
+| `psycle-helpers` | SVN r12005 / 68 files / manifest `13d05df94637cef8701fee0555bb4a9915fd082dcd531ae2b772c4a633f3f5db` | **PINNED FOR AUDIT**; public import HOLD |
+| `psycle-player` | SVN r12005 / 7 files / manifest `6fd4fb58b3841b89cafd69c1c4a6c4f5c95864f1d7edb6e6f999621bfadecb6f` | **PINNED FOR AUDIT**; public import HOLD |
+| `psycle-plugins` | SVN r12005 / 634 files / manifest `a8d66a18e363229ad9ff13b688149fec4682da8b177afb757c064491123de888` | **PINNED FOR AUDIT**; requires sanitization before import |
 | C-Psycle oracle | repository audited baseline `cpsycle-r12005-baseline` plus merged Phase 2–5 regressions | available |
+
+The candidate C++ snapshot is reproducible, but **not yet present in this Git repository**. A parity row cannot report candidate-engine execution until the provenance-safe sanitized import/build gate is complete.
 
 ## Engine compatibility matrix
 
-| Subsystem / contract | Original reference evidence | `psycle-core` result | C-Psycle evidence reusable? | Status | Notes / next evidence |
+| Subsystem / contract | Original reference evidence | Candidate C++ result | C-Psycle evidence reusable? | Status | Notes / next evidence |
 | --- | --- | --- | --- | --- | --- |
 | PSY2 parsing | pending | pending | yes, project fixture exists | UNKNOWN | establish shared fixture and field-level receipt |
 | PSY3 parsing | pending | pending | yes | UNKNOWN | compare song topology and state |
@@ -108,6 +114,12 @@ The current regression corpus should be reused deliberately rather than copied w
 
 ## First implementation backlog
 
-This section remains intentionally empty until the pinned SourceForge receipts and first build/parity observations exist.
+The only implementation backlog item currently justified by Phase 6 evidence is the **sanitized C++ import/build boundary itself**:
 
-A Phase 7 backlog must be generated from reproducible `DIFFERENT` / `MISSING` results, not from architectural preference.
+1. finish file-level licensing/third-party review of the frozen r12005 C++ receipts;
+2. define exact omissions/replacements;
+3. create an audited sanitized C++ baseline;
+4. reproduce `psycle-player` on Linux;
+5. only then begin moving matrix rows out of `UNKNOWN`.
+
+A Phase 7 behavioral backlog must be generated from reproducible `DIFFERENT` / `MISSING` results, not from architectural preference.
