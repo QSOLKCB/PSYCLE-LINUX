@@ -1,0 +1,46 @@
+name: Phase 5 ayeternal Gainer preservation
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-5/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gainer:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install native-machine test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Run Gainer preservation regression
+        shell: bash
+        run: |
+          set -o pipefail
+          chmod +x scripts/phase5-gainer-smoke.sh
+          scripts/phase5-gainer-smoke.sh phase5-gainer \
+            2>&1 | tee "$RUNNER_TEMP/phase5-gainer.log"
+
+      - name: Upload Gainer evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-gainer
+          path: |
+            phase5-gainer/
+            ${{ runner.temp }}/phase5-gainer.log
+          if-no-files-found: warn
