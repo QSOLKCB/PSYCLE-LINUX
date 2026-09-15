@@ -216,78 +216,98 @@ int verify_mono_stereo_routing(CMachineInterface* machine)
     return 0;
 }
 
-void configure_transition(CMachineInterface* machine)
+void configure_timing(CMachineInterface* machine)
 {
-    machine->ParameterTweak(PARAM_ROOM, 100);
-    machine->ParameterTweak(PARAM_REVTIME, 1200);
-    machine->ParameterTweak(PARAM_DAMPING, 500);
-    machine->ParameterTweak(PARAM_BANDWIDTH, 1000);
+    /* Bandwidth=0 keeps the input-damper/tap path silent after the impulse, so
+    ** the first later non-zero samples are the source-derived early-reflection
+    ** allpass delays. Input mode last flushes both engines. */
+    machine->ParameterTweak(PARAM_BANDWIDTH, 0);
     machine->ParameterTweak(PARAM_DRY, -70000);
     machine->ParameterTweak(PARAM_EARLY, 0);
-    machine->ParameterTweak(PARAM_TAIL, 0);
+    machine->ParameterTweak(PARAM_TAIL, -70000);
     machine->ParameterTweak(PARAM_INPUT, 0);
 }
 
-void render_impulse(CMachineInterface* machine,
+struct FirstDelays {
+    int left;
+    int right;
+};
+
+FirstDelays expected_first_delays(int sample_rate)
+{
+    /* Diffuser sizes are fixed in the gverb constructor from its initial
+    ** roomsize=50 m. The first later output on each side comes from diffuser
+    ** stage 1. Match the retained float-to-int truncation explicitly. */
+    const double largest_delay = static_cast<double>(sample_rate) * 50.0 / 340.0;
+    const int fdn_len3 = static_cast<int>(std::floor(0.632450 * largest_delay));
+    const double diffscale = static_cast<double>(fdn_len3) / 1341.0;
+    const int left_cc = 159 + static_cast<int>(15.0 * 0.125541);
+    const int right_cc = 159 + static_cast<int>(15.0 * -0.568366);
+    return {
+        static_cast<int>(diffscale * static_cast<double>(left_cc)),
+        static_cast<int>(diffscale * static_cast<double>(right_cc))
+    };
+}
+
+void render_impulse(CMachineInterface* machine, std::size_t frames,
     std::vector<float>& left, std::vector<float>& right)
 {
-    std::fill(left.begin(), left.end(), 0.0f);
-    std::fill(right.begin(), right.end(), 0.0f);
+    left.assign(frames, 0.0f);
+    right.assign(frames, 0.0f);
     left[0] = IMPULSE;
-    for (std::size_t offset = 0; offset < left.size();) {
+    for (std::size_t offset = 0; offset < frames;) {
         const int block = static_cast<int>(std::min<std::size_t>(256,
-            left.size() - offset));
+            frames - offset));
         machine->Work(left.data() + offset, right.data() + offset, block, 1);
         offset += static_cast<std::size_t>(block);
     }
 }
 
-double max_difference(const std::vector<float>& a,
-    const std::vector<float>& b)
+int first_nonzero_after_zero(const std::vector<float>& data)
 {
-    double result = 0.0;
-    for (std::size_t i = 0; i < a.size(); ++i)
-        result = std::max(result,
-            std::fabs(static_cast<double>(a[i]) - static_cast<double>(b[i])));
-    return result;
+    for (std::size_t i = 1; i < data.size(); ++i) {
+        if (std::fabs(data[i]) > 1e-5f)
+            return static_cast<int>(i);
+    }
+    return -1;
 }
 
-int verify_sample_rate_transition(CMachineInterface* live,
-    CMachineInterface* fresh, CMachineInterface* stale,
+int verify_sample_rate_transition(CMachineInterface* machine,
     const CMachineInfo* info)
 {
-    TestCallback live_callback(44100);
-    TestCallback fresh_callback(88200);
-    TestCallback stale_callback(44100);
+    TestCallback callback(44100);
+    initialize(machine, info, &callback);
+    configure_timing(machine);
 
-    initialize(live, info, &live_callback);
-    configure_transition(live);
-    live_callback.set_sample_rate(88200);
-    live->SequencerTick();
+    std::vector<float> left;
+    std::vector<float> right;
+    render_impulse(machine, 1600, left, right);
+    const FirstDelays expected_44 = expected_first_delays(44100);
+    const int left_44 = first_nonzero_after_zero(left);
+    const int right_44 = first_nonzero_after_zero(right);
+    if (left_44 != expected_44.left || right_44 != expected_44.right) {
+        std::fprintf(stderr,
+            "phase5-gverb: FAIL: 44.1 kHz first delays expected L%d/R%d got L%d/R%d\n",
+            expected_44.left, expected_44.right, left_44, right_44);
+        return 1;
+    }
 
-    initialize(fresh, info, &fresh_callback);
-    configure_transition(fresh);
-    initialize(stale, info, &stale_callback);
-    configure_transition(stale);
+    callback.set_sample_rate(88200);
+    machine->SequencerTick();
+    render_impulse(machine, 2600, left, right);
+    const FirstDelays expected_88 = expected_first_delays(88200);
+    const int left_88 = first_nonzero_after_zero(left);
+    const int right_88 = first_nonzero_after_zero(right);
+    if (left_88 != expected_88.left || right_88 != expected_88.right) {
+        std::fprintf(stderr,
+            "phase5-gverb: FAIL: 88.2 kHz first delays expected L%d/R%d got L%d/R%d\n",
+            expected_88.left, expected_88.right, left_88, right_88);
+        return 1;
+    }
+    if (left_88 == left_44 || right_88 == right_44)
+        return fail("sample-rate transition retained stale diffuser timing");
 
-    constexpr std::size_t frames = 20000;
-    std::vector<float> live_l(frames), live_r(frames);
-    std::vector<float> fresh_l(frames), fresh_r(frames);
-    std::vector<float> stale_l(frames), stale_r(frames);
-    render_impulse(live, live_l, live_r);
-    render_impulse(fresh, fresh_l, fresh_r);
-    render_impulse(stale, stale_l, stale_r);
-
-    const double target_diff = std::max(max_difference(live_l, fresh_l),
-        max_difference(live_r, fresh_r));
-    const double stale_diff = std::max(max_difference(live_l, stale_l),
-        max_difference(live_r, stale_r));
-    if (target_diff > 1e-5)
-        return fail("live 88.2 kHz reinit diverged from a fresh target instance");
-    if (stale_diff < 1e-3)
-        return fail("live sample-rate transition retained stale 44.1 kHz timing");
-
-    std::printf("phase5-gverb: samplerate PASS live-44100->88200 matches-fresh-88200 rejects-stale-44100 frames=20000\n");
+    std::printf("phase5-gverb: samplerate PASS first-delay-44100=L489/R461 first-delay-88200=L978/R923\n");
     return 0;
 }
 
@@ -336,20 +356,13 @@ int main(int argc, char** argv)
     delete_machine(machine);
 
     if (rc == 0) {
-        CMachineInterface* live = create_machine();
-        CMachineInterface* fresh = create_machine();
-        CMachineInterface* stale = create_machine();
-        if (!live || !fresh || !stale) {
-            if (live) delete_machine(live);
-            if (fresh) delete_machine(fresh);
-            if (stale) delete_machine(stale);
+        CMachineInterface* timing = create_machine();
+        if (!timing) {
             dlclose(handle);
-            return fail("sample-rate comparison machine creation failed");
+            return fail("sample-rate timing machine creation failed");
         }
-        rc = verify_sample_rate_transition(live, fresh, stale, info);
-        delete_machine(live);
-        delete_machine(fresh);
-        delete_machine(stale);
+        rc = verify_sample_rate_transition(timing, info);
+        delete_machine(timing);
     }
 
     dlclose(handle);
