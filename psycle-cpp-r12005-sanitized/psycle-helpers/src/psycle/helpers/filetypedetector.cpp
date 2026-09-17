@@ -1,4 +1,5 @@
 #include "filetypedetector.hpp"
+#include <cstring>
 namespace psycle
 {
 	namespace helpers
@@ -116,7 +117,7 @@ namespace psycle
 		{
 			char read[21];
 			ReadRaw(read,sizeof(read));
-			if ( strncmp(read,XI_STRING_ID,sizeof(read))) return false;
+			if (std::strncmp(read, XI_STRING_ID, sizeof(read)) != 0) return false;
 			return true;
 		}
 
