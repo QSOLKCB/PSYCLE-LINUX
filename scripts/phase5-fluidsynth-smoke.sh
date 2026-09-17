@@ -18,6 +18,7 @@ NATIVE_BIN="$OUT/phase5-fluidsynth"
 STATE_BIN="$OUT/phase5-fluidsynth-state"
 NATIVE_LOG="$OUT/phase5-fluidsynth.log"
 STATE_LOG="$OUT/phase5-fluidsynth-state.log"
+BACKTRACE_LOG="$OUT/persistence-backtrace.log"
 SUMMARY="$OUT/summary.md"
 
 [[ -s "$SF2" ]] || {
@@ -64,7 +65,8 @@ LUA_CFLAGS=($(pkg-config --cflags lua))
 # shellcheck disable=SC2207
 LUA_LIBS=($(pkg-config --libs lua))
 
-gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
+gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer \
+    -Wall -Wextra -Werror=implicit-function-declaration \
     -I"$CPSYCLE/audio/src" -I"$CPSYCLE/thread/src" \
     -I"$CPSYCLE/script/src" -I"$CPSYCLE/container/src" \
     -I"$CPSYCLE/file/src" -I"$CPSYCLE/dsp/src" \
@@ -77,7 +79,29 @@ gcc -std=gnu11 -Wall -Wextra -Werror=implicit-function-declaration \
     -lpthread -ldl -lstdc++ -lcontainer "${LUA_LIBS[@]}"
 
 "$NATIVE_BIN" "$PLUGIN" "$SF2" 2>&1 | tee "$NATIVE_LOG"
+
+set +e
 "$STATE_BIN" "$OUT" "$PLUGIN" "$SF2" 2>&1 | tee "$STATE_LOG"
+STATE_STATUS=${PIPESTATUS[0]}
+set -e
+
+if (( STATE_STATUS != 0 )); then
+    echo "phase5-fluidsynth: persistence executable failed with status $STATE_STATUS" >&2
+    if command -v gdb >/dev/null 2>&1; then
+        set +e
+        gdb --batch \
+            -ex 'set pagination off' \
+            -ex 'handle SIGSEGV stop print nopass' \
+            -ex run \
+            -ex 'thread apply all bt full' \
+            --args "$STATE_BIN" "$OUT" "$PLUGIN" "$SF2" \
+            2>&1 | tee "$BACKTRACE_LOG"
+        set -e
+    else
+        echo "phase5-fluidsynth: gdb unavailable; no persistence backtrace captured" >&2
+    fi
+    exit "$STATE_STATUS"
+fi
 
 grep -Fqx 'phase5-fluidsynth: metadata PASS version=0x0101 slots=24 state=19 labels=3 nulls=2 identity=FluidSynth' "$NATIVE_LOG"
 grep -Fqx 'phase5-fluidsynth: constructor PASS defaults=24 initialized-before-Init=yes' "$NATIVE_LOG"
