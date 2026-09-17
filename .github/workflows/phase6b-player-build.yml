@@ -1,0 +1,89 @@
+name: Phase 6B historical psycle-player build
+
+on:
+  push:
+    branches:
+      - 'phase-6b/source-baseline-player-build'
+    paths:
+      - 'psycle-cpp-r12005-sanitized/**'
+      - 'scripts/phase6b-verify-committed-source.sh'
+      - 'scripts/phase6b-verify-qmake-support.sh'
+      - 'scripts/phase6b-verify-build-system-src.sh'
+      - '.github/workflows/phase6b-player-build.yml'
+  pull_request:
+    paths:
+      - 'psycle-cpp-r12005-sanitized/**'
+      - 'scripts/phase6b-verify-committed-source.sh'
+      - 'scripts/phase6b-verify-qmake-support.sh'
+      - 'scripts/phase6b-verify-build-system-src.sh'
+      - '.github/workflows/phase6b-player-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  historical-player:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install historical build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            qt5-qmake \
+            qtbase5-dev \
+            libboost-all-dev \
+            libxml++2.6-dev \
+            zlib1g-dev \
+            libsoxr-dev \
+            libasound2-dev \
+            libjack-jackd2-dev
+
+      - name: Verify sanitized source identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/phase6-upstream-audit.sh phase6-upstream-audit
+          bash scripts/phase6b-sanitized-manifest.sh \
+            phase6-upstream-audit \
+            phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-committed-source.sh \
+            psycle-cpp-r12005-sanitized \
+            phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-qmake-support.sh \
+            psycle-cpp-r12005-sanitized/build-systems/qmake
+          bash scripts/phase6b-verify-build-system-src.sh \
+            psycle-cpp-r12005-sanitized/build-systems/src
+
+      - name: Configure historical qmake build
+        shell: bash
+        working-directory: psycle-cpp-r12005-sanitized/psycle-player
+        run: |
+          set -euo pipefail
+          qmake CONFIG-=shared CONFIG+=release psycle-player.pro
+
+      - name: Build historical psycle-player
+        shell: bash
+        working-directory: psycle-cpp-r12005-sanitized/psycle-player
+        run: |
+          set -euo pipefail
+          make -j2
+
+      - name: Verify player executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          PLAYER='psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player'
+          test -x "$PLAYER"
+          "$PLAYER" --help
+          "$PLAYER" --version
+          file "$PLAYER"
