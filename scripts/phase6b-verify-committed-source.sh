@@ -34,17 +34,17 @@ done
 [[ "$(cat "$RECEIPT/baseline.sha256")" == "$EXPECTED_BASELINE_SHA256" ]] || \
   die "unexpected Phase 6B receipt identity"
 
-actual_file_count="$(find "$SOURCE_ROOT" -type f -printf '.' | wc -c | tr -d ' ')"
-[[ "$actual_file_count" -eq "$EXPECTED_FILE_COUNT" ]] || \
-  die "unexpected committed upstream file count: $actual_file_count"
-
 actual_manifest="$(mktemp)"
 trap 'rm -f "$actual_manifest"' EXIT
 : > "$actual_manifest"
+actual_file_count=0
 
 for component in "${COMPONENTS[@]}"; do
   component_root="$SOURCE_ROOT/$component"
   [[ -d "$component_root" ]] || die "missing committed component: $component"
+
+  component_count="$(find "$component_root" -type f -printf '.' | wc -c | tr -d ' ')"
+  actual_file_count=$((actual_file_count + component_count))
 
   while IFS= read -r -d '' file; do
     relative="${file#"$SOURCE_ROOT/"}"
@@ -52,6 +52,9 @@ for component in "${COMPONENTS[@]}"; do
     printf '%s  %s\n' "$sha" "$relative" >> "$actual_manifest"
   done < <(find "$component_root" -type f -print0 | sort -z)
 done
+
+[[ "$actual_file_count" -eq "$EXPECTED_FILE_COUNT" ]] || \
+  die "unexpected committed upstream file count: $actual_file_count"
 
 sort -o "$actual_manifest" "$actual_manifest"
 if ! diff -u "$RECEIPT/retained-all.sha256" "$actual_manifest"; then
@@ -71,8 +74,10 @@ actual_baseline_sha="$(sha256sum "$actual_manifest" | awk '{print $1}')"
 [[ "$(find "$SOURCE_ROOT/psycle-plugins" -type f -printf '.' | wc -c | tr -d ' ')" -eq 1 ]] || \
   die "unexpected plugin-tree material entered committed baseline"
 
-if find "$SOURCE_ROOT" -type f \( -iname '*.dll' -o -iname '*.psy' \) -print -quit | grep -q .; then
-  die "restricted binary/song material entered committed source"
-fi
+for component in "${COMPONENTS[@]}"; do
+  if find "$SOURCE_ROOT/$component" -type f \( -iname '*.dll' -o -iname '*.psy' \) -print -quit | grep -q .; then
+    die "restricted binary/song material entered committed component source"
+  fi
+done
 
 echo "phase6b-verify-committed-source: PASS files=$actual_file_count baseline=$actual_baseline_sha"
