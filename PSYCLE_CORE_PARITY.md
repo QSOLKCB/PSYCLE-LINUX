@@ -2,15 +2,17 @@
 
 ## Status
 
-**Phase 6 audit scaffold — no compatibility PASS / DIFFERENT claims are accepted yet.**
+**Phase 6C active — the candidate C++ engine is now imported and buildable, but no original-Psycle compatibility row is classified yet.**
 
-This matrix compares three separately identified evidence sources:
+This document is the human-readable view of the machine-readable contract in [`phase6c/compatibility-matrix.json`](phase6c/compatibility-matrix.json). The matrix compares three separately identified evidence sources:
 
 1. **Original Psycle 1.12.0 x86** — primary behavioural reference;
-2. **six-component C++ build-source family at SourceForge SVN r12005** — candidate Linux engine snapshot, including required `universalis` support code;
+2. **sanitized SourceForge SVN r12005 C++ family** — candidate Linux engine, frozen by the Phase 6B baseline identity;
 3. **C-Psycle r12005 regression corpus** — independent donor/oracle where semantics overlap.
 
-See [PHASE6_REFERENCE_PROVENANCE.md](PHASE6_REFERENCE_PROVENANCE.md) for the frozen identities and [PHASE6_CPP_IMPORT_AUDIT.md](PHASE6_CPP_IMPORT_AUDIT.md) for the current import HOLD.
+Phase 6B is complete. The sanitized C++ source is committed under `psycle-cpp-r12005-sanitized/`, the historical qmake path builds `psycle-player` on Ubuntu 24.04, the missing historical support inputs are staged with pinned identities, and the final Phase 6B historical-player CI run completed successfully.
+
+Phase 6C therefore starts with evidence collection rather than more source-discovery work.
 
 ## Evidence rule
 
@@ -20,55 +22,70 @@ A row may change from `UNKNOWN` only when the result records:
 - exact candidate C++ snapshot identity;
 - fixture/input identity;
 - observation procedure;
-- produced receipt, hash, render, dump, log, or other reproducible evidence;
+- produced receipt, hash, render, dump, log, screenshot, or another reproducible observation;
 - tolerance/invariant when byte-exact comparison is inappropriate.
 
 `PASS` means the tested compatibility contract matches the pinned original reference for the stated fixture/procedure. It does **not** mean the whole subsystem is proven equivalent.
 
 `DIFFERENT` means a reproducible difference exists. It is not automatically a defect until the expected compatibility contract is established.
 
-`MISSING` means the candidate engine lacks a capability required to perform the corresponding original-Psycle operation.
+`MISSING` means the candidate engine lacks a capability required to perform the corresponding original-Psycle operation, with that requirement grounded in the original-reference evidence.
 
-`UNKNOWN` means evidence has not yet established the result.
+`UNKNOWN` means the evidence is incomplete.
+
+Candidate-only or C-Psycle-only observations may be useful and may expose implementation gaps, but they do **not** move an overall compatibility row out of `UNKNOWN` by themselves. `scripts/phase6c-validate-matrix.py` enforces that rule mechanically.
 
 ## Pinned inputs
 
 | Role | Identity | Status |
 | --- | --- | --- |
-| Original Psycle | `Psycle 1.12.0 x86 / PsycleInstallerx86-1.12.0.exe` — 9,322,919 bytes — SHA-256 `f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769` | **PINNED**; observation procedures still to be executed |
-| `universalis` | SVN r12005 / last changed r12004 / 83 files / manifest `827586daad2efcfbc10466394670a4a0e5f208da94afb7b3bf72239d396a618e` | **PINNED FOR AUDIT**; required build support |
-| `psycle-core` | SVN r12005 / 108 files / manifest `eb25467bdfbdea7296fc2c8e01c802e3b2b977d95775ab363cc810309aee729b` | **PINNED FOR AUDIT**; public import HOLD |
-| `psycle-audiodrivers` | SVN r12005 / 36 files / manifest `4518274595b58fa89f59ca9012198e4602bdabb32216193edc38fdbe7aef0ab1` | **PINNED FOR AUDIT**; public import HOLD |
-| `psycle-helpers` | SVN r12005 / 68 files / manifest `13d05df94637cef8701fee0555bb4a9915fd082dcd531ae2b772c4a633f3f5db` | **PINNED FOR AUDIT**; public import HOLD |
-| `psycle-player` | SVN r12005 / 7 files / manifest `6fd4fb58b3841b89cafd69c1c4a6c4f5c95864f1d7edb6e6f999621bfadecb6f` | **PINNED FOR AUDIT**; public import HOLD |
-| `psycle-plugins` | SVN r12005 / 634 files / manifest `a8d66a18e363229ad9ff13b688149fec4682da8b177afb757c064491123de888` | **PINNED FOR AUDIT**; requires sanitization before import |
-| C-Psycle oracle | repository audited baseline `cpsycle-r12005-baseline` plus merged Phase 2–5 regressions | available |
+| Original Psycle | `Psycle 1.12.0 x86 / PsycleInstallerx86-1.12.0.exe` — 9,322,919 bytes — SHA-256 `f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769` | **PINNED**; executable is not redistributed; behavioural observations remain to be collected |
+| Candidate C++ | SourceForge SVN r12005 sanitized Phase 6B baseline `00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a` | **IMPORTED / BUILDABLE** |
+| Historical player build | Ubuntu 24.04 qmake build; Phase 6B run `35196962690` | **PASS** as a build/runtime smoke, not an original-Psycle parity claim |
+| C-Psycle oracle | repository baseline `cpsycle-r12005-baseline` plus merged Phase 2–5 regressions | **AVAILABLE** |
 
-The candidate C++ snapshot is reproducible, but **not yet present in this Git repository**. A parity row cannot report candidate-engine execution until the provenance-safe sanitized import/build gate is complete.
+See [`PHASE6_REFERENCE_PROVENANCE.md`](PHASE6_REFERENCE_PROVENANCE.md) for the frozen upstream identities and [`PHASE6_CPP_IMPORT_AUDIT.md`](PHASE6_CPP_IMPORT_AUDIT.md) for the sanitized import boundary.
+
+## Phase 6C executable evidence lane
+
+The maintained Phase 6C workflow is `.github/workflows/phase6c-compatibility-matrix.yml`.
+
+Its first portable evidence slice deliberately reuses project-authored fixtures rather than upstream demo songs:
+
+- `scripts/phase4-historical-psy2-smoke.sh` creates and validates the existing deterministic PSY2SONG fixture through C-Psycle;
+- `scripts/phase4-core-workflow-smoke.sh` creates and validates the existing deterministic PSY3 workflow fixture through C-Psycle;
+- the pinned historical `psycle-player` is rebuilt from the sanitized C++ baseline;
+- `scripts/phase6c-candidate-fixtures.sh` runs that player with the `dummy` audio driver against both fixtures;
+- the evidence artifact records fixture SHA-256, player exit code, observation classification and log SHA-256 for each candidate run.
+
+Those receipts intentionally set `original_psycle_observed=false` and `parity_status=UNKNOWN`. A clean candidate load is useful candidate evidence, but it is not silently promoted into an original-Psycle compatibility claim.
 
 ## Engine compatibility matrix
 
-| Subsystem / contract | Original reference evidence | Candidate C++ result | C-Psycle evidence reusable? | Status | Notes / next evidence |
+| Subsystem / contract | Original reference evidence | Candidate C++ evidence | C-Psycle evidence reusable? | Status | Next evidence |
 | --- | --- | --- | --- | --- | --- |
-| PSY2 parsing | pending | pending | yes, project fixture exists | UNKNOWN | establish shared fixture and field-level receipt |
-| PSY3 parsing | pending | pending | yes | UNKNOWN | compare song topology and state |
-| PSY serialization / round-trip | pending | pending | yes | UNKNOWN | distinguish format compatibility from byte identity |
-| Sequence / pattern order | pending | pending | partial | UNKNOWN | original pattern-sequence semantics are authoritative |
-| BPM / LPB / tick timing | pending | pending | partial | UNKNOWN | C-Psycle event sequencer may diverge |
-| Delayed / retrigger commands | pending | pending | partial | UNKNOWN | use minimal deterministic pattern fixtures |
-| Sampler PS1 | pending | pending | yes | UNKNOWN | compare pitch, envelopes, looping, commands |
-| XMSampler / Sampulse-related playback | pending | pending | partial | UNKNOWN | pin feature/version scope carefully |
-| Mixer / Master routing | pending | pending | partial | UNKNOWN | compare graph gain/send semantics |
-| Native-machine ABI / identity | pending | pending | strong Phase 5 corpus | UNKNOWN | map C++ host ABI against original first |
-| Native-machine parameter/state persistence | pending | pending | strong Phase 5 corpus | UNKNOWN | reuse source-derived plugin receipts where valid |
-| Plugin opaque state persistence | pending | pending | yes | UNKNOWN | VST2 host restoration is later Phase 9 work |
-| MIDI routing | pending | pending | partial | UNKNOWN | separate engine routing from platform driver input |
-| Automation / tweak commands | pending | pending | partial | UNKNOWN | record exact command semantics |
-| WAV/sample loading | pending | pending | yes | UNKNOWN | start with project-authored PCM fixture |
-| Offline render / bounce | pending | pending | yes | UNKNOWN | compare deterministic renders where practical |
-| Bounce → Sampler workflow | pending | pending | yes | UNKNOWN | reuse Phase 4 acceptance concept |
-| Missing-machine recovery | pending | pending | partial | UNKNOWN | define placeholder contract before implementation |
-| Historical song playback | pending | pending | not yet | UNKNOWN | only use redistributable/permissioned songs |
+| PSY2 parsing | pending | Phase 6C candidate receipt lane established | yes; project fixture exists | UNKNOWN | observe the same fixture/procedure on pinned original 1.12.0 |
+| PSY3 parsing | pending | Phase 6C candidate receipt lane established | yes; project fixture exists | UNKNOWN | compare topology/state against original 1.12.0 |
+| Serialization / round-trip | pending | pending | yes | UNKNOWN | distinguish semantic round-trip from byte identity |
+| Malformed-file behaviour | pending | pending | partial | UNKNOWN | define rejection/recovery fixtures and original behaviour |
+| Sequence / pattern order | pending | pending | partial | UNKNOWN | original sequence semantics are authoritative |
+| BPM / LPB / tick timing | pending | pending | partial | UNKNOWN | capture deterministic timing receipts from original |
+| Delayed / retrigger / extended commands | pending | pending | partial | UNKNOWN | use minimal deterministic patterns |
+| Sampler PS1 | pending | pending | yes | UNKNOWN | compare pitch, envelopes, looping and commands |
+| XMSampler / Sampulse-related playback | pending | pending | partial | UNKNOWN | pin exact feature/version scope |
+| Mixer / Master / routing / mute / bypass | pending | pending | partial | UNKNOWN | compare graph defaults, gain and send semantics |
+| Native-machine ABI / identity | pending | pending | strong Phase 5 corpus | UNKNOWN | bind shared ABI receipts to original 1.12.0 observations |
+| Native-machine defaults / tweak / state | pending | pending | strong Phase 5 corpus | UNKNOWN | reuse source-derived plugin receipts where valid |
+| Plugin opaque-state persistence | pending | pending | yes | UNKNOWN | VST2 host restoration remains later Phase 9 scope |
+| Native rescan / cache | pending | pending | partial | UNKNOWN | separate native discovery from later VST2 scanning |
+| MIDI routing | pending | pending | partial | UNKNOWN | separate engine routing from platform-driver input |
+| Automation / tweak commands | pending | pending | partial | UNKNOWN | record exact event ordering and command semantics |
+| WAV / sample loading | pending | pending | yes | UNKNOWN | use a project-authored PCM fixture |
+| Offline render / bounce | pending | pending | yes | UNKNOWN | compare deterministic/tolerance-bounded renders |
+| Missing-machine recovery | pending | pending | partial | UNKNOWN | establish original placeholder/recovery contract |
+| Historical song playback | pending | pending | not yet | UNKNOWN | use only redistributable, permissioned or project-authored material |
+
+The machine-readable matrix contains the canonical row IDs and exact evidence-gating rules. This table is a readable projection, not a second source of truth.
 
 ## UI-only gaps
 
@@ -86,15 +103,13 @@ Phase 6 separates engine gaps from UI gaps. The absence of a full tracker UI in 
 
 ## Existing C-Psycle evidence classification
 
-The current regression corpus should be reused deliberately rather than copied wholesale.
-
 ### Likely portable compatibility contracts
 
-- `.psy` fixture construction and structural round-trip checks;
+- project-authored `.psy` fixture construction and structural round-trip checks;
 - machine identity/parameter/state receipts where the C++ and C hosts consume the same native ABI;
 - deterministic DSP oracles for preserved native machines;
 - WAV/sample fixture generation;
-- render → Sampler workflow concepts;
+- render-to-Sampler workflow concepts;
 - missing-machine recovery concepts;
 - sample-rate and non-positive-buffer boundary tests where applicable.
 
@@ -105,22 +120,23 @@ The current regression corpus should be reused deliberately rather than copied w
 - delayed/retrigger command implementation;
 - mixer/send semantics;
 - automation routing;
-- UI-facing behavior.
+- UI-facing behaviour.
 
 ### C-Psycle-only historical evidence
 
-- C-Psycle X11 host behavior;
+- C-Psycle X11 host behaviour;
 - C-Psycle platform UI bridge implementation details;
 - C-Psycle's newer event-sequencer internals when they differ from original Psycle.
 
-## First implementation backlog
+## Current implementation backlog
 
-The only implementation backlog item currently justified by Phase 6 evidence is the **sanitized C++ import/build boundary itself**:
+Phase 6C now justifies this evidence backlog:
 
-1. materialize the exact retained-file and omission/replacement manifest for `universalis` plus the five Psycle C++ component trees;
-2. preserve/restore all compatible third-party notices;
-3. create an audited sanitized C++ baseline;
-4. reproduce `psycle-player` on Linux;
-5. only then begin moving matrix rows out of `UNKNOWN`.
+1. keep the machine-readable matrix and validation gate green;
+2. collect candidate receipts for the shared PSY2/PSY3 fixtures in maintained CI;
+3. reproduce those shared fixtures/procedures against the pinned original Psycle 1.12.0 reference in an accepted observation environment;
+4. classify only the rows for which the three-way evidence is sufficient;
+5. expand to timing, tracker commands, routing, sampler, native-state, WAV and render fixtures in that order as evidence becomes reproducible;
+6. generate the first Phase 7 behavioural backlog only from confirmed `DIFFERENT` / `MISSING` results.
 
-A Phase 7 behavioral backlog must be generated from reproducible `DIFFERENT` / `MISSING` results, not from architectural preference.
+No Phase 7 engine change is justified merely because C-Psycle and the C++ candidate differ. Original Psycle remains the compatibility target.
