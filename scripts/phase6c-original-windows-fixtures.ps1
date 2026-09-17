@@ -10,4 +10,47 @@ $ErrorActionPreference = "Stop"
 & (Join-Path $PSScriptRoot "phase6c-original-windows-fixtures-v2.ps1") `
     -CandidateArtifactRoot $CandidateArtifactRoot `
     -Out $Out
-exit $LASTEXITCODE
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
+$outRoot = if ([System.IO.Path]::IsPathRooted($Out)) {
+    [System.IO.Path]::GetFullPath($Out)
+} else {
+    [System.IO.Path]::GetFullPath((Join-Path (Join-Path $PSScriptRoot "..") $Out))
+}
+
+$runtimeUrl = $env:PSYCLE_PHASE6C_VC90_RUNTIME_URL
+$runtimeSha = $env:PSYCLE_PHASE6C_VC90_RUNTIME_SHA256
+$runtimeVersion = $env:PSYCLE_PHASE6C_VC90_RUNTIME_VERSION
+$runtimeReceipt = $env:PSYCLE_PHASE6C_VC90_RUNTIME_RECEIPT
+
+if ([string]::IsNullOrWhiteSpace($runtimeUrl) -or
+    [string]::IsNullOrWhiteSpace($runtimeSha) -or
+    [string]::IsNullOrWhiteSpace($runtimeVersion) -or
+    [string]::IsNullOrWhiteSpace($runtimeReceipt)) {
+    throw "phase6c-original-windows-fixtures: missing pinned VC90 runtime environment metadata"
+}
+
+if (-not (Test-Path -LiteralPath $runtimeReceipt -PathType Leaf)) {
+    throw "phase6c-original-windows-fixtures: missing VC90 runtime receipt: $runtimeReceipt"
+}
+Copy-Item -LiteralPath $runtimeReceipt -Destination (Join-Path $outRoot "vc90-runtime.txt")
+
+foreach ($name in @("psy2", "psy3")) {
+    $receiptPath = Join-Path $outRoot ("original-{0}.json" -f $name)
+    $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+    $receipt.procedure = "$($receipt.procedure); before launch install pinned Microsoft Visual C++ 2008 SP1 x86 runtime version $runtimeVersion from $runtimeUrl with SHA-256 $runtimeSha"
+    $receipt.environment | Add-Member -NotePropertyName vc90_runtime -NotePropertyValue ([ordered]@{
+        version = $runtimeVersion
+        url = $runtimeUrl
+        sha256 = $runtimeSha
+        receipt = "vc90-runtime.txt"
+    }) -Force
+    $json = $receipt | ConvertTo-Json -Depth 12
+    [System.IO.File]::WriteAllText(
+        $receiptPath,
+        $json + [Environment]::NewLine,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+}
