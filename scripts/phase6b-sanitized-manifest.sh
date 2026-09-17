@@ -15,6 +15,15 @@ COMPONENTS=(
   psycle-plugins
 )
 
+declare -A EXPECTED_MANIFEST_SHA256=(
+  [universalis]="827586daad2efcfbc10466394670a4a0e5f208da94afb7b3bf72239d396a618e"
+  [psycle-core]="eb25467bdfbdea7296fc2c8e01c802e3b2b977d95775ab363cc810309aee729b"
+  [psycle-audiodrivers]="4518274595b58fa89f59ca9012198e4602bdabb32216193edc38fdbe7aef0ab1"
+  [psycle-helpers]="13d05df94637cef8701fee0555bb4a9915fd082dcd531ae2b772c4a633f3f5db"
+  [psycle-player]="6fd4fb58b3841b89cafd69c1c4a6c4f5c95864f1d7edb6e6f999621bfadecb6f"
+  [psycle-plugins]="a8d66a18e363229ad9ff13b688149fec4682da8b177afb757c064491123de888"
+)
+
 EXPECTED_UPSTREAM=936
 EXPECTED_RETAINED=291
 EXPECTED_OMITTED=645
@@ -73,6 +82,10 @@ for component in "${COMPONENTS[@]}"; do
   manifest="$RECEIPT/components/$component/files.sha256"
   [[ -f "$manifest" ]] || die "missing frozen manifest: $manifest"
 
+  manifest_sha="$(sha256sum "$manifest" | awk '{print $1}')"
+  [[ "$manifest_sha" == "${EXPECTED_MANIFEST_SHA256[$component]}" ]] || \
+    die "frozen Phase 6A manifest identity mismatch for $component: $manifest_sha"
+
   retained="$OUT/retained/$component.sha256"
   omitted="$OUT/omitted/$component.tsv"
   : > "$retained"
@@ -82,8 +95,14 @@ for component in "${COMPONENTS[@]}"; do
   retained_count=0
   omitted_count=0
 
-  while read -r sha path; do
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ ${#line} -ge 68 ]] || die "invalid manifest record in $manifest"
+    sha="${line:0:64}"
+    separator="${line:64:2}"
+    path="${line:66}"
     [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || die "invalid sha256 in $manifest"
+    [[ "$separator" == "  " ]] || \
+      die "invalid sha256sum record separator in $manifest"
     [[ "$path" == ./* ]] || die "unexpected path in $manifest: $path"
     upstream_count=$((upstream_count + 1))
 
