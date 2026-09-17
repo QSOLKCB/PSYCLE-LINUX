@@ -1,0 +1,177 @@
+name: Phase 6B sanitized C++ baseline
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-6b/**'
+    paths:
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
+      - 'scripts/phase6b-materialize-source.sh'
+      - 'PHASE6_CPP_IMPORT_AUDIT.md'
+      - 'PHASE6B_SANITIZED_BASELINE.md'
+      - '.github/workflows/phase6b-sanitized-baseline.yml'
+  pull_request:
+    paths:
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
+      - 'scripts/phase6b-materialize-source.sh'
+      - 'PHASE6_CPP_IMPORT_AUDIT.md'
+      - 'PHASE6B_SANITIZED_BASELINE.md'
+      - '.github/workflows/phase6b-sanitized-baseline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6b-sanitized-baseline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sanitized-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install provenance tools
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            subversion
+
+      - name: Reproduce frozen Phase 6A receipts
+        shell: bash
+        run: |
+          scripts/phase6-upstream-audit.sh phase6-upstream-audit
+
+      - name: Materialize Phase 6B sanitized selection
+        shell: bash
+        run: |
+          bash scripts/phase6b-sanitized-manifest.sh \
+            phase6-upstream-audit \
+            phase6b-sanitized-manifest
+          cat phase6b-sanitized-manifest/counts.tsv
+          cat phase6b-sanitized-manifest/summary.md
+
+      - name: Assert conservative selection boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          grep -Fqx $'universalis\t83\t83\t0' phase6b-sanitized-manifest/counts.tsv
+          grep -Fqx $'psycle-core\t108\t100\t8' phase6b-sanitized-manifest/counts.tsv
+          grep -Fqx $'psycle-audiodrivers\t36\t32\t4' phase6b-sanitized-manifest/counts.tsv
+          grep -Fqx $'psycle-helpers\t68\t68\t0' phase6b-sanitized-manifest/counts.tsv
+          grep -Fqx $'psycle-player\t7\t7\t0' phase6b-sanitized-manifest/counts.tsv
+          grep -Fqx $'psycle-plugins\t634\t1\t633' phase6b-sanitized-manifest/counts.tsv
+          grep -Fqx '00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a' \
+            phase6b-sanitized-manifest/baseline.sha256
+
+          test "$(wc -l < phase6b-sanitized-manifest/retained/psycle-plugins.sha256)" -eq 1
+          grep -Fq '  ./src/psycle/plugins/plugin.hpp' \
+            phase6b-sanitized-manifest/retained/psycle-plugins.sha256
+
+          if grep -Fq '/src/seib/vst/' phase6b-sanitized-manifest/retained-all.sha256; then
+            echo 'Seib VST quarantine leaked into retained baseline.' >&2
+            exit 1
+          fi
+          if grep -Fq '/src/asio/' phase6b-sanitized-manifest/retained-all.sha256; then
+            echo 'ASIO quarantine leaked into retained baseline.' >&2
+            exit 1
+          fi
+          if grep -Ei '\.(dll|psy)$' phase6b-sanitized-manifest/retained-all.sha256; then
+            echo 'Restricted binary/song material leaked into retained baseline.' >&2
+            exit 1
+          fi
+
+          test "$(grep -c '^exclude-closed-source-prebuilt-binary' phase6b-sanitized-manifest/omitted/psycle-plugins.tsv)" -eq 9
+          test "$(grep -c '^exclude-unresolved-song-redistribution' phase6b-sanitized-manifest/omitted/psycle-plugins.tsv)" -eq 3
+          test "$(grep -c '^exclude-steinberg-vst-sdk-derived' phase6b-sanitized-manifest/omitted/psycle-plugins.tsv)" -eq 1
+          test "$(grep -c '^defer-plugin-material-not-required-for-first-player-baseline' phase6b-sanitized-manifest/omitted/psycle-plugins.tsv)" -eq 620
+
+      - name: Verify sanitized source materialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/phase6b-materialize-source.sh \
+            phase6b-sanitized-manifest \
+            phase6b-sanitized-source
+
+          test "$(find phase6b-sanitized-source -type f ! -name '.phase6b-retained-manifest.sha256' -printf '.' | wc -c | tr -d ' ')" -eq 291
+          grep -Fqx '00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a' \
+            phase6b-sanitized-source/.phase6b-retained-manifest.sha256
+          test -f phase6b-sanitized-source/psycle-plugins/src/psycle/plugins/plugin.hpp
+          test "$(find phase6b-sanitized-source/psycle-plugins -type f -printf '.' | wc -c | tr -d ' ')" -eq 1
+          test ! -e phase6b-sanitized-source/psycle-core/src/seib/vst
+          test ! -e phase6b-sanitized-source/psycle-audiodrivers/src/asio
+
+      - name: Assert materializer refuses an existing destination
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir phase6b-existing-destination
+          if bash scripts/phase6b-materialize-source.sh \
+              phase6b-sanitized-manifest \
+              phase6b-existing-destination; then
+            echo 'Materializer unexpectedly reused an existing destination.' >&2
+            exit 1
+          fi
+          rmdir phase6b-existing-destination
+
+      - name: Remove transient sanitized source before artifact handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf -- phase6b-sanitized-source
+          test ! -e phase6b-sanitized-source
+
+      - name: Assert receipts-only output layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(mktemp)"
+          actual="$(mktemp)"
+          trap 'rm -f "$expected" "$actual"' EXIT
+
+          cat > "$expected" <<'EOF'
+          d omitted
+          d retained
+          f baseline.sha256
+          f counts.tsv
+          f omitted/psycle-audiodrivers.tsv
+          f omitted/psycle-core.tsv
+          f omitted/psycle-helpers.tsv
+          f omitted/psycle-player.tsv
+          f omitted/psycle-plugins.tsv
+          f omitted/universalis.tsv
+          f retained-all.sha256
+          f retained/psycle-audiodrivers.sha256
+          f retained/psycle-core.sha256
+          f retained/psycle-helpers.sha256
+          f retained/psycle-player.sha256
+          f retained/psycle-plugins.sha256
+          f retained/universalis.sha256
+          f summary.md
+          EOF
+
+          LC_ALL=C sort -o "$expected" "$expected"
+          find phase6b-sanitized-manifest -mindepth 1 -printf '%y %P\n' \
+            | LC_ALL=C sort > "$actual"
+          diff -u "$expected" "$actual"
+
+      - name: Upload Phase 6B selection receipt
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6b-sanitized-baseline
+          path: phase6b-sanitized-manifest/
+          if-no-files-found: error
+          retention-days: 30
