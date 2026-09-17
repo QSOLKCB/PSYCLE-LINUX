@@ -6,6 +6,10 @@ on:
       - 'phase-6c/**'
     paths:
       - 'phase6c/**'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'PHASE6_CPP_IMPORT_AUDIT.md'
+      - 'PHASE6_REFERENCE_PROVENANCE.md'
+      - 'ROADMAP.md'
       - 'psycle-cpp-r12005-sanitized/**'
       - 'scripts/phase6*.sh'
       - 'scripts/phase6*.py'
@@ -17,6 +21,10 @@ on:
   pull_request:
     paths:
       - 'phase6c/**'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'PHASE6_CPP_IMPORT_AUDIT.md'
+      - 'PHASE6_REFERENCE_PROVENANCE.md'
+      - 'ROADMAP.md'
       - 'psycle-cpp-r12005-sanitized/**'
       - 'scripts/phase6*.sh'
       - 'scripts/phase6*.py'
