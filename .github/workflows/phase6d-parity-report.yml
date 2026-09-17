@@ -1,0 +1,45 @@
+name: Phase 6D parity report contract
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-6d/**'
+    paths:
+      - 'phase6c/**'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'ROADMAP.md'
+      - 'scripts/phase6c-validate-matrix.py'
+      - 'scripts/phase6d-validate-parity-report.py'
+      - '.github/workflows/phase6d-parity-report.yml'
+  pull_request:
+    paths:
+      - 'phase6c/**'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'ROADMAP.md'
+      - 'scripts/phase6c-validate-matrix.py'
+      - 'scripts/phase6d-validate-parity-report.py'
+      - '.github/workflows/phase6d-parity-report.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6d-parity-report-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity-report-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Phase 6C evidence matrix
+        run: python3 scripts/phase6c-validate-matrix.py phase6c/compatibility-matrix.json
+
+      - name: Validate Phase 6D human parity report
+        run: python3 scripts/phase6d-validate-parity-report.py
