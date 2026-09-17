@@ -1,10 +1,24 @@
-name: Phase 6B source-bearing sanitized import
+name: Phase 6B sanitized source baseline
 
 on:
   push:
     branches:
-      - 'phase-6b/source-baseline-player-build'
+      - main
+      - 'phase-6b/**'
     paths:
+      - 'psycle-cpp-r12005-sanitized/**'
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
+      - 'scripts/phase6b-materialize-source.sh'
+      - 'scripts/phase6b-verify-committed-source.sh'
+      - 'scripts/phase6b-materialize-qmake-support.sh'
+      - 'scripts/phase6b-verify-qmake-support.sh'
+      - 'scripts/phase6b-materialize-build-system-src.sh'
+      - 'scripts/phase6b-verify-build-system-src.sh'
+      - '.github/workflows/phase6b-source-import.yml'
+  pull_request:
+    paths:
+      - 'psycle-cpp-r12005-sanitized/**'
       - 'scripts/phase6-upstream-audit.sh'
       - 'scripts/phase6b-sanitized-manifest.sh'
       - 'scripts/phase6b-materialize-source.sh'
@@ -17,23 +31,20 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: phase6b-source-import-${{ github.ref }}
-  cancel-in-progress: false
+  group: phase6b-source-baseline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  import-sanitized-source:
+  verify-sanitized-source:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
-      - name: Checkout branch
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.ref_name }}
 
       - name: Install provenance tools
         env:
@@ -61,64 +72,24 @@ jobs:
           grep -Fqx '00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a' \
             phase6b-sanitized-manifest/baseline.sha256
 
-      - name: Materialize or verify committed component source
+      - name: Verify committed component source
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -d psycle-cpp-r12005-sanitized/psycle-core ]]; then
-            bash scripts/phase6b-verify-committed-source.sh \
-              psycle-cpp-r12005-sanitized \
-              phase6b-sanitized-manifest
-          else
-            bash scripts/phase6b-materialize-source.sh \
-              phase6b-sanitized-manifest \
-              psycle-cpp-r12005-sanitized
-            rm -f psycle-cpp-r12005-sanitized/.phase6b-retained-manifest.sha256
-            bash scripts/phase6b-verify-committed-source.sh \
-              psycle-cpp-r12005-sanitized \
-              phase6b-sanitized-manifest
-          fi
+          bash scripts/phase6b-verify-committed-source.sh \
+            psycle-cpp-r12005-sanitized \
+            phase6b-sanitized-manifest
 
-      - name: Materialize or verify historical qmake support
+      - name: Verify historical qmake support
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -d psycle-cpp-r12005-sanitized/build-systems/qmake ]]; then
-            bash scripts/phase6b-verify-qmake-support.sh \
-              psycle-cpp-r12005-sanitized/build-systems/qmake
-          else
-            mkdir -p psycle-cpp-r12005-sanitized/build-systems
-            bash scripts/phase6b-materialize-qmake-support.sh \
-              psycle-cpp-r12005-sanitized/build-systems/qmake
-            bash scripts/phase6b-verify-qmake-support.sh \
-              psycle-cpp-r12005-sanitized/build-systems/qmake
-          fi
+          bash scripts/phase6b-verify-qmake-support.sh \
+            psycle-cpp-r12005-sanitized/build-systems/qmake
 
-      - name: Materialize or verify build-system source support
+      - name: Verify build-system source support
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -d psycle-cpp-r12005-sanitized/build-systems/src ]]; then
-            bash scripts/phase6b-verify-build-system-src.sh \
-              psycle-cpp-r12005-sanitized/build-systems/src
-          else
-            mkdir -p psycle-cpp-r12005-sanitized/build-systems
-            bash scripts/phase6b-materialize-build-system-src.sh \
-              psycle-cpp-r12005-sanitized/build-systems/src
-            bash scripts/phase6b-verify-build-system-src.sh \
-              psycle-cpp-r12005-sanitized/build-systems/src
-          fi
-
-      - name: Commit exact sanitized source baseline
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- psycle-cpp-r12005-sanitized
-          if git diff --cached --quiet; then
-            echo 'Committed sanitized source and build support already match the frozen receipts.'
-            exit 0
-          fi
-          git commit -m 'phase6b: add pinned build-system source support'
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          bash scripts/phase6b-verify-build-system-src.sh \
+            psycle-cpp-r12005-sanitized/build-systems/src
