@@ -4,7 +4,7 @@
 The important invariant is epistemic, not cosmetic: candidate/C-Psycle evidence alone
 must never promote a row out of UNKNOWN. PASS, DIFFERENT and MISSING are claims about
 the pinned original-Psycle compatibility target and therefore require reproducible
-original-reference evidence as well as candidate evidence.
+original-reference evidence, candidate evidence, and a versioned comparison verdict.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ MATRIX = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path(
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 EVIDENCE_ROOT = (REPO_ROOT / "phase6c" / "evidence").resolve()
 
+EXPECTED_ORIGINAL_FILE = "PsycleInstallerx86-1.12.0.exe"
 EXPECTED_ORIGINAL_SHA256 = (
     "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 )
@@ -28,6 +29,7 @@ EXPECTED_CANDIDATE_BASELINE = (
     "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a"
 )
 ALLOWED_STATUS = {"PASS", "DIFFERENT", "MISSING", "UNKNOWN"}
+CLASSIFIED_STATUS = ALLOWED_STATUS - {"UNKNOWN"}
 REQUIRED_IDS = {
     "project-io-psy2-parse",
     "project-io-psy3-parse",
@@ -57,6 +59,7 @@ PLACEHOLDER_RE = re.compile(
     r"not[\s_-]+yet|not[\s_-]+observed)(?:$|[\s:/_\-])",
     re.IGNORECASE,
 )
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def die(message: str) -> None:
@@ -79,6 +82,12 @@ def require_concrete_evidence_value(value: str, context: str) -> None:
         die(f"{context} contains placeholder evidence: {value!r}")
 
 
+def require_sha256(value: object, context: str) -> str:
+    if not isinstance(value, str) or SHA256_RE.fullmatch(value) is None:
+        die(f"{context} must be a lowercase SHA-256 hex digest")
+    return value
+
+
 def resolve_versioned_receipt(reference: str, context: str) -> pathlib.Path:
     """Resolve a classification receipt committed below phase6c/evidence/."""
     receipt_ref = pathlib.PurePosixPath(reference.strip())
@@ -99,15 +108,24 @@ def resolve_versioned_receipt(reference: str, context: str) -> pathlib.Path:
     return receipt_path
 
 
+def load_versioned_receipt(reference: str, context: str) -> dict[str, object]:
+    receipt_path = resolve_versioned_receipt(reference, context)
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        die(f"{context} receipt is invalid JSON: {exc}")
+    if not isinstance(receipt, dict):
+        die(f"{context} receipt must be a JSON object")
+    return receipt
+
+
 def validate_classification_receipt(
     mapping: dict[str, object],
     row_id: str,
     role: str,
-    identity_field: str,
-    expected_identity: str,
     context: str,
-) -> None:
-    """Require a versioned receipt that binds identity, fixture, procedure and result."""
+) -> tuple[str, str]:
+    """Validate one versioned observation receipt and return its ref and fixture hash."""
     for field in ("fixture", "procedure"):
         value = mapping[field]
         assert isinstance(value, str)
@@ -115,14 +133,7 @@ def validate_classification_receipt(
 
     observation_ref = mapping["observation"]
     assert isinstance(observation_ref, str)
-    receipt_path = resolve_versioned_receipt(observation_ref, f"{context}.observation")
-
-    try:
-        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        die(f"{context}.observation receipt is invalid JSON: {exc}")
-    if not isinstance(receipt, dict):
-        die(f"{context}.observation receipt must be a JSON object")
+    receipt = load_versioned_receipt(observation_ref, f"{context}.observation")
 
     if receipt.get("schema_version") != 1 or receipt.get("phase") != "6C":
         die(f"{context}.observation receipt has unexpected schema_version/phase")
@@ -130,19 +141,97 @@ def validate_classification_receipt(
         die(f"{context}.observation receipt is bound to the wrong contract")
     if receipt.get("evidence_role") != role:
         die(f"{context}.observation receipt is bound to the wrong evidence role")
-    if receipt.get(identity_field) != expected_identity:
-        die(f"{context}.observation receipt is bound to the wrong identity")
+
+    if role == "original":
+        if receipt.get("reference_build") != "Psycle 1.12.0 x86":
+            die(f"{context}.observation receipt is bound to the wrong reference build")
+        if receipt.get("reference_file") != EXPECTED_ORIGINAL_FILE:
+            die(f"{context}.observation receipt is bound to the wrong reference file")
+        if receipt.get("reference_installer_sha256") != EXPECTED_ORIGINAL_SHA256:
+            die(f"{context}.observation receipt has the wrong reference installer SHA-256")
+        if receipt.get("reference_installer_size_bytes") != EXPECTED_ORIGINAL_SIZE:
+            die(f"{context}.observation receipt has the wrong reference installer size")
+    elif role == "candidate":
+        if receipt.get("snapshot") != EXPECTED_CANDIDATE_BASELINE:
+            die(f"{context}.observation receipt is bound to the wrong candidate snapshot")
+        require_sha256(
+            receipt.get("executable_sha256"),
+            f"{context}.observation receipt executable_sha256",
+        )
+    else:
+        die(f"{context} has unsupported evidence role: {role}")
+
     if receipt.get("fixture") != mapping["fixture"]:
         die(f"{context}.observation receipt fixture does not match the matrix")
     if receipt.get("procedure") != mapping["procedure"]:
         die(f"{context}.observation receipt procedure does not match the matrix")
 
+    fixture_sha256 = require_sha256(
+        receipt.get("fixture_sha256"),
+        f"{context}.observation receipt fixture_sha256",
+    )
     receipt_observation = receipt.get("observation")
     if not isinstance(receipt_observation, str) or not receipt_observation.strip():
         die(f"{context}.observation receipt must contain a concrete observation")
     require_concrete_evidence_value(
         receipt_observation, f"{context}.observation receipt observation"
     )
+    return observation_ref, fixture_sha256
+
+
+def validate_comparison_receipt(
+    row: dict[str, object],
+    row_id: str,
+    status: str,
+    original_ref: str,
+    candidate_ref: str,
+    original_fixture_sha256: str,
+    candidate_fixture_sha256: str,
+) -> None:
+    """Bind the matrix status to a versioned comparison verdict over both receipts."""
+    comparison_ref = row.get("comparison")
+    if not isinstance(comparison_ref, str) or not comparison_ref.strip():
+        die(f"{row_id}.comparison must reference a versioned comparison receipt")
+    comparison = load_versioned_receipt(comparison_ref, f"{row_id}.comparison")
+
+    if comparison.get("schema_version") != 1 or comparison.get("phase") != "6C":
+        die(f"{row_id}.comparison receipt has unexpected schema_version/phase")
+    if comparison.get("scope") != "compatibility-comparison":
+        die(f"{row_id}.comparison receipt has the wrong scope")
+    if comparison.get("contract") != row_id:
+        die(f"{row_id}.comparison receipt is bound to the wrong contract")
+    if comparison.get("original_receipt") != original_ref:
+        die(f"{row_id}.comparison receipt references the wrong original receipt")
+    if comparison.get("candidate_receipt") != candidate_ref:
+        die(f"{row_id}.comparison receipt references the wrong candidate receipt")
+    if comparison.get("original_reference_build") != "Psycle 1.12.0 x86":
+        die(f"{row_id}.comparison receipt is bound to the wrong original build")
+    if comparison.get("original_installer_sha256") != EXPECTED_ORIGINAL_SHA256:
+        die(f"{row_id}.comparison receipt has the wrong original installer SHA-256")
+    if comparison.get("original_installer_size_bytes") != EXPECTED_ORIGINAL_SIZE:
+        die(f"{row_id}.comparison receipt has the wrong original installer size")
+    if comparison.get("candidate_snapshot") != EXPECTED_CANDIDATE_BASELINE:
+        die(f"{row_id}.comparison receipt is bound to the wrong candidate snapshot")
+
+    if original_fixture_sha256 != candidate_fixture_sha256:
+        die(f"{row_id} original/candidate receipts do not identify the same fixture")
+    if comparison.get("fixture_sha256") != original_fixture_sha256:
+        die(f"{row_id}.comparison receipt is bound to the wrong fixture SHA-256")
+
+    verdict = comparison.get("verdict")
+    if verdict not in CLASSIFIED_STATUS:
+        die(f"{row_id}.comparison receipt has invalid verdict: {verdict!r}")
+    if verdict != status:
+        die(
+            f"{row_id} matrix status {status!r} does not match comparison "
+            f"verdict {verdict!r}"
+        )
+
+    for field in ("comparison_method", "rationale"):
+        value = comparison.get(field)
+        if not isinstance(value, str) or not value.strip():
+            die(f"{row_id}.comparison receipt {field} must be a non-empty string")
+        require_concrete_evidence_value(value, f"{row_id}.comparison receipt {field}")
 
 
 def main() -> int:
@@ -163,7 +252,7 @@ def main() -> int:
     original = identities.get("original_psycle", {})
     if original.get("version") != "1.12.0 x86":
         die("original reference version changed")
-    if original.get("file") != "PsycleInstallerx86-1.12.0.exe":
+    if original.get("file") != EXPECTED_ORIGINAL_FILE:
         die("original reference filename changed")
     if original.get("size_bytes") != EXPECTED_ORIGINAL_SIZE:
         die("original reference size changed")
@@ -228,21 +317,20 @@ def main() -> int:
                     "candidate baseline"
                 )
 
-            validate_classification_receipt(
-                row["original"],
-                row_id,
-                "original",
-                "reference_build",
-                "Psycle 1.12.0 x86",
-                f"{row_id}.original",
+            original_ref, original_fixture_sha256 = validate_classification_receipt(
+                row["original"], row_id, "original", f"{row_id}.original"
             )
-            validate_classification_receipt(
-                row["candidate"],
+            candidate_ref, candidate_fixture_sha256 = validate_classification_receipt(
+                row["candidate"], row_id, "candidate", f"{row_id}.candidate"
+            )
+            validate_comparison_receipt(
+                row,
                 row_id,
-                "candidate",
-                "snapshot",
-                EXPECTED_CANDIDATE_BASELINE,
-                f"{row_id}.candidate",
+                status,
+                original_ref,
+                candidate_ref,
+                original_fixture_sha256,
+                candidate_fixture_sha256,
             )
 
     missing = REQUIRED_IDS - seen

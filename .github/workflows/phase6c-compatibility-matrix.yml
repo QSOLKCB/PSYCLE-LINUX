@@ -3,6 +3,7 @@ name: Phase 6C compatibility matrix
 on:
   push:
     branches:
+      - main
       - 'phase-6c/**'
     paths:
       - 'phase6c/**'
