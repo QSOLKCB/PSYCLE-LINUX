@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "purpose": "Three-way behavioural compatibility matrix. Overall PASS/DIFFERENT/MISSING claims require versioned original-Psycle evidence; candidate-only and C-Psycle observations do not establish parity by themselves.",
+  "identities": {
+    "original_psycle": {
+      "role": "behavioural-reference",
+      "version": "1.12.0 x86",
+      "file": "PsycleInstallerx86-1.12.0.exe",
+      "size_bytes": 9322919,
+      "sha256": "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769",
+      "redistributed": false,
+      "provenance": "PHASE6_REFERENCE_PROVENANCE.md"
+    },
+    "candidate_cpp": {
+      "role": "candidate-linux-engine",
+      "source_revision": "SourceForge SVN r12005",
+      "sanitized_root": "psycle-cpp-r12005-sanitized",
+      "phase6b_baseline_sha256": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+      "build_target": "psycle-player"
+    },
+    "cpsycle": {
+      "role": "independent-donor-oracle-where-semantics-overlap",
+      "baseline": "cpsycle-r12005-baseline",
+      "regression_scope": "merged Phase 2-5 preservation corpus"
+    }
+  },
+  "status_values": ["PASS", "DIFFERENT", "MISSING", "UNKNOWN"],
+  "evidence_rule": {
+    "non_unknown_requires_original": true,
+    "required_original_fields": ["reference_build", "fixture", "procedure", "observation"],
+    "required_candidate_fields": ["snapshot", "fixture", "procedure", "observation"],
+    "note": "PASS is scoped to the stated fixture/procedure and does not assert whole-subsystem equivalence. DIFFERENT records a reproducible difference. MISSING records an absent required candidate capability."
+  },
+  "contracts": [
+    {
+      "id": "project-io-psy2-parse",
+      "subsystem": "Project I/O",
+      "contract": "PSY2 parsing",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {"planned_receipt": "phase6c-evidence/candidate-psy2.json"},
+      "cpsycle": {"evidence": "scripts/phase4-historical-psy2-smoke.sh", "reusable": true},
+      "notes": "Project-authored PSY2SONG fixture exists; original 1.12.0 observation is still required before parity classification."
+    },
+    {
+      "id": "project-io-psy3-parse",
+      "subsystem": "Project I/O",
+      "contract": "PSY3 parsing",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {"planned_receipt": "phase6c-evidence/candidate-psy3.json"},
+      "cpsycle": {"evidence": "scripts/phase4-core-workflow-smoke.sh", "reusable": true},
+      "notes": "Start with project-authored Phase 4 PSY3 workflow fixture."
+    },
+    {
+      "id": "project-io-serialization-roundtrip",
+      "subsystem": "Project I/O",
+      "contract": "Serialization and round-trip preservation",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"evidence": "tests/phase4_core_workflow.c", "reusable": true},
+      "notes": "Distinguish structural/semantic round-trip from byte identity."
+    },
+    {
+      "id": "project-io-malformed-files",
+      "subsystem": "Project I/O",
+      "contract": "Malformed-file behaviour",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": "partial"},
+      "notes": "Compare rejection, recovery and failure containment separately."
+    },
+    {
+      "id": "sequencer-pattern-order",
+      "subsystem": "Sequencer",
+      "contract": "Sequence and pattern order",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": "partial"},
+      "notes": "Original pattern/sequence semantics are authoritative."
+    },
+    {
+      "id": "sequencer-bpm-lpb-tick",
+      "subsystem": "Sequencer",
+      "contract": "BPM, LPB and tick timing",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": "partial"},
+      "notes": "Do not assume C-Psycle event-sequencer timing is authoritative."
+    },
+    {
+      "id": "sequencer-delayed-retrigger",
+      "subsystem": "Sequencer",
+      "contract": "Note delay, retrigger, retrigger-cont and extended commands",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": "partial"},
+      "notes": "Use minimal deterministic pattern fixtures."
+    },
+    {
+      "id": "sampler-ps1",
+      "subsystem": "Sampler",
+      "contract": "Sampler PS1 behaviour",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": true},
+      "notes": "Compare pitch, envelopes, looping and tracker commands."
+    },
+    {
+      "id": "sampler-xmsampler",
+      "subsystem": "Sampler",
+      "contract": "XMSampler / Sampulse-related playback",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": "partial"},
+      "notes": "Pin version/feature scope before classification."
+    },
+    {
+      "id": "routing-mixer-master",
+      "subsystem": "DSP / routing",
+      "contract": "Mixer, Master, routing, bypass and mute semantics",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": "partial"},
+      "notes": "Include graph topology, gain/send and default-state semantics."
+    },
+    {
+      "id": "native-abi-identity",
+      "subsystem": "Machine / plugin",
+      "contract": "Native-machine ABI and identity",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"evidence": "Phase 5 native-machine preservation corpus", "reusable": true},
+      "notes": "Map the candidate host ABI against original Psycle before claiming equivalence."
+    },
+    {
+      "id": "native-parameter-state",
+      "subsystem": "Machine / plugin",
+      "contract": "Native parameter defaults, tweak semantics and state persistence",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"evidence": "Phase 5 native-machine preservation corpus", "reusable": true},
+      "notes": "Source-derived plugin receipts are reusable only where the host contract overlaps."
+    },
+    {
+      "id": "plugin-opaque-state",
+      "subsystem": "Machine / plugin",
+      "contract": "Plugin opaque-state persistence",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": true},
+      "notes": "VST2 host restoration remains Phase 9 scope."
+    },
+    {
+      "id": "plugin-rescan-cache",
+      "subsystem": "Machine / plugin",
+      "contract": "Native rescan and cache behaviour",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": "partial"},
+      "notes": "Separate discovery/cache behaviour from later VST2 containment work."
+    },
+    {
+      "id": "midi-routing",
+      "subsystem": "MIDI / automation",
+      "contract": "MIDI routing",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": "partial"},
+      "notes": "Separate engine routing from platform-driver input."
+    },
+    {
+      "id": "automation-tweak",
+      "subsystem": "MIDI / automation",
+      "contract": "Automation and tweak commands",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": "partial"},
+      "notes": "Record exact command semantics and ordering."
+    },
+    {
+      "id": "sample-wav-loading",
+      "subsystem": "Samples",
+      "contract": "WAV and sample loading",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": true},
+      "notes": "Start with a project-authored PCM fixture."
+    },
+    {
+      "id": "render-bounce",
+      "subsystem": "Render",
+      "contract": "Offline render / bounce and bounce-to-Sampler workflow",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"evidence": "Phase 4 render/bounce regressions", "reusable": true},
+      "notes": "Use deterministic render hashes or tolerance-bounded sample comparisons where practical."
+    },
+    {
+      "id": "missing-machine-recovery",
+      "subsystem": "Recovery",
+      "contract": "Missing-machine behaviour",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": "partial"},
+      "notes": "Define the placeholder/recovery contract from original observations before implementation."
+    },
+    {
+      "id": "historical-song-playback",
+      "subsystem": "End-to-end",
+      "contract": "Historical song playback",
+      "status": "UNKNOWN",
+      "original": {},
+      "candidate": {},
+      "cpsycle": {"reusable": false},
+      "notes": "Use only redistributable, permissioned or project-authored fixtures."
+    }
+  ]
+}
