@@ -48,7 +48,7 @@ Upstream maintainer clarification distinguishes:
 - the `psycle-core` family — earlier C++ cross-platform reimplementation and current candidate Linux engine;
 - `cpsycle/` — later C reimplementation, retained here as a tested donor/reference implementation and regression corpus.
 
-The current repository does not yet import the `psycle-core` family. Phase 6 of `ROADMAP.md` requires revision pinning, licensing/provenance review and a coherent-build audit before any such source is imported. That future import must receive its own provenance record and must not mutate the frozen C-Psycle baseline identity below.
+Phase 6A separately pinned the six-component C++ r12005 build-source family and its public-import boundary. Phase 6B then materialized and committed the provenance-cleared candidate under `psycle-cpp-r12005-sanitized/` without changing the frozen C-Psycle baseline below. Its frozen sanitized baseline SHA-256 is `00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a`; detailed retained/omitted-source evidence remains in `PHASE6B_SANITIZED_BASELINE.md`, `PHASE6B_CPP_THIRD_PARTY_NOTICES.md`, and `PHASE6_CPP_IMPORT_AUDIT.md`.
 
 ## Upstream Identity, Sanitized Archive, and Canonical Audited Baseline
 
@@ -171,7 +171,7 @@ The r12005 C-Psycle tree already contains substantial cross-platform and Linux-s
 
 The top-level makefile already defines host, plugin, driver and player targets. The Linux driver makefile includes SDL2, ALSA, ALSA MIDI, JACK and Linux event joystick targets. The host and UI build files reference X11/Xft and related libraries.
 
-That made C-Psycle a strong first preservation/Linux-validation baseline and enabled the completed Phases 0–5 regression program. It does **not** mean the final product must retain C-Psycle's engine, sequencer or X11 UI architecture. The active roadmap now audits the earlier C++ `psycle-core` family as the candidate engine while keeping all C-Psycle work as donor and compatibility evidence.
+That made C-Psycle a strong first preservation/Linux-validation baseline and enabled the completed Phases 0–5 regression program. It does **not** mean the final product must retain C-Psycle's engine, sequencer or X11 UI architecture. The active roadmap measures the separately imported C++ `psycle-core` family as the candidate engine while keeping all C-Psycle work as donor and compatibility evidence.
 
 ## Upstream Authorship
 
@@ -221,9 +221,11 @@ When upstream source is introduced or refreshed in PSYCLE-LINUX:
 6. keep pinned upstream revision/checksum identities separate from sanitized archival refs and audited public-baseline tags when redistribution corrections are required;
 7. keep third-party source boundaries and licensing visible;
 8. record later upstream cherry-picks or source refreshes separately rather than moving frozen baseline identities;
-9. give each separately imported upstream family (`cpsycle`, future `psycle-core`, etc.) its own provenance record rather than conflating their histories.
+9. give each separately imported upstream family (`cpsycle`, `psycle-core` family, etc.) its own provenance record rather than conflating their histories.
 
 Phase 1 satisfies these rules for C-Psycle with SourceForge SVN `r12005` plus the recorded ZIP SHA-256 as the exact upstream identity, `archive/cpsycle-r12005-sanitized-import` for the public mechanically comparable source state after all omissions, and `cpsycle-r12005-baseline` for the audited public state. The canonical tag is not to be moved after Phase 1 is merged and frozen.
+
+Phase 6B separately satisfies the candidate-family import rule through the frozen six-component r12005 manifests, explicit sanitization/omission records, retained third-party notices, and the committed `psycle-cpp-r12005-sanitized/` baseline. Neither family may be silently relabelled or have its frozen identity moved to absorb later fixes.
 
 ## Historical Community
 
