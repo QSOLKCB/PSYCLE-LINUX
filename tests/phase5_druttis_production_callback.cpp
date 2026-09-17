@@ -244,7 +244,7 @@ int expect_headless_callback_fallback()
             "phase5-druttis-production-callback: headless-fallback PASS sentinel-ratio=8 fallback=5292\n");
     }
 
-    mi_dispose(&machine);
+    delete machine.pCB;
     machine.pCB = nullptr;
     return rc;
 }
@@ -301,7 +301,7 @@ int expect_real_player_callback()
     }
 
     if (machine.pCB) {
-        mi_dispose(&machine);
+        delete machine.pCB;
         machine.pCB = nullptr;
     }
     phase5_druttis_player_callback_fixture_destroy(fixture);
@@ -337,7 +337,7 @@ int main()
         std::printf("phase5-druttis-production-callback: PASS tracker-line-derived native timing\n");
     }
 
-    mi_dispose(&machine);
+    delete machine.pCB;
     machine.pCB = nullptr;
     return rc;
 }
