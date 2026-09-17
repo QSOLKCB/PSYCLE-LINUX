@@ -15,6 +15,7 @@ on:
       - 'cpsycle/**'
       - 'scripts/phase6*.sh'
       - 'scripts/phase6*.py'
+      - 'scripts/phase6*.ps1'
       - 'scripts/phase4-historical-psy2-smoke.sh'
       - 'scripts/phase4-core-workflow-smoke.sh'
       - 'tests/phase4_historical_psy2.c'
@@ -31,6 +32,7 @@ on:
       - 'cpsycle/**'
       - 'scripts/phase6*.sh'
       - 'scripts/phase6*.py'
+      - 'scripts/phase6*.ps1'
       - 'scripts/phase4-historical-psy2-smoke.sh'
       - 'scripts/phase4-core-workflow-smoke.sh'
       - 'tests/phase4_historical_psy2.c'
@@ -166,10 +168,49 @@ jobs:
           set -euo pipefail
           bash scripts/phase6c-candidate-fixtures.sh phase6c-evidence
 
-      - name: Upload Phase 6C evidence
+      - name: Upload Phase 6C candidate evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: phase6c-compatibility-evidence
           path: phase6c-evidence/
+          if-no-files-found: warn
+
+  original-reference-evidence:
+    needs: candidate-evidence
+    runs-on: windows-2022
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download exact candidate fixture artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: phase6c-compatibility-evidence
+          path: phase6c-candidate-artifact
+
+      - name: Observe pinned original Psycle against shared fixtures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./scripts/phase6c-original-windows-fixtures.ps1 `
+            -CandidateArtifactRoot 'phase6c-candidate-artifact' `
+            -Out 'phase6c-original-evidence'
+
+      - name: Validate original-reference evidence integrity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python scripts/phase6c-validate-original-receipts.py `
+            phase6c-candidate-artifact `
+            phase6c-original-evidence
+
+      - name: Upload Phase 6C original-reference evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-original-reference-evidence
+          path: phase6c-original-evidence/
           if-no-files-found: warn
