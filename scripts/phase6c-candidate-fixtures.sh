@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OUT="${1:-$ROOT/phase6c-evidence}"
+[[ "$OUT" = /* ]] || OUT="$ROOT/$OUT"
+DEFAULT_PLAYER="$ROOT/psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player"
+PLAYER="${PSYCLE_PHASE6C_PLAYER:-$DEFAULT_PLAYER}"
+
+if [[ -e "$OUT" ]] && [[ -n "$(find "$OUT" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
+    echo "phase6c-candidate-fixtures: refusing non-empty output directory: $OUT" >&2
+    exit 2
+fi
+mkdir -p "$OUT"
+
+[[ -x "$DEFAULT_PLAYER" ]] || {
+    echo "phase6c-candidate-fixtures: missing pinned historical player: $DEFAULT_PLAYER" >&2
+    exit 2
+}
+[[ -x "$PLAYER" ]] || {
+    echo "phase6c-candidate-fixtures: missing historical player: $PLAYER" >&2
+    exit 2
+}
+if [[ ! "$PLAYER" -ef "$DEFAULT_PLAYER" ]]; then
+    echo "phase6c-candidate-fixtures: PSYCLE_PHASE6C_PLAYER must resolve to the pinned Phase 6B executable" >&2
+    echo "phase6c-candidate-fixtures: expected: $DEFAULT_PLAYER" >&2
+    echo "phase6c-candidate-fixtures: selected: $PLAYER" >&2
+    exit 2
+fi
+PLAYER_SHA256="$(sha256sum "$PLAYER" | awk '{print $1}')"
+
+python3 "$ROOT/scripts/phase6c-validate-matrix.py" \
+    "$ROOT/phase6c/compatibility-matrix.json" | tee "$OUT/matrix-validation.log"
+
+# Generate project-authored fixtures through the existing C-Psycle regression
+# corpus. These establish a reproducible shared input; they are not treated as
+# original-Psycle behavioural truth.
+bash "$ROOT/scripts/phase4-historical-psy2-smoke.sh" "$OUT/cpsycle-psy2" \
+    >"$OUT/cpsycle-psy2.log" 2>&1
+bash "$ROOT/scripts/phase4-core-workflow-smoke.sh" "$OUT/cpsycle-psy3" \
+    >"$OUT/cpsycle-psy3.log" 2>&1
+
+PSY2="$OUT/cpsycle-psy2/phase4-historical-psy2.psy"
+PSY3="$OUT/cpsycle-psy3/phase4-first.psy"
+[[ -s "$PSY2" ]] || { echo "missing generated PSY2 fixture" >&2; exit 2; }
+[[ -s "$PSY3" ]] || { echo "missing generated PSY3 fixture" >&2; exit 2; }
+[[ "$(dd if="$PSY2" bs=1 count=8 status=none)" == "PSY2SONG" ]] || {
+    echo "unexpected PSY2 fixture signature" >&2
+    exit 2
+}
+[[ "$(dd if="$PSY3" bs=1 count=4 status=none)" == "PSY3" ]] || {
+    echo "unexpected PSY3 fixture signature" >&2
+    exit 2
+}
+
+collect_load() {
+    local name="$1"
+    local fixture="$2"
+    local receipt="$OUT/candidate-${name}.json"
+    local log="$OUT/candidate-${name}.log"
+    local rc observation fixture_sha log_sha
+
+    set +e
+    timeout 20s "$PLAYER" --output-driver dummy --input-file "$fixture" \
+        </dev/null >"$log" 2>&1
+    rc=$?
+    set -e
+
+    if [[ "$rc" -eq 125 || "$rc" -eq 126 || "$rc" -eq 127 ]]; then
+        echo "phase6c-candidate-fixtures: timeout/player harness failure rc=$rc" >&2
+        return 2
+    fi
+    if [[ "$rc" -eq 0 ]]; then
+        observation="load-and-clean-exit"
+    elif [[ "$rc" -eq 124 ]]; then
+        observation="timeout"
+    elif [[ "$rc" -gt 128 ]]; then
+        observation="terminated-by-signal-$((rc - 128))"
+    else
+        observation="load-returned-nonzero"
+    fi
+
+    fixture_sha="$(sha256sum "$fixture" | awk '{print $1}')"
+    log_sha="$(sha256sum "$log" | awk '{print $1}')"
+
+    python3 - "$receipt" "$name" "$OUT" "$fixture" "$fixture_sha" "$log" "$log_sha" "$rc" "$observation" "$PLAYER_SHA256" <<'PY'
+import json
+import pathlib
+import sys
+
+(
+    receipt,
+    name,
+    artifact_root,
+    fixture,
+    fixture_sha,
+    log,
+    log_sha,
+    rc,
+    observation,
+    player_sha,
+) = sys.argv[1:]
+artifact_root_path = pathlib.Path(artifact_root)
+fixture_path = pathlib.Path(fixture).relative_to(artifact_root_path).as_posix()
+log_path = pathlib.Path(log).relative_to(artifact_root_path).as_posix()
+procedure = (
+    "timeout 20s "
+    "psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player "
+    "--output-driver dummy --input-file <fixture> </dev/null > <log> 2>&1"
+)
+payload = {
+    "schema_version": 1,
+    "phase": "6C",
+    "scope": "candidate-observation",
+    "contract": f"project-io-{name}-parse",
+    "evidence_role": "candidate",
+    "snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+    "fixture": fixture_path,
+    "fixture_sha256": fixture_sha,
+    "procedure": procedure,
+    "observation": observation,
+    "source_revision": "SourceForge SVN r12005",
+    "executable": "psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player",
+    "executable_sha256": player_sha,
+    "exit_code": int(rc),
+    "log": {"path": log_path, "sha256": log_sha},
+    "original_psycle_observed": False,
+    "parity_status": "UNKNOWN",
+    "parity_note": "Candidate execution evidence alone cannot classify compatibility with the pinned original Psycle reference."
+}
+pathlib.Path(receipt).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+
+    printf 'phase6c-candidate-fixtures: %s rc=%s observation=%s fixture=%s player=%s\n' \
+        "$name" "$rc" "$observation" "$fixture_sha" "$PLAYER_SHA256"
+}
+
+collect_load psy2 "$PSY2"
+collect_load psy3 "$PSY3"
+
+cat >"$OUT/summary.md" <<'EOF'
+# Phase 6C Candidate Fixture Evidence
+
+This receipt set is intentionally **candidate-only**. It proves that the pinned
+historical Linux `psycle-player` was exercised against shared project-authored
+PSY2/PSY3 fixtures and records the exact result. It does not classify any row as
+PASS / DIFFERENT / MISSING against original Psycle 1.12.0.
+
+- Matrix schema/invariants: validated.
+- PSY2 fixture: generated by the existing Phase 4 historical PSY2 regression.
+- PSY3 fixture: generated by the existing Phase 4 core workflow regression.
+- Candidate execution: recorded with dummy audio, 20-second GNU `timeout`, stdin from `/dev/null`, executable SHA-256, exit code, fixture SHA-256 and log SHA-256.
+- Candidate receipts use the same observation-receipt schema required by the classification gate and can be versioned under `phase6c/evidence/` when selected for a comparison.
+- Original-Psycle observation: not performed by this workflow.
+- Overall parity classification: remains UNKNOWN until versioned original-reference evidence and a versioned comparison verdict exist.
+EOF
+
+cat "$OUT/candidate-psy2.json"
+cat "$OUT/candidate-psy3.json"
+cat "$OUT/summary.md"

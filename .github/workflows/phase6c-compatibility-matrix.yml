@@ -1,0 +1,175 @@
+name: Phase 6C compatibility matrix
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-6c/**'
+    paths:
+      - 'phase6c/**'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'PHASE6_CPP_IMPORT_AUDIT.md'
+      - 'PHASE6_REFERENCE_PROVENANCE.md'
+      - 'ROADMAP.md'
+      - 'psycle-cpp-r12005-sanitized/**'
+      - 'cpsycle/**'
+      - 'scripts/phase6*.sh'
+      - 'scripts/phase6*.py'
+      - 'scripts/phase4-historical-psy2-smoke.sh'
+      - 'scripts/phase4-core-workflow-smoke.sh'
+      - 'tests/phase4_historical_psy2.c'
+      - 'tests/phase4_core_workflow.c'
+      - '.github/workflows/phase6c-compatibility-matrix.yml'
+  pull_request:
+    paths:
+      - 'phase6c/**'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'PHASE6_CPP_IMPORT_AUDIT.md'
+      - 'PHASE6_REFERENCE_PROVENANCE.md'
+      - 'ROADMAP.md'
+      - 'psycle-cpp-r12005-sanitized/**'
+      - 'cpsycle/**'
+      - 'scripts/phase6*.sh'
+      - 'scripts/phase6*.py'
+      - 'scripts/phase4-historical-psy2-smoke.sh'
+      - 'scripts/phase4-core-workflow-smoke.sh'
+      - 'tests/phase4_historical_psy2.c'
+      - 'tests/phase4_core_workflow.c'
+      - '.github/workflows/phase6c-compatibility-matrix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6c-compatibility-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  candidate-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install active-track build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            subversion \
+            file \
+            build-essential \
+            pkg-config \
+            qt5-qmake \
+            qtbase5-dev \
+            libboost-thread-dev \
+            libboost-filesystem-dev \
+            libboost-system-dev \
+            libboost-chrono-dev \
+            libboost-date-time-dev \
+            libxml++2.6-dev \
+            zlib1g-dev \
+            libsoxr-dev \
+            libasound2-dev \
+            libjack-jackd2-dev \
+            liblilv-dev \
+            liblua5.4-dev
+
+      - name: Validate Phase 6C matrix contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/phase6c-validate-matrix.py phase6c/compatibility-matrix.json
+
+      - name: Verify frozen Phase 6B source identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/phase6-upstream-audit.sh phase6-upstream-audit
+          bash scripts/phase6b-sanitized-manifest.sh \
+            phase6-upstream-audit \
+            phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-committed-source.sh \
+            psycle-cpp-r12005-sanitized \
+            phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-qmake-support.sh \
+            psycle-cpp-r12005-sanitized/build-systems/qmake
+          bash scripts/phase6b-verify-build-system-src.sh \
+            psycle-cpp-r12005-sanitized/build-systems/src
+
+      - name: Stage pinned historical plugin interface
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/psycle-plugins/src/psycle/plugin_interface.hpp'
+          ARCHIVE_COMMIT='1863c4177d38d37e8eba9e4eb8857e5023debe6d'
+          EXPECTED_BLOB='2cf4d8f756fa58098fd84b7b44d0ebe1350594c5'
+          test ! -e "$DEST"
+          mkdir -p "$(dirname "$DEST")"
+          curl -fsSL --retry 3 \
+            "https://raw.githubusercontent.com/QSOLKCB/PSYCLE-LINUX/${ARCHIVE_COMMIT}/cpsycle/plugins/psycle/plugin_interface.hpp" \
+            -o "$DEST"
+          actual_blob="$(git hash-object "$DEST")"
+          [[ "$actual_blob" == "$EXPECTED_BLOB" ]] || {
+            echo "historical plugin interface blob mismatch: $actual_blob" >&2
+            exit 2
+          }
+          printf 'plugin-interface-archive-commit=%s\n' "$ARCHIVE_COMMIT"
+          printf 'plugin-interface-blob=%s\n' "$actual_blob"
+
+      - name: Stage pinned historical diversalis dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/diversalis'
+          test ! -e "$DEST"
+          svn export --quiet --force -r 12005 \
+            'https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005' \
+            "$DEST"
+          manifest="$(mktemp)"
+          (
+            cd "$DEST"
+            find . -type f -print0 | sort -z | xargs -0 -r sha256sum
+          ) > "$manifest"
+          printf 'diversalis-file-count=%s\n' \
+            "$(find "$DEST" -type f -printf '.' | wc -c | tr -d ' ')"
+          printf 'diversalis-manifest-sha256=%s\n' \
+            "$(sha256sum "$manifest" | awk '{print $1}')"
+
+      - name: Build pinned historical psycle-player
+        shell: bash
+        working-directory: psycle-cpp-r12005-sanitized/psycle-player
+        run: |
+          set -euo pipefail
+          qmake CONFIG-=shared CONFIG+=release psycle-player.pro
+          make -j2
+
+      - name: Verify candidate executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          PLAYER='psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player'
+          test -x "$PLAYER"
+          "$PLAYER" --help
+          "$PLAYER" --version
+          file "$PLAYER"
+
+      - name: Collect shared PSY2 and PSY3 candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/phase6c-candidate-fixtures.sh phase6c-evidence
+
+      - name: Upload Phase 6C evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-compatibility-evidence
+          path: phase6c-evidence/
+          if-no-files-found: warn
