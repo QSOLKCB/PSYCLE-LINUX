@@ -5,6 +5,7 @@
 #pragma once
 
 #include <universalis.hpp>
+#include <cmath>
 
 
 namespace psycle { namespace helpers {
@@ -480,22 +481,22 @@ void FixedPointBE::changeValue(const float val) {
 				expon = 0; hiMant = 0; loMant = 0;
 			}
 			else {
-				fMant = frexp(num, &expon);
+				fMant = std::frexp(num, &expon);
 				if ((expon > 16384) || !(fMant < 1)) {    /* Infinity or NaN */
 					expon = sign|0x7FFF; hiMant = 0; loMant = 0; /* infinity */
 				}
 				else {    /* Finite */
 					expon += 16382;
 					if (expon < 0) {    /* denormalized */
-						fMant = ldexp(fMant, expon);
+						fMant = std::ldexp(fMant, expon);
 						expon = 0;
 					}
 					expon |= sign;
-					fMant = ldexp(fMant, 32);          
-					fsMant = floor(fMant); 
+					fMant = std::ldexp(fMant, 32);          
+					fsMant = std::floor(fMant); 
 					hiMant = static_cast<unsigned long>(fsMant);
-					fMant = ldexp(fMant - fsMant, 32); 
-					fsMant = floor(fMant); 
+					fMant = std::ldexp(fMant - fsMant, 32); 
+					fsMant = std::floor(fMant); 
 					loMant = static_cast<unsigned long>(fsMant);
 				}
 			}
@@ -536,8 +537,8 @@ void FixedPointBE::changeValue(const float val) {
 			}
 			else {
 				expon -= 16383;
-				f  = ldexp(static_cast<float>(hiMant), expon-=31);
-				f += ldexp(static_cast<float>(loMant), expon-=32);
+				f  = std::ldexp(static_cast<float>(hiMant), expon-=31);
+				f += std::ldexp(static_cast<float>(loMant), expon-=32);
 			}
 
 			if (bytes[0] & 0x80)
