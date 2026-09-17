@@ -1,0 +1,85 @@
+name: Phase 6B apply endiantypes math fix
+
+on:
+  push:
+    branches:
+      - 'phase-6b/source-baseline-player-build'
+    paths:
+      - '.github/workflows/phase6b-apply-endiantypes-math-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Apply exact compatibility patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import pathlib
+
+          path = pathlib.Path('psycle-cpp-r12005-sanitized/psycle-helpers/src/psycle/helpers/endiantypes.hpp')
+          data = path.read_bytes()
+          upstream_sha = 'cc9c5f99924a539cba6c14ceebeb16bcece856d1479a493bba404a2b78e1db0'
+
+          if b'#include <cmath>' in data:
+              print('endiantypes compatibility patch already present')
+              raise SystemExit(0)
+
+          actual_sha = hashlib.sha256(data).hexdigest()
+          if actual_sha != upstream_sha:
+              raise SystemExit(f'refusing unexpected endiantypes input: {actual_sha}')
+
+          newline = b'\r\n' if b'\r\n' in data else b'\n'
+          include = b'#include <universalis.hpp>' + newline
+          if data.count(include) != 1:
+              raise SystemExit('unexpected universalis include layout')
+          data = data.replace(include, include + b'#include <cmath>' + newline, 1)
+
+          replacements = (
+              (b'fMant = frexp(num, &expon);', b'fMant = std::frexp(num, &expon);', 1),
+              (b'fMant = ldexp(fMant, expon);', b'fMant = std::ldexp(fMant, expon);', 1),
+              (b'fMant = ldexp(fMant, 32);', b'fMant = std::ldexp(fMant, 32);', 1),
+              (b'fsMant = floor(fMant);', b'fsMant = std::floor(fMant);', 2),
+              (b'fMant = ldexp(fMant - fsMant, 32);', b'fMant = std::ldexp(fMant - fsMant, 32);', 1),
+              (b'f  = ldexp(static_cast<float>(hiMant), expon-=31);', b'f  = std::ldexp(static_cast<float>(hiMant), expon-=31);', 1),
+              (b'f += ldexp(static_cast<float>(loMant), expon-=32);', b'f += std::ldexp(static_cast<float>(loMant), expon-=32);', 1),
+          )
+          for old, new, expected_count in replacements:
+              count = data.count(old)
+              if count != expected_count:
+                  raise SystemExit(
+                      f'unexpected expression count for {old.decode()}: expected={expected_count} actual={count}'
+                  )
+              data = data.replace(old, new)
+
+          path.write_bytes(data)
+          print('patched-sha256=' + hashlib.sha256(data).hexdigest())
+          PY
+          git diff --check
+
+      - name: Commit compatibility patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- psycle-cpp-r12005-sanitized/psycle-helpers/src/psycle/helpers/endiantypes.hpp
+          if git diff --cached --quiet; then
+            echo 'No compatibility patch commit required.'
+            exit 0
+          fi
+          git commit -m 'phase6b: fix endiantypes math declarations'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
