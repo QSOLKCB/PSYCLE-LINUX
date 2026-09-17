@@ -49,7 +49,11 @@ jobs:
             pkg-config \
             qt5-qmake \
             qtbase5-dev \
-            libboost-all-dev \
+            libboost-thread-dev \
+            libboost-filesystem-dev \
+            libboost-system-dev \
+            libboost-chrono-dev \
+            libboost-date-time-dev \
             libxml++2.6-dev \
             zlib1g-dev \
             libsoxr-dev \
@@ -71,6 +75,28 @@ jobs:
             psycle-cpp-r12005-sanitized/build-systems/qmake
           bash scripts/phase6b-verify-build-system-src.sh \
             psycle-cpp-r12005-sanitized/build-systems/src
+
+      - name: Probe and stage historical diversalis dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/diversalis'
+          test ! -e "$DEST"
+          svn info -r 12005 'https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005'
+          svn export --quiet --force -r 12005 \
+            'https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005' \
+            "$DEST"
+          manifest="$(mktemp)"
+          (
+            cd "$DEST"
+            find . -type f -print0 | sort -z | xargs -0 -r sha256sum
+          ) > "$manifest"
+          printf 'diversalis-file-count=%s\n' \
+            "$(find "$DEST" -type f -printf '.' | wc -c | tr -d ' ')"
+          printf 'diversalis-manifest-sha256=%s\n' \
+            "$(sha256sum "$manifest" | awk '{print $1}')"
+          printf '%s\n' '--- diversalis notice hints ---'
+          grep -RniE 'copyright|licen[sc]e|gnu|gpl|permission|redistribut|author' "$DEST" || true
 
       - name: Configure historical qmake build
         shell: bash
