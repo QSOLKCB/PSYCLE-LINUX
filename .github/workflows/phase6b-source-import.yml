@@ -75,6 +75,28 @@ jobs:
               phase6b-sanitized-manifest
           fi
 
+      - name: Probe historical qmake support boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          url='https://svn.code.sf.net/p/psycle/code/trunk/build-systems/qmake@12005'
+          svn info -r 12005 "$url" > "$work/svn-info.txt"
+          svn export --quiet --force -r 12005 "$url" "$work/qmake"
+          (
+            cd "$work/qmake"
+            find . -type f -print0 | sort -z | xargs -0 -r sha256sum
+          ) > "$work/files.sha256"
+          printf '%s\n' '--- phase6b qmake support probe ---'
+          cat "$work/svn-info.txt"
+          printf 'file-count=%s\n' "$(find "$work/qmake" -type f -printf '.' | wc -c | tr -d ' ')"
+          printf 'manifest-sha256=%s\n' "$(sha256sum "$work/files.sha256" | awk '{print $1}')"
+          printf '%s\n' '--- files ---'
+          cat "$work/files.sha256"
+          printf '%s\n' '--- notice hints ---'
+          grep -RniE 'copyright|licen[sc]e|gnu|gpl|permission|redistribut|author' "$work/qmake" || true
+
       - name: Commit exact sanitized source baseline
         shell: bash
         run: |
