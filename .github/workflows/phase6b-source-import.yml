@@ -1,0 +1,95 @@
+name: Phase 6B sanitized source baseline
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-6b/**'
+    paths:
+      - 'psycle-cpp-r12005-sanitized/**'
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
+      - 'scripts/phase6b-materialize-source.sh'
+      - 'scripts/phase6b-verify-committed-source.sh'
+      - 'scripts/phase6b-materialize-qmake-support.sh'
+      - 'scripts/phase6b-verify-qmake-support.sh'
+      - 'scripts/phase6b-materialize-build-system-src.sh'
+      - 'scripts/phase6b-verify-build-system-src.sh'
+      - '.github/workflows/phase6b-source-import.yml'
+  pull_request:
+    paths:
+      - 'psycle-cpp-r12005-sanitized/**'
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
+      - 'scripts/phase6b-materialize-source.sh'
+      - 'scripts/phase6b-verify-committed-source.sh'
+      - 'scripts/phase6b-materialize-qmake-support.sh'
+      - 'scripts/phase6b-verify-qmake-support.sh'
+      - 'scripts/phase6b-materialize-build-system-src.sh'
+      - 'scripts/phase6b-verify-build-system-src.sh'
+      - '.github/workflows/phase6b-source-import.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6b-source-baseline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-sanitized-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install provenance tools
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            subversion
+
+      - name: Reproduce frozen Phase 6A receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/phase6-upstream-audit.sh phase6-upstream-audit
+
+      - name: Reproduce Phase 6B retained manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/phase6b-sanitized-manifest.sh \
+            phase6-upstream-audit \
+            phase6b-sanitized-manifest
+          grep -Fqx '00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a' \
+            phase6b-sanitized-manifest/baseline.sha256
+
+      - name: Verify committed component source
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/phase6b-verify-committed-source.sh \
+            psycle-cpp-r12005-sanitized \
+            phase6b-sanitized-manifest
+
+      - name: Verify historical qmake support
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/phase6b-verify-qmake-support.sh \
+            psycle-cpp-r12005-sanitized/build-systems/qmake
+
+      - name: Verify build-system source support
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/phase6b-verify-build-system-src.sh \
+            psycle-cpp-r12005-sanitized/build-systems/src
