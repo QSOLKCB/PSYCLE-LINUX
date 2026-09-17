@@ -20,6 +20,14 @@ EXPECTED_REFERENCE_SHA256 = (
     "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 )
 EXPECTED_REFERENCE_SIZE = 9322919
+EXPECTED_VC90_RUNTIME_VERSION = "9.0.30729.6161"
+EXPECTED_VC90_RUNTIME_URL = (
+    "https://download.microsoft.com/download/5/D/8/"
+    "5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x86.exe"
+)
+EXPECTED_VC90_RUNTIME_SHA256 = (
+    "8742bcbf24ef328a72d2a27b693cc7071e38d3bb4b9b44dec42aa3d2c8d61d92"
+)
 EXPECTED = {
     "psy2": "project-io-psy2-parse",
     "psy3": "project-io-psy3-parse",
@@ -89,6 +97,41 @@ def require_artifact_file(
         die(f"{context} SHA-256 mismatch: expected={expected_hash} actual={actual_hash}")
 
 
+def validate_runtime(environment: dict[str, object], original_root: pathlib.Path, name: str) -> None:
+    runtime = environment.get("vc90_runtime")
+    if not isinstance(runtime, dict):
+        die(f"original-{name}.environment.vc90_runtime must be an object")
+    if runtime.get("version") != EXPECTED_VC90_RUNTIME_VERSION:
+        die(f"original-{name} has the wrong VC90 runtime version")
+    if runtime.get("url") != EXPECTED_VC90_RUNTIME_URL:
+        die(f"original-{name} has the wrong VC90 runtime URL")
+    if runtime.get("sha256") != EXPECTED_VC90_RUNTIME_SHA256:
+        die(f"original-{name} has the wrong VC90 runtime SHA-256")
+
+    receipt_path = resolve_artifact_path(
+        original_root,
+        runtime.get("receipt"),
+        f"original-{name}.environment.vc90_runtime.receipt",
+    )
+    receipt = receipt_path.read_text(encoding="utf-8-sig")
+    required_lines = (
+        f"version={EXPECTED_VC90_RUNTIME_VERSION}",
+        f"url={EXPECTED_VC90_RUNTIME_URL}",
+        f"sha256={EXPECTED_VC90_RUNTIME_SHA256}",
+        "authenticode_status=Valid",
+        "signer_subject=",
+    )
+    for value in required_lines:
+        if value not in receipt:
+            die(f"original-{name} VC90 runtime receipt lacks {value!r}")
+    signer_line = next(
+        (line for line in receipt.splitlines() if line.startswith("signer_subject=")),
+        "",
+    )
+    if "microsoft" not in signer_line.lower():
+        die(f"original-{name} VC90 runtime receipt is not signed by Microsoft")
+
+
 def validate_pair(
     name: str,
     contract: str,
@@ -151,6 +194,8 @@ def validate_pair(
     procedure = original.get("procedure")
     if not isinstance(procedure, str) or not procedure.strip():
         die(f"original-{name}.procedure must be non-empty")
+    if EXPECTED_VC90_RUNTIME_SHA256 not in procedure:
+        die(f"original-{name}.procedure does not bind the pinned VC90 runtime")
     observation = original.get("observation")
     if not isinstance(observation, str) or not observation.strip():
         die(f"original-{name}.observation must be non-empty")
@@ -164,6 +209,7 @@ def validate_pair(
         die(f"original-{name} runner_os is not Windows")
     if environment.get("installer_framework") not in {"inno-setup", "nsis"}:
         die(f"original-{name} has unsupported installer framework metadata")
+    validate_runtime(environment, original_root, name)
 
     result = original.get("load_result")
     if result not in ALLOWED_LOAD_RESULT:
@@ -193,8 +239,6 @@ def validate_pair(
         if error_marker.startswith("UI_") or "Automation" in error_marker:
             die(f"original-{name} rejection incorrectly uses harness diagnostics as application evidence")
     else:
-        # Inconclusive is the required safe outcome when UI Automation fails or
-        # when the application never yields stable acceptance/rejection evidence.
         pass
 
     if diagnostics and result != "inconclusive":
