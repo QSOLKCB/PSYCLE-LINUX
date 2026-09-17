@@ -167,12 +167,11 @@ static int verify_identity(psy_audio_Machine* machine)
 	return 0;
 }
 
-static int apply_state(psy_audio_Machine* machine, const struct FluidState* expected)
+static int verify_state(psy_audio_Machine* machine, const struct FluidState* expected)
 {
 	psy_audio_Preset captured;
 	const struct FluidState* actual;
 	if (verify_identity(machine) != 0) return 1;
-	psy_audio_machine_put_data(machine, (uint8_t*)expected);
 	psy_audio_preset_init(&captured);
 	psy_audio_machine_current_preset(machine, &captured);
 	if (psy_audio_preset_num_parameters(&captured) != PARAMETER_COUNT ||
@@ -183,10 +182,17 @@ static int apply_state(psy_audio_Machine* machine, const struct FluidState* expe
 	actual = (const struct FluidState*)captured.data;
 	if (!state_matches(actual, expected)) {
 		psy_audio_preset_dispose(&captured);
-		return fail("FluidSynth opaque state did not apply exactly");
+		return fail("FluidSynth opaque state did not match exactly");
 	}
 	psy_audio_preset_dispose(&captured);
 	return 0;
+}
+
+static int apply_state(psy_audio_Machine* machine, const struct FluidState* expected)
+{
+	if (verify_identity(machine) != 0) return 1;
+	psy_audio_machine_put_data(machine, (uint8_t*)expected);
+	return verify_state(machine, expected);
 }
 
 static int preset_roundtrip(psy_audio_Machine* source, const char* preset_path,
@@ -244,7 +250,7 @@ static int preset_roundtrip(psy_audio_Machine* source, const char* preset_path,
 		if (!fresh) rc = fail("independent preset-restore machine creation failed");
 		else {
 			psy_audio_machine_tweak_preset(fresh, reloaded);
-			rc = apply_state(fresh, expected);
+			rc = verify_state(fresh, expected);
 		}
 	}
 	if (fresh) psy_audio_machine_deallocate(fresh);
