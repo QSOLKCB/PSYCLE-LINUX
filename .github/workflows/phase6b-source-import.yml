@@ -11,6 +11,8 @@ on:
       - 'scripts/phase6b-verify-committed-source.sh'
       - 'scripts/phase6b-materialize-qmake-support.sh'
       - 'scripts/phase6b-verify-qmake-support.sh'
+      - 'scripts/phase6b-materialize-build-system-src.sh'
+      - 'scripts/phase6b-verify-build-system-src.sh'
       - '.github/workflows/phase6b-source-import.yml'
   workflow_dispatch:
 
@@ -92,27 +94,20 @@ jobs:
               psycle-cpp-r12005-sanitized/build-systems/qmake
           fi
 
-      - name: Probe build-systems source support boundary
+      - name: Materialize or verify build-system source support
         shell: bash
         run: |
           set -euo pipefail
-          work="$(mktemp -d)"
-          trap 'rm -rf "$work"' EXIT
-          url='https://svn.code.sf.net/p/psycle/code/trunk/build-systems/src@12005'
-          svn info -r 12005 "$url" > "$work/svn-info.txt"
-          svn export --quiet --force -r 12005 "$url" "$work/src"
-          (
-            cd "$work/src"
-            find . -type f -print0 | sort -z | xargs -0 -r sha256sum
-          ) > "$work/files.sha256"
-          printf '%s\n' '--- phase6b build-systems/src probe ---'
-          cat "$work/svn-info.txt"
-          printf 'file-count=%s\n' "$(find "$work/src" -type f -printf '.' | wc -c | tr -d ' ')"
-          printf 'manifest-sha256=%s\n' "$(sha256sum "$work/files.sha256" | awk '{print $1}')"
-          printf '%s\n' '--- files ---'
-          cat "$work/files.sha256"
-          printf '%s\n' '--- notice hints ---'
-          grep -RniE 'copyright|licen[sc]e|gnu|gpl|permission|redistribut|author' "$work/src" || true
+          if [[ -d psycle-cpp-r12005-sanitized/build-systems/src ]]; then
+            bash scripts/phase6b-verify-build-system-src.sh \
+              psycle-cpp-r12005-sanitized/build-systems/src
+          else
+            mkdir -p psycle-cpp-r12005-sanitized/build-systems
+            bash scripts/phase6b-materialize-build-system-src.sh \
+              psycle-cpp-r12005-sanitized/build-systems/src
+            bash scripts/phase6b-verify-build-system-src.sh \
+              psycle-cpp-r12005-sanitized/build-systems/src
+          fi
 
       - name: Commit exact sanitized source baseline
         shell: bash
@@ -122,8 +117,8 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- psycle-cpp-r12005-sanitized
           if git diff --cached --quiet; then
-            echo 'Committed sanitized source and qmake support already match the frozen receipts.'
+            echo 'Committed sanitized source and build support already match the frozen receipts.'
             exit 0
           fi
-          git commit -m 'phase6b: add pinned historical qmake build support'
+          git commit -m 'phase6b: add pinned build-system source support'
           git push origin "HEAD:${GITHUB_REF_NAME}"
