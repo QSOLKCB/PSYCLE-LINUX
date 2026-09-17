@@ -11,11 +11,14 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import sys
 
 MATRIX = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path(
     "phase6c/compatibility-matrix.json"
 )
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+EVIDENCE_ROOT = (REPO_ROOT / "phase6c" / "evidence").resolve()
 
 EXPECTED_ORIGINAL_SHA256 = (
     "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
@@ -49,6 +52,11 @@ REQUIRED_IDS = {
 }
 REQUIRED_ORIGINAL_FIELDS = ("reference_build", "fixture", "procedure", "observation")
 REQUIRED_CANDIDATE_FIELDS = ("snapshot", "fixture", "procedure", "observation")
+PLACEHOLDER_RE = re.compile(
+    r"(?:^|[\s:/_\-])(pending|todo|tbd|unknown|placeholder|unverified|"
+    r"not[\s_-]+yet|not[\s_-]+observed)(?:$|[\s:/_\-])",
+    re.IGNORECASE,
+)
 
 
 def die(message: str) -> None:
@@ -64,6 +72,77 @@ def require_nonempty_mapping_fields(
         value = mapping.get(field)
         if not isinstance(value, str) or not value.strip():
             die(f"{context}.{field} must be a non-empty string")
+
+
+def require_concrete_evidence_value(value: str, context: str) -> None:
+    if PLACEHOLDER_RE.search(value.strip()):
+        die(f"{context} contains placeholder evidence: {value!r}")
+
+
+def resolve_versioned_receipt(reference: str, context: str) -> pathlib.Path:
+    """Resolve a classification receipt committed below phase6c/evidence/."""
+    receipt_ref = pathlib.PurePosixPath(reference.strip())
+    if receipt_ref.is_absolute() or ".." in receipt_ref.parts:
+        die(f"{context} must be a repository-relative receipt path")
+    if receipt_ref.suffix != ".json":
+        die(f"{context} must reference a JSON receipt")
+    if receipt_ref.parts[:2] != ("phase6c", "evidence"):
+        die(f"{context} must reference a receipt below phase6c/evidence/")
+
+    receipt_path = (REPO_ROOT / pathlib.Path(*receipt_ref.parts)).resolve()
+    try:
+        receipt_path.relative_to(EVIDENCE_ROOT)
+    except ValueError:
+        die(f"{context} escapes the Phase 6C evidence directory")
+    if not receipt_path.is_file():
+        die(f"{context} references missing receipt: {reference}")
+    return receipt_path
+
+
+def validate_classification_receipt(
+    mapping: dict[str, object],
+    row_id: str,
+    role: str,
+    identity_field: str,
+    expected_identity: str,
+    context: str,
+) -> None:
+    """Require a versioned receipt that binds identity, fixture, procedure and result."""
+    for field in ("fixture", "procedure"):
+        value = mapping[field]
+        assert isinstance(value, str)
+        require_concrete_evidence_value(value, f"{context}.{field}")
+
+    observation_ref = mapping["observation"]
+    assert isinstance(observation_ref, str)
+    receipt_path = resolve_versioned_receipt(observation_ref, f"{context}.observation")
+
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        die(f"{context}.observation receipt is invalid JSON: {exc}")
+    if not isinstance(receipt, dict):
+        die(f"{context}.observation receipt must be a JSON object")
+
+    if receipt.get("schema_version") != 1 or receipt.get("phase") != "6C":
+        die(f"{context}.observation receipt has unexpected schema_version/phase")
+    if receipt.get("contract") != row_id:
+        die(f"{context}.observation receipt is bound to the wrong contract")
+    if receipt.get("evidence_role") != role:
+        die(f"{context}.observation receipt is bound to the wrong evidence role")
+    if receipt.get(identity_field) != expected_identity:
+        die(f"{context}.observation receipt is bound to the wrong identity")
+    if receipt.get("fixture") != mapping["fixture"]:
+        die(f"{context}.observation receipt fixture does not match the matrix")
+    if receipt.get("procedure") != mapping["procedure"]:
+        die(f"{context}.observation receipt procedure does not match the matrix")
+
+    receipt_observation = receipt.get("observation")
+    if not isinstance(receipt_observation, str) or not receipt_observation.strip():
+        die(f"{context}.observation receipt must contain a concrete observation")
+    require_concrete_evidence_value(
+        receipt_observation, f"{context}.observation receipt observation"
+    )
 
 
 def main() -> int:
@@ -118,7 +197,14 @@ def main() -> int:
             die(f"duplicate contract id: {row_id}")
         seen.add(row_id)
 
-        for required in ("subsystem", "contract", "status", "original", "candidate", "cpsycle"):
+        for required in (
+            "subsystem",
+            "contract",
+            "status",
+            "original",
+            "candidate",
+            "cpsycle",
+        ):
             if required not in row:
                 die(f"{row_id} missing required field: {required}")
 
@@ -141,6 +227,23 @@ def main() -> int:
                     f"{row_id} non-UNKNOWN claim is not bound to the pinned "
                     "candidate baseline"
                 )
+
+            validate_classification_receipt(
+                row["original"],
+                row_id,
+                "original",
+                "reference_build",
+                "Psycle 1.12.0 x86",
+                f"{row_id}.original",
+            )
+            validate_classification_receipt(
+                row["candidate"],
+                row_id,
+                "candidate",
+                "snapshot",
+                EXPECTED_CANDIDATE_BASELINE,
+                f"{row_id}.candidate",
+            )
 
     missing = REQUIRED_IDS - seen
     extra = seen - REQUIRED_IDS
