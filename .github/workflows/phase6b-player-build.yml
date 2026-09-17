@@ -6,6 +6,8 @@ on:
       - 'phase-6b/source-baseline-player-build'
     paths:
       - 'psycle-cpp-r12005-sanitized/**'
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
       - 'scripts/phase6b-verify-committed-source.sh'
       - 'scripts/phase6b-verify-qmake-support.sh'
       - 'scripts/phase6b-verify-build-system-src.sh'
@@ -13,6 +15,8 @@ on:
   pull_request:
     paths:
       - 'psycle-cpp-r12005-sanitized/**'
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
       - 'scripts/phase6b-verify-committed-source.sh'
       - 'scripts/phase6b-verify-qmake-support.sh'
       - 'scripts/phase6b-verify-build-system-src.sh'
@@ -37,6 +41,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            subversion \
+            file \
             build-essential \
             pkg-config \
             qt5-qmake \
