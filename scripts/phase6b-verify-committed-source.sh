@@ -7,8 +7,9 @@ SOURCE_ROOT="${1:-psycle-cpp-r12005-sanitized}"
 RECEIPT="${2:-phase6b-sanitized-manifest}"
 EXPECTED_FILE_COUNT=291
 EXPECTED_BASELINE_SHA256="00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a"
-COMPAT_PATH="psycle-helpers/src/psycle/helpers/endiantypes.hpp"
-COMPAT_UPSTREAM_SHA256="110ad67297203886b84e18668ec9fe9d26dc89cb2adc9698eb2b6e588d902703"
+ENDIANTYPES_COMPAT_PATH="psycle-helpers/src/psycle/helpers/endiantypes.hpp"
+ENDIANTYPES_UPSTREAM_SHA256="110ad67297203886b84e18668ec9fe9d26dc89cb2adc9698eb2b6e588d902703"
+FILETYPE_COMPAT_PATH="psycle-helpers/src/psycle/helpers/filetypedetector.cpp"
 COMPONENTS=(
   universalis
   psycle-core
@@ -38,13 +39,15 @@ done
 
 tmpdir="$(mktemp -d)"
 actual_manifest="$tmpdir/actual-manifest.sha256"
-compat_normalized="$tmpdir/endiantypes-upstream-normalized.hpp"
+endiantypes_normalized="$tmpdir/endiantypes-upstream-normalized.hpp"
+filetype_normalized="$tmpdir/filetypedetector-upstream-normalized.cpp"
 trap 'rm -rf "$tmpdir"' EXIT
 : > "$actual_manifest"
 actual_file_count=0
-compat_actual_sha=""
+endiantypes_actual_sha=""
+filetype_actual_sha=""
 
-normalize_compat_header() {
+normalize_endiantypes_header() {
   local source="$1"
   local output="$2"
   python3 - "$source" "$output" <<'PY'
@@ -59,7 +62,7 @@ newline = b"\r\n" if b"\r\n" in data else b"\n"
 include_original = b"#include <universalis.hpp>" + newline
 include_patched = include_original + b"#include <cmath>" + newline
 if data.count(include_patched) != 1:
-    raise SystemExit("tracked compatibility patch must contain exactly one <cmath> include after <universalis.hpp>")
+    raise SystemExit("tracked endiantypes patch must contain exactly one <cmath> include after <universalis.hpp>")
 data = data.replace(include_patched, include_original, 1)
 
 replacements = (
@@ -75,9 +78,37 @@ for patched, upstream, expected_count in replacements:
     actual_count = data.count(patched)
     if actual_count != expected_count:
         raise SystemExit(
-            f"tracked compatibility patch expression count mismatch: {patched.decode()} expected={expected_count} actual={actual_count}"
+            f"tracked endiantypes expression count mismatch: {patched.decode()} expected={expected_count} actual={actual_count}"
         )
     data = data.replace(patched, upstream)
+
+output.write_bytes(data)
+PY
+}
+
+normalize_filetype_detector() {
+  local source="$1"
+  local output="$2"
+  python3 - "$source" "$output" <<'PY'
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1])
+output = pathlib.Path(sys.argv[2])
+data = source.read_bytes()
+newline = b"\r\n" if b"\r\n" in data else b"\n"
+
+include_original = b'#include "filetypedetector.hpp"' + newline
+include_patched = include_original + b'#include <cstring>' + newline
+if data.count(include_patched) != 1:
+    raise SystemExit("tracked filetypedetector patch must contain exactly one <cstring> include")
+data = data.replace(include_patched, include_original, 1)
+
+patched_call = b"if (std::strncmp(read, XI_STRING_ID, sizeof(read)) != 0) return false;"
+upstream_call = b"if ( strncmp(read,XI_STRING_ID,sizeof(read))) return false;"
+if data.count(patched_call) != 1:
+    raise SystemExit("tracked filetypedetector patch must contain exactly one qualified strncmp call")
+data = data.replace(patched_call, upstream_call, 1)
 
 output.write_bytes(data)
 PY
@@ -94,16 +125,17 @@ for component in "${COMPONENTS[@]}"; do
     relative="${file#"$SOURCE_ROOT/"}"
     sha="$(sha256sum "$file" | awk '{print $1}')"
 
-    if [[ "$relative" == "$COMPAT_PATH" ]]; then
-      compat_actual_sha="$sha"
-      normalize_compat_header "$file" "$compat_normalized"
-      normalized_sha="$(sha256sum "$compat_normalized" | awk '{print $1}')"
-      [[ "$normalized_sha" == "$COMPAT_UPSTREAM_SHA256" ]] || \
-        die "tracked compatibility patch contains changes beyond the approved math-declaration repair"
-      # Preserve the frozen upstream selection identity in the aggregate receipt.
-      # The committed file is allowed to differ only by the exactly reversible
-      # compatibility patch validated above.
+    if [[ "$relative" == "$ENDIANTYPES_COMPAT_PATH" ]]; then
+      endiantypes_actual_sha="$sha"
+      normalize_endiantypes_header "$file" "$endiantypes_normalized"
+      normalized_sha="$(sha256sum "$endiantypes_normalized" | awk '{print $1}')"
+      [[ "$normalized_sha" == "$ENDIANTYPES_UPSTREAM_SHA256" ]] || \
+        die "tracked endiantypes patch contains changes beyond the approved math-declaration repair"
       sha="$normalized_sha"
+    elif [[ "$relative" == "$FILETYPE_COMPAT_PATH" ]]; then
+      filetype_actual_sha="$sha"
+      normalize_filetype_detector "$file" "$filetype_normalized"
+      sha="$(sha256sum "$filetype_normalized" | awk '{print $1}')"
     fi
 
     printf '%s  %s\n' "$sha" "$relative" >> "$actual_manifest"
@@ -112,7 +144,8 @@ done
 
 [[ "$actual_file_count" -eq "$EXPECTED_FILE_COUNT" ]] || \
   die "unexpected committed upstream file count: $actual_file_count"
-[[ -n "$compat_actual_sha" ]] || die "tracked compatibility header is missing"
+[[ -n "$endiantypes_actual_sha" ]] || die "tracked endiantypes compatibility header is missing"
+[[ -n "$filetype_actual_sha" ]] || die "tracked filetypedetector compatibility source is missing"
 
 sort -o "$actual_manifest" "$actual_manifest"
 if ! diff -u "$RECEIPT/retained-all.sha256" "$actual_manifest"; then
@@ -138,4 +171,4 @@ for component in "${COMPONENTS[@]}"; do
   fi
 done
 
-echo "phase6b-verify-committed-source: PASS files=$actual_file_count baseline=$actual_baseline_sha compat-patches=1 endiantypes-sha256=$compat_actual_sha"
+echo "phase6b-verify-committed-source: PASS files=$actual_file_count baseline=$actual_baseline_sha compat-patches=2 endiantypes-sha256=$endiantypes_actual_sha filetypedetector-sha256=$filetype_actual_sha"
