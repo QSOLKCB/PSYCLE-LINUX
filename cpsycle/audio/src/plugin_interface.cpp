@@ -151,7 +151,17 @@ void mi_init(CMachineInterface* mi)
 
 void mi_dispose(CMachineInterface* mi)
 {
-	delete mi->pCB;
+	if (mi) {
+		CFxCallback* callback = mi->pCB;
+		/* CreateMachine() returns a heap-allocated polymorphic machine. Its
+		** destructor must run while the plugin module is still loaded so native
+		** resources (including FluidSynth worker state) are torn down before
+		** psy_library_dispose() calls dlclose(). Keep the host-owned callback
+		** alive through the machine destructor in case a plugin references it
+		** during teardown, then release the callback afterwards. */
+		delete mi;
+		delete callback;
+	}
 }
 
 void mi_sequencertick(CMachineInterface* mi)
