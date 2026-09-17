@@ -9,6 +9,8 @@ on:
       - 'scripts/phase6b-sanitized-manifest.sh'
       - 'scripts/phase6b-materialize-source.sh'
       - 'scripts/phase6b-verify-committed-source.sh'
+      - 'scripts/phase6b-materialize-qmake-support.sh'
+      - 'scripts/phase6b-verify-qmake-support.sh'
       - '.github/workflows/phase6b-source-import.yml'
   workflow_dispatch:
 
@@ -57,11 +59,11 @@ jobs:
           grep -Fqx '00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a' \
             phase6b-sanitized-manifest/baseline.sha256
 
-      - name: Materialize or verify committed source
+      - name: Materialize or verify committed component source
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -d psycle-cpp-r12005-sanitized ]]; then
+          if [[ -d psycle-cpp-r12005-sanitized/psycle-core ]]; then
             bash scripts/phase6b-verify-committed-source.sh \
               psycle-cpp-r12005-sanitized \
               phase6b-sanitized-manifest
@@ -75,27 +77,20 @@ jobs:
               phase6b-sanitized-manifest
           fi
 
-      - name: Probe historical qmake support boundary
+      - name: Materialize or verify historical qmake support
         shell: bash
         run: |
           set -euo pipefail
-          work="$(mktemp -d)"
-          trap 'rm -rf "$work"' EXIT
-          url='https://svn.code.sf.net/p/psycle/code/trunk/build-systems/qmake@12005'
-          svn info -r 12005 "$url" > "$work/svn-info.txt"
-          svn export --quiet --force -r 12005 "$url" "$work/qmake"
-          (
-            cd "$work/qmake"
-            find . -type f -print0 | sort -z | xargs -0 -r sha256sum
-          ) > "$work/files.sha256"
-          printf '%s\n' '--- phase6b qmake support probe ---'
-          cat "$work/svn-info.txt"
-          printf 'file-count=%s\n' "$(find "$work/qmake" -type f -printf '.' | wc -c | tr -d ' ')"
-          printf 'manifest-sha256=%s\n' "$(sha256sum "$work/files.sha256" | awk '{print $1}')"
-          printf '%s\n' '--- files ---'
-          cat "$work/files.sha256"
-          printf '%s\n' '--- notice hints ---'
-          grep -RniE 'copyright|licen[sc]e|gnu|gpl|permission|redistribut|author' "$work/qmake" || true
+          if [[ -d psycle-cpp-r12005-sanitized/build-systems/qmake ]]; then
+            bash scripts/phase6b-verify-qmake-support.sh \
+              psycle-cpp-r12005-sanitized/build-systems/qmake
+          else
+            mkdir -p psycle-cpp-r12005-sanitized/build-systems
+            bash scripts/phase6b-materialize-qmake-support.sh \
+              psycle-cpp-r12005-sanitized/build-systems/qmake
+            bash scripts/phase6b-verify-qmake-support.sh \
+              psycle-cpp-r12005-sanitized/build-systems/qmake
+          fi
 
       - name: Commit exact sanitized source baseline
         shell: bash
@@ -105,8 +100,8 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- psycle-cpp-r12005-sanitized
           if git diff --cached --quiet; then
-            echo 'Committed sanitized source already matches the frozen receipt.'
+            echo 'Committed sanitized source and qmake support already match the frozen receipts.'
             exit 0
           fi
-          git commit -m 'phase6b: import exact sanitized r12005 C++ baseline'
+          git commit -m 'phase6b: add pinned historical qmake build support'
           git push origin "HEAD:${GITHUB_REF_NAME}"
