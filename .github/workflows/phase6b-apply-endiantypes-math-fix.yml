@@ -32,7 +32,7 @@ jobs:
 
           path = pathlib.Path('psycle-cpp-r12005-sanitized/psycle-helpers/src/psycle/helpers/endiantypes.hpp')
           data = path.read_bytes()
-          upstream_sha = 'cc9c5f99924a539cba6c14ceebeb16bcece856d1479a493bba404a2b78e1db0'
+          upstream_sha = '110ad67297203886b84e18668ec9fe9d26dc89cb2adc9698eb2b6e588d902703'
 
           if b'#include <cmath>' in data:
               print('endiantypes compatibility patch already present')
