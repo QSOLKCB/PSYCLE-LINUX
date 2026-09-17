@@ -76,6 +76,27 @@ jobs:
           bash scripts/phase6b-verify-build-system-src.sh \
             psycle-cpp-r12005-sanitized/build-systems/src
 
+      - name: Stage pinned historical plugin interface
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/psycle-plugins/src/psycle/plugin_interface.hpp'
+          ARCHIVE_COMMIT='1863c4177d38d37e8eba9e4eb8857e5023debe6d'
+          EXPECTED_BLOB='2cf4d8f756fa58098fd84b7b44d0ebe1350594c5'
+          test ! -e "$DEST"
+          mkdir -p "$(dirname "$DEST")"
+          curl -fsSL --retry 3 \
+            "https://raw.githubusercontent.com/QSOLKCB/PSYCLE-LINUX/${ARCHIVE_COMMIT}/cpsycle/plugins/psycle/plugin_interface.hpp" \
+            -o "$DEST"
+          actual_blob="$(git hash-object "$DEST")"
+          if [[ "$actual_blob" != "$EXPECTED_BLOB" ]]; then
+            echo "historical plugin interface blob mismatch: $actual_blob" >&2
+            exit 2
+          fi
+          grep -Fq 'namespace psycle { namespace plugin_interface {' "$DEST"
+          printf 'plugin-interface-archive-commit=%s\n' "$ARCHIVE_COMMIT"
+          printf 'plugin-interface-blob=%s\n' "$actual_blob"
+
       - name: Probe and stage historical diversalis dependency
         shell: bash
         run: |
