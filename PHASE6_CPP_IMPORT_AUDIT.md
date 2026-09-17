@@ -1,29 +1,35 @@
 # Phase 6 C++ Import Audit
 
-## Purpose
+## Status
 
-This document records the first redistribution/provenance review of the pinned C++ reimplementation build-source snapshot used by Phase 6.
+**Phase 6B sanitized import/build gate: COMPLETE. Phase 6C behavioural evidence collection is active.**
 
-Pinned repository revision:
+This document records the provenance and redistribution boundary for the pinned C++ reimplementation used by the active Psycle-on-Linux track.
+
+Pinned upstream observation point:
 
 ```text
 SourceForge SVN r12005
 https://svn.code.sf.net/p/psycle/code/trunk
 ```
 
-The snapshot identity is frozen by `scripts/phase6-upstream-audit.sh`; see `PHASE6_REFERENCE_PROVENANCE.md` for exact manifest hashes.
+Frozen sanitized Phase 6B selection identity:
 
-## Disposition
+```text
+00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a
+```
 
-**Public source import status: HOLD pending a sanitized import manifest.**
+The committed candidate source lives under:
 
-The snapshot is reproducible and the notice-hint pass confirms that a large amount of the Psycle-authored C++ code carries explicit GPL-2-or-later notices. However, the complete six-component build-source set also contains mixed-provenance material that must be omitted, quarantined, or separately documented before the source can be copied mechanically into this repository.
+```text
+psycle-cpp-r12005-sanitized/
+```
 
-This is not a conclusion that the C++ reimplementation itself is non-redistributable. It is a conclusion that **the repository snapshot must be sanitized at file level**, exactly as the C-Psycle baseline was.
+The separate C-Psycle oracle baseline remains `cpsycle-r12005-baseline`; the two histories are not conflated.
 
-## Snapshot identity
+## Upstream snapshot identity
 
-| Component | Last changed at/before r12005 | Files | Manifest SHA-256 |
+| Component | Last changed at/before r12005 | Upstream files | Manifest SHA-256 |
 | --- | ---: | ---: | --- |
 | `universalis` | r12004 | 83 | `827586daad2efcfbc10466394670a4a0e5f208da94afb7b3bf72239d396a618e` |
 | `psycle-core` | r10901 | 108 | `eb25467bdfbdea7296fc2c8e01c802e3b2b977d95775ab363cc810309aee729b` |
@@ -32,121 +38,74 @@ This is not a conclusion that the C++ reimplementation itself is non-redistribut
 | `psycle-player` | r10725 | 7 | `6fd4fb58b3841b89cafd69c1c4a6c4f5c95864f1d7edb6e6f999621bfadecb6f` |
 | `psycle-plugins` | r12004 | 634 | `a8d66a18e363229ad9ff13b688149fec4682da8b177afb757c064491123de888` |
 
-`r12005` is the repository-wide observation revision. The component `Last Changed Rev` values simply record when each path last changed before that observation.
+`r12005` is the repository-wide observation revision. Different `Last Changed Rev` values only mean those paths had not changed again by r12005.
 
-`universalis` is part of the build-source snapshot because the historical C++ projects depend on it; omitting it would make the supposedly coherent player input incomplete.
+## Sanitized baseline result
 
-## Notice-hint results
-
-The hardened audit does not retain the source files. It retains short provenance-relevant text matches so licensing and donor boundaries can be reviewed before import.
-
-### `universalis`
-
-The r12005 receipt contains 83 files and no binary/song redistribution hints. The source/header notice scan is dominated by explicit Psycle project **GPL-2-or-later** notices.
-
-`universalis` is therefore a required and comparatively clean support component for the first sanitized C++ engine/player baseline, subject to preservation of its upstream notices and any individual third-party notices surfaced during exact retained-file materialization.
-
-### `psycle-core`
-
-The main `src/psycle/core/` implementation repeatedly declares itself free software under **GNU GPL version 2 or later** and credits members of the Psycle project.
-
-This includes core engine areas such as song/sequence/player/machine/native-host and the Psycle-owned VST host wrapper files.
-
-A separate subtree requires quarantine:
+Phase 6B materialized the exact retained/omitted selection from the six frozen manifests.
 
 ```text
-src/seib/vst/
+upstream files:          936
+retained component files: 291
+omitted/quarantined:      645
+baseline sha256:          00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a
 ```
 
-The receipt says several of these files are derived from the LGPL host `vsthost (1.16m)`, but it also contains explicit references to VST SDK 2.4 and, in `CVSTHost.Seib.hpp`, a `PluginLoader` described as coming from VST SDK `minihost.cpp`. Because we are not assuming redistribution rights for Steinberg SDK source expressions, **the Seib VST subtree is not cleared for the first public import**. It remains a Phase 9 archaeology/donor source until the expression-level boundary is reviewed.
+The retained component set is verified by `scripts/phase6b-verify-committed-source.sh`. Historical qmake/build-system support is verified separately so compatibility repairs do not silently rewrite the frozen component identity.
 
-The Psycle-owned files:
+Narrow modern-toolchain compatibility edits are allowed only through exact reversible normalization in the verification gates. Current approved repairs include:
+
+- `psycle-helpers/src/psycle/helpers/endiantypes.hpp`: direct `<cmath>` dependency plus standard-qualified math calls;
+- `psycle-helpers/src/psycle/helpers/filetypedetector.cpp`: direct `<cstring>` dependency plus `std::strncmp`;
+- Linux qmake Boost linkage: removal of obsolete binary `boost_signals` linkage where retained source uses header-only Boost.Signals2.
+
+The verifier reconstructs the historical bytes for identity checking; unrelated drift still fails.
+
+## Retained historical build support
+
+Two build inputs are required by the historical Linux player path but are staged after the frozen component-source verification rather than silently folded into the 291-file selection.
+
+### Native plugin interface
+
+The build stages the authentic historical header:
 
 ```text
-src/psycle/core/vsthost.cpp
-src/psycle/core/vsthost.h
-src/psycle/core/vstplugin.cpp
-src/psycle/core/vstplugin.h
+cpsycle/plugins/psycle/plugin_interface.hpp
 ```
 
-carry GPL-2-or-later project notices in the receipt. They may be retained in a sanitized source baseline while VST2 compilation remains disabled until the Phase 9 clean-room ABI boundary exists.
-
-`src/psycle/core/ladspa.h` is a third-party API boundary and must retain an explicit component-local license association if imported.
-
-### `psycle-audiodrivers`
-
-The Linux-facing ALSA/JACK and general driver implementation repeatedly carries **GPL-2-or-later Psycle project notices**.
-
-The Windows ASIO-specific area is deliberately separated from the first Linux import:
+from repository archival commit:
 
 ```text
-src/asio/asio.cpp
-src/asio/asio.private.hpp
-src/asio/asiodrivers.cpp
-src/asio/asiolist.cpp
+1863c4177d38d37e8eba9e4eb8857e5023debe6d
 ```
 
-`asio.private.hpp` itself carries a Psycle GPL notice, but the receipt does not expose an equivalent notice for all three accompanying ASIO implementation files. Since ASIO is not required for the Linux player build and Steinberg ASIO provenance is historically sensitive, the conservative first sanitized baseline will **omit/quarantine `src/asio/`** pending a dedicated expression/provenance review.
-
-The Psycle-side `src/psycle/audiodrivers/asiointerface.*` files do carry GPL project notices; they may be retained as historical Windows integration if they do not require restricted material to be redistributed, but they must not be part of the Linux build gate.
-
-### `psycle-player`
-
-The executable source under `src/psycle/player/` carries **GPL-2-or-later Psycle project notices**. Project/qmake metadata has no separate license file but does not introduce a new binary or third-party payload in the receipt.
-
-This makes `psycle-player` a good first executable target once `universalis` plus the required core/helper/API dependencies are imported safely.
-
-### `psycle-helpers`
-
-This component is intentionally treated as mixed-origin rather than stamped with one blanket label.
-
-The receipt identifies:
-
-- many Psycle-authored headers/sources under GPL-2-or-later;
-- `math/sse_mathfun.h` identifying the **zlib license**;
-- Mersenne Twister sources carrying their own redistribution conditions;
-- FFT files preserving separate original-copyright lineage;
-- music-DSP lineage in some math helpers.
-
-These are not automatic exclusions. They require their existing permission/copyright text to be preserved and, where the current tree lacks a complete distribution notice, a component-local provenance/license record should be added just as was done in the C-Psycle Phase 1 audit.
-
-### `psycle-plugins`
-
-This tree is the most mixed-provenance part of the snapshot and should **not** be imported wholesale merely to make `psycle-player` compile.
-
-The notice pass finds many GPL/Psycle machine sources and explicit local licenses for Audacity-derived and JME material. It also finds STK-derived machine sources that need their STK provenance retained.
-
-One file is an immediate Steinberg-derived omission candidate:
+with exact Git blob identity:
 
 ```text
-src/psycle/plugins/y_midi/gmnames.h
+2cf4d8f756fa58098fd84b7b44d0ebe1350594c5
 ```
 
-Its own header identifies it as `VST Plug-Ins SDK` material created by Steinberg Media Technologies. It is therefore not eligible for the first public sanitized import absent a separately established redistribution basis.
-
-The first engine/player import should prefer the **minimum native plugin API surface actually required to compile and test the engine**, then bring historical machine sources across in audited slices rather than importing all 634 files as one legal/provenance unit.
-
-## Definite public-import exclusions
-
-### Closed-source/prebuilt plugin binaries
-
-The pinned `psycle-plugins` tree contains nine `.dll` files under `closed-source/`:
+It is placed at the historical include location required by the C++ core:
 
 ```text
-closed-source/cyanphase/CyanPhase_VibraSynth_1P.dll
-closed-source/j-hamaide/SingleFrequency.dll
-closed-source/recovered-or-reversed-engineered/arguru/arguru compressor.dll
-closed-source/recovered-or-reversed-engineered/ninereeds.and.7900/NRS_7900_Fractal.dll
-closed-source/sond/s_filter.dll
-closed-source/sond/s_phaser.dll
-closed-source/sond/s_reverb.dll
-closed-source/sond/s_vld.dll
-closed-source/sond/softsynth_psycle_plugin.dll
+psycle-cpp-r12005-sanitized/psycle-plugins/src/psycle/plugin_interface.hpp
 ```
 
-They are **excluded from any mechanical public import** unless a clear redistribution basis is documented individually.
+### `diversalis`
 
-### Historical `.psy` songs
+The historical build also stages `trunk/diversalis` at SourceForge SVN r12005. It is fetched and hashed during CI rather than being confused with the six-component retained-selection identity.
+
+## Provenance boundary
+
+The sanitized import preserves the project-authored GPL notices and compatible third-party lineage needed by the retained source while keeping known or conservatively unresolved material outside the baseline.
+
+### Excluded closed-source binaries
+
+Nine prebuilt DLLs under `psycle-plugins/closed-source/` remain excluded unless a redistribution basis is documented individually.
+
+### Excluded historical songs
+
+These upstream songs remain excluded because composition/sample redistribution permission was not established:
 
 ```text
 src/psycle/plugins/jme/blitzn/songs/Rm-Im_in_a_place_i_dont_belong.psy
@@ -154,82 +113,94 @@ src/psycle/plugins/jme/blitzn/songs/voskomo_-_hawkeye_loader.psy
 src/psycle/plugins/jme/gamefxn/songs/example.psy
 ```
 
-These same songs were conservatively omitted from the C-Psycle public baseline because composition/sample redistribution permission was not established. They remain excluded unless permission is established.
+Phase 6C therefore starts with project-authored fixtures and only later accepts redistributable/permissioned historical songs.
 
-### Steinberg VST SDK-derived header candidate
+### Steinberg-derived / Windows SDK boundary
 
-```text
-src/psycle/plugins/y_midi/gmnames.h
-```
-
-The file identifies itself as Steinberg VST Plug-Ins SDK material and is excluded from the proposed first public baseline.
-
-## Quarantined pending expression-level review
-
-These are not declared permanently non-redistributable; they are simply **not cleared for the first import**:
+The following remain outside the first candidate baseline:
 
 ```text
 psycle-core/src/seib/vst/
 psycle-audiodrivers/src/asio/
+psycle-plugins/src/psycle/plugins/y_midi/gmnames.h
 ```
 
-Both are nonessential to the first native Linux `psycle-player` build goal. Deferring them lets Phase 6 establish engine/song parity without dragging Phase 9 VST2 or Windows ASIO licensing questions into the engine baseline.
+`gmnames.h` identifies itself as VST Plug-Ins SDK material. The Seib VST subtree and Windows ASIO subtree remain quarantined pending their dedicated expression/provenance review. None is needed for the Phase 6 native Linux engine/player parity work.
 
-## Project-level licensing evidence
+VST2 restoration remains Phase 9 scope and must not be achieved by reintroducing excluded SDK expressions.
 
-The official Psycle 1.12.0 release readme calls Psycle open source, records Arguru's original Psycle 1.0 public-domain grant, and describes the later team's intent to keep Psycle source freely visible/modifiable and redistributed as derived Psycle work.
+## Component notes
 
-That historical prose supports the project's open-source intent, but it is **not used as a blanket override for third-party files, SDK-derived expressions, binaries, songs or assets**.
+### `universalis`
 
-The file-level notice receipt is stronger for the candidate engine: much of the project-authored C++ source, including `universalis`, explicitly states GPL-2-or-later. The sanitized import should preserve those headers verbatim and add clear boundary notices for compatible third-party material where necessary.
+Required historical support project. The r12005 receipt is dominated by Psycle project GPL-2-or-later notices and contains no binary/song redistribution hints relevant to the retained baseline.
 
-## Proposed first sanitized-import policy
+### `psycle-core`
 
-The next import PR should be deliberately smaller than the complete six-component SourceForge snapshot:
+The retained engine source carries Psycle GPL-2-or-later notices. Psycle-owned native/song/sequence/player machinery is available for Phase 6C. The Seib VST subtree remains excluded.
 
-1. import `universalis` with its upstream notices preserved;
-2. import the cleared Psycle-authored portions of `psycle-core`;
-3. import the cleared portions of `psycle-helpers` with their third-party notices preserved/restored;
-4. import `psycle-player`;
-5. import only Linux-relevant/cleared `psycle-audiodrivers` for the first build, with `src/asio/` quarantined;
-6. import only the minimum audited `psycle-plugins` API surface required by the engine/player build initially;
-7. keep the nine closed-source DLLs, three songs, Steinberg `gmnames.h`, Seib VST subtree and ASIO subtree out of that baseline;
-8. add exact omission/replacement arithmetic and a new C++ archival/canonical baseline identity;
-9. keep VST2 restoration in Phase 9 rather than using excluded historical SDK expressions to make Phase 6 compile.
+### `psycle-audiodrivers`
 
-## Sanitized-import rule
+Linux-facing ALSA/JACK/general driver code is retained where cleared. The Windows ASIO subtree remains excluded.
 
-A future C++ import must:
+### `psycle-helpers`
 
-1. start from all six frozen r12005 manifests;
-2. preserve all retained authorship/license headers;
-3. record each omission/quarantine and reason;
-4. restore full compatible third-party permission notices where the source only contains abbreviated lineage text;
-5. independently replace material only when technically necessary and provenance-safe;
-6. record resulting file-count arithmetic and content identity;
-7. create separate archival/canonical refs for the C++ family;
-8. never mutate or conflate `cpsycle-r12005-baseline`.
+Mixed-origin helper code remains subject to its component-local provenance/notice requirements. The baseline preserves compatible lineage such as zlib-licensed SSE math, Mersenne Twister and FFT attribution rather than applying one blanket label.
 
-## Phase 6A audit status
+### `psycle-player`
 
-Completed in this PR:
+The historical CLI player is retained and is now the first executable candidate used by Phase 6C. It supports the `dummy` output driver, making project/song-load evidence practical in headless CI.
 
-- [x] freeze the complete six-component build-source identity, including required `universalis`;
-- [x] freeze the original Psycle 1.12.0 x86 executable identity;
-- [x] force locale-independent manifest ordering with `LC_ALL=C`;
-- [x] review file-name licensing/dependency/redistribution hints;
-- [x] review provenance-relevant source/header notice hints;
-- [x] identify closed-source binary exclusions;
-- [x] identify unresolved historical-song exclusions;
-- [x] identify a Steinberg VST SDK-derived plugin-header exclusion candidate;
-- [x] quarantine the Seib VST and ASIO subtrees from the first Linux baseline;
-- [x] define the minimum/sanitized first-import policy.
+### `psycle-plugins`
 
-Still required in the next import/build slice:
+The 634-file upstream plugin tree was not imported wholesale. The first candidate baseline keeps the minimum audited native API surface required by the engine/player work; broader machine history remains covered by the C-Psycle preservation corpus and can be imported later only through explicit provenance-safe slices.
 
-- [ ] materialize the exact proposed retained-file list and omission arithmetic;
-- [ ] restore/add any required full third-party notices for retained helper/API code;
-- [ ] create the sanitized C++ archival/canonical baseline;
-- [ ] prove that baseline builds `psycle-player` on Linux or document the next narrow build blockers.
+## Build evidence
 
-**Result:** Phase 6A has produced a reproducible, conservative import boundary. The correct next step is a sanitized engine/player import and build audit—not a bulk six-tree copy and not Qt UI work yet.
+Phase 6B now proves more than source materialization:
+
+- sanitized source identity reproduction: PASS;
+- qmake/build-support identity verification: PASS;
+- authentic historical native plugin interface staging: PASS;
+- r12005 `diversalis` staging: PASS;
+- qmake configuration on Ubuntu 24.04: PASS;
+- `universalis` / helpers / audio-driver / core chain build: PASS;
+- historical `psycle-player` link: PASS;
+- `psycle-player --help`: PASS;
+- `psycle-player --version`: PASS.
+
+Final green historical-player evidence before Phase 6C:
+
+```text
+workflow: Phase 6B historical psycle-player build
+run:      35196962690
+result:   success
+```
+
+The build blockers discovered on the way—missing math declarations, missing C string declaration, missing historical plugin-interface header and obsolete Boost.Signals binary linkage—were repaired narrowly and are now captured by CI rather than left as undocumented local folklore.
+
+## Phase 6B completion checklist
+
+- [x] Materialize exact retained-file and omission arithmetic.
+- [x] Preserve/restore compatible provenance and third-party notices.
+- [x] Create a separate sanitized C++ baseline identity.
+- [x] Keep VST/ASIO/binary/song quarantine material out.
+- [x] Reproduce the historical Debian/Linux qmake build path.
+- [x] Build `psycle-player` with its required support components.
+- [x] Record and repair concrete modern compiler/linker blockers narrowly.
+- [x] Verify the resulting historical player in Ubuntu 24.04 CI.
+- [x] Establish a headless-capable `dummy` driver path for Phase 6C fixture execution.
+
+## Phase 6C handoff
+
+The import question is no longer the blocker. The active question is behavioural compatibility.
+
+Phase 6C uses:
+
+- `phase6c/compatibility-matrix.json` as the machine-readable contract inventory;
+- `scripts/phase6c-validate-matrix.py` to prevent unsupported parity claims;
+- `.github/workflows/phase6c-compatibility-matrix.yml` as the maintained candidate evidence lane;
+- project-authored PSY2/PSY3 fixtures as the first shared executable inputs;
+- the pinned original Psycle 1.12.0 x86 build as the behavioural authority before any row may become PASS / DIFFERENT / MISSING.
+
+**Result:** the provenance-safe C++ candidate is imported and buildable. Phase 6C can now measure it rather than speculate about it.
