@@ -7,7 +7,7 @@ isEmpty(boost_included) {
 
 	unix {
 		macx: LIBS *= $$linkLibs(boost_signals-1_50 boost_thread-1_50 boost_filesystem-1_50 boost_system-1_50 boost_chrono-1_50 boost_date_time-1_50)
-		else: LIBS *= $$linkLibs(boost_signals boost_thread boost_filesystem boost_system boost_chrono boost_date_time)
+		else: LIBS *= $$linkLibs(boost_thread boost_filesystem boost_system boost_chrono boost_date_time)
 	} else: win32 {
 		contains(QMAKE_HOST.arch, x86_64):{
 			ARCH_STR = x64
