@@ -181,7 +181,7 @@ enum {
 };
 
 /* prototypes */
-static void setcallback(psy_audio_Plugin*, psy_audio_MachineCallback);
+static void setcallback(psy_audio_Plugin*, psy_audio_MachineCallback*);
 static psy_audio_Machine* clone(psy_audio_Plugin*);
 static int hostevent(psy_audio_Plugin*, int const eventNr, int val1, float val2);
 static void generateaudio(psy_audio_Plugin*, psy_audio_BufferContext*);
@@ -415,10 +415,10 @@ bool restore_dalay_delay_parameter(psy_audio_Plugin* self,
 	return TRUE;
 }
 
-void setcallback(psy_audio_Plugin* self, psy_audio_MachineCallback callback)
+void setcallback(psy_audio_Plugin* self, psy_audio_MachineCallback* callback)
 {
 	if (self->mi) {
-		mi_setcallback(self->mi, &callback);
+		mi_setcallback(self->mi, callback);
 	}
 }
 
@@ -506,7 +506,7 @@ void psy_audio_plugin_machineinfo_set(psy_audio_MachineInfo* self,
 	self->type = psy_audio_PLUGIN;
 	psy_strreset(&self->modulepath, modulepath);
 	self->shellidx = 0;
-	self->image_id = psy_INDEX_INVALID;	
+	self->image_id = psy_INDEX_INVALID;
 	psy_strreset(&self->helptext, info->Command);	
 }
 
