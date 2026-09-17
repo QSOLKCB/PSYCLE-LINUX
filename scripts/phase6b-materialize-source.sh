@@ -23,7 +23,7 @@ die() {
   exit 2
 }
 
-for command_name in svn sha256sum sort find awk cp mkdir mktemp diff wc; do
+for command_name in svn sha256sum sort find awk cp mkdir mktemp diff wc cat dirname rm tr; do
   command -v "$command_name" >/dev/null 2>&1 || \
     die "missing required command: $command_name"
 done
