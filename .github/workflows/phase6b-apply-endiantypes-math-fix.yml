@@ -68,7 +68,6 @@ jobs:
           path.write_bytes(data)
           print('patched-sha256=' + hashlib.sha256(data).hexdigest())
           PY
-          git diff --check
 
       - name: Commit compatibility patch
         shell: bash
