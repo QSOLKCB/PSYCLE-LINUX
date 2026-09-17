@@ -136,6 +136,11 @@ def main() -> int:
             )
             if row["original"]["reference_build"] != "Psycle 1.12.0 x86":
                 die(f"{row_id} non-UNKNOWN claim is not bound to the primary reference")
+            if row["candidate"]["snapshot"] != EXPECTED_CANDIDATE_BASELINE:
+                die(
+                    f"{row_id} non-UNKNOWN claim is not bound to the pinned "
+                    "candidate baseline"
+                )
 
     missing = REQUIRED_IDS - seen
     extra = seen - REQUIRED_IDS
