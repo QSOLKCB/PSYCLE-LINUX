@@ -354,6 +354,7 @@ try {
         $windowTitle = ""
         $uiValues = @()
         $uiDiagnostics = @()
+        $uiDiagnosticSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
         $matchedMarker = $null
         $errorMarker = $null
         $stableMarkerPolls = 0
@@ -372,7 +373,12 @@ try {
             $windowTitle = $process.MainWindowTitle
             $uiObservation = Get-UiObservation $process
             $uiValues = @($uiObservation.values)
-            $uiDiagnostics = @($uiObservation.diagnostics)
+            foreach ($diagnostic in @($uiObservation.diagnostics)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
+                    [void]$uiDiagnosticSet.Add([string]$diagnostic)
+                }
+            }
+            $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
             $combined = @($windowTitle) + $uiValues
 
             $errorMarker = $null
@@ -564,8 +570,8 @@ try {
 - Observation environment: native GitHub-hosted Windows runner.
 - Reference installer and installed executable payload: transient only; not retained in this evidence directory.
 - Inputs: exact project-authored fixture bytes copied into this artifact and SHA-256-bound to the corresponding candidate receipts.
-- Acceptance rule: an application load error takes precedence over any filename/title marker; acceptance requires a stable fixture marker across four polls, no application error marker, and no UI Automation diagnostic.
-- UI Automation failures are harness diagnostics and yield an inconclusive observation, never a rejection result.
+- Acceptance rule: an application load error takes precedence over any filename/title marker; acceptance requires a stable fixture marker across four polls, no application error marker, and no UI Automation diagnostic observed during the polling window.
+- UI Automation failures are sticky harness diagnostics across the full observation and yield an inconclusive observation, never a rejection or later acceptance result.
 - Classification policy: these observations do not change compatibility status by themselves; rows remain UNKNOWN until versioned original + candidate receipts and a comparison verdict are committed.
 "@
     [System.IO.File]::WriteAllText(
