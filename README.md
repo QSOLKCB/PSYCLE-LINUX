@@ -22,7 +22,7 @@ That distinction changes the implementation strategy.
 
 **C-Psycle is no longer treated as the literal implementation base for the final Linux Psycle.** The extensive work already completed against `cpsycle/` remains valuable as a preservation corpus, compatibility laboratory, behavioural oracle, Linux-port reference, and regression suite.
 
-Phase 6A has now pinned the original-Psycle reference and the complete six-component C++ build-source snapshot. The next implementation step is **Phase 6B: materialize a provenance-safe sanitized C++ baseline and reproduce the historical Linux `psycle-player` build** before any engine convergence or Qt UI work.
+Phase 6B is complete: the provenance-cleared SourceForge SVN r12005 C++ candidate has been imported as `psycle-cpp-r12005-sanitized/`, frozen by a reproducible baseline identity, and its historical Linux `psycle-player` build is maintained in CI. Phase 6C is now collecting evidence against the pinned Psycle 1.12.0 x86 reference, while Phase 6D keeps the human parity report mechanically synchronized with the canonical compatibility matrix. No Phase 7 engine convergence is justified until versioned original-Psycle observations produce real `DIFFERENT` or `MISSING` results.
 
 ## Dedication
 
@@ -33,7 +33,7 @@ PSYCLE-LINUX is dedicated to the memory of **Juan Antonio Arguelles Rius (Arguru
 The project now has three explicit source roles:
 
 1. **Original Psycle is the compatibility reference.** Preserve its song behaviour, workflow, machine semantics and user-facing identity.
-2. **The pinned C++ build-source family is the candidate Linux engine path.** Import it conservatively, reproduce the player build, then close demonstrated compatibility gaps instead of rebuilding the engine from scratch.
+2. **The pinned C++ build-source family is the candidate Linux engine path.** Measure the sanitized imported candidate against original Psycle, then close demonstrated compatibility gaps instead of rebuilding the engine from scratch.
 3. **C-Psycle is a tested donor and oracle.** Reuse its Linux work, tests, architectural lessons and independently validated machine behaviour where that helps restore original-Psycle compatibility.
 
 Modernization is allowed when it solves a real Linux, reliability, security, packaging or maintainability problem without casually changing historical behaviour.
@@ -55,9 +55,12 @@ Completed work includes:
 - FluidSynth SF2 Player preservation;
 - explicit VST2 licensing/provenance boundaries;
 - startup-safety planning for future third-party plugin scanning;
-- Phase 6A provenance pinning of Psycle 1.12.0 x86 and the six-component r12005 C++ build-source snapshot, with an explicit sanitized-import boundary.
+- Phase 6A provenance pinning of Psycle 1.12.0 x86 and the six-component r12005 C++ build-source snapshot;
+- Phase 6B sanitized C++ import, frozen baseline identity, historical qmake build reproduction, and maintained `psycle-player` CI;
+- Phase 6C machine-readable three-way compatibility matrix, strict evidence gates, and reusable PSY2/PSY3 candidate receipts;
+- Phase 6D machine validation that the human-readable parity report remains aligned with the canonical matrix.
 
-None of that work is discarded by the architecture correction. It becomes the compatibility evidence used to evaluate and harden the next engine path.
+None of that work is discarded by the architecture correction. It becomes the compatibility evidence used to evaluate and harden the candidate engine path.
 
 ## Upstream Architectural Evidence
 
@@ -71,20 +74,16 @@ See [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md) for how that guide is u
 
 ## Next Implementation Milestone
 
-**Phase 6A is complete.** The project has pinned:
+**Phase 6B is complete.** The sanitized C++ candidate is imported and buildable. The active evidence work is now **Phase 6C / 6D — compatibility observations and parity reporting**:
 
-- **Psycle 1.12.0 x86** as the primary original-Psycle behavioural reference, including its official SourceForge origin, exact size and SHA-256;
-- the complete SourceForge SVN **r12005** C++ build-source set: `universalis`, `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player`, and `psycle-plugins`;
-- the first public-import exclusions/quarantines and provenance requirements.
+1. preserve the frozen Psycle 1.12.0 x86 and sanitized r12005 candidate identities;
+2. collect versioned original-Psycle observations in the accepted environment for the same reproducible fixtures/procedures used by the candidate;
+3. keep every compatibility row `UNKNOWN` until both observation sides and a versioned comparison verdict exist;
+4. expand the evidence set from PSY2/PSY3 into timing, tracker commands, routing, Sampler/XMSampler, native state, WAV/sample handling, render/bounce, recovery, and legally usable historical songs;
+5. keep `PSYCLE_CORE_PARITY.md` mechanically synchronized with the canonical matrix;
+6. generate the first Phase 7 implementation backlog only from confirmed `DIFFERENT` / `MISSING` evidence.
 
-The active milestone is now **Phase 6B — sanitized import and historical Linux player build**:
-
-1. materialize the exact retained-file list and omission/replacement arithmetic from the frozen six-component manifests;
-2. preserve or restore complete compatible third-party permission/provenance notices for retained helper/API code;
-3. create separate sanitized archival/canonical baseline identities for the C++ family;
-4. import only the provenance-cleared source needed for the first engine/player build, keeping quarantined VST/ASIO/binary/song material out;
-5. reproduce the historical Debian/Linux `psycle-player` build and record narrow compiler/linker/runtime blockers;
-6. establish deterministic/headless playback where practical and then begin moving parity-matrix rows out of `UNKNOWN` with reproducible evidence.
+The current candidate evidence confirms that the historical player reaches both the project-authored PSY2 and PSY3 loaders. PSY2 exits cleanly under the maintained noninteractive procedure; PSY3 reaches playback but currently times out during noninteractive termination. These observations remain candidate-only evidence and are not original-Psycle parity claims.
 
 Only after the engine is sufficiently compatible should the project implement the full Linux tracker UI. **Qt is the leading candidate** because the original MFC UI cannot be carried directly to Linux; Qt Widgets should be evaluated first for faithful desktop behaviour, with QML remaining an option where it provides a demonstrated advantage.
 
@@ -116,7 +115,7 @@ See [PORTING.md](PORTING.md) for the project's engineering rules and [ROADMAP.md
 
 ## Current Repository Baseline
 
-The currently imported and audited source baseline remains:
+The original audited C-Psycle preservation baseline remains:
 
 - Source: Psycle / C-Psycle SourceForge repository
 - Revision: `r12005`
@@ -126,7 +125,7 @@ The currently imported and audited source baseline remains:
 
 This baseline is retained as a preservation/reference asset. It is **not** being relabelled as the original Psycle implementation.
 
-The C++ candidate family is still **not imported** into the repository. Phase 6A has already established its exact six-component r12005 identities and first licensing/provenance boundary; Phase 6B must now materialize the sanitized retained-file set before any public source import.
+The C++ candidate family is now imported separately under [`psycle-cpp-r12005-sanitized/`](psycle-cpp-r12005-sanitized/) using the Phase 6A/6B provenance boundary. Its frozen Phase 6B baseline SHA-256 is `00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a`. The original Psycle 1.12.0 executable remains a non-redistributed behavioural reference.
 
 See [PHASE6_REFERENCE_PROVENANCE.md](PHASE6_REFERENCE_PROVENANCE.md), [PHASE6_CPP_IMPORT_AUDIT.md](PHASE6_CPP_IMPORT_AUDIT.md), [PSYCLE_CORE_PARITY.md](PSYCLE_CORE_PARITY.md), [PROVENANCE.md](PROVENANCE.md), [UPSTREAM_OMISSIONS.md](UPSTREAM_OMISSIONS.md), [THIRD_PARTY_INVENTORY.md](THIRD_PARTY_INVENTORY.md), [SOURCE_TREE.md](SOURCE_TREE.md), and [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md).
 
@@ -136,7 +135,7 @@ The PSYCLE-LINUX repository scaffolding and original project material are provid
 
 Imported Psycle/C-Psycle source retains its own upstream licensing and component-specific notices. Importing upstream source does **not** relicense it under Apache-2.0.
 
-The pending C++ import must follow the Phase 6A provenance boundary: retain cleared upstream notices, restore complete compatible third-party notices where necessary, and keep quarantined/restricted material out of the public sanitized baseline.
+The sanitized C++ candidate remains governed by the Phase 6A/6B provenance boundary: retained upstream notices stay intact, compatible third-party notices are preserved/restored where required, and quarantined/restricted material remains outside the public baseline.
 
 See [LICENSING.md](LICENSING.md) for project policy.
 

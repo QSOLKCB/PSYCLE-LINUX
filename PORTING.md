@@ -9,10 +9,10 @@ The target is the behaviour and workflow of **original Psycle**. Historical reim
 The current source roles are:
 
 - `psycle/` — original C++/MFC Psycle; primary behavioural and UI reference where it can be observed or inspected lawfully;
-- `universalis` + `psycle-core` + `psycle-audiodrivers` + `psycle-helpers` + `psycle-player` + `psycle-plugins` — the pinned six-component C++ build-source family for the candidate Linux engine/player path;
+- `universalis` + `psycle-core` + `psycle-audiodrivers` + `psycle-helpers` + `psycle-player` + `psycle-plugins` — the pinned six-component C++ family, now imported as the sanitized candidate Linux engine/player path;
 - `cpsycle/` — later C reimplementation, retained as a preservation baseline, Linux donor, regression corpus and compatibility oracle where semantics overlap.
 
-Phase 6A has completed the reference/provenance pin. The immediate implementation task is now **Phase 6B: create a sanitized import of the pinned C++ build-source family and reproduce the historical Linux `psycle-player` build** before behavioural convergence or full UI work.
+Phase 6A pinned the reference identities and provenance boundary. Phase 6B completed the sanitized C++ import and historical Linux `psycle-player` build. The immediate implementation work is now **Phase 6C / 6D: collect versioned original-Psycle observations, keep the three-way matrix evidence-gated, and keep the human parity report synchronized with that matrix** before behavioural convergence or full UI work.
 
 ## Core Rule
 
@@ -56,7 +56,7 @@ The retained C-Psycle developer guide is explicitly **C-Version, Feb 2021 (unfin
 
 An upstream import should remain mechanically close to the selected pinned snapshot after documented sanitization. Avoid combining source acquisition with cleanup, formatting, naming changes or architectural rewrites.
 
-The audited C-Psycle r12005 baseline remains immutable historical evidence. The future C++ family import must receive its own mechanically comparable sanitized archival state and canonical baseline identity.
+The audited C-Psycle r12005 baseline remains immutable historical evidence. The sanitized C++ family now has its own mechanically comparable baseline identity and must remain distinguishable from later compatibility patches.
 
 ### 2. Reproduce before replacing
 
@@ -121,26 +121,25 @@ Reuse C-Psycle code or tests only when the behaviour is demonstrated equivalent 
 
 ## Engine Policy
 
-The leading engine candidate is the pinned six-component C++ build-source family established in Phase 6A.
+The leading engine candidate is the pinned six-component C++ family established in Phase 6A and imported through the Phase 6B sanitization boundary.
 
-Phase 6A has already:
+Phase 6A established:
 
-1. pinned **Psycle 1.12.0 x86** as the primary original-Psycle behavioural reference;
-2. pinned SourceForge SVN **r12005** for `universalis`, `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player`, and `psycle-plugins`;
+1. **Psycle 1.12.0 x86** as the primary original-Psycle behavioural reference;
+2. SourceForge SVN **r12005** for `universalis`, `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player`, and `psycle-plugins`;
 3. frozen per-component file counts, last-changed revisions, and locale-stable manifest hashes;
-4. documented the first licensing/provenance boundary and concrete exclusions/quarantines.
+4. the licensing/provenance boundary and concrete exclusions/quarantines.
 
-Before behavioural modification of that engine, Phase 6B must:
+Phase 6B then:
 
-1. materialize the exact retained-file list and omission/replacement arithmetic from the frozen six-component manifests;
-2. preserve or restore complete compatible third-party permission/provenance notices for retained helper/API code;
-3. create separate sanitized archival/canonical baseline identities;
-4. import only provenance-cleared source, keeping the documented VST/ASIO/closed-binary/song quarantines out;
-5. reproduce the historical Debian/Linux `psycle-player` build and record narrow compiler/linker/runtime blockers;
-6. establish deterministic/headless player execution where practical;
-7. only then begin moving parity-matrix rows out of `UNKNOWN` and separate engine gaps from UI-only gaps.
+1. materialized the exact retained-file list and omission/replacement arithmetic from those frozen manifests;
+2. preserved/restored required compatible third-party permission/provenance notices;
+3. created a separate sanitized C++ baseline identity;
+4. imported only provenance-cleared source while keeping documented VST/ASIO/closed-binary/song quarantines out;
+5. reproduced the historical Debian/Linux `psycle-player` build and recorded the required support inputs/blockers;
+6. established deterministic candidate execution evidence for project-authored PSY2/PSY3 fixtures.
 
-Do not rewrite an engine subsystem until the parity evidence demonstrates why repair is insufficient.
+The current Phase 6C/6D rule is stricter: **do not rewrite an engine subsystem until versioned original-Psycle observations demonstrate the compatibility gap.** Candidate-only evidence remains useful, but it does not justify a Phase 7 parity fix by itself.
 
 ## Build-System Policy
 
@@ -168,7 +167,7 @@ Do not redesign Psycle into a generic modern DAW merely to adopt a newer toolkit
 
 ## Audio and MIDI Policy
 
-During the C++ engine audit/build work, prefer the existing `psycle-audiodrivers` lineage where it is coherent and compatible, while using C-Psycle's ALSA/JACK/ALSA-MIDI/SDL2 work as donor/reference material where useful.
+During C++ engine audit/convergence work, prefer the existing `psycle-audiodrivers` lineage where it is coherent and compatible, while using C-Psycle's ALSA/JACK/ALSA-MIDI/SDL2 work as donor/reference material where useful.
 
 Required Linux acceptance eventually includes:
 
@@ -243,7 +242,7 @@ When touching upstream files:
 - do not silently change licensing notices;
 - avoid adding bundled dependencies when system packages are practical;
 - keep separate upstream families and provenance records distinguishable;
-- reconcile every Phase 6B retained path against the frozen Phase 6A manifests and omission/quarantine inventory.
+- keep the Phase 6B sanitized C++ baseline frozen and apply later compatibility work as traceable changes relative to it.
 
 ## Definition of a Good Porting PR
 

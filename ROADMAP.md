@@ -46,7 +46,7 @@ According to maintainer clarification, that reimplementation was buildable on De
 
 `cpsycle/` is a later C reimplementation with its own UI toolkit, tracker and event/sequencer architecture.
 
-C-Psycle shares substantial concepts and compatibility goals with Psycle, but it is **not the original Psycle port** and intentionally diverges in some areas. Its own developer guide describes it as a C-version/variant and documents differences such as the event-oriented sequencer.
+C-Psycle shares substantial concepts and compatibility goals with Psycle, but it is **not the original Psycle port** and intentionally diverged in some areas. Its own developer guide describes it as a C-version/variant and documents differences such as the event-oriented sequencer.
 
 The current repository's extensive work on C-Psycle remains valuable as:
 
@@ -231,7 +231,7 @@ Still important for the final product:
 
 ### 6A — pin both sides of the parity comparison
 
-The repository still does **not** import the C++ engine family or the original-Psycle executable. Phase 6A pins their identities and records the public-import boundary without redistributing either input.
+At the start of Phase 6A the repository did **not** import the C++ engine family or the original-Psycle executable. Phase 6A pinned both identities and defined the public-import boundary without redistributing the original executable.
 
 #### Original Psycle reference
 
@@ -252,19 +252,21 @@ The repository still does **not** import the C++ engine family or the original-P
 - [x] Define a conservative sanitized-import policy and keep public source import on **HOLD** until the exact retained-file/omission manifest is materialized.
 - [x] Document the relationship between the pinned C++ candidate, the Psycle 1.12.0 behavioural reference, and the separate C-Psycle r12005 oracle.
 
-**Phase 6A status: complete.** The two parity inputs are reproducibly pinned and the first public-import boundary is documented. Source materialization/build work starts in Phase 6B.
+**Phase 6A status: complete.** The two parity inputs are reproducibly pinned and the first public-import boundary is documented.
 
 ### 6B — sanitized import and historical Linux player build
 
-- [ ] Materialize the exact retained-file list and omission/replacement arithmetic from the frozen six-component manifests.
-- [ ] Restore/add complete compatible third-party permission/provenance notices required by retained helper/API code.
-- [ ] Create separate sanitized archival/canonical baseline identities for the C++ family without changing `cpsycle-r12005-baseline`.
-- [ ] Import only the provenance-cleared source needed for the first engine/player build; keep quarantined VST/ASIO/binary/song material out.
-- [ ] Reproduce the Debian/Linux build path without redesigning it first.
-- [ ] Build `psycle-player` and its required `universalis`/core/audio-driver/helper/plugin components.
-- [ ] Record compiler/linker/runtime blockers.
-- [ ] Establish deterministic CLI/headless playback where practical.
-- [ ] Confirm which historical `.psy` versions load.
+- [x] Materialize the exact retained-file list and omission/replacement arithmetic from the frozen six-component manifests.
+- [x] Restore/add complete compatible third-party permission/provenance notices required by retained helper/API code.
+- [x] Create separate sanitized archival/canonical baseline identities for the C++ family without changing `cpsycle-r12005-baseline`.
+- [x] Import only the provenance-cleared source needed for the first engine/player build; keep quarantined VST/ASIO/binary/song material out.
+- [x] Reproduce the Debian/Linux build path without redesigning it first.
+- [x] Build `psycle-player` and its required `universalis`/core/audio-driver/helper/plugin components.
+- [x] Record compiler/linker/runtime blockers.
+- [x] Establish deterministic CLI/headless playback where practical.
+- [x] Confirm candidate loading behaviour for project-authored historical formats: PSY2 loads and exits cleanly; PSY3 reaches the version-3 loader, constructs Sampler/Master and begins playback, while the current noninteractive termination procedure times out. This is candidate evidence only, not original-Psycle parity.
+
+**Phase 6B status: complete.** The sanitized C++ baseline is imported and frozen, the historical Linux player builds reproducibly, and the first PSY2/PSY3 candidate observations are recorded. The PSY3 timeout is retained as evidence for later parity work rather than hidden by the completion status.
 
 ### 6C — build a three-way compatibility matrix
 
@@ -274,11 +276,19 @@ Compare:
 2. **pinned C++ build-source family** — candidate Linux engine;
 3. **C-Psycle regression corpus** — independent donor/oracle where semantics overlap.
 
-Every PASS / DIFFERENT entry must identify the original-Psycle reference version/build and the observation artifact or procedure that supports it. “Original Psycle did X” without a versioned reference is not a reproducible matrix result.
+Completed matrix infrastructure:
+
+- [x] Establish the canonical machine-readable 20-contract matrix in `phase6c/compatibility-matrix.json`.
+- [x] Pin the original Psycle and Phase 6B candidate identities in the matrix validator.
+- [x] Require versioned original and candidate receipts plus a comparison verdict before any row leaves `UNKNOWN`.
+- [x] Collect reusable candidate PSY2/PSY3 receipts in maintained CI.
+- [x] Keep candidate-only and C-Psycle-only evidence from becoming original-Psycle parity claims.
+
+Every PASS / DIFFERENT / MISSING entry must identify the original-Psycle reference version/build and the observation artifacts/procedures that support it. “Original Psycle did X” without a versioned reference is not a reproducible matrix result.
 
 Audit at minimum:
 
-- [ ] PSY2/PSY3 parsing and serialization;
+- [ ] PSY2/PSY3 parsing and serialization against the pinned original reference;
 - [ ] sequence/pattern timing;
 - [ ] BPM/LPB/tick behaviour;
 - [ ] tracker commands and delayed/retrigger events;
@@ -295,24 +305,31 @@ Audit at minimum:
 
 Do **not** assume C-Psycle's event sequencer is authoritative when it differs from original Psycle. The point of this phase is to discover and document differences.
 
+**Phase 6C status: active.** The matrix, evidence schema and candidate lane are established, but all compatibility rows remain `UNKNOWN` until versioned original-Psycle observations and comparison verdicts exist.
+
 ### 6D — parity report
 
-- [ ] Produce `PSYCLE_CORE_PARITY.md` with PASS / DIFFERENT / MISSING / UNKNOWN for each subsystem.
-- [ ] Record the original-Psycle version/build and evidence artifact/procedure for every PASS / DIFFERENT row.
-- [ ] Separate engine gaps from UI-only gaps.
-- [ ] Identify which existing C-Psycle tests can be ported unchanged, which need original-Psycle oracles, and which should remain C-Psycle-only historical tests.
-- [ ] Freeze the first implementation backlog from evidence rather than intuition.
+- [x] Produce `PSYCLE_CORE_PARITY.md` with PASS / DIFFERENT / MISSING / UNKNOWN for each subsystem.
+- [x] Mechanically require the original-Psycle version/build and versioned evidence receipts for every future non-`UNKNOWN` row; there are currently zero classified rows.
+- [x] Separate engine gaps from UI-only gaps.
+- [x] Identify which existing C-Psycle tests are portable shared contracts, which need original-Psycle confirmation, and which remain C-Psycle-only historical evidence.
+- [x] Add `scripts/phase6d-validate-parity-report.py` plus a maintained Phase 6D workflow so the human-readable 20-row report cannot drift from the canonical matrix status inventory.
+- [ ] Freeze the first Phase 7 implementation backlog from confirmed `DIFFERENT` / `MISSING` evidence rather than intuition.
+
+**Phase 6D status: report contract established.** Final Phase 7 backlog generation remains blocked by the intentionally missing original-Psycle observations.
 
 ### 6E — active-track CI foundation
 
 As soon as the provenance-safe C++ family is imported, the new implementation path must have CI of its own rather than relying on the retained C-Psycle Phase 2–5 workflows.
 
-- [ ] Add a maintained GitHub Actions workflow that builds the pinned C++ family and `psycle-player` on the reference Linux runner.
-- [ ] Run deterministic/headless player smoke and all portable Phase 6 parity fixtures in CI.
-- [ ] Upload parity receipts/logs/renders needed to diagnose a failed comparison.
-- [ ] Make the active C++ engine build/parity workflow a required merge signal before Phase 7 implementation PRs are accepted.
+- [x] Add a maintained GitHub Actions workflow that builds the pinned C++ family and `psycle-player` on the reference Linux runner.
+- [x] Run deterministic/headless player smoke and the currently portable Phase 6 PSY2/PSY3 fixture slice in CI.
+- [x] Upload the receipts/logs required to diagnose the current candidate evidence slice; add renders when a later comparison contract requires them.
+- [ ] Make the active C++ engine build/parity workflow a required merge signal before Phase 7 implementation PRs are accepted. (`main` is currently unprotected, so this governance control is not yet in force.)
 - [ ] Require every Phase 7 parity regression to execute in the maintained CI path; no release-blocking regression may remain local-only.
 - [ ] Extend the active-track CI as later phases arrive: Qt build/headless interaction smoke in Phase 8, and VST2 ABI/real-plugin/scanner/song-load containment tests in Phase 9.
+
+**Phase 6E status: active foundation.** The build/evidence workflows exist and run on the canonical branch, but required-check governance and future-phase coverage remain open.
 
 **Exit condition:** the original-Psycle reference and C++ candidate inputs are pinned and reproducible; the parity matrix identifies exactly what the candidate engine already provides and what must change; and the active engine/build/parity suite runs in maintained CI.
 

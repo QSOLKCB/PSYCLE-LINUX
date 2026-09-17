@@ -8,36 +8,32 @@ The project has one rule above all others:
 
 For the active implementation track, that means preserving the **behaviour and workflow of original Psycle** while using the existing cross-platform reimplementations as evidence and donors rather than assuming any one of them is automatically authoritative.
 
-Please read [PORTING.md](PORTING.md), [ROADMAP.md](ROADMAP.md), [PROVENANCE.md](PROVENANCE.md), and [LICENSING.md](LICENSING.md) before proposing large changes.
+Please read [AGENTS.md](AGENTS.md), [PORTING.md](PORTING.md), [ROADMAP.md](ROADMAP.md), [PROVENANCE.md](PROVENANCE.md), and [LICENSING.md](LICENSING.md) before proposing large changes.
 
 ## Current Architecture and Priority
 
 The repository now distinguishes three upstream roles:
 
 - **original `psycle/`** — behavioural and UI reference;
-- **`universalis` + the `psycle-core` family** — pinned candidate C++ build-source path for the Linux engine/player;
+- **`universalis` + the `psycle-core` family** — pinned, sanitized C++ candidate for the Linux engine/player;
 - **`cpsycle/`** — preserved C reimplementation, Linux donor, compatibility laboratory, and regression corpus.
 
-Phase 6A is complete. It pinned Psycle 1.12.0 x86 as the primary behavioural reference and froze the complete SourceForge SVN r12005 C++ build-source set: `universalis`, `psycle-core`, `psycle-audiodrivers`, `psycle-helpers`, `psycle-player`, and `psycle-plugins`.
+Phases 6A and 6B are complete. Psycle 1.12.0 x86 is pinned as the primary behavioural reference, and the provenance-cleared SourceForge SVN r12005 C++ family is imported under `psycle-cpp-r12005-sanitized/` with a frozen Phase 6B identity and maintained historical-player build.
 
-The C++ source is still **not imported** into this repository. The active task is Phase 6B: materialize the exact sanitized retained-file set, preserve/restore required notices, import only provenance-cleared source, and reproduce the historical Linux `psycle-player` build.
+The active work is **Phase 6C / 6D: versioned compatibility evidence and parity reporting**. Candidate-only observations are useful but cannot justify an engine convergence patch by themselves; a compatibility row stays `UNKNOWN` until the pinned original reference and candidate both have reproducible observations and a versioned comparison verdict.
 
 ### What We Need Most Now
 
-The active priority is **Phase 6B — sanitized import and historical Linux player build**. Useful contributions include:
+Useful contributions include:
 
-- materializing the exact retained-file list and omission/replacement arithmetic from the frozen six-component r12005 manifests;
-- reviewing and preserving complete compatible third-party permission/provenance notices for retained helper/API code;
-- creating separate sanitized archival/canonical baseline identities for the C++ family without changing the frozen C-Psycle baseline;
-- importing only provenance-cleared `universalis`, core, helper, player, Linux-relevant audio-driver, and minimum plugin/API source needed for the first build;
-- keeping the documented VST/ASIO/closed-binary/song quarantines out of that first baseline;
-- reproducing the historical Debian/Linux `psycle-player` build;
-- modern GCC/Clang compatibility fixes required by that build, once the sanitized source is imported;
-- establishing active-track GitHub Actions CI for the imported C++ build/player path;
-- deterministic parity fixtures for `.psy` loading, timing, sampler behaviour, mixer/routing, plugin state, MIDI, and rendering once the player executes;
-- adapting the existing C-Psycle regression corpus where it tests a genuinely shared compatibility contract;
+- reproducible original-Psycle 1.12.0 x86 observations for the project-authored PSY2/PSY3 fixtures under the documented reference procedure;
+- small deterministic fixtures for timing, sequence/pattern order, tracker commands, Sampler/XMSampler, mixer/routing, native state, MIDI/automation, WAV/sample loading, render/bounce, and missing-machine behaviour;
+- versioned observation/comparison receipts that satisfy the Phase 6C validator rather than prose-only parity claims;
+- maintaining `PSYCLE_CORE_PARITY.md` as a faithful human-readable projection of the canonical matrix;
+- adapting the existing C-Psycle regression corpus only where it tests a genuinely shared compatibility contract;
 - legally redistributable historical songs, samples, presets, and reference fixtures with clear provenance;
-- historical documentation and reproducible behaviour reports that identify the exact Psycle version/build observed.
+- historical documentation and reproducible behaviour reports that identify the exact Psycle version/build observed;
+- focused fixes to the candidate only after a `DIFFERENT` or `MISSING` result demonstrates the gap.
 
 Later roadmap phases also welcome focused work when their prerequisites are met:
 
@@ -73,18 +69,18 @@ For historical executable/reference evidence, do not upload or redistribute bina
 
 Good examples for the active track:
 
-- `phase6b: materialize sanitized C++ import manifest`
-- `phase6b: import cleared universalis and core baseline`
-- `player: fix GCC build without changing playback semantics`
-- `sampler: add original-Psycle timing parity fixture`
-- `songio: preserve machine state on legacy .psy reload`
+- `phase6c: add original PSY2 observation receipt`
+- `phase6c: compare candidate and original tick timing`
+- `phase6d: keep parity report synchronized with matrix`
+- `sampler: fix confirmed original-Psycle envelope parity gap`
+- `songio: preserve machine state for a confirmed legacy .psy difference`
 - `ci: run C++ player parity smoke on Ubuntu`
 - `qt: add tracker keyboard-focus proof after engine parity`
 - `vst2: add ABI layout assertions and independent plugin fixture`
 
 Poor proposals include:
 
-- importing the full six-tree SourceForge snapshot without applying the documented sanitization boundary;
+- bypassing or weakening the Phase 6 evidence gate merely to move a row out of `UNKNOWN`;
 - starting the full Qt tracker before the engine parity audit identifies the required contracts;
 - replacing the engine instead of measuring the existing `psycle-core` implementation;
 - replacing the build system and refactoring every directory in the same PR;
@@ -115,7 +111,7 @@ When introducing third-party or historical code, binaries, assets, or reference 
 - whether it is committed to the repository or used only as an external observation/reference;
 - the runtime/build environment needed to reproduce the observation.
 
-Phase 6B imports must also reconcile every retained path against the frozen Phase 6A manifests and the documented omission/quarantine list.
+The Phase 6B sanitized baseline is frozen evidence. Later compatibility changes must repair forward as traceable commits rather than retroactively rewriting that baseline identity.
 
 See [PHASE6_REFERENCE_PROVENANCE.md](PHASE6_REFERENCE_PROVENANCE.md), [PHASE6_CPP_IMPORT_AUDIT.md](PHASE6_CPP_IMPORT_AUDIT.md), [LICENSING.md](LICENSING.md), and [PROVENANCE.md](PROVENANCE.md).
 
@@ -169,13 +165,15 @@ Where exact output cannot be reproduced across architectures, document the expec
 
 New active-track regressions must not remain local-only tests.
 
-The Phase 6A receipt-only provenance workflow already protects the frozen reference identities. Once the sanitized C++ family is imported in Phase 6B, PRs that change the active engine must run the relevant build and parity tests in GitHub Actions. As later phases become active, their critical tests must join the merge-gating suite as well, including:
+The Phase 6A provenance workflow protects the frozen reference identities. The Phase 6B/6C maintained workflows now verify the sanitized candidate, rebuild `psycle-player`, exercise portable candidate fixtures, and publish evidence receipts/logs. Phase 6D additionally checks that the human parity report cannot drift away from the canonical matrix status inventory.
+
+As later phases become active, their critical tests must join the maintained CI suite as well, including:
 
 - C++ engine/`psycle-player` build and parity tests;
 - Qt host build and headless interaction smoke where practical;
 - plugin ABI, independent real-plugin processing, scanner timeout/crash, song-load containment, and state-restore regressions.
 
-A regression test that is not executed by the maintained CI path does not protect the project from future merges.
+A regression test that is not executed by the maintained CI path does not protect the project from future merges. Repository branch protection/required-check governance remains a separate control and must not be claimed until it is actually configured.
 
 ## Native Machines
 
@@ -216,8 +214,9 @@ The independent plugin test must exercise real audio processing in addition to a
 Prefer concise messages describing the subsystem and reason, for example:
 
 ```text
-phase6b: sanitize C++ player baseline
-core: fix 64-bit playback counter without changing timing
+phase6c: add original PSY2 observation receipt
+phase6d: gate parity-report status drift
+core: fix confirmed 64-bit playback counter parity gap
 songio: preserve machine state on legacy .psy reload
 ci: gate C++ timing parity
 qt: prove tracker focus routing

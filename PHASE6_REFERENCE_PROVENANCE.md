@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Phase 6 begins by making the compatibility comparison reproducible **before** importing or modifying the C++ reimplementation.
+Phase 6 began by making the compatibility comparison reproducible **before** importing or modifying the C++ reimplementation. That provenance pin remains authoritative after the Phase 6B sanitized import.
 
 The governing rule remains:
 
@@ -68,7 +68,7 @@ The first candidate engine snapshot is the **repository-wide SourceForge SVN rev
 https://svn.code.sf.net/p/psycle/code/trunk
 ```
 
-The audit now pins the complete build-source family needed for the historical C++ player path, including the top-level `universalis` support project discovered during review.
+The audit pins the complete build-source family needed for the historical C++ player path, including the top-level `universalis` support project discovered during review.
 
 All six paths were successfully exported together at `-r 12005` on clean Ubuntu 24.04 GitHub Actions runners.
 
@@ -164,36 +164,36 @@ That run exercised the finalized script/workflow gate and passed the exact recei
 
 The official Psycle 1.12.0 readme describes Psycle as open source and records the project's historical licensing intent. That is useful project-level evidence but is **not treated as a blanket redistribution grant for every bundled file** in the sibling component trees.
 
-The file-level receipt indicates that `universalis`, `psycle-player`, much of `psycle-core`, and the Linux-facing driver code carry explicit GPL-2-or-later Psycle notices. It also exposes concrete mixed-provenance boundaries that require sanitization.
+The file-level receipt indicates that `universalis`, `psycle-player`, much of `psycle-core`, and the Linux-facing driver code carry explicit GPL-2-or-later Psycle notices. It also exposes concrete mixed-provenance boundaries that required sanitization.
 
-Definite or conservative first-import exclusions/quarantines currently include:
+Definite or conservative first-import exclusions/quarantines include:
 
 - nine prebuilt DLLs under `psycle-plugins/closed-source/`;
 - three unresolved historical `.psy` songs;
 - `psycle-plugins/src/psycle/plugins/y_midi/gmnames.h`, which identifies itself as Steinberg VST Plug-Ins SDK material;
-- `psycle-core/src/seib/vst/`, pending expression-level VST SDK review;
-- `psycle-audiodrivers/src/asio/`, pending expression-level ASIO provenance review.
+- `psycle-core/src/seib/vst/`, excluded pending expression-level VST SDK review;
+- `psycle-audiodrivers/src/asio/`, excluded pending expression-level ASIO provenance review.
 
-Helper/STK/LADSPA and other third-party boundaries require their compatible notices to be preserved or restored explicitly.
+Helper/STK/LADSPA and other third-party boundaries require their compatible notices to remain preserved or restored explicitly.
 
 See [PHASE6_CPP_IMPORT_AUDIT.md](PHASE6_CPP_IMPORT_AUDIT.md).
 
-**Current public source import status: HOLD pending the exact sanitized retained/omission manifest.**
+**Current public source import status: Phase 6B sanitized import COMPLETE.**
 
-No C++ source is imported by this PR. A future sanitized import must have an explicit omission/replacement inventory and its own archival/canonical baseline identity; it must not mutate the existing C-Psycle baseline.
+The provenance-cleared candidate is committed under `psycle-cpp-r12005-sanitized/` with frozen Phase 6B baseline SHA-256 `00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a`. The documented quarantines remain outside that public baseline, and the original Psycle executable remains non-redistributed. Later compatibility changes must repair forward relative to the frozen baseline rather than changing its historical identity.
 
 ## Relationship to original Psycle
 
 Historical maintainer evidence says the multiplatform C++ version could play existing songs but remained incomplete and developed incompatibilities. Therefore:
 
 - Psycle 1.12.0 x86 is the primary behavioural reference;
-- the six-component r12005 build-source snapshot is the first candidate engine input;
+- the sanitized six-component r12005 family is the first candidate engine implementation;
 - C-Psycle r12005 remains a separate tested donor/oracle;
 - reproducible differences are evidence to classify, not automatically defects in either side.
 
-## Phase 6A status
+## Phase 6 status
 
-Completed in this PR:
+Phase 6A provenance pinning is complete:
 
 - [x] select the primary original-Psycle reference version/build;
 - [x] freeze its official SourceForge origin, size and SHA-256;
@@ -203,13 +203,16 @@ Completed in this PR:
 - [x] freeze component file counts, last-changed revisions and manifest hashes;
 - [x] establish receipt-only CI that redistributes neither source nor original binaries;
 - [x] review filename/dependency/provenance notice hints;
-- [x] create the initial `PSYCLE_CORE_PARITY.md` evidence matrix;
 - [x] record the import disposition and concrete sanitization blockers;
-- [x] define the conservative first sanitized-import policy.
+- [x] define the conservative sanitized-import policy.
 
-Still required in Phase 6B before candidate-engine execution evidence can begin:
+Phase 6B import/build work is also complete:
 
-- [ ] materialize the exact retained-file and omission/replacement manifest;
-- [ ] restore/add any required compatible third-party notices;
-- [ ] create the sanitized C++ archival/canonical baseline;
-- [ ] demonstrate that the sanitized set builds `psycle-player` on Linux or document the next narrow build blockers.
+- [x] materialize the exact retained-file and omission/replacement manifest;
+- [x] restore/add required compatible third-party notices;
+- [x] create the sanitized C++ baseline identity without changing the C-Psycle baseline;
+- [x] commit the provenance-cleared source under `psycle-cpp-r12005-sanitized/`;
+- [x] reproduce the historical Linux `psycle-player` build in maintained CI;
+- [x] begin candidate execution evidence with project-authored PSY2/PSY3 fixtures.
+
+Phase 6C/6D now owns behavioural comparison: compatibility rows remain `UNKNOWN` until versioned original-Psycle observations, candidate observations and comparison verdicts satisfy the matrix gate.
