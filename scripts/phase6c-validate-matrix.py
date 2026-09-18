@@ -53,6 +53,7 @@ EXPECTED_WORKFLOW_ATTRIBUTION = {
 EXPECTED_ORIGINAL_CLASSIFICATION_FIELDS = {
     "project-io-psy2-parse": {
         "reference_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+        "fixture": "fixtures/psy2/phase4-historical-psy2.psy",
         "observation": "stable-native-window-evidence-identifies-loaded-fixture-without-error",
         "load_result": "accepted",
         "load_evidence_marker": "phase4-historical-psy2.psy",
