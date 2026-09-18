@@ -32,6 +32,13 @@ EXPECTED = {
     "psy2": "project-io-psy2-parse",
     "psy3": "project-io-psy3-parse",
 }
+VC90_MODULE_NAMES = {
+    "msvcr90.dll",
+    "msvcp90.dll",
+    "mfc90.dll",
+    "mfc90u.dll",
+    "atl90.dll",
+}
 ALLOWED_LOAD_RESULT = {"accepted", "rejected", "inconclusive"}
 ALLOWED_TERMINATION = {
     "already-exited",
@@ -146,6 +153,118 @@ def validate_runtime(environment: dict[str, object], original_root: pathlib.Path
     )
     if "microsoft" not in signer_line.lower():
         die(f"original-{name} VC90 runtime receipt is not signed by Microsoft")
+
+
+def validate_loaded_vc90_runtime(
+    environment: dict[str, object],
+    original_root: pathlib.Path,
+    name: str,
+) -> tuple[list[str], bool]:
+    mapping = environment.get("loaded_vc90_runtime")
+    if not isinstance(mapping, dict):
+        die(f"original-{name}.environment.loaded_vc90_runtime must be an object")
+
+    inventory_ref = mapping.get("path")
+    expected_ref = f"loaded-vc90-runtime-{name}.json"
+    if inventory_ref != expected_ref:
+        die(
+            f"original-{name} is not bound to its fixture-specific "
+            "loaded VC90 runtime inventory"
+        )
+    inventory_path = resolve_artifact_path(
+        original_root,
+        inventory_ref,
+        f"original-{name}.environment.loaded_vc90_runtime.path",
+    )
+    expected_hash = require_hash(
+        mapping.get("sha256"),
+        f"original-{name}.environment.loaded_vc90_runtime.sha256",
+    )
+    actual_hash = sha256(inventory_path)
+    if actual_hash != expected_hash:
+        die(
+            f"original-{name} loaded VC90 runtime inventory SHA-256 mismatch: "
+            f"expected={expected_hash} actual={actual_hash}"
+        )
+
+    inventory = load_json(inventory_path)
+    if inventory.get("schema_version") != 1:
+        die(f"original-{name} loaded VC90 runtime inventory has the wrong schema version")
+    if inventory.get("reference_build") != EXPECTED_REFERENCE_BUILD:
+        die(f"original-{name} loaded VC90 runtime inventory has the wrong reference build")
+    if inventory.get("expected_vc90_version") != EXPECTED_VC90_RUNTIME_VERSION:
+        die(f"original-{name} loaded VC90 runtime inventory has the wrong expected version")
+
+    process_id = inventory.get("process_id")
+    if not isinstance(process_id, int) or isinstance(process_id, bool) or process_id <= 0:
+        die(f"original-{name} loaded VC90 runtime inventory has an invalid process_id")
+
+    diagnostics = inventory.get("diagnostics")
+    if not isinstance(diagnostics, list) or any(
+        not isinstance(value, str) or not value.strip() for value in diagnostics
+    ):
+        die(f"original-{name} loaded VC90 runtime diagnostics must be a string array")
+
+    modules = inventory.get("modules")
+    if not isinstance(modules, list):
+        die(f"original-{name} loaded VC90 runtime modules must be an array")
+
+    seen_names: set[str] = set()
+    seen_paths: set[str] = set()
+    has_msvcr90 = False
+    identity_valid = True
+    for index, module in enumerate(modules):
+        context = f"original-{name}.loaded_vc90_runtime.modules[{index}]"
+        if not isinstance(module, dict):
+            die(f"{context} must be an object")
+
+        module_name = module.get("name")
+        if not isinstance(module_name, str) or module_name.lower() not in VC90_MODULE_NAMES:
+            die(f"{context}.name is not a recognized VC90 runtime module")
+        module_name = module_name.lower()
+        if module_name in seen_names:
+            die(f"{context}.name is duplicated")
+        seen_names.add(module_name)
+        if module_name == "msvcr90.dll":
+            has_msvcr90 = True
+
+        module_path = module.get("path")
+        if not isinstance(module_path, str) or not module_path.strip():
+            die(f"{context}.path must be non-empty")
+        pure_path = pathlib.PureWindowsPath(module_path)
+        if not pure_path.is_absolute():
+            die(f"{context}.path must be an absolute Windows path")
+        normalized_path = str(pure_path).lower()
+        if normalized_path in seen_paths:
+            die(f"{context}.path is duplicated")
+        seen_paths.add(normalized_path)
+
+        size = module.get("size_bytes")
+        if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
+            die(f"{context}.size_bytes must be a positive integer")
+        require_hash(module.get("sha256"), f"{context}.sha256")
+
+        file_version = module.get("file_version")
+        if file_version != EXPECTED_VC90_RUNTIME_VERSION:
+            identity_valid = False
+
+        raw_version = module.get("file_version_raw")
+        product_version = module.get("product_version")
+        if raw_version is not None and not isinstance(raw_version, str):
+            die(f"{context}.file_version_raw must be string or null")
+        if product_version is not None and not isinstance(product_version, str):
+            die(f"{context}.product_version must be string or null")
+
+    if not has_msvcr90:
+        identity_valid = False
+
+    if not identity_valid and not diagnostics:
+        die(
+            f"original-{name} loaded VC90 runtime identity is incomplete/mismatched "
+            "without a recorded runtime diagnostic"
+        )
+
+    return diagnostics, identity_valid
 
 
 def validate_machine_plugin_inventory(
@@ -390,6 +509,9 @@ def validate_pair(
     if environment.get("installer_framework") not in {"inno-setup", "nsis"}:
         die(f"original-{name} has unsupported installer framework metadata")
     validate_runtime(environment, original_root, name)
+    runtime_inventory_diagnostics, runtime_identity_valid = validate_loaded_vc90_runtime(
+        environment, original_root, name
+    )
     validate_machine_plugin_inventory(
         environment, original_root, name, reference_executable_hash
     )
@@ -404,6 +526,7 @@ def validate_pair(
     marker = original.get("load_evidence_marker")
     stable_polls = original.get("stable_marker_polls")
     diagnostics = original.get("ui_automation_diagnostics")
+    runtime_diagnostics = original.get("runtime_identity_diagnostics")
     exit_code = original.get("exit_code_before_termination")
     running_before_termination = original.get("process_running_before_termination")
     termination = original.get("termination")
@@ -457,6 +580,15 @@ def validate_pair(
 
     if not isinstance(diagnostics, list) or any(not isinstance(x, str) for x in diagnostics):
         die(f"original-{name}.ui_automation_diagnostics must be a string array")
+    if not isinstance(runtime_diagnostics, list) or any(
+        not isinstance(x, str) or not x.strip() for x in runtime_diagnostics
+    ):
+        die(f"original-{name}.runtime_identity_diagnostics must be a string array")
+    if sorted(set(runtime_diagnostics)) != sorted(set(runtime_inventory_diagnostics)):
+        die(
+            f"original-{name} runtime identity diagnostics do not match "
+            "the hash-bound loaded-runtime inventory"
+        )
     if not isinstance(stable_polls, int) or stable_polls < 0:
         die(f"original-{name}.stable_marker_polls must be a non-negative integer")
     if exit_code is not None and (not isinstance(exit_code, int) or isinstance(exit_code, bool)):
@@ -475,6 +607,8 @@ def validate_pair(
             die(f"original-{name} accepted result has a non-empty error scope")
         if diagnostics:
             die(f"original-{name} accepted result contains UI Automation harness diagnostics")
+        if runtime_diagnostics or not runtime_identity_valid:
+            die(f"original-{name} accepted result lacks verified loaded VC90 runtime identity")
         if stable_polls < 4:
             die(f"original-{name} accepted result lacks the required stable marker window")
         if original.get("main_window_seen") is not True:
@@ -506,6 +640,8 @@ def validate_pair(
 
     if diagnostics and result != "inconclusive":
         die(f"original-{name} UI Automation diagnostics must force an inconclusive result")
+    if (runtime_diagnostics or not runtime_identity_valid) and result != "inconclusive":
+        die(f"original-{name} loaded VC90 runtime identity diagnostics must force an inconclusive result")
 
     if original.get("original_psycle_observed") is not True:
         die(f"original-{name} must explicitly record original_psycle_observed=true")
