@@ -34,6 +34,10 @@ EXPECTED = {
     "psy2": "project-io-psy2-parse",
     "psy3": "project-io-psy3-parse",
 }
+LEGACY_DIRECTSOUND_PROCEDURE_MARKER = "timeout-bounded Win32 WM_COMMAND/IDOK"
+BM_CLICK_DIRECTSOUND_PROCEDURE_MARKER = "timeout-bounded Win32 BM_CLICK"
+LEGACY_DIRECTSOUND_ACTION = "invoke-ok-win32-wm-command"
+BM_CLICK_DIRECTSOUND_ACTION = "invoke-ok-win32-bm-click"
 VC90_MODULE_NAMES = {
     "msvcr90.dll",
     "msvcp90.dll",
@@ -504,6 +508,22 @@ def validate_pair(
         die(f"original-{name}.procedure must be non-empty")
     if EXPECTED_VC90_REDISTRIBUTABLE_SHA256 not in procedure:
         die(f"original-{name}.procedure does not bind the pinned VC90 runtime")
+
+    procedure_uses_legacy_directsound = (
+        LEGACY_DIRECTSOUND_PROCEDURE_MARKER in procedure
+    )
+    procedure_uses_bm_click = BM_CLICK_DIRECTSOUND_PROCEDURE_MARKER in procedure
+    if procedure_uses_legacy_directsound == procedure_uses_bm_click:
+        die(
+            f"original-{name}.procedure must identify exactly one supported "
+            "DirectSound Win32 fallback"
+        )
+    expected_directsound_win32_action = (
+        LEGACY_DIRECTSOUND_ACTION
+        if procedure_uses_legacy_directsound
+        else BM_CLICK_DIRECTSOUND_ACTION
+    )
+
     observation = original.get("observation")
     if not isinstance(observation, str) or not observation.strip():
         die(f"original-{name}.observation must be non-empty")
@@ -712,10 +732,21 @@ def validate_pair(
     if directsound_action not in {
         None,
         "invoke-ok",
-        "invoke-ok-win32-wm-command",
-        "invoke-ok-win32-bm-click",
+        LEGACY_DIRECTSOUND_ACTION,
+        BM_CLICK_DIRECTSOUND_ACTION,
     }:
         die(f"original-{name} DirectSound bootstrap action is invalid")
+    if (
+        directsound_action in {
+            LEGACY_DIRECTSOUND_ACTION,
+            BM_CLICK_DIRECTSOUND_ACTION,
+        }
+        and directsound_action != expected_directsound_win32_action
+    ):
+        die(
+            f"original-{name} DirectSound bootstrap action {directsound_action!r} "
+            "does not match the recorded procedure"
+        )
     directsound_outcome = directsound_bootstrap.get("outcome")
     allowed_directsound_outcomes = {
         "not-seen",
@@ -757,8 +788,8 @@ def validate_pair(
         "invoke-failed": (True, True, True, "invoke-ok"),
     }
     directsound_win32_states = {
-        (True, True, True, "invoke-ok-win32-wm-command"),
-        (True, True, True, "invoke-ok-win32-bm-click"),
+        (True, True, True, LEGACY_DIRECTSOUND_ACTION),
+        (True, True, True, BM_CLICK_DIRECTSOUND_ACTION),
     }
     directsound_close_verification_states = {
         (True, True, True, "invoke-ok"),
@@ -789,8 +820,8 @@ def validate_pair(
             and directsound_dismissed
             and directsound_action in {
                 "invoke-ok",
-                "invoke-ok-win32-wm-command",
-                "invoke-ok-win32-bm-click",
+                LEGACY_DIRECTSOUND_ACTION,
+                BM_CLICK_DIRECTSOUND_ACTION,
             }
         ):
             die(f"original-{name} dismissed DirectSound bootstrap state is inconsistent")
