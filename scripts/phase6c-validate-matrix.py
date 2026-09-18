@@ -216,6 +216,14 @@ def validate_classification_receipt(
 
     if receipt.get("schema_version") != 1 or receipt.get("phase") != "6C":
         die(f"{context}.observation receipt has unexpected schema_version/phase")
+    expected_scope = (
+        "original-observation" if role == "original" else "candidate-observation"
+    )
+    if receipt.get("scope") != expected_scope:
+        die(
+            f"{context}.observation receipt has wrong scope: "
+            f"{receipt.get('scope')!r}"
+        )
     if receipt.get("contract") != row_id:
         die(f"{context}.observation receipt is bound to the wrong contract")
     if receipt.get("evidence_role") != role:
@@ -245,6 +253,12 @@ def validate_classification_receipt(
             die(f"{context}.observation receipt is bound to the wrong source receipt")
         if source_evidence.get("artifact_digest") != expected_source["artifact_digest"]:
             die(f"{context}.observation receipt is bound to the wrong source artifact")
+        expected_artifact_receipt = pathlib.PurePosixPath(observation_ref).name
+        if source_evidence.get("artifact_receipt") != expected_artifact_receipt:
+            die(
+                f"{context}.observation receipt source artifact filename "
+                "does not match the versioned receipt basename"
+            )
 
         expected_attribution = EXPECTED_WORKFLOW_ATTRIBUTION.get(row_id)
         if not isinstance(expected_attribution, dict):
