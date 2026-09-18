@@ -33,11 +33,13 @@ EXPECTED_ORIGINAL_SOURCE_IDENTITIES = {
     "project-io-psy2-parse": {
         "receipt_sha256": "1b9d05dd5caafc8120ade51e28086d02f05800bcba0479aa4325680333fb6b74",
         "procedure_sha256": "b1d0a80417d8589d458e35386b9051b039210144df707e1aea57ba65ca6b5a6d",
+        "executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
         "artifact_digest": "sha256:20957d9e23733bc3ce724611734f07f9d90a49450b66152c68ae186c1dd62595",
     }
 }
 EXPECTED_ORIGINAL_CLASSIFICATION_FIELDS = {
     "project-io-psy2-parse": {
+        "reference_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
         "observation": "stable-native-window-evidence-identifies-loaded-fixture-without-error",
         "load_result": "accepted",
         "load_evidence_marker": "phase4-historical-psy2.psy",
@@ -605,6 +607,35 @@ def validate_comparison_receipt(
             "receipt SHA-256"
         )
 
+    expected_original_source = EXPECTED_ORIGINAL_SOURCE_IDENTITIES.get(row_id)
+    if not isinstance(expected_original_source, dict):
+        die(f"{row_id} comparison lacks a pinned original source identity")
+    original_executable_sha256 = require_sha256(
+        original_receipt.get("reference_executable_sha256"),
+        f"{row_id} original executable SHA-256",
+    )
+    if (
+        original_executable_sha256 != expected_original_source["executable_sha256"]
+        or comparison.get("original_executable_sha256")
+        != expected_original_source["executable_sha256"]
+    ):
+        die(f"{row_id}.comparison receipt does not bind the original executable")
+
+    source_evidence = comparison.get("source_evidence")
+    if not isinstance(source_evidence, dict):
+        die(f"{row_id}.comparison receipt lacks source_evidence")
+    if (
+        source_evidence.get("original_artifact_digest")
+        != expected_original_source["artifact_digest"]
+    ):
+        die(f"{row_id}.comparison receipt has the wrong original artifact digest")
+    expected_original_artifact_receipt = pathlib.PurePosixPath(original_ref).name
+    if (
+        source_evidence.get("original_artifact_receipt")
+        != expected_original_artifact_receipt
+    ):
+        die(f"{row_id}.comparison receipt has the wrong original artifact receipt")
+
     expected_candidate_source = EXPECTED_CANDIDATE_SOURCE_IDENTITIES.get(row_id)
     if not isinstance(expected_candidate_source, dict):
         die(f"{row_id} comparison lacks a pinned candidate source identity")
@@ -627,9 +658,6 @@ def validate_comparison_receipt(
         != expected_candidate_source["executable_sha256"]
     ):
         die(f"{row_id}.comparison receipt does not bind the candidate executable")
-    source_evidence = comparison.get("source_evidence")
-    if not isinstance(source_evidence, dict):
-        die(f"{row_id}.comparison receipt lacks source_evidence")
     if (
         source_evidence.get("candidate_artifact_digest")
         != expected_candidate_source["artifact_digest"]
