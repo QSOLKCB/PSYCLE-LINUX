@@ -59,41 +59,83 @@ function Get-InstallerFramework([string]$Path) {
 function Get-UiObservation([System.Diagnostics.Process]$Process) {
     $values = New-Object System.Collections.Generic.List[string]
     $diagnostics = New-Object System.Collections.Generic.List[string]
+    $topLevelWindowCount = 0
 
     try {
         $Process.Refresh()
-        if ($Process.HasExited -or $Process.MainWindowHandle -eq 0) {
-            return [ordered]@{ values = @(); diagnostics = @() }
+        if ($Process.HasExited) {
+            return [ordered]@{
+                values = @()
+                diagnostics = @()
+                top_level_window_count = 0
+            }
         }
 
-        $root = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]$Process.MainWindowHandle)
-        if ($null -eq $root) {
-            return [ordered]@{ values = @(); diagnostics = @("UI Automation returned no root element") }
+        $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+        if ($null -eq $desktop) {
+            return [ordered]@{
+                values = @()
+                diagnostics = @("UI Automation returned no desktop root element")
+                top_level_window_count = 0
+            }
         }
 
-        $nodes = $root.FindAll(
-            [System.Windows.Automation.TreeScope]::Descendants,
+        $windows = $desktop.FindAll(
+            [System.Windows.Automation.TreeScope]::Children,
             [System.Windows.Automation.Condition]::TrueCondition
         )
-        foreach ($node in $nodes) {
+        foreach ($window in $windows) {
             try {
-                $name = $node.Current.Name
-                if (-not [string]::IsNullOrWhiteSpace($name)) {
-                    $values.Add($name.Trim())
+                $ownerProcessId = $window.Current.ProcessId
+            }
+            catch {
+                continue
+            }
+            if ($ownerProcessId -ne $Process.Id) {
+                continue
+            }
+
+            $topLevelWindowCount += 1
+            try {
+                $windowName = $window.Current.Name
+                if (-not [string]::IsNullOrWhiteSpace($windowName)) {
+                    $values.Add($windowName.Trim())
                 }
             }
             catch {
-                $diagnostics.Add("UI element read failed: $($_.Exception.Message)")
+                $diagnostics.Add("Psycle top-level window read failed: $($_.Exception.Message)")
+            }
+
+            try {
+                $nodes = $window.FindAll(
+                    [System.Windows.Automation.TreeScope]::Descendants,
+                    [System.Windows.Automation.Condition]::TrueCondition
+                )
+                foreach ($node in $nodes) {
+                    try {
+                        $name = $node.Current.Name
+                        if (-not [string]::IsNullOrWhiteSpace($name)) {
+                            $values.Add($name.Trim())
+                        }
+                    }
+                    catch {
+                        $diagnostics.Add("Psycle UI element read failed: $($_.Exception.Message)")
+                    }
+                }
+            }
+            catch {
+                $diagnostics.Add("Psycle top-level window traversal failed: $($_.Exception.Message)")
             }
         }
     }
     catch {
-        $diagnostics.Add("UI Automation failed: $($_.Exception.Message)")
+        $diagnostics.Add("UI Automation failed while enumerating Psycle top-level windows: $($_.Exception.Message)")
     }
 
     return [ordered]@{
         values = @($values | Select-Object -Unique)
         diagnostics = @($diagnostics | Select-Object -Unique)
+        top_level_window_count = $topLevelWindowCount
     }
 }
 
@@ -127,6 +169,164 @@ function Write-JsonUtf8([string]$Path, [object]$Value) {
         $json + [Environment]::NewLine,
         [System.Text.UTF8Encoding]::new($false)
     )
+}
+
+function Write-MachinePluginInventory(
+    [string]$InstallRoot,
+    [string]$ExecutablePath,
+    [string]$Path,
+    [bool]$PreexistingPsycleRegistry
+) {
+    $installFull = [System.IO.Path]::GetFullPath($InstallRoot)
+    $executableFull = [System.IO.Path]::GetFullPath($ExecutablePath)
+    $installPrefix = $installFull.TrimEnd([System.IO.Path]::DirectorySeparatorChar) +
+        [System.IO.Path]::DirectorySeparatorChar
+
+    $installedFiles = @(
+        Get-ChildItem -LiteralPath $installFull -Recurse -File |
+            Sort-Object FullName |
+            ForEach-Object {
+                [ordered]@{
+                    path = [System.IO.Path]::GetRelativePath($installFull, $_.FullName).Replace("\", "/")
+                    size_bytes = [long]$_.Length
+                    sha256 = Get-Sha256 $_.FullName
+                }
+            }
+    )
+
+    $registryEntries = New-Object System.Collections.Generic.List[object]
+    $registryRoot = "HKCU:\Software\Psycle"
+    if (Test-Path -LiteralPath $registryRoot) {
+        $registryKeys = @((Get-Item -LiteralPath $registryRoot))
+        $registryKeys += @(Get-ChildItem -LiteralPath $registryRoot -Recurse -ErrorAction SilentlyContinue)
+        foreach ($key in $registryKeys) {
+            try {
+                $properties = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop
+                foreach ($property in $properties.PSObject.Properties) {
+                    if ($property.Name -match "^PS(Path|ParentPath|ChildName|Drive|Provider)$") {
+                        continue
+                    }
+                    $rawValue = $property.Value
+                    $textValue = if ($null -eq $rawValue) {
+                        ""
+                    } elseif ($rawValue -is [System.Array]) {
+                        (@($rawValue | ForEach-Object { [string]$_ }) -join ";")
+                    } else {
+                        [string]$rawValue
+                    }
+                    $registryEntries.Add([ordered]@{
+                        key = [string]$key.Name
+                        name = [string]$property.Name
+                        value = $textValue
+                    })
+                }
+            }
+            catch {
+                Fail "could not inventory Psycle registry key $($key.Name): $($_.Exception.Message)"
+            }
+        }
+    }
+
+    $pluginRootSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in $registryEntries) {
+        $searchable = "$($entry.key) $($entry.name) $($entry.value)"
+        if ($searchable -notmatch "(?i)(plugin|vst|machine)") {
+            continue
+        }
+        foreach ($piece in ([string]$entry.value -split ";")) {
+            $candidate = [Environment]::ExpandEnvironmentVariables($piece.Trim().Trim('"'))
+            if ([string]::IsNullOrWhiteSpace($candidate)) {
+                continue
+            }
+            try {
+                if ([System.IO.Path]::IsPathRooted($candidate)) {
+                    $candidate = [System.IO.Path]::GetFullPath($candidate)
+                } elseif ($candidate -match "[\\/]") {
+                    $candidate = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $executableFull) $candidate))
+                } else {
+                    continue
+                }
+                [void]$pluginRootSet.Add($candidate)
+            }
+            catch {
+                Fail "invalid plugin/machine path in Psycle registry inventory: $candidate"
+            }
+        }
+    }
+
+    $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+    $knownRoots = @(
+        (Join-Path $installFull "PsyclePlugins"),
+        (Join-Path $installFull "VstPlugins"),
+        (Join-Path $installFull "Vst64Plugins"),
+        (Join-Path $env:USERPROFILE "PsyclePlugins"),
+        (Join-Path $env:USERPROFILE "VstPlugins"),
+        (Join-Path $env:USERPROFILE "Vst64Plugins"),
+        (Join-Path $env:USERPROFILE "Documents\Psycle\PsyclePlugins"),
+        (Join-Path $env:USERPROFILE "Documents\Psycle\VstPlugins"),
+        (Join-Path $env:USERPROFILE "Documents\Psycle\Vst64Plugins"),
+        (Join-Path $env:ProgramFiles "Steinberg\VstPlugins"),
+        (Join-Path $env:ProgramFiles "Common Files\VST2")
+    )
+    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
+        $knownRoots += (Join-Path $programFilesX86 "Steinberg\VstPlugins")
+        $knownRoots += (Join-Path $programFilesX86 "Common Files\VST2")
+    }
+    foreach ($root in $knownRoots) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$root)) {
+            [void]$pluginRootSet.Add([System.IO.Path]::GetFullPath([string]$root))
+        }
+    }
+
+    $pluginRoots = New-Object System.Collections.Generic.List[object]
+    $externalPluginDllCount = 0
+    foreach ($root in @($pluginRootSet | Sort-Object)) {
+        $rootFull = [System.IO.Path]::GetFullPath([string]$root)
+        $insideInstall = $rootFull.Equals($installFull, [System.StringComparison]::OrdinalIgnoreCase) -or
+            $rootFull.StartsWith($installPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+        $exists = Test-Path -LiteralPath $rootFull -PathType Container
+        $dlls = @()
+        if ($exists) {
+            $dlls = @(
+                Get-ChildItem -LiteralPath $rootFull -Recurse -File -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Extension -ieq ".dll" } |
+                    Sort-Object FullName |
+                    ForEach-Object {
+                        [ordered]@{
+                            path = [System.IO.Path]::GetRelativePath($rootFull, $_.FullName).Replace("\", "/")
+                            size_bytes = [long]$_.Length
+                            sha256 = Get-Sha256 $_.FullName
+                        }
+                    }
+            )
+        }
+        if (-not $insideInstall) {
+            $externalPluginDllCount += $dlls.Count
+        }
+        $pluginRoots.Add([ordered]@{
+            path = $rootFull
+            scope = if ($insideInstall) { "installed-payload" } else { "external" }
+            exists = [bool]$exists
+            dlls = @($dlls)
+        })
+    }
+
+    $inventory = [ordered]@{
+        schema_version = 1
+        reference_build = $ReferenceBuild
+        reference_executable_sha256 = Get-Sha256 $executableFull
+        preexisting_psycle_registry = $PreexistingPsycleRegistry
+        installed_payload_files = @($installedFiles)
+        psycle_registry = @($registryEntries)
+        plugin_roots = @($pluginRoots)
+        external_plugin_dll_count = $externalPluginDllCount
+        external_visibility_note = "Fresh runner required no pre-existing HKCU\Software\Psycle configuration. Installed payload, Psycle registry state, configured plugin/machine paths, and conventional VST/Psycle plugin roots are SHA-256 inventoried before observation."
+    }
+    Write-JsonUtf8 $Path $inventory
+    return [ordered]@{
+        path = [System.IO.Path]::GetFileName($Path)
+        sha256 = Get-Sha256 $Path
+    }
 }
 
 function Write-InstallerDiagnostics([string]$FrameworkPath, [string]$InstallPath) {
@@ -173,6 +373,11 @@ $fixtureArtifactRoot = Join-Path $outRoot "fixtures"
 New-Item -ItemType Directory -Path $workRoot | Out-Null
 New-Item -ItemType Directory -Path $installRoot | Out-Null
 New-Item -ItemType Directory -Path $fixtureArtifactRoot | Out-Null
+
+$preexistingPsycleRegistry = Test-Path -LiteralPath "HKCU:\Software\Psycle"
+if ($preexistingPsycleRegistry) {
+    Fail "runner contains pre-existing HKCU\Software\Psycle configuration; refusing contaminated original-reference observation"
+}
 
 try {
     & curl.exe --fail --location --retry 3 --silent --show-error --output $installerPath $ReferenceUrl
@@ -268,6 +473,8 @@ try {
     $psycleExe = $psycleExecutables[0]
     $psycleExeSha = Get-Sha256 $psycleExe.FullName
     $versionInfo = $psycleExe.VersionInfo
+    $machinePluginInventoryPath = Join-Path $outRoot "machine-plugin-inventory.json"
+    $machinePluginInventory = Write-MachinePluginInventory -InstallRoot $installRoot -ExecutablePath $psycleExe.FullName -Path $machinePluginInventoryPath -PreexistingPsycleRegistry $preexistingPsycleRegistry
 
     $environment = [ordered]@{
         observation_mode = "native-windows-github-runner-transient-installed-payload"
@@ -278,6 +485,7 @@ try {
         os_version = [Environment]::OSVersion.VersionString
         powershell_version = $PSVersionTable.PSVersion.ToString()
         installer_framework = $installerFramework
+        machine_plugin_inventory = $machinePluginInventory
     }
 
     $fixtureSpecs = @(
@@ -365,13 +573,11 @@ try {
             if ($process.HasExited) {
                 break
             }
-            if ($process.MainWindowHandle -eq 0) {
-                continue
-            }
-
-            $mainWindowSeen = $true
             $windowTitle = $process.MainWindowTitle
             $uiObservation = Get-UiObservation $process
+            if ($process.MainWindowHandle -ne 0 -or [int]$uiObservation.top_level_window_count -gt 0) {
+                $mainWindowSeen = $true
+            }
             $uiValues = @($uiObservation.values)
             foreach ($diagnostic in @($uiObservation.diagnostics)) {
                 if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
@@ -465,31 +671,30 @@ try {
             }
         }
 
-        if ($errorMarker) {
-            $loadResult = "rejected"
-            $observation = "native-window-evidence-reports-load-error"
-        } elseif ($uiDiagnostics.Count -gt 0) {
-            $loadResult = "inconclusive"
-            $observation = "ui-automation-harness-diagnostic-prevents-behaviour-classification"
-        } elseif ($stableMarkerPolls -ge 4 -and $matchedMarker) {
-            $loadResult = "accepted"
-            $observation = "stable-native-window-evidence-identifies-loaded-fixture-without-error"
-        } elseif ($process.HasExited) {
-            $loadResult = "inconclusive"
-            $observation = "reference-process-exited-without-stable-fixture-load-marker"
-        } elseif ($mainWindowSeen) {
-            $loadResult = "inconclusive"
-            $observation = "reference-window-opened-without-stable-fixture-load-marker"
-        } else {
-            $loadResult = "inconclusive"
-            $observation = "reference-process-produced-no-observable-main-window"
+        $process.Refresh()
+        $exitedBeforeHarnessTermination = $process.HasExited
+        if ($exitedBeforeHarnessTermination -and $null -eq $exitCode) {
+            $exitCode = $process.ExitCode
         }
+        $processRunningBeforeTermination = -not $exitedBeforeHarnessTermination
 
         $termination = "already-exited"
-        if (-not $process.HasExited) {
+        if ($processRunningBeforeTermination) {
             try {
-                [void]$process.CloseMainWindow()
-                if (-not $process.WaitForExit(5000)) {
+                $closeRequested = [bool]$process.CloseMainWindow()
+                if (-not $closeRequested) {
+                    $process.Refresh()
+                    if ($process.HasExited) {
+                        $exitCode = $process.ExitCode
+                        $exitedBeforeHarnessTermination = $true
+                        $processRunningBeforeTermination = $false
+                        $termination = "exited-before-close-request"
+                    } else {
+                        $process.Kill()
+                        $process.WaitForExit()
+                        $termination = "killed-without-closeable-main-window"
+                    }
+                } elseif (-not $process.WaitForExit(5000)) {
                     $process.Kill()
                     $process.WaitForExit()
                     $termination = "killed-after-observation"
@@ -499,14 +704,42 @@ try {
             }
             catch {
                 try {
-                    $process.Kill()
-                    $process.WaitForExit()
-                    $termination = "killed-after-close-error"
+                    $process.Refresh()
+                    if ($process.HasExited) {
+                        $exitCode = $process.ExitCode
+                        $exitedBeforeHarnessTermination = $true
+                        $processRunningBeforeTermination = $false
+                        $termination = "exited-during-close-error"
+                    } else {
+                        $process.Kill()
+                        $process.WaitForExit()
+                        $termination = "killed-after-close-error"
+                    }
                 }
                 catch {
                     $termination = "termination-error"
                 }
             }
+        }
+
+        if ($errorMarker) {
+            $loadResult = "rejected"
+            $observation = "native-window-evidence-reports-load-error"
+        } elseif ($uiDiagnostics.Count -gt 0) {
+            $loadResult = "inconclusive"
+            $observation = "ui-automation-harness-diagnostic-prevents-behaviour-classification"
+        } elseif ($exitedBeforeHarnessTermination) {
+            $loadResult = "inconclusive"
+            $observation = "reference-process-exited-before-harness-termination"
+        } elseif ($stableMarkerPolls -ge 4 -and $matchedMarker) {
+            $loadResult = "accepted"
+            $observation = "stable-native-window-evidence-identifies-loaded-fixture-without-error"
+        } elseif ($mainWindowSeen) {
+            $loadResult = "inconclusive"
+            $observation = "reference-window-opened-without-stable-fixture-load-marker"
+        } else {
+            $loadResult = "inconclusive"
+            $observation = "reference-process-produced-no-observable-main-window"
         }
 
         $receipt = [ordered]@{
@@ -536,6 +769,7 @@ try {
             main_window_seen = $mainWindowSeen
             main_window_title = $windowTitle
             exit_code_before_termination = $exitCode
+            process_running_before_termination = $processRunningBeforeTermination
             termination = $termination
             environment = $environment
             stdout = [ordered]@{
@@ -570,8 +804,9 @@ try {
 - Observation environment: native GitHub-hosted Windows runner.
 - Reference installer and installed executable payload: transient only; not retained in this evidence directory.
 - Inputs: exact project-authored fixture bytes copied into this artifact and SHA-256-bound to the corresponding candidate receipts.
-- Acceptance rule: an application load error takes precedence over any filename/title marker; acceptance requires a stable fixture marker across four polls, no application error marker, and no UI Automation diagnostic observed during the polling window.
+- Acceptance rule: application load errors from every Psycle-owned top-level window take precedence over any filename/title marker; acceptance requires a stable fixture marker across four polls, no application error marker, no UI Automation diagnostic, and the reference process still running when harness termination begins.
 - UI Automation failures are sticky harness diagnostics across the full observation and yield an inconclusive observation, never a rejection or later acceptance result.
+- Machine/plugin environment: the full installed payload, Psycle registry state, configured plugin/machine roots, and conventional external VST/Psycle plugin roots are recorded in a SHA-256-bound machine-plugin inventory before observation.
 - Classification policy: these observations do not change compatibility status by themselves; rows remain UNKNOWN until versioned original + candidate receipts and a comparison verdict are committed.
 "@
     [System.IO.File]::WriteAllText(
