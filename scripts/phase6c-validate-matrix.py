@@ -37,6 +37,19 @@ EXPECTED_ORIGINAL_SOURCE_IDENTITIES = {
         "artifact_digest": "sha256:20957d9e23733bc3ce724611734f07f9d90a49450b66152c68ae186c1dd62595",
     }
 }
+EXPECTED_WORKFLOW_ATTRIBUTION = {
+    "project-io-psy2-parse": {
+        "workflow": "Phase 6C compatibility matrix",
+        "run_id": 35342946830,
+        "event": "pull_request",
+        "head_sha": "1f9afb8c8ac675f5bc06b172d3415fbaa136e201",
+        "merged_main_sha": "af23c420dcd6c7c62f4177f82eadca645db004a2",
+        "original_job_id": 105593457296,
+        "original_artifact_id": 10546630670,
+        "candidate_job_id": 105592884470,
+        "candidate_artifact_id": 10545756966,
+    }
+}
 EXPECTED_ORIGINAL_CLASSIFICATION_FIELDS = {
     "project-io-psy2-parse": {
         "reference_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
@@ -232,6 +245,26 @@ def validate_classification_receipt(
             die(f"{context}.observation receipt is bound to the wrong source receipt")
         if source_evidence.get("artifact_digest") != expected_source["artifact_digest"]:
             die(f"{context}.observation receipt is bound to the wrong source artifact")
+
+        expected_attribution = EXPECTED_WORKFLOW_ATTRIBUTION.get(row_id)
+        if not isinstance(expected_attribution, dict):
+            die(f"{context}.observation receipt lacks pinned workflow attribution")
+        original_attribution_bindings = {
+            "workflow": expected_attribution["workflow"],
+            "run_id": expected_attribution["run_id"],
+            "event": expected_attribution["event"],
+            "head_sha": expected_attribution["head_sha"],
+            "merged_main_sha": expected_attribution["merged_main_sha"],
+            "job_id": expected_attribution["original_job_id"],
+            "artifact_id": expected_attribution["original_artifact_id"],
+        }
+        for field, expected_value in original_attribution_bindings.items():
+            if source_evidence.get(field) != expected_value:
+                die(
+                    f"{context}.observation receipt source_evidence.{field} "
+                    "does not match the pinned workflow attribution"
+                )
+
         if source_evidence.get("projection_type") != (
             "field-preserving-classification-projection"
         ):
@@ -624,6 +657,47 @@ def validate_comparison_receipt(
     source_evidence = comparison.get("source_evidence")
     if not isinstance(source_evidence, dict):
         die(f"{row_id}.comparison receipt lacks source_evidence")
+
+    expected_attribution = EXPECTED_WORKFLOW_ATTRIBUTION.get(row_id)
+    if not isinstance(expected_attribution, dict):
+        die(f"{row_id}.comparison receipt lacks pinned workflow attribution")
+    comparison_attribution_bindings = {
+        "workflow": expected_attribution["workflow"],
+        "workflow_run_id": expected_attribution["run_id"],
+        "workflow_event": expected_attribution["event"],
+        "workflow_head_sha": expected_attribution["head_sha"],
+        "merged_main_sha": expected_attribution["merged_main_sha"],
+        "original_job_id": expected_attribution["original_job_id"],
+        "original_artifact_id": expected_attribution["original_artifact_id"],
+        "candidate_job_id": expected_attribution["candidate_job_id"],
+        "candidate_artifact_id": expected_attribution["candidate_artifact_id"],
+    }
+    for field, expected_value in comparison_attribution_bindings.items():
+        if source_evidence.get(field) != expected_value:
+            die(
+                f"{row_id}.comparison receipt source_evidence.{field} "
+                "does not match the pinned workflow attribution"
+            )
+
+    original_projection_bindings = {
+        "workflow": "workflow",
+        "run_id": "workflow_run_id",
+        "event": "workflow_event",
+        "head_sha": "workflow_head_sha",
+        "merged_main_sha": "merged_main_sha",
+        "job_id": "original_job_id",
+        "artifact_id": "original_artifact_id",
+    }
+    for original_field, comparison_field in original_projection_bindings.items():
+        if (
+            original_source_evidence.get(original_field)
+            != source_evidence.get(comparison_field)
+        ):
+            die(
+                f"{row_id}.comparison receipt attribution disagrees with "
+                f"the original projection for {original_field}"
+            )
+
     if (
         source_evidence.get("original_artifact_digest")
         != expected_original_source["artifact_digest"]
