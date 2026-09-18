@@ -200,6 +200,25 @@ def validate_parse_pass_semantics(
         die(f"{row_id} PASS original receipt contains UI Automation diagnostics")
     if original_receipt.get("runtime_identity_diagnostics") != []:
         die(f"{row_id} PASS original receipt contains runtime identity diagnostics")
+
+    startup_bootstrap = original_receipt.get("startup_bootstrap")
+    if not isinstance(startup_bootstrap, dict):
+        die(f"{row_id} PASS original receipt lacks startup bootstrap state")
+    if (
+        startup_bootstrap.get("settings_dialog_seen") is True
+        and startup_bootstrap.get("dismissed") is not True
+    ):
+        die(f"{row_id} PASS original receipt did not dismiss observed settings bootstrap")
+
+    environment_bootstrap = original_receipt.get("environment_bootstrap")
+    if not isinstance(environment_bootstrap, dict):
+        die(f"{row_id} PASS original receipt lacks environment bootstrap state")
+    directsound = environment_bootstrap.get("directsound")
+    if not isinstance(directsound, dict):
+        die(f"{row_id} PASS original receipt lacks DirectSound bootstrap state")
+    if directsound.get("dialog_seen") is True and directsound.get("dismissed") is not True:
+        die(f"{row_id} PASS original receipt did not dismiss observed DirectSound bootstrap")
+
     stable_polls = original_receipt.get("stable_marker_polls")
     if (
         not isinstance(stable_polls, int)
