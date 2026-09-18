@@ -1,7 +1,11 @@
 CC = g++
 INC = -I ../../ -I ../../psycle
 LIBDIRS =
-LDFLAGS = -lfluidsynth -shared
+# The Phase 5 persistence regression has reproduced an intermittent teardown
+# SIGSEGV when this historical native module is unloaded after FluidSynth
+# instances are destroyed. Keep only this module resident for the process
+# lifetime; do not broaden the host loader policy for unrelated plugins.
+LDFLAGS = -lfluidsynth -shared -Wl,-z,nodelete
 OUTPUTFILE = fluidsynth.so
 OUTPUTDIR = ../../build/
 src = $(wildcard *.cpp)
