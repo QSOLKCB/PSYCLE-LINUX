@@ -38,6 +38,12 @@ LEGACY_DIRECTSOUND_PROCEDURE_MARKER = "timeout-bounded Win32 WM_COMMAND/IDOK"
 BM_CLICK_DIRECTSOUND_PROCEDURE_MARKER = "timeout-bounded Win32 BM_CLICK"
 LEGACY_DIRECTSOUND_ACTION = "invoke-ok-win32-wm-command"
 BM_CLICK_DIRECTSOUND_ACTION = "invoke-ok-win32-bm-click"
+EXPECTED_LOAD_WARNING_TITLE = "Load Warning"
+EXPECTED_LOAD_WARNING_MESSAGE = (
+    "This file is from a newer version of Psycle! "
+    "This process will try to load it anyway."
+)
+LOAD_WARNING_PROCEDURE_MARKER = "fixture specification requires the exact Psycle Load Warning dialog"
 VC90_MODULE_NAMES = {
     "msvcr90.dll",
     "msvcp90.dll",
@@ -508,6 +514,10 @@ def validate_pair(
         die(f"original-{name}.procedure must be non-empty")
     if EXPECTED_VC90_REDISTRIBUTABLE_SHA256 not in procedure:
         die(f"original-{name}.procedure does not bind the pinned VC90 runtime")
+    if LOAD_WARNING_PROCEDURE_MARKER not in procedure:
+        die(f"original-{name}.procedure does not describe the PSY3 load-warning bootstrap")
+    if EXPECTED_LOAD_WARNING_MESSAGE not in procedure:
+        die(f"original-{name}.procedure does not bind the exact PSY3 load-warning message")
 
     procedure_uses_legacy_directsound = (
         LEGACY_DIRECTSOUND_PROCEDURE_MARKER in procedure
@@ -557,6 +567,7 @@ def validate_pair(
     diagnostics = original.get("ui_automation_diagnostics")
     startup_bootstrap = original.get("startup_bootstrap")
     environment_bootstrap = original.get("environment_bootstrap")
+    fixture_bootstrap = original.get("fixture_bootstrap")
     runtime_diagnostics = original.get("runtime_identity_diagnostics")
     exit_code = original.get("exit_code_before_termination")
     running_before_termination = original.get("process_running_before_termination")
@@ -866,6 +877,143 @@ def validate_pair(
         if result != "inconclusive":
             die(f"original-{name} failed DirectSound bootstrap must force an inconclusive result")
 
+    if not isinstance(fixture_bootstrap, dict):
+        die(f"original-{name}.fixture_bootstrap must be an object")
+    load_warning = fixture_bootstrap.get("load_warning")
+    if not isinstance(load_warning, dict):
+        die(f"original-{name}.fixture_bootstrap.load_warning must be an object")
+
+    expected_warning_required = name == "psy3"
+    warning_required = load_warning.get("required")
+    if not isinstance(warning_required, bool):
+        die(f"original-{name}.fixture_bootstrap.load_warning.required must be boolean")
+    if warning_required is not expected_warning_required:
+        die(f"original-{name} load-warning requirement does not match the fixture contract")
+
+    expected_title = load_warning.get("expected_title")
+    expected_message = load_warning.get("expected_message")
+    if warning_required:
+        if expected_title != EXPECTED_LOAD_WARNING_TITLE:
+            die(f"original-{name} load-warning title is not pinned")
+        if expected_message != EXPECTED_LOAD_WARNING_MESSAGE:
+            die(f"original-{name} load-warning message is not pinned")
+    elif expected_title is not None or expected_message is not None:
+        die(f"original-{name} non-required load-warning metadata must be null")
+
+    for field in ("dialog_seen", "signature_verified", "attempted", "dismissed"):
+        if not isinstance(load_warning.get(field), bool):
+            die(
+                f"original-{name}.fixture_bootstrap.load_warning.{field} "
+                "must be boolean"
+            )
+
+    warning_action = load_warning.get("action")
+    if warning_action not in {None, "invoke-ok"}:
+        die(f"original-{name} load-warning action is invalid")
+
+    warning_outcome = load_warning.get("outcome")
+    allowed_warning_outcomes = {
+        "not-required",
+        "dismissed",
+        "required-not-seen",
+        "desktop-root-missing",
+        "signature-read-failed",
+        "signature-mismatch",
+        "invoke-failed",
+        "close-verification-failed",
+        "close-timeout",
+        "automation-failed",
+    }
+    if warning_outcome not in allowed_warning_outcomes:
+        die(
+            f"original-{name} load-warning outcome is invalid: "
+            f"{warning_outcome!r}"
+        )
+
+    warning_diagnostics = load_warning.get("diagnostics")
+    if not isinstance(warning_diagnostics, list) or any(
+        not isinstance(x, str) or not x.strip() for x in warning_diagnostics
+    ):
+        die(f"original-{name} load-warning diagnostics must be a string array")
+    if any(value not in diagnostics for value in warning_diagnostics):
+        die(
+            f"original-{name} load-warning diagnostics are not retained "
+            "in the sticky UI Automation diagnostics"
+        )
+
+    warning_seen = load_warning["dialog_seen"]
+    warning_signature = load_warning["signature_verified"]
+    warning_attempted = load_warning["attempted"]
+    warning_dismissed = load_warning["dismissed"]
+    warning_state = (
+        warning_seen,
+        warning_signature,
+        warning_attempted,
+        warning_action,
+    )
+
+    if not warning_required:
+        if (
+            warning_outcome != "not-required"
+            or warning_seen
+            or warning_signature
+            or warning_attempted
+            or warning_dismissed
+            or warning_action is not None
+            or warning_diagnostics
+        ):
+            die(f"original-{name} non-required load-warning state is inconsistent")
+    elif warning_outcome == "dismissed":
+        if not (
+            warning_seen
+            and warning_signature
+            and warning_attempted
+            and warning_dismissed
+            and warning_action == "invoke-ok"
+            and not warning_diagnostics
+        ):
+            die(f"original-{name} dismissed load-warning state is inconsistent")
+    elif warning_outcome == "required-not-seen":
+        if (
+            warning_seen
+            or warning_signature
+            or warning_attempted
+            or warning_dismissed
+            or warning_action is not None
+            or not warning_diagnostics
+        ):
+            die(f"original-{name} required-not-seen load-warning state is inconsistent")
+        if result != "inconclusive":
+            die(f"original-{name} missing required load warning must force inconclusive")
+    else:
+        if warning_dismissed:
+            die(f"original-{name} failed load-warning bootstrap cannot be marked dismissed")
+        warning_failure_states = {
+            "desktop-root-missing": (False, False, False, None),
+            "signature-read-failed": (True, False, False, None),
+            "signature-mismatch": (True, False, False, None),
+            "invoke-failed": (True, True, True, "invoke-ok"),
+            "close-verification-failed": (True, True, True, "invoke-ok"),
+            "close-timeout": (True, True, True, "invoke-ok"),
+        }
+        warning_automation_states = {
+            (False, False, False, None),
+            (True, False, False, None),
+            (True, True, True, "invoke-ok"),
+        }
+        if warning_outcome == "automation-failed":
+            if warning_state not in warning_automation_states:
+                die(f"original-{name} load-warning automation-failed state is inconsistent")
+        elif warning_state != warning_failure_states.get(warning_outcome):
+            die(
+                f"original-{name} load-warning state is inconsistent "
+                f"for outcome {warning_outcome!r}"
+            )
+        if not warning_diagnostics:
+            die(f"original-{name} failed load-warning bootstrap lacks a harness diagnostic")
+        if result != "inconclusive":
+            die(f"original-{name} failed load-warning bootstrap must force inconclusive")
+
     if not isinstance(runtime_diagnostics, list) or any(
         not isinstance(x, str) or not x.strip() for x in runtime_diagnostics
     ):
@@ -897,6 +1045,8 @@ def validate_pair(
             die(f"original-{name} accepted result did not complete the first-run settings bootstrap")
         if directsound_seen and not directsound_dismissed:
             die(f"original-{name} accepted result did not complete the DirectSound environment bootstrap")
+        if warning_required and not warning_dismissed:
+            die(f"original-{name} accepted result did not complete the required fixture load-warning bootstrap")
         if runtime_diagnostics or not runtime_identity_valid:
             die(f"original-{name} accepted result lacks verified loaded VC90 runtime identity")
         if stable_polls < 4:
