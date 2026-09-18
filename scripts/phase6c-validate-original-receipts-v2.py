@@ -712,7 +712,7 @@ def validate_pair(
     if directsound_action not in {
         None,
         "invoke-ok",
-        "invoke-ok-legacy-default-action",
+        "invoke-ok-win32-wm-command",
     }:
         die(f"original-{name} DirectSound bootstrap action is invalid")
     directsound_outcome = directsound_bootstrap.get("outcome")
@@ -723,7 +723,7 @@ def validate_pair(
         "signature-read-failed",
         "signature-mismatch",
         "invoke-failed",
-        "legacy-action-failed",
+        "win32-action-failed",
         "close-verification-failed",
         "close-timeout",
         "automation-failed",
@@ -754,28 +754,28 @@ def validate_pair(
         "signature-read-failed": (True, False, False, None),
         "signature-mismatch": (True, False, False, None),
         "invoke-failed": (True, True, True, "invoke-ok"),
-        "legacy-action-failed": (
+        "win32-action-failed": (
             True,
             True,
             True,
-            "invoke-ok-legacy-default-action",
+            "invoke-ok-win32-wm-command",
         ),
         "close-timeout": (
             True,
             True,
             True,
-            "invoke-ok-legacy-default-action",
+            "invoke-ok-win32-wm-command",
         ),
     }
     directsound_close_verification_states = {
         (True, True, True, "invoke-ok"),
-        (True, True, True, "invoke-ok-legacy-default-action"),
+        (True, True, True, "invoke-ok-win32-wm-command"),
     }
     directsound_automation_states = {
         (False, False, False, None),
         (True, False, False, None),
         (True, True, True, "invoke-ok"),
-        (True, True, True, "invoke-ok-legacy-default-action"),
+        (True, True, True, "invoke-ok-win32-wm-command"),
     }
 
     if directsound_outcome == "not-seen":
@@ -796,7 +796,7 @@ def validate_pair(
             and directsound_dismissed
             and directsound_action in {
                 "invoke-ok",
-                "invoke-ok-legacy-default-action",
+                "invoke-ok-win32-wm-command",
             }
         ):
             die(f"original-{name} dismissed DirectSound bootstrap state is inconsistent")
