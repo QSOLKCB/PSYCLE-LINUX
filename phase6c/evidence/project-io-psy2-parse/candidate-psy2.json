@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "scope": "candidate-observation",
+  "contract": "project-io-psy2-parse",
+  "evidence_role": "candidate",
+  "snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+  "fixture": "cpsycle-psy2/phase4-historical-psy2.psy",
+  "fixture_sha256": "ebef8216fe6b2b6cbaf1f169ff234115d6cf06cfda480b4433f9c2fa3ab400ba",
+  "procedure": "GitHub Actions Ubuntu 24.04 run 35342946830 rebuilt the pinned Phase 6B psycle-player and executed it with --output-driver dummy --input-file <fixture> under a 20-second timeout with stdin from /dev/null, recording the executable, fixture and log SHA-256 values plus the exit code.",
+  "observation": "load-and-clean-exit",
+  "source_revision": "SourceForge SVN r12005",
+  "executable": "psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player",
+  "executable_sha256": "79b8bc04918039cca8be4db0909f826b55ad6538b6edf1f1689ec0eb8dcac330",
+  "exit_code": 0,
+  "log_sha256": "f381701441c75690d42de3bb43ae123eff67215a6cdccdea28c8762563a372f6",
+  "original_psycle_observed": false,
+  "parity_status": "UNKNOWN",
+  "source_evidence": {
+    "workflow": "Phase 6C compatibility matrix",
+    "run_id": 35342946830,
+    "event": "pull_request",
+    "head_sha": "1f9afb8c8ac675f5bc06b172d3415fbaa136e201",
+    "merged_main_sha": "af23c420dcd6c7c62f4177f82eadca645db004a2",
+    "job_id": 105592884470,
+    "artifact_id": 10545756966,
+    "artifact_digest": "sha256:b8d206aa16a2b820149e1e83f76c671fb0b584cea59ed8f69941846e183b6fcf",
+    "artifact_receipt": "candidate-psy2.json"
+  }
+}
