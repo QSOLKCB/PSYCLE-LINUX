@@ -13,7 +13,8 @@ $ReferenceFile = "PsycleInstallerx86-1.12.0.exe"
 $ReferenceUrl = "https://sourceforge.net/projects/psycle/files/psycle/1.12/$ReferenceFile/download"
 $ExpectedInstallerSha256 = "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 $ExpectedInstallerSize = 9322919
-$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; enumerate every top-level window owned by the reference process and its descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, and conventional external VST/Psycle roots for that observation; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or UI Automation failure and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
+$ExpectedVc90RuntimeVersion = "9.0.30729.6161"
+$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with file versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
 
 function Fail([string]$Message) {
     throw "phase6c-original-windows-fixtures: $Message"
@@ -80,21 +81,15 @@ function Get-UiObservation([System.Diagnostics.Process]$Process) {
             }
         }
 
+        $processCondition = [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+            $Process.Id
+        )
         $windows = $desktop.FindAll(
             [System.Windows.Automation.TreeScope]::Children,
-            [System.Windows.Automation.Condition]::TrueCondition
+            $processCondition
         )
         foreach ($window in $windows) {
-            try {
-                $ownerProcessId = $window.Current.ProcessId
-            }
-            catch {
-                continue
-            }
-            if ($ownerProcessId -ne $Process.Id) {
-                continue
-            }
-
             $topLevelWindowCount += 1
             try {
                 $windowName = $window.Current.Name
@@ -221,6 +216,832 @@ function Write-JsonUtf8([string]$Path, [object]$Value) {
         $json + [Environment]::NewLine,
         [System.Text.UTF8Encoding]::new($false)
     )
+}
+
+function Write-LoadedVc90RuntimeInventory(
+    [System.Diagnostics.Process]$Process,
+    [string]$Path
+) {
+    $modules = [System.Collections.Generic.List[object]]::new()
+    $diagnostics = [System.Collections.Generic.List[string]]::new()
+    $seenPaths = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+
+    try {
+        $Process.Refresh()
+        if ($Process.HasExited) {
+            $diagnostics.Add("reference process exited before loaded VC90 runtime inventory")
+        } else {
+            foreach ($module in $Process.Modules) {
+                try {
+                    $name = [string]$module.ModuleName
+                    if ($name -notmatch '^(?i:msvcr90|msvcp90|mfc90|mfc90u|atl90)\.dll    [string]$InstallRoot,
+    [string]$ExecutablePath,
+    [string]$Path,
+    [bool]$PreexistingPsycleRegistry
+) {
+    $installFull = [System.IO.Path]::GetFullPath($InstallRoot)
+    $executableFull = [System.IO.Path]::GetFullPath($ExecutablePath)
+    $installPrefix = $installFull.TrimEnd([System.IO.Path]::DirectorySeparatorChar) +
+        [System.IO.Path]::DirectorySeparatorChar
+
+    $installedFiles = @(
+        Get-ChildItem -LiteralPath $installFull -Recurse -File |
+            Sort-Object FullName |
+            ForEach-Object {
+                [ordered]@{
+                    path = [System.IO.Path]::GetRelativePath($installFull, $_.FullName).Replace("\", "/")
+                    size_bytes = [long]$_.Length
+                    sha256 = Get-Sha256 $_.FullName
+                }
+            }
+    )
+
+    $registryEntries = [System.Collections.Generic.List[object]]::new()
+    $registryRoot = "HKCU:\Software\Psycle"
+    if (Test-Path -LiteralPath $registryRoot) {
+        $registryKeys = @((Get-Item -LiteralPath $registryRoot))
+        $registryKeys += @(Get-ChildItem -LiteralPath $registryRoot -Recurse -ErrorAction SilentlyContinue)
+        foreach ($key in $registryKeys) {
+            try {
+                $properties = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop
+                foreach ($property in $properties.PSObject.Properties) {
+                    if ($property.Name -match "^PS(Path|ParentPath|ChildName|Drive|Provider)$") {
+                        continue
+                    }
+                    $rawValue = $property.Value
+                    $textValue = if ($null -eq $rawValue) {
+                        ""
+                    } elseif ($rawValue -is [System.Array]) {
+                        (@($rawValue | ForEach-Object { [string]$_ }) -join ";")
+                    } else {
+                        [string]$rawValue
+                    }
+                    $registryEntries.Add([ordered]@{
+                        key = [string]$key.Name
+                        name = [string]$property.Name
+                        value = $textValue
+                    })
+                }
+            }
+            catch {
+                Fail "could not inventory Psycle registry key $($key.Name): $($_.Exception.Message)"
+            }
+        }
+    }
+
+    $pluginRootSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in $registryEntries) {
+        $searchable = "$($entry.key) $($entry.name) $($entry.value)"
+        if ($searchable -notmatch "(?i)(plugin|vst|machine)") {
+            continue
+        }
+        foreach ($piece in ([string]$entry.value -split ";")) {
+            $candidate = [Environment]::ExpandEnvironmentVariables($piece.Trim().Trim('"'))
+            if ([string]::IsNullOrWhiteSpace($candidate)) {
+                continue
+            }
+            try {
+                if ([System.IO.Path]::IsPathRooted($candidate)) {
+                    $candidate = [System.IO.Path]::GetFullPath($candidate)
+                } elseif ($candidate -match "[\\/]") {
+                    $candidate = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $executableFull) $candidate))
+                } else {
+                    continue
+                }
+                [void]$pluginRootSet.Add($candidate)
+            }
+            catch {
+                Fail "invalid plugin/machine path in Psycle registry inventory: $candidate"
+            }
+        }
+    }
+
+    $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+    $knownRoots = @(
+        (Join-Path $installFull "PsyclePlugins"),
+        (Join-Path $installFull "VstPlugins"),
+        (Join-Path $installFull "Vst64Plugins"),
+        (Join-Path $env:USERPROFILE "PsyclePlugins"),
+        (Join-Path $env:USERPROFILE "VstPlugins"),
+        (Join-Path $env:USERPROFILE "Vst64Plugins"),
+        (Join-Path $env:USERPROFILE "Documents\Psycle\PsyclePlugins"),
+        (Join-Path $env:USERPROFILE "Documents\Psycle\VstPlugins"),
+        (Join-Path $env:USERPROFILE "Documents\Psycle\Vst64Plugins"),
+        (Join-Path $env:ProgramFiles "Steinberg\VstPlugins"),
+        (Join-Path $env:ProgramFiles "Common Files\VST2")
+    )
+    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
+        $knownRoots += (Join-Path $programFilesX86 "Steinberg\VstPlugins")
+        $knownRoots += (Join-Path $programFilesX86 "Common Files\VST2")
+    }
+    foreach ($root in $knownRoots) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$root)) {
+            [void]$pluginRootSet.Add([System.IO.Path]::GetFullPath([string]$root))
+        }
+    }
+
+    $pluginRoots = [System.Collections.Generic.List[object]]::new()
+    $externalPluginDllCount = 0
+    foreach ($root in @($pluginRootSet | Sort-Object)) {
+        $rootFull = [System.IO.Path]::GetFullPath([string]$root)
+        $insideInstall = $rootFull.Equals($installFull, [System.StringComparison]::OrdinalIgnoreCase) -or
+            $rootFull.StartsWith($installPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+        $exists = Test-Path -LiteralPath $rootFull -PathType Container
+        $dlls = @()
+        if ($exists) {
+            $dlls = @(
+                Get-ChildItem -LiteralPath $rootFull -Recurse -File -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Extension -ieq ".dll" } |
+                    Sort-Object FullName |
+                    ForEach-Object {
+                        [ordered]@{
+                            path = [System.IO.Path]::GetRelativePath($rootFull, $_.FullName).Replace("\", "/")
+                            size_bytes = [long]$_.Length
+                            sha256 = Get-Sha256 $_.FullName
+                        }
+                    }
+            )
+        }
+        if (-not $insideInstall) {
+            $externalPluginDllCount += $dlls.Count
+        }
+        $pluginRoots.Add([ordered]@{
+            path = $rootFull
+            scope = if ($insideInstall) { "installed-payload" } else { "external" }
+            exists = [bool]$exists
+            dlls = @($dlls)
+        })
+    }
+
+    $inventory = [ordered]@{
+        schema_version = 1
+        reference_build = $ReferenceBuild
+        reference_executable_sha256 = Get-Sha256 $executableFull
+        preexisting_psycle_registry = $PreexistingPsycleRegistry
+        installed_payload_files = @($installedFiles)
+        psycle_registry = $registryEntries.ToArray()
+        plugin_roots = $pluginRoots.ToArray()
+        external_plugin_dll_count = $externalPluginDllCount
+        configuration_baseline = "post-installer HKCU\Software\Psycle snapshot restored before this fixture"
+        external_visibility_note = "Fresh runner required no pre-existing HKCU\Software\Psycle configuration. Installed payload, runtime Psycle registry state, configured plugin/machine paths, and conventional VST/Psycle plugin roots are SHA-256 inventoried during this observation."
+    }
+    Write-JsonUtf8 $Path $inventory
+    return [ordered]@{
+        path = [System.IO.Path]::GetFileName($Path)
+        sha256 = Get-Sha256 $Path
+    }
+}
+
+function Write-InstallerDiagnostics([string]$FrameworkPath, [string]$InstallPath) {
+    if (Test-Path -LiteralPath $FrameworkPath -PathType Leaf) {
+        Write-Host "--- installer-framework.txt ---"
+        Get-Content -LiteralPath $FrameworkPath | ForEach-Object { Write-Host $_ }
+    }
+    if (Test-Path -LiteralPath $InstallPath -PathType Leaf) {
+        Write-Host "--- installer-install.log ---"
+        Get-Content -LiteralPath $InstallPath | ForEach-Object { Write-Host $_ }
+    }
+}
+
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$candidateRoot = [System.IO.Path]::GetFullPath($CandidateArtifactRoot)
+$outRoot = if ([System.IO.Path]::IsPathRooted($Out)) {
+    [System.IO.Path]::GetFullPath($Out)
+} else {
+    [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Out))
+}
+
+if (-not (Test-Path -LiteralPath $candidateRoot -PathType Container)) {
+    Fail "missing candidate artifact root: $candidateRoot"
+}
+if (Test-Path -LiteralPath $outRoot) {
+    if ((Get-ChildItem -LiteralPath $outRoot -Force | Select-Object -First 1)) {
+        Fail "refusing non-empty output directory: $outRoot"
+    }
+} else {
+    New-Item -ItemType Directory -Path $outRoot | Out-Null
+}
+
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Windows.Forms
+
+$workRoot = Join-Path $env:RUNNER_TEMP ("psycle-phase6c-original-" + [Guid]::NewGuid().ToString("N"))
+$installRoot = Join-Path $workRoot "installed"
+$installerPath = Join-Path $workRoot $ReferenceFile
+$frameworkLog = Join-Path $outRoot "installer-framework.txt"
+$installLog = Join-Path $outRoot "installer-install.log"
+$fixtureArtifactRoot = Join-Path $outRoot "fixtures"
+New-Item -ItemType Directory -Path $workRoot | Out-Null
+New-Item -ItemType Directory -Path $installRoot | Out-Null
+New-Item -ItemType Directory -Path $fixtureArtifactRoot | Out-Null
+
+$preexistingPsycleRegistry = Test-Path -LiteralPath "HKCU:\Software\Psycle"
+if ($preexistingPsycleRegistry) {
+    Fail "runner contains pre-existing HKCU\Software\Psycle configuration; refusing contaminated original-reference observation"
+}
+
+try {
+    & curl.exe --fail --location --retry 3 --silent --show-error --output $installerPath $ReferenceUrl
+    if ($LASTEXITCODE -ne 0) {
+        Fail "SourceForge installer download failed with curl exit $LASTEXITCODE"
+    }
+
+    $installerInfo = Get-Item -LiteralPath $installerPath
+    $installerSha = Get-Sha256 $installerPath
+    if ($installerInfo.Length -ne $ExpectedInstallerSize) {
+        Fail "reference installer size mismatch: expected=$ExpectedInstallerSize actual=$($installerInfo.Length)"
+    }
+    if ($installerSha -ne $ExpectedInstallerSha256) {
+        Fail "reference installer SHA-256 mismatch: expected=$ExpectedInstallerSha256 actual=$installerSha"
+    }
+
+    $stream = [System.IO.File]::OpenRead($installerPath)
+    try {
+        $first = $stream.ReadByte()
+        $second = $stream.ReadByte()
+    }
+    finally {
+        $stream.Dispose()
+    }
+    if ($first -ne 0x4d -or $second -ne 0x5a) {
+        Fail "reference installer is not a PE executable"
+    }
+
+    $installerFramework = Get-InstallerFramework $installerPath
+    $installerVersionInfo = $installerInfo.VersionInfo
+    [System.IO.File]::WriteAllLines(
+        $frameworkLog,
+        @(
+            "reference_file=$ReferenceFile",
+            "reference_sha256=$installerSha",
+            "reference_size=$($installerInfo.Length)",
+            "framework=$installerFramework",
+            "file_description=$($installerVersionInfo.FileDescription)",
+            "product_name=$($installerVersionInfo.ProductName)",
+            "file_version=$($installerVersionInfo.FileVersion)",
+            "product_version=$($installerVersionInfo.ProductVersion)"
+        ),
+        [System.Text.UTF8Encoding]::new($false)
+    )
+
+    $installerArguments = $null
+    if ($installerFramework -eq "inno-setup") {
+        $installerArguments = @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/SP-",
+            "/NOICONS",
+            "/DIR=`"$installRoot`"",
+            "/LOG=`"$installLog`""
+        )
+    } elseif ($installerFramework -eq "nsis") {
+        $installerArguments = @("/S", "/D=$installRoot")
+    } else {
+        Write-InstallerDiagnostics $frameworkLog $installLog
+        Fail "unsupported/unknown installer framework; refusing to guess unattended switches"
+    }
+
+    $installerProcess = Start-Process -FilePath $installerPath -ArgumentList $installerArguments -PassThru
+    if (-not $installerProcess.WaitForExit(120000)) {
+        try { $installerProcess.Kill() } catch { }
+        Write-InstallerDiagnostics $frameworkLog $installLog
+        Fail "reference installer did not finish within 120 seconds"
+    }
+    if ($installerProcess.ExitCode -ne 0) {
+        Write-InstallerDiagnostics $frameworkLog $installLog
+        Fail "reference installer returned nonzero exit code $($installerProcess.ExitCode)"
+    }
+
+    if ($installerFramework -eq "nsis") {
+        [System.IO.File]::WriteAllText(
+            $installLog,
+            "framework=nsis`nexit_code=0`ninstall_root=$installRoot`n",
+            [System.Text.UTF8Encoding]::new($false)
+        )
+    }
+    Write-InstallerDiagnostics $frameworkLog $installLog
+
+    $psycleExecutables = @(
+        Get-ChildItem -LiteralPath $installRoot -Recurse -File |
+            Where-Object { $_.Name -ieq "psycle.exe" }
+    )
+    if ($psycleExecutables.Count -ne 1) {
+        $paths = ($psycleExecutables | ForEach-Object { $_.FullName }) -join "; "
+        Fail "expected exactly one installed psycle.exe; found=$($psycleExecutables.Count) paths=$paths"
+    }
+
+    $psycleExe = $psycleExecutables[0]
+    $psycleExeSha = Get-Sha256 $psycleExe.FullName
+    $versionInfo = $psycleExe.VersionInfo
+
+    $environment = [ordered]@{
+        observation_mode = "native-windows-github-runner-transient-installed-payload"
+        runner_os = $env:RUNNER_OS
+        runner_arch = $env:RUNNER_ARCH
+        image_os = $env:ImageOS
+        image_version = $env:ImageVersion
+        os_version = [Environment]::OSVersion.VersionString
+        powershell_version = $PSVersionTable.PSVersion.ToString()
+        installer_framework = $installerFramework
+    }
+
+    $postInstallRegistryExists = Test-Path -LiteralPath "HKCU:\Software\Psycle"
+    $registrySnapshotPath = Join-Path $workRoot "psycle-post-install.reg"
+    if ($postInstallRegistryExists) {
+        & reg.exe export "HKCU\Software\Psycle" $registrySnapshotPath /y | Out-Null
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $registrySnapshotPath -PathType Leaf)) {
+            Fail "could not snapshot post-install HKCU\Software\Psycle registry baseline"
+        }
+    }
+
+    $fixtureSpecs = @(
+        [ordered]@{
+            name = "psy2"
+            candidate_receipt = "candidate-psy2.json"
+            expected_contract = "project-io-psy2-parse"
+            expected_song_title = "QSOL PSY2 compatibility fixture"
+        },
+        [ordered]@{
+            name = "psy3"
+            candidate_receipt = "candidate-psy3.json"
+            expected_contract = "project-io-psy3-parse"
+            expected_song_title = "PSYCLE-LINUX Phase 4 synthetic fixture"
+        }
+    )
+
+    foreach ($spec in $fixtureSpecs) {
+        if (Test-Path -LiteralPath "HKCU:\Software\Psycle") {
+            Remove-Item -LiteralPath "HKCU:\Software\Psycle" -Recurse -Force
+        }
+        if ($postInstallRegistryExists) {
+            & reg.exe import $registrySnapshotPath | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Fail "could not restore post-install Psycle registry baseline for $($spec.name)"
+            }
+        }
+        $candidateReceiptPath = Join-Path $candidateRoot $spec.candidate_receipt
+        if (-not (Test-Path -LiteralPath $candidateReceiptPath -PathType Leaf)) {
+            Fail "missing candidate receipt: $candidateReceiptPath"
+        }
+        $candidate = Get-Content -LiteralPath $candidateReceiptPath -Raw | ConvertFrom-Json
+        if ($candidate.contract -ne $spec.expected_contract -or $candidate.evidence_role -ne "candidate") {
+            Fail "candidate receipt identity mismatch for $($spec.name)"
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$candidate.fixture)) {
+            Fail "candidate receipt has no fixture path for $($spec.name)"
+        }
+
+        $candidateFixturePath = Resolve-ChildPath $candidateRoot ([string]$candidate.fixture)
+        if (-not (Test-Path -LiteralPath $candidateFixturePath -PathType Leaf)) {
+            Fail "candidate fixture is missing: $candidateFixturePath"
+        }
+        $fixtureSha = Get-Sha256 $candidateFixturePath
+        if ($fixtureSha -ne ([string]$candidate.fixture_sha256).ToLowerInvariant()) {
+            Fail "fixture SHA-256 does not match candidate receipt for $($spec.name)"
+        }
+
+        $fixtureDir = Join-Path $fixtureArtifactRoot $spec.name
+        New-Item -ItemType Directory -Path $fixtureDir -Force | Out-Null
+        $fixtureCopy = Join-Path $fixtureDir ([System.IO.Path]::GetFileName($candidateFixturePath))
+        Copy-Item -LiteralPath $candidateFixturePath -Destination $fixtureCopy
+        if ((Get-Sha256 $fixtureCopy) -ne $fixtureSha) {
+            Fail "copied evidence fixture SHA-256 mismatch for $($spec.name)"
+        }
+        $fixtureReceiptPath = "fixtures/$($spec.name)/$([System.IO.Path]::GetFileName($fixtureCopy))"
+
+        $stdoutPath = Join-Path $outRoot ("original-{0}.stdout.log" -f $spec.name)
+        $stderrPath = Join-Path $outRoot ("original-{0}.stderr.log" -f $spec.name)
+        $uiPath = Join-Path $outRoot ("original-{0}.ui.txt" -f $spec.name)
+        $screenshotPath = Join-Path $outRoot ("original-{0}.png" -f $spec.name)
+        $receiptPath = Join-Path $outRoot ("original-{0}.json" -f $spec.name)
+
+        $isolatedProfile = Join-Path $workRoot ("profile-" + $spec.name)
+        $appData = Join-Path $isolatedProfile "AppData\Roaming"
+        $localAppData = Join-Path $isolatedProfile "AppData\Local"
+        New-Item -ItemType Directory -Path $appData -Force | Out-Null
+        New-Item -ItemType Directory -Path $localAppData -Force | Out-Null
+        $env:APPDATA = $appData
+        $env:LOCALAPPDATA = $localAppData
+        $env:HOME = $isolatedProfile
+
+        $argument = '"' + $fixtureCopy + '"'
+        $process = Start-Process -FilePath $psycleExe.FullName `
+            -ArgumentList $argument `
+            -WorkingDirectory $psycleExe.DirectoryName `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath `
+            -PassThru
+
+        $deadline = (Get-Date).AddSeconds(30)
+        $mainWindowSeen = $false
+        $windowTitle = ""
+        $uiValues = @()
+        $uiDiagnostics = @()
+        $uiDiagnosticSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+        $markers = @(
+            [System.IO.Path]::GetFileName($fixtureCopy),
+            [System.IO.Path]::GetFileNameWithoutExtension($fixtureCopy),
+            $spec.expected_song_title
+        )
+        $matchedMarker = $null
+        $applicationErrorMarker = $null
+        $fixtureLoadErrorMarker = $null
+        $stableMarkerPolls = 0
+
+        while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Milliseconds 500
+            $process.Refresh()
+            if ($process.HasExited) {
+                break
+            }
+            $windowTitle = $process.MainWindowTitle
+            $uiObservation = Get-UiObservation $process
+            if ($process.MainWindowHandle -ne 0 -or [int]$uiObservation.top_level_window_count -gt 0) {
+                $mainWindowSeen = $true
+            }
+            $uiValues = @($uiObservation.values)
+            foreach ($diagnostic in @($uiObservation.diagnostics)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
+                    [void]$uiDiagnosticSet.Add([string]$diagnostic)
+                }
+            }
+            $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
+            $combined = @($windowTitle) + $uiValues
+            $assessment = Get-FixtureUiAssessment -Texts $combined -Markers $markers
+
+            if ($null -eq $applicationErrorMarker -and $assessment.application_error_marker) {
+                $applicationErrorMarker = [string]$assessment.application_error_marker
+            }
+            if ($assessment.fixture_load_error_marker) {
+                $fixtureLoadErrorMarker = [string]$assessment.fixture_load_error_marker
+            }
+
+            $pollMarker = $assessment.fixture_marker
+            if ($pollMarker -and $uiDiagnostics.Count -eq 0) {
+                if ($matchedMarker -eq $pollMarker) {
+                    $stableMarkerPolls += 1
+                } else {
+                    $matchedMarker = $pollMarker
+                    $stableMarkerPolls = 1
+                }
+            } else {
+                $matchedMarker = $pollMarker
+                $stableMarkerPolls = 0
+            }
+
+            if ($fixtureLoadErrorMarker) {
+                break
+            }
+        }
+
+        $process.Refresh()
+        $exitCode = $null
+        if ($process.HasExited) {
+            $exitCode = $process.ExitCode
+        }
+
+        $machinePluginInventoryPath = Join-Path $outRoot ("machine-plugin-inventory-{0}.json" -f $spec.name)
+        $machinePluginInventory = Write-MachinePluginInventory -InstallRoot $installRoot -ExecutablePath $psycleExe.FullName -Path $machinePluginInventoryPath -PreexistingPsycleRegistry $preexistingPsycleRegistry
+        $environment["machine_plugin_inventory"] = $machinePluginInventory
+
+        $loadedRuntimeInventoryPath = Join-Path $outRoot ("loaded-vc90-runtime-{0}.json" -f $spec.name)
+        $loadedRuntimeObservation = Write-LoadedVc90RuntimeInventory -Process $process -Path $loadedRuntimeInventoryPath
+        $environment["loaded_vc90_runtime"] = $loadedRuntimeObservation.binding
+        $runtimeIdentityDiagnostics = @($loadedRuntimeObservation.diagnostics)
+
+        # Inventory hashing can take long enough for a late parse/machine error
+        # dialog to appear. Re-scan the complete Psycle-owned UI immediately
+        # before liveness capture and harness termination.
+        $process.Refresh()
+        if (-not $process.HasExited) {
+            $windowTitle = $process.MainWindowTitle
+            $finalUiObservation = Get-UiObservation $process
+            if ($process.MainWindowHandle -ne 0 -or [int]$finalUiObservation.top_level_window_count -gt 0) {
+                $mainWindowSeen = $true
+            }
+            $uiValues = @($finalUiObservation.values)
+            foreach ($diagnostic in @($finalUiObservation.diagnostics)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
+                    [void]$uiDiagnosticSet.Add([string]$diagnostic)
+                }
+            }
+            $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
+            $finalCombined = @($windowTitle) + $uiValues
+            $finalAssessment = Get-FixtureUiAssessment -Texts $finalCombined -Markers $markers
+            if ($null -eq $applicationErrorMarker -and $finalAssessment.application_error_marker) {
+                $applicationErrorMarker = [string]$finalAssessment.application_error_marker
+            }
+            if ($finalAssessment.fixture_load_error_marker) {
+                $fixtureLoadErrorMarker = [string]$finalAssessment.fixture_load_error_marker
+            }
+
+            $finalMarker = $finalAssessment.fixture_marker
+            if ($finalMarker -and $uiDiagnostics.Count -eq 0) {
+                if ($matchedMarker -eq $finalMarker) {
+                    $stableMarkerPolls += 1
+                } else {
+                    $matchedMarker = $finalMarker
+                    $stableMarkerPolls = 1
+                }
+            } else {
+                $matchedMarker = $finalMarker
+                $stableMarkerPolls = 0
+            }
+        }
+
+        $process.Refresh()
+        $exitedBeforeHarnessTermination = $process.HasExited
+        if ($exitedBeforeHarnessTermination -and $null -eq $exitCode) {
+            $exitCode = $process.ExitCode
+        }
+        $processRunningBeforeTermination = -not $exitedBeforeHarnessTermination
+
+        $evidenceLines = [System.Collections.Generic.List[string]]::new()
+        $evidenceLines.Add("reference_build=$ReferenceBuild")
+        $evidenceLines.Add("contract=$($spec.expected_contract)")
+        $evidenceLines.Add("candidate_fixture=$($candidate.fixture)")
+        $evidenceLines.Add("fixture=$fixtureReceiptPath")
+        $evidenceLines.Add("fixture_sha256=$fixtureSha")
+        $evidenceLines.Add("process_id=$($process.Id)")
+        $evidenceLines.Add("main_window_seen=$mainWindowSeen")
+        $evidenceLines.Add("main_window_title=$windowTitle")
+        $evidenceLines.Add("matched_marker=$matchedMarker")
+        $evidenceLines.Add("stable_marker_polls=$stableMarkerPolls")
+        $evidenceLines.Add("application_error_marker=$applicationErrorMarker")
+        $evidenceLines.Add("fixture_load_error_marker=$fixtureLoadErrorMarker")
+        if ($null -ne $exitCode) {
+            $evidenceLines.Add("exit_code=$exitCode")
+        }
+        $evidenceLines.Add("")
+        $evidenceLines.Add("UI_TEXT:")
+        foreach ($value in $uiValues) {
+            $evidenceLines.Add($value)
+        }
+        $evidenceLines.Add("")
+        $evidenceLines.Add("UI_AUTOMATION_DIAGNOSTICS:")
+        foreach ($value in $uiDiagnostics) {
+            $evidenceLines.Add($value)
+        }
+        [System.IO.File]::WriteAllLines($uiPath, $evidenceLines, [System.Text.UTF8Encoding]::new($false))
+
+        $screenshotCaptured = Save-DesktopScreenshot $screenshotPath
+        $screenshot = $null
+        if ($screenshotCaptured -and (Test-Path -LiteralPath $screenshotPath -PathType Leaf)) {
+            $screenshot = [ordered]@{
+                path = [System.IO.Path]::GetFileName($screenshotPath)
+                sha256 = Get-Sha256 $screenshotPath
+            }
+        }
+
+        $termination = "already-exited"
+        if ($processRunningBeforeTermination) {
+            try {
+                $closeRequested = [bool]$process.CloseMainWindow()
+                if (-not $closeRequested) {
+                    $process.Refresh()
+                    if ($process.HasExited) {
+                        $exitCode = $process.ExitCode
+                        $exitedBeforeHarnessTermination = $true
+                        $processRunningBeforeTermination = $false
+                        $termination = "exited-before-close-request"
+                    } else {
+                        $process.Kill()
+                        $process.WaitForExit()
+                        $termination = "killed-without-closeable-main-window"
+                    }
+                } elseif (-not $process.WaitForExit(5000)) {
+                    $process.Kill()
+                    $process.WaitForExit()
+                    $termination = "killed-after-observation"
+                } else {
+                    $termination = "closed-after-observation"
+                }
+            }
+            catch {
+                try {
+                    $process.Refresh()
+                    if ($process.HasExited) {
+                        $exitCode = $process.ExitCode
+                        $exitedBeforeHarnessTermination = $true
+                        $processRunningBeforeTermination = $false
+                        $termination = "exited-during-close-error"
+                    } else {
+                        $process.Kill()
+                        $process.WaitForExit()
+                        $termination = "killed-after-close-error"
+                    }
+                }
+                catch {
+                    $termination = "termination-error"
+                }
+            }
+        }
+
+        if ($uiDiagnostics.Count -gt 0) {
+            $loadResult = "inconclusive"
+            $observation = "ui-automation-harness-diagnostic-prevents-behaviour-classification"
+        } elseif ($runtimeIdentityDiagnostics.Count -gt 0) {
+            $loadResult = "inconclusive"
+            $observation = "loaded-vc90-runtime-identity-diagnostic-prevents-behaviour-classification"
+        } elseif ($fixtureLoadErrorMarker) {
+            $loadResult = "rejected"
+            $observation = "fixture-associated-native-window-evidence-reports-load-error"
+        } elseif ($applicationErrorMarker) {
+            $loadResult = "inconclusive"
+            $observation = "application-error-not-bound-to-fixture-load"
+        } elseif ($exitedBeforeHarnessTermination) {
+            $loadResult = "inconclusive"
+            $observation = "reference-process-exited-before-harness-termination"
+        } elseif ($stableMarkerPolls -ge 4 -and $matchedMarker) {
+            $loadResult = "accepted"
+            $observation = "stable-native-window-evidence-identifies-loaded-fixture-without-error"
+        } elseif ($mainWindowSeen) {
+            $loadResult = "inconclusive"
+            $observation = "reference-window-opened-without-stable-fixture-load-marker"
+        } else {
+            $loadResult = "inconclusive"
+            $observation = "reference-process-produced-no-observable-main-window"
+        }
+
+        $receipt = [ordered]@{
+            schema_version = 1
+            phase = "6C"
+            scope = "original-observation"
+            contract = $spec.expected_contract
+            evidence_role = "original"
+            reference_build = $ReferenceBuild
+            reference_file = $ReferenceFile
+            reference_installer_sha256 = $ExpectedInstallerSha256
+            reference_installer_size_bytes = $ExpectedInstallerSize
+            reference_executable = "transient installed psycle.exe from pinned installer"
+            reference_executable_sha256 = $psycleExeSha
+            reference_executable_file_version = $versionInfo.FileVersion
+            reference_executable_product_version = $versionInfo.ProductVersion
+            candidate_fixture = [string]$candidate.fixture
+            fixture = $fixtureReceiptPath
+            fixture_sha256 = $fixtureSha
+            procedure = $Procedure
+            observation = $observation
+            load_result = $loadResult
+            load_evidence_marker = $matchedMarker
+            stable_marker_polls = $stableMarkerPolls
+            error_marker = $fixtureLoadErrorMarker
+            application_error_marker = $applicationErrorMarker
+            error_marker_scope = if ($fixtureLoadErrorMarker) {
+                "fixture-load"
+            } elseif ($applicationErrorMarker) {
+                "application-unassociated"
+            } else {
+                "none"
+            }
+            ui_automation_diagnostics = @($uiDiagnostics)
+            runtime_identity_diagnostics = @($runtimeIdentityDiagnostics)
+            main_window_seen = $mainWindowSeen
+            main_window_title = $windowTitle
+            exit_code_before_termination = $exitCode
+            process_running_before_termination = $processRunningBeforeTermination
+            termination = $termination
+            environment = $environment
+            stdout = [ordered]@{
+                path = [System.IO.Path]::GetFileName($stdoutPath)
+                sha256 = Get-Sha256 $stdoutPath
+            }
+            stderr = [ordered]@{
+                path = [System.IO.Path]::GetFileName($stderrPath)
+                sha256 = Get-Sha256 $stderrPath
+            }
+            ui_evidence = [ordered]@{
+                path = [System.IO.Path]::GetFileName($uiPath)
+                sha256 = Get-Sha256 $uiPath
+            }
+            screenshot = $screenshot
+            original_psycle_observed = $true
+            parity_status = "UNKNOWN"
+            parity_note = "This is version-pinned original-reference observation evidence only. Compatibility remains UNKNOWN until a versioned candidate receipt and comparison verdict are committed."
+        }
+        Write-JsonUtf8 $receiptPath $receipt
+
+        Write-Host ("phase6c-original-windows-fixtures: {0} load_result={1} observation={2} marker={3} stable_polls={4} ui_diagnostics={5}" -f `
+            $spec.name, $loadResult, $observation, $matchedMarker, $stableMarkerPolls, $uiDiagnostics.Count)
+    }
+
+    $summary = @"
+# Phase 6C Original Psycle Native-Windows Evidence
+
+- Reference: `$ReferenceBuild` / `$ReferenceFile`.
+- Installer SHA-256: `$ExpectedInstallerSha256`.
+- Installer size: `$ExpectedInstallerSize` bytes.
+- Observation environment: native GitHub-hosted Windows runner.
+- Reference installer and installed executable payload: transient only; not retained in this evidence directory.
+- Inputs: exact project-authored fixture bytes copied into this artifact and SHA-256-bound to the corresponding candidate receipts.
+- Rejection rule: only an error-bearing UI text item that is explicitly associated with this fixture and load/open/read/parse/project semantics can classify the fixture as rejected; unrelated Psycle application errors force an inconclusive result instead.
+- Acceptance rule: the observer continues through the full polling window, performs a final complete Psycle-owned UI scan after runtime inventory hashing, and accepts only with a stable fixture marker, no application error, no UI Automation diagnostic, and the reference process still running when harness termination begins.
+- UI Automation failures and loaded-runtime identity failures are sticky harness diagnostics across the full observation and yield an inconclusive observation, never a rejection or later acceptance result.
+- Loaded VC90 runtime identity: each fixture records a hash-bound inventory of the VC90 CRT/MFC/ATL modules actually loaded by the live Psycle process, including absolute module path, size, SHA-256, and file/product version; missing or mismatched runtime identity prevents behavioural classification.
+- Configuration isolation: the post-install HKCU\Software\Psycle baseline is restored before each fixture so PSY2 cannot influence PSY3.
+- Machine/plugin environment: the full installed payload, runtime Psycle registry state, configured plugin/machine roots, and conventional external VST/Psycle plugin roots are recorded in a fixture-specific SHA-256-bound machine-plugin inventory during each observation.
+- Classification policy: these observations do not change compatibility status by themselves; rows remain UNKNOWN until versioned original + candidate receipts and a comparison verdict are committed.
+"@
+    [System.IO.File]::WriteAllText(
+        (Join-Path $outRoot "summary.md"),
+        $summary,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+}
+finally {
+    if (-not $preexistingPsycleRegistry -and (Test-Path -LiteralPath "HKCU:\Software\Psycle")) {
+        Remove-Item -LiteralPath "HKCU:\Software\Psycle" -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path -LiteralPath $workRoot) {
+        Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}) {
+                        continue
+                    }
+
+                    $filePath = [string]$module.FileName
+                    if ([string]::IsNullOrWhiteSpace($filePath) -or
+                        -not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
+                        $diagnostics.Add("loaded VC90 module has no readable file path: $name")
+                        continue
+                    }
+                    $filePath = [System.IO.Path]::GetFullPath($filePath)
+                    if (-not $seenPaths.Add($filePath)) {
+                        continue
+                    }
+
+                    $item = Get-Item -LiteralPath $filePath
+                    $versionInfo = $item.VersionInfo
+                    $fileVersionRaw = [string]$versionInfo.FileVersion
+                    $normalizedVersion = $null
+                    try {
+                        $normalizedVersion = ([Version]$fileVersionRaw).ToString()
+                    }
+                    catch {
+                        $diagnostics.Add("could not normalize loaded VC90 module version for $name: $fileVersionRaw")
+                    }
+
+                    if ($normalizedVersion -and
+                        $normalizedVersion -ne $ExpectedVc90RuntimeVersion) {
+                        $diagnostics.Add(
+                            "loaded VC90 module version mismatch for $($name): " +
+                            "expected=$ExpectedVc90RuntimeVersion actual=$normalizedVersion"
+                        )
+                    }
+
+                    $modules.Add([ordered]@{
+                        name = $name.ToLowerInvariant()
+                        path = $filePath
+                        size_bytes = [long]$item.Length
+                        sha256 = Get-Sha256 $filePath
+                        file_version = $normalizedVersion
+                        file_version_raw = $fileVersionRaw
+                        product_version = [string]$versionInfo.ProductVersion
+                    })
+                }
+                catch {
+                    $diagnostics.Add("loaded VC90 module inspection failed: $($_.Exception.Message)")
+                }
+            }
+        }
+    }
+    catch {
+        $diagnostics.Add("loaded VC90 module enumeration failed: $($_.Exception.Message)")
+    }
+
+    $hasMsvcr90 = $false
+    foreach ($module in $modules) {
+        if ($module.name -ieq "msvcr90.dll") {
+            $hasMsvcr90 = $true
+            break
+        }
+    }
+    if (-not $hasMsvcr90) {
+        $diagnostics.Add("live Psycle process did not expose msvcr90.dll in its loaded module set")
+    }
+
+    $inventory = [ordered]@{
+        schema_version = 1
+        reference_build = $ReferenceBuild
+        process_id = $Process.Id
+        expected_vc90_version = $ExpectedVc90RuntimeVersion
+        modules = $modules.ToArray()
+        diagnostics = @($diagnostics | Select-Object -Unique)
+    }
+    Write-JsonUtf8 $Path $inventory
+
+    return [ordered]@{
+        binding = [ordered]@{
+            path = [System.IO.Path]::GetFileName($Path)
+            sha256 = Get-Sha256 $Path
+        }
+        diagnostics = @($inventory.diagnostics)
+    }
 }
 
 function Write-MachinePluginInventory(
