@@ -219,6 +219,19 @@ def validate_parse_pass_semantics(
     if directsound.get("dialog_seen") is True and directsound.get("dismissed") is not True:
         die(f"{row_id} PASS original receipt did not dismiss observed DirectSound bootstrap")
 
+    load_marker = original_receipt.get("load_evidence_marker")
+    fixture_ref = original_receipt.get("fixture")
+    if not isinstance(load_marker, str) or not load_marker.strip():
+        die(f"{row_id} PASS original receipt lacks a concrete load marker")
+    if not isinstance(fixture_ref, str) or not fixture_ref.strip():
+        die(f"{row_id} PASS original receipt lacks its fixture identity")
+    expected_marker = pathlib.PurePosixPath(fixture_ref.replace("\\", "/")).name
+    if load_marker != expected_marker:
+        die(
+            f"{row_id} PASS original load marker {load_marker!r} does not "
+            f"match fixture basename {expected_marker!r}"
+        )
+
     stable_polls = original_receipt.get("stable_marker_polls")
     if (
         not isinstance(stable_polls, int)
@@ -235,8 +248,25 @@ def validate_parse_pass_semantics(
 
     if candidate_receipt.get("observation") != "load-and-clean-exit":
         die(f"{row_id} PASS candidate receipt is not a clean load observation")
-    if candidate_receipt.get("exit_code") != 0:
-        die(f"{row_id} PASS candidate receipt does not have exit_code=0")
+    candidate_exit_code = candidate_receipt.get("exit_code")
+    if (
+        not isinstance(candidate_exit_code, int)
+        or isinstance(candidate_exit_code, bool)
+        or candidate_exit_code != 0
+    ):
+        die(f"{row_id} PASS candidate receipt does not have integer exit_code=0")
+
+    comparison_exit_code = comparison.get("candidate_exit_code")
+    if (
+        not isinstance(comparison_exit_code, int)
+        or isinstance(comparison_exit_code, bool)
+        or comparison_exit_code != 0
+    ):
+        die(
+            f"{row_id}.comparison receipt does not bind an integer "
+            "candidate_exit_code=0"
+        )
+
     if candidate_receipt.get("original_psycle_observed") is not False:
         die(f"{row_id} candidate receipt has invalid original_psycle_observed flag")
 
