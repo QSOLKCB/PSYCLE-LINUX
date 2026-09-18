@@ -20,12 +20,14 @@ EXPECTED_REFERENCE_SHA256 = (
     "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 )
 EXPECTED_REFERENCE_SIZE = 9322919
-EXPECTED_VC90_RUNTIME_VERSION = "9.0.30729.6161"
-EXPECTED_VC90_RUNTIME_URL = (
+EXPECTED_VC90_REDISTRIBUTABLE_VERSION = "9.0.30729.6161"
+VC90_RUNTIME_FAMILY = "9.0"
+VC90_VERSION_PREFIX = VC90_RUNTIME_FAMILY + "."
+EXPECTED_VC90_REDISTRIBUTABLE_URL = (
     "https://download.microsoft.com/download/5/D/8/"
     "5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x86.exe"
 )
-EXPECTED_VC90_RUNTIME_SHA256 = (
+EXPECTED_VC90_REDISTRIBUTABLE_SHA256 = (
     "8742bcbf24ef328a72d2a27b693cc7071e38d3bb4b9b44dec42aa3d2c8d61d92"
 )
 EXPECTED = {
@@ -120,39 +122,44 @@ def require_artifact_file(
         die(f"{context} SHA-256 mismatch: expected={expected_hash} actual={actual_hash}")
 
 
-def validate_runtime(environment: dict[str, object], original_root: pathlib.Path, name: str) -> None:
-    runtime = environment.get("vc90_runtime")
-    if not isinstance(runtime, dict):
-        die(f"original-{name}.environment.vc90_runtime must be an object")
-    if runtime.get("version") != EXPECTED_VC90_RUNTIME_VERSION:
-        die(f"original-{name} has the wrong VC90 runtime version")
-    if runtime.get("url") != EXPECTED_VC90_RUNTIME_URL:
-        die(f"original-{name} has the wrong VC90 runtime URL")
-    if runtime.get("sha256") != EXPECTED_VC90_RUNTIME_SHA256:
-        die(f"original-{name} has the wrong VC90 runtime SHA-256")
+def validate_redistributable(
+    environment: dict[str, object], original_root: pathlib.Path, name: str
+) -> None:
+    redistributable = environment.get("vc90_redistributable")
+    if not isinstance(redistributable, dict):
+        die(f"original-{name}.environment.vc90_redistributable must be an object")
+    if (
+        redistributable.get("redistributable_version")
+        != EXPECTED_VC90_REDISTRIBUTABLE_VERSION
+    ):
+        die(f"original-{name} has the wrong VC90 redistributable version")
+    if redistributable.get("url") != EXPECTED_VC90_REDISTRIBUTABLE_URL:
+        die(f"original-{name} has the wrong VC90 redistributable URL")
+    if redistributable.get("sha256") != EXPECTED_VC90_REDISTRIBUTABLE_SHA256:
+        die(f"original-{name} has the wrong VC90 redistributable SHA-256")
 
     receipt_path = resolve_artifact_path(
         original_root,
-        runtime.get("receipt"),
-        f"original-{name}.environment.vc90_runtime.receipt",
+        redistributable.get("receipt"),
+        f"original-{name}.environment.vc90_redistributable.receipt",
     )
     receipt = receipt_path.read_text(encoding="utf-8-sig")
     required_lines = (
-        f"version={EXPECTED_VC90_RUNTIME_VERSION}",
-        f"url={EXPECTED_VC90_RUNTIME_URL}",
-        f"sha256={EXPECTED_VC90_RUNTIME_SHA256}",
+        f"redistributable_version={EXPECTED_VC90_REDISTRIBUTABLE_VERSION}",
+        f"url={EXPECTED_VC90_REDISTRIBUTABLE_URL}",
+        f"sha256={EXPECTED_VC90_REDISTRIBUTABLE_SHA256}",
         "authenticode_status=Valid",
         "signer_subject=",
     )
     for value in required_lines:
         if value not in receipt:
-            die(f"original-{name} VC90 runtime receipt lacks {value!r}")
+            die(f"original-{name} VC90 redistributable receipt lacks {value!r}")
     signer_line = next(
         (line for line in receipt.splitlines() if line.startswith("signer_subject=")),
         "",
     )
     if "microsoft" not in signer_line.lower():
-        die(f"original-{name} VC90 runtime receipt is not signed by Microsoft")
+        die(f"original-{name} VC90 redistributable receipt is not signed by Microsoft")
 
 
 def validate_loaded_vc90_runtime(
@@ -192,8 +199,8 @@ def validate_loaded_vc90_runtime(
         die(f"original-{name} loaded VC90 runtime inventory has the wrong schema version")
     if inventory.get("reference_build") != EXPECTED_REFERENCE_BUILD:
         die(f"original-{name} loaded VC90 runtime inventory has the wrong reference build")
-    if inventory.get("expected_vc90_version") != EXPECTED_VC90_RUNTIME_VERSION:
-        die(f"original-{name} loaded VC90 runtime inventory has the wrong expected version")
+    if inventory.get("required_vc90_family") != VC90_RUNTIME_FAMILY:
+        die(f"original-{name} loaded VC90 runtime inventory has the wrong runtime family")
 
     process_id = inventory.get("process_id")
     if not isinstance(process_id, int) or isinstance(process_id, bool) or process_id <= 0:
@@ -245,7 +252,9 @@ def validate_loaded_vc90_runtime(
         require_hash(module.get("sha256"), f"{context}.sha256")
 
         file_version = module.get("file_version")
-        if file_version != EXPECTED_VC90_RUNTIME_VERSION:
+        if not isinstance(file_version, str) or not file_version.startswith(
+            VC90_VERSION_PREFIX
+        ):
             identity_valid = False
 
         raw_version = module.get("file_version_raw")
@@ -260,8 +269,8 @@ def validate_loaded_vc90_runtime(
 
     if not identity_valid and not diagnostics:
         die(
-            f"original-{name} loaded VC90 runtime identity is incomplete/mismatched "
-            "without a recorded runtime diagnostic"
+            f"original-{name} loaded VC90 runtime identity is missing or outside "
+            "the VC90 9.0 family without a recorded runtime diagnostic"
         )
 
     return diagnostics, identity_valid
@@ -493,7 +502,7 @@ def validate_pair(
     procedure = original.get("procedure")
     if not isinstance(procedure, str) or not procedure.strip():
         die(f"original-{name}.procedure must be non-empty")
-    if EXPECTED_VC90_RUNTIME_SHA256 not in procedure:
+    if EXPECTED_VC90_REDISTRIBUTABLE_SHA256 not in procedure:
         die(f"original-{name}.procedure does not bind the pinned VC90 runtime")
     observation = original.get("observation")
     if not isinstance(observation, str) or not observation.strip():
@@ -508,7 +517,7 @@ def validate_pair(
         die(f"original-{name} runner_os is not Windows")
     if environment.get("installer_framework") not in {"inno-setup", "nsis"}:
         die(f"original-{name} has unsupported installer framework metadata")
-    validate_runtime(environment, original_root, name)
+    validate_redistributable(environment, original_root, name)
     runtime_inventory_diagnostics, runtime_identity_valid = validate_loaded_vc90_runtime(
         environment, original_root, name
     )
