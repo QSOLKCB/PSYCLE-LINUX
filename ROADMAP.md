@@ -283,12 +283,16 @@ Completed matrix infrastructure:
 - [x] Require versioned original and candidate receipts plus a comparison verdict before any row leaves `UNKNOWN`.
 - [x] Collect reusable candidate PSY2/PSY3 receipts in maintained CI.
 - [x] Keep candidate-only and C-Psycle-only evidence from becoming original-Psycle parity claims.
+- [x] Version the first original/candidate comparison receipts and classify `project-io-psy2-parse` as a scoped `PASS` for the exact project-authored fixture.
 
 Every PASS / DIFFERENT / MISSING entry must identify the original-Psycle reference version/build and the observation artifacts/procedures that support it. “Original Psycle did X” without a versioned reference is not a reproducible matrix result.
 
 Audit at minimum:
 
 - [ ] PSY2/PSY3 parsing and serialization against the pinned original reference;
+  - [x] PSY2 parse/load acceptance for the exact project-authored PSY2SONG fixture is classified `PASS` against pinned Psycle 1.12.0 x86.
+  - [ ] PSY3 parsing remains `UNKNOWN` because the original-reference observation has not yet produced a stable fixture-load marker.
+  - [ ] Serialization / round-trip remains a separate `UNKNOWN` contract and is not implied by the PSY2 parse PASS.
 - [ ] sequence/pattern timing;
 - [ ] BPM/LPB/tick behaviour;
 - [ ] tracker commands and delayed/retrigger events;
@@ -305,18 +309,18 @@ Audit at minimum:
 
 Do **not** assume C-Psycle's event sequencer is authoritative when it differs from original Psycle. The point of this phase is to discover and document differences.
 
-**Phase 6C status: active.** The matrix, evidence schema and candidate lane are established, but all compatibility rows remain `UNKNOWN` until versioned original-Psycle observations and comparison verdicts exist.
+**Phase 6C status: active.** The matrix, evidence schema and candidate lane are established, and the first versioned comparison now classifies PSY2 parsing as a scoped `PASS`; 19 contracts remain `UNKNOWN`. PSY3 and serialization remain open and no `DIFFERENT` / `MISSING` result yet justifies Phase 7 implementation work.
 
 ### 6D — parity report
 
 - [x] Produce `PSYCLE_CORE_PARITY.md` with PASS / DIFFERENT / MISSING / UNKNOWN for each subsystem.
-- [x] Mechanically require the original-Psycle version/build and versioned evidence receipts for every future non-`UNKNOWN` row; there are currently zero classified rows.
+- [x] Mechanically require the original-Psycle version/build and versioned evidence receipts for every non-`UNKNOWN` row; the first classified row is the scoped PSY2 parsing `PASS`.
 - [x] Separate engine gaps from UI-only gaps.
 - [x] Identify which existing C-Psycle tests are portable shared contracts, which need original-Psycle confirmation, and which remain C-Psycle-only historical evidence.
 - [x] Add `scripts/phase6d-validate-parity-report.py` plus a maintained Phase 6D workflow so the human-readable 20-row report cannot drift from the canonical matrix status inventory.
 - [ ] Freeze the first Phase 7 implementation backlog from confirmed `DIFFERENT` / `MISSING` evidence rather than intuition.
 
-**Phase 6D status: report contract established.** Final Phase 7 backlog generation remains blocked by the intentionally missing original-Psycle observations.
+**Phase 6D status: report contract established.** The human report now projects the first classified PASS. Final Phase 7 backlog generation remains blocked because there is still no confirmed `DIFFERENT` / `MISSING` evidence to implement.
 
 ### 6E — active-track CI foundation
 
