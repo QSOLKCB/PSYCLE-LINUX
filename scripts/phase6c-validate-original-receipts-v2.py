@@ -535,6 +535,8 @@ def validate_pair(
     marker = original.get("load_evidence_marker")
     stable_polls = original.get("stable_marker_polls")
     diagnostics = original.get("ui_automation_diagnostics")
+    startup_bootstrap = original.get("startup_bootstrap")
+    environment_bootstrap = original.get("environment_bootstrap")
     runtime_diagnostics = original.get("runtime_identity_diagnostics")
     exit_code = original.get("exit_code_before_termination")
     running_before_termination = original.get("process_running_before_termination")
@@ -589,6 +591,250 @@ def validate_pair(
 
     if not isinstance(diagnostics, list) or any(not isinstance(x, str) for x in diagnostics):
         die(f"original-{name}.ui_automation_diagnostics must be a string array")
+
+    if not isinstance(startup_bootstrap, dict):
+        die(f"original-{name}.startup_bootstrap must be an object")
+    for field in (
+        "settings_dialog_seen",
+        "signature_verified",
+        "attempted",
+        "dismissed",
+    ):
+        if not isinstance(startup_bootstrap.get(field), bool):
+            die(f"original-{name}.startup_bootstrap.{field} must be boolean")
+    action = startup_bootstrap.get("action")
+    if action is not None and action != "invoke-ok":
+        die(f"original-{name}.startup_bootstrap.action is invalid")
+    outcome = startup_bootstrap.get("outcome")
+    allowed_bootstrap_outcomes = {
+        "not-seen",
+        "dismissed",
+        "desktop-root-missing",
+        "signature-read-failed",
+        "signature-mismatch",
+        "invoke-failed",
+        "close-verification-failed",
+        "close-timeout",
+        "automation-failed",
+    }
+    if outcome not in allowed_bootstrap_outcomes:
+        die(f"original-{name}.startup_bootstrap.outcome is invalid: {outcome!r}")
+    bootstrap_diagnostics = startup_bootstrap.get("diagnostics")
+    if not isinstance(bootstrap_diagnostics, list) or any(
+        not isinstance(x, str) or not x.strip() for x in bootstrap_diagnostics
+    ):
+        die(f"original-{name}.startup_bootstrap.diagnostics must be a string array")
+    if any(value not in diagnostics for value in bootstrap_diagnostics):
+        die(
+            f"original-{name} startup bootstrap diagnostics are not retained "
+            "in the sticky UI Automation diagnostics"
+        )
+
+    bootstrap_seen = startup_bootstrap["settings_dialog_seen"]
+    bootstrap_signature = startup_bootstrap["signature_verified"]
+    bootstrap_attempted = startup_bootstrap["attempted"]
+    bootstrap_dismissed = startup_bootstrap["dismissed"]
+
+    startup_failure_states = {
+        "desktop-root-missing": (False, False, False, None),
+        "signature-read-failed": (True, False, False, None),
+        "signature-mismatch": (True, False, False, None),
+        "invoke-failed": (True, True, True, "invoke-ok"),
+        "close-verification-failed": (True, True, True, "invoke-ok"),
+        "close-timeout": (True, True, True, "invoke-ok"),
+    }
+    startup_automation_states = {
+        (False, False, False, None),
+        (True, False, False, None),
+        (True, True, True, "invoke-ok"),
+    }
+
+    if outcome == "not-seen":
+        if (
+            bootstrap_seen
+            or bootstrap_signature
+            or bootstrap_attempted
+            or bootstrap_dismissed
+            or action is not None
+            or bootstrap_diagnostics
+        ):
+            die(f"original-{name} startup bootstrap not-seen state is inconsistent")
+    elif outcome == "dismissed":
+        if not (
+            bootstrap_seen
+            and bootstrap_signature
+            and bootstrap_attempted
+            and bootstrap_dismissed
+            and action == "invoke-ok"
+        ):
+            die(f"original-{name} dismissed startup bootstrap state is inconsistent")
+        if bootstrap_diagnostics and result != "inconclusive":
+            die(
+                f"original-{name} dismissed startup bootstrap diagnostics "
+                "must force an inconclusive result"
+            )
+    else:
+        if bootstrap_dismissed:
+            die(f"original-{name} failed startup bootstrap cannot be marked dismissed")
+        startup_state = (
+            bootstrap_seen,
+            bootstrap_signature,
+            bootstrap_attempted,
+            action,
+        )
+        if outcome == "automation-failed":
+            if startup_state not in startup_automation_states:
+                die(
+                    f"original-{name} startup automation-failed state is inconsistent"
+                )
+        elif startup_state != startup_failure_states.get(outcome):
+            die(
+                f"original-{name} startup bootstrap state is inconsistent "
+                f"for outcome {outcome!r}"
+            )
+        if not bootstrap_diagnostics:
+            die(f"original-{name} failed startup bootstrap lacks a harness diagnostic")
+        if result != "inconclusive":
+            die(f"original-{name} failed startup bootstrap must force an inconclusive result")
+
+    if not isinstance(environment_bootstrap, dict):
+        die(f"original-{name}.environment_bootstrap must be an object")
+    directsound_bootstrap = environment_bootstrap.get("directsound")
+    if not isinstance(directsound_bootstrap, dict):
+        die(f"original-{name}.environment_bootstrap.directsound must be an object")
+    for field in ("dialog_seen", "signature_verified", "attempted", "dismissed"):
+        if not isinstance(directsound_bootstrap.get(field), bool):
+            die(
+                f"original-{name}.environment_bootstrap.directsound.{field} "
+                "must be boolean"
+            )
+    directsound_action = directsound_bootstrap.get("action")
+    if directsound_action not in {
+        None,
+        "invoke-ok",
+        "invoke-ok-legacy-default-action",
+    }:
+        die(f"original-{name} DirectSound bootstrap action is invalid")
+    directsound_outcome = directsound_bootstrap.get("outcome")
+    allowed_directsound_outcomes = {
+        "not-seen",
+        "dismissed",
+        "desktop-root-missing",
+        "signature-read-failed",
+        "signature-mismatch",
+        "invoke-failed",
+        "legacy-action-failed",
+        "close-verification-failed",
+        "close-timeout",
+        "automation-failed",
+    }
+    if directsound_outcome not in allowed_directsound_outcomes:
+        die(
+            f"original-{name} DirectSound bootstrap outcome is invalid: "
+            f"{directsound_outcome!r}"
+        )
+    directsound_diagnostics = directsound_bootstrap.get("diagnostics")
+    if not isinstance(directsound_diagnostics, list) or any(
+        not isinstance(x, str) or not x.strip() for x in directsound_diagnostics
+    ):
+        die(f"original-{name} DirectSound bootstrap diagnostics must be a string array")
+    if any(value not in diagnostics for value in directsound_diagnostics):
+        die(
+            f"original-{name} DirectSound bootstrap diagnostics are not retained "
+            "in the sticky UI Automation diagnostics"
+        )
+
+    directsound_seen = directsound_bootstrap["dialog_seen"]
+    directsound_signature = directsound_bootstrap["signature_verified"]
+    directsound_attempted = directsound_bootstrap["attempted"]
+    directsound_dismissed = directsound_bootstrap["dismissed"]
+
+    directsound_failure_states = {
+        "desktop-root-missing": (False, False, False, None),
+        "signature-read-failed": (True, False, False, None),
+        "signature-mismatch": (True, False, False, None),
+        "invoke-failed": (True, True, True, "invoke-ok"),
+        "legacy-action-failed": (
+            True,
+            True,
+            True,
+            "invoke-ok-legacy-default-action",
+        ),
+        "close-timeout": (
+            True,
+            True,
+            True,
+            "invoke-ok-legacy-default-action",
+        ),
+    }
+    directsound_close_verification_states = {
+        (True, True, True, "invoke-ok"),
+        (True, True, True, "invoke-ok-legacy-default-action"),
+    }
+    directsound_automation_states = {
+        (False, False, False, None),
+        (True, False, False, None),
+        (True, True, True, "invoke-ok"),
+        (True, True, True, "invoke-ok-legacy-default-action"),
+    }
+
+    if directsound_outcome == "not-seen":
+        if (
+            directsound_seen
+            or directsound_signature
+            or directsound_attempted
+            or directsound_dismissed
+            or directsound_action is not None
+            or directsound_diagnostics
+        ):
+            die(f"original-{name} DirectSound bootstrap not-seen state is inconsistent")
+    elif directsound_outcome == "dismissed":
+        if not (
+            directsound_seen
+            and directsound_signature
+            and directsound_attempted
+            and directsound_dismissed
+            and directsound_action in {
+                "invoke-ok",
+                "invoke-ok-legacy-default-action",
+            }
+        ):
+            die(f"original-{name} dismissed DirectSound bootstrap state is inconsistent")
+        if directsound_diagnostics and result != "inconclusive":
+            die(
+                f"original-{name} dismissed DirectSound bootstrap diagnostics "
+                "must force an inconclusive result"
+            )
+    else:
+        if directsound_dismissed:
+            die(f"original-{name} failed DirectSound bootstrap cannot be marked dismissed")
+        directsound_state = (
+            directsound_seen,
+            directsound_signature,
+            directsound_attempted,
+            directsound_action,
+        )
+        if directsound_outcome == "close-verification-failed":
+            if directsound_state not in directsound_close_verification_states:
+                die(
+                    f"original-{name} DirectSound close-verification-failed "
+                    "state is inconsistent"
+                )
+        elif directsound_outcome == "automation-failed":
+            if directsound_state not in directsound_automation_states:
+                die(
+                    f"original-{name} DirectSound automation-failed state is inconsistent"
+                )
+        elif directsound_state != directsound_failure_states.get(directsound_outcome):
+            die(
+                f"original-{name} DirectSound bootstrap state is inconsistent "
+                f"for outcome {directsound_outcome!r}"
+            )
+        if not directsound_diagnostics:
+            die(f"original-{name} failed DirectSound bootstrap lacks a harness diagnostic")
+        if result != "inconclusive":
+            die(f"original-{name} failed DirectSound bootstrap must force an inconclusive result")
+
     if not isinstance(runtime_diagnostics, list) or any(
         not isinstance(x, str) or not x.strip() for x in runtime_diagnostics
     ):
@@ -616,6 +862,10 @@ def validate_pair(
             die(f"original-{name} accepted result has a non-empty error scope")
         if diagnostics:
             die(f"original-{name} accepted result contains UI Automation harness diagnostics")
+        if bootstrap_seen and not bootstrap_dismissed:
+            die(f"original-{name} accepted result did not complete the first-run settings bootstrap")
+        if directsound_seen and not directsound_dismissed:
+            die(f"original-{name} accepted result did not complete the DirectSound environment bootstrap")
         if runtime_diagnostics or not runtime_identity_valid:
             die(f"original-{name} accepted result lacks verified loaded VC90 runtime identity")
         if stable_polls < 4:
