@@ -28,5 +28,6 @@
   },
   "original_source_receipt_sha256": "1b9d05dd5caafc8120ade51e28086d02f05800bcba0479aa4325680333fb6b74",
   "candidate_source_receipt_sha256": "feee397beec6babfc715ad05be08037789e881cecb77abb174e934dbbc42a230",
-  "candidate_executable_sha256": "79b8bc04918039cca8be4db0909f826b55ad6538b6edf1f1689ec0eb8dcac330"
+  "candidate_executable_sha256": "79b8bc04918039cca8be4db0909f826b55ad6538b6edf1f1689ec0eb8dcac330",
+  "original_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6"
 }
