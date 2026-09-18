@@ -34,6 +34,12 @@ PARSE_CONTRACT_IDS = {
     "project-io-psy2-parse",
     "project-io-psy3-parse",
 }
+ACCEPTED_ORIGINAL_TERMINATION = {
+    "killed-without-closeable-main-window",
+    "killed-after-observation",
+    "closed-after-observation",
+    "killed-after-close-error",
+}
 REQUIRED_IDS = {
     "project-io-psy2-parse",
     "project-io-psy3-parse",
@@ -226,11 +232,49 @@ def validate_parse_pass_semantics(
     startup_bootstrap = original_receipt.get("startup_bootstrap")
     if not isinstance(startup_bootstrap, dict):
         die(f"{row_id} PASS original receipt lacks startup bootstrap state")
-    if (
-        startup_bootstrap.get("settings_dialog_seen") is True
-        and startup_bootstrap.get("dismissed") is not True
+
+    startup_seen = startup_bootstrap.get("settings_dialog_seen")
+    startup_signature = startup_bootstrap.get("signature_verified")
+    startup_attempted = startup_bootstrap.get("attempted")
+    startup_dismissed = startup_bootstrap.get("dismissed")
+    startup_action = startup_bootstrap.get("action")
+    startup_outcome = startup_bootstrap.get("outcome")
+    startup_diagnostics = startup_bootstrap.get("diagnostics")
+    if any(
+        not isinstance(value, bool)
+        for value in (
+            startup_seen,
+            startup_signature,
+            startup_attempted,
+            startup_dismissed,
+        )
     ):
-        die(f"{row_id} PASS original receipt did not dismiss observed settings bootstrap")
+        die(f"{row_id} PASS original receipt has invalid settings bootstrap booleans")
+    if startup_diagnostics != []:
+        die(f"{row_id} PASS original receipt has settings bootstrap diagnostics")
+    if startup_seen:
+        if not (
+            startup_signature
+            and startup_attempted
+            and startup_dismissed
+            and startup_action == "invoke-ok"
+            and startup_outcome == "dismissed"
+        ):
+            die(
+                f"{row_id} PASS original receipt has inconsistent successful "
+                "settings bootstrap state"
+            )
+    elif not (
+        startup_signature is False
+        and startup_attempted is False
+        and startup_dismissed is False
+        and startup_action is None
+        and startup_outcome == "not-seen"
+    ):
+        die(
+            f"{row_id} PASS original receipt has inconsistent not-seen "
+            "settings bootstrap state"
+        )
 
     environment_bootstrap = original_receipt.get("environment_bootstrap")
     if not isinstance(environment_bootstrap, dict):
@@ -238,8 +282,54 @@ def validate_parse_pass_semantics(
     directsound = environment_bootstrap.get("directsound")
     if not isinstance(directsound, dict):
         die(f"{row_id} PASS original receipt lacks DirectSound bootstrap state")
-    if directsound.get("dialog_seen") is True and directsound.get("dismissed") is not True:
-        die(f"{row_id} PASS original receipt did not dismiss observed DirectSound bootstrap")
+
+    directsound_seen = directsound.get("dialog_seen")
+    directsound_signature = directsound.get("signature_verified")
+    directsound_attempted = directsound.get("attempted")
+    directsound_dismissed = directsound.get("dismissed")
+    directsound_action = directsound.get("action")
+    directsound_outcome = directsound.get("outcome")
+    directsound_diagnostics = directsound.get("diagnostics")
+    if any(
+        not isinstance(value, bool)
+        for value in (
+            directsound_seen,
+            directsound_signature,
+            directsound_attempted,
+            directsound_dismissed,
+        )
+    ):
+        die(f"{row_id} PASS original receipt has invalid DirectSound bootstrap booleans")
+    if directsound_diagnostics != []:
+        die(f"{row_id} PASS original receipt has DirectSound bootstrap diagnostics")
+    if directsound_seen:
+        if not (
+            directsound_signature
+            and directsound_attempted
+            and directsound_dismissed
+            and directsound_action
+            in {
+                "invoke-ok",
+                "invoke-ok-win32-wm-command",
+                "invoke-ok-win32-bm-click",
+            }
+            and directsound_outcome == "dismissed"
+        ):
+            die(
+                f"{row_id} PASS original receipt has inconsistent successful "
+                "DirectSound bootstrap state"
+            )
+    elif not (
+        directsound_signature is False
+        and directsound_attempted is False
+        and directsound_dismissed is False
+        and directsound_action is None
+        and directsound_outcome == "not-seen"
+    ):
+        die(
+            f"{row_id} PASS original receipt has inconsistent not-seen "
+            "DirectSound bootstrap state"
+        )
 
     load_marker = original_receipt.get("load_evidence_marker")
     fixture_ref = original_receipt.get("fixture")
@@ -267,6 +357,12 @@ def validate_parse_pass_semantics(
         die(f"{row_id} PASS original receipt exited before harness termination")
     if original_receipt.get("process_running_before_termination") is not True:
         die(f"{row_id} PASS original receipt was not live at harness termination")
+    termination = original_receipt.get("termination")
+    if termination not in ACCEPTED_ORIGINAL_TERMINATION:
+        die(
+            f"{row_id} PASS original receipt lacks successful "
+            "harness-controlled termination"
+        )
 
     if candidate_receipt.get("observation") != "load-and-clean-exit":
         die(f"{row_id} PASS candidate receipt is not a clean load observation")
