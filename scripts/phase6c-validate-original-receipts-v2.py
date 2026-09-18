@@ -712,7 +712,7 @@ def validate_pair(
     if directsound_action not in {
         None,
         "invoke-ok",
-        "invoke-ok-win32-bm-click",
+        "invoke-ok-win32-wm-command",
     }:
         die(f"original-{name} DirectSound bootstrap action is invalid")
     directsound_outcome = directsound_bootstrap.get("outcome")
@@ -758,24 +758,24 @@ def validate_pair(
             True,
             True,
             True,
-            "invoke-ok-win32-bm-click",
+            "invoke-ok-win32-wm-command",
         ),
         "close-timeout": (
             True,
             True,
             True,
-            "invoke-ok-win32-bm-click",
+            "invoke-ok-win32-wm-command",
         ),
     }
     directsound_close_verification_states = {
         (True, True, True, "invoke-ok"),
-        (True, True, True, "invoke-ok-win32-bm-click"),
+        (True, True, True, "invoke-ok-win32-wm-command"),
     }
     directsound_automation_states = {
         (False, False, False, None),
         (True, False, False, None),
         (True, True, True, "invoke-ok"),
-        (True, True, True, "invoke-ok-win32-bm-click"),
+        (True, True, True, "invoke-ok-win32-wm-command"),
     }
 
     if directsound_outcome == "not-seen":
@@ -796,7 +796,7 @@ def validate_pair(
             and directsound_dismissed
             and directsound_action in {
                 "invoke-ok",
-                "invoke-ok-win32-bm-click",
+                "invoke-ok-win32-wm-command",
             }
         ):
             die(f"original-{name} dismissed DirectSound bootstrap state is inconsistent")

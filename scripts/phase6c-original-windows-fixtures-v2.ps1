@@ -14,7 +14,7 @@ $ReferenceUrl = "https://sourceforge.net/projects/psycle/files/psycle/1.12/$Refe
 $ExpectedInstallerSha256 = "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 $ExpectedInstallerSize = 9322919
 $RequiredVc90RuntimeFamily = "9.0"
-$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 BM_CLICK only if the old MFC button ignores a successful UIA InvokePattern, and only after binding the button HWND to the same Psycle process and the exact Windows Button class; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
+$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 WM_COMMAND/IDOK only if the old MFC button ignores a successful UIA InvokePattern, and only after binding the already-verified DirectSound dialog HWND to the same Psycle process and the standard #32770 dialog class; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
 
 function Fail([string]$Message) {
     throw "phase6c-original-windows-fixtures: $Message"
@@ -490,53 +490,55 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
             if (-not $closed) {
                 # Psycle 1.12 uses an old MFC message box. On the hosted runner
                 # UIA InvokePattern can report success without dispatching the
-                # button action. The fallback remains bound to the same exact
-                # dialog/message/single-OK signature above and additionally
-                # requires a live native Button HWND owned by the same Psycle
-                # process before issuing a timeout-bounded BM_CLICK.
-                $result.action = "invoke-ok-win32-bm-click"
+                # button action, while the UIA child proxy does not expose a
+                # live native button HWND. The fallback therefore targets only
+                # the already-verified process-owned DirectSound dialog and
+                # issues its standard IDOK command after re-validating the
+                # native dialog HWND and class.
+                $result.action = "invoke-ok-win32-wm-command"
                 try {
-                    $buttonHandleValue = [int64]$okButtons[0].Current.NativeWindowHandle
-                    if ($buttonHandleValue -eq 0) {
-                        throw "DirectSound bootstrap verified OK button has no native HWND"
+                    $dialogHandleValue = [int64]$window.Current.NativeWindowHandle
+                    if ($dialogHandleValue -eq 0) {
+                        throw "DirectSound bootstrap verified dialog has no native HWND"
                     }
-                    $buttonHandle = [IntPtr]::new($buttonHandleValue)
-                    if (-not [Phase6cNativeButton]::IsWindow($buttonHandle)) {
-                        throw "DirectSound bootstrap verified OK HWND is not a live window"
+                    $dialogHandle = [IntPtr]::new($dialogHandleValue)
+                    if (-not [Phase6cNativeButton]::IsWindow($dialogHandle)) {
+                        throw "DirectSound bootstrap verified dialog HWND is not a live window"
                     }
 
-                    [uint32]$buttonProcessId = 0
+                    [uint32]$dialogProcessId = 0
                     [void][Phase6cNativeButton]::GetWindowThreadProcessId(
-                        $buttonHandle,
-                        [ref]$buttonProcessId
+                        $dialogHandle,
+                        [ref]$dialogProcessId
                     )
-                    if ($buttonProcessId -ne [uint32]$Process.Id) {
+                    if ($dialogProcessId -ne [uint32]$Process.Id) {
                         throw (
-                            "DirectSound bootstrap verified OK HWND belongs to the wrong process: " +
-                            "expected=$($Process.Id) actual=$buttonProcessId"
+                            "DirectSound bootstrap verified dialog HWND belongs to the wrong process: " +
+                            "expected=$($Process.Id) actual=$dialogProcessId"
                         )
                     }
 
                     $className = [System.Text.StringBuilder]::new(64)
                     $classLength = [Phase6cNativeButton]::GetClassName(
-                        $buttonHandle,
+                        $dialogHandle,
                         $className,
                         $className.Capacity
                     )
-                    if ($classLength -le 0 -or $className.ToString() -cne "Button") {
+                    if ($classLength -le 0 -or $className.ToString() -cne "#32770") {
                         throw (
-                            "DirectSound bootstrap verified OK HWND has unexpected class: " +
+                            "DirectSound bootstrap verified dialog HWND has unexpected class: " +
                             "$($className.ToString())"
                         )
                     }
 
-                    $BM_CLICK = [uint32]0x00F5
+                    $WM_COMMAND = [uint32]0x0111
+                    $IDOK = [IntPtr]::new(1)
                     $SMTO_ABORTIFHUNG = [uint32]0x0002
                     [IntPtr]$messageResult = [IntPtr]::Zero
                     $sendResult = [Phase6cNativeButton]::SendMessageTimeout(
-                        $buttonHandle,
-                        $BM_CLICK,
-                        [IntPtr]::Zero,
+                        $dialogHandle,
+                        $WM_COMMAND,
+                        $IDOK,
                         [IntPtr]::Zero,
                         $SMTO_ABORTIFHUNG,
                         [uint32]2000,
@@ -544,7 +546,10 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
                     )
                     if ($sendResult -eq [IntPtr]::Zero) {
                         $lastError = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
-                        throw "DirectSound bootstrap BM_CLICK failed or timed out: win32_error=$lastError"
+                        throw (
+                            "DirectSound bootstrap WM_COMMAND/IDOK failed or timed out: " +
+                            "win32_error=$lastError"
+                        )
                     }
                 }
                 catch {
