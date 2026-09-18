@@ -22,6 +22,8 @@
     "workflow_head_sha": "1f9afb8c8ac675f5bc06b172d3415fbaa136e201",
     "merged_main_sha": "af23c420dcd6c7c62f4177f82eadca645db004a2",
     "original_artifact_digest": "sha256:20957d9e23733bc3ce724611734f07f9d90a49450b66152c68ae186c1dd62595",
-    "candidate_artifact_digest": "sha256:b8d206aa16a2b820149e1e83f76c671fb0b584cea59ed8f69941846e183b6fcf"
-  }
+    "candidate_artifact_digest": "sha256:b8d206aa16a2b820149e1e83f76c671fb0b584cea59ed8f69941846e183b6fcf",
+    "original_artifact_receipt": "original-psy2.json"
+  },
+  "original_source_receipt_sha256": "1b9d05dd5caafc8120ade51e28086d02f05800bcba0479aa4325680333fb6b74"
 }
