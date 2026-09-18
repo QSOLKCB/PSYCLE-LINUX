@@ -13,8 +13,8 @@ $ReferenceFile = "PsycleInstallerx86-1.12.0.exe"
 $ReferenceUrl = "https://sourceforge.net/projects/psycle/files/psycle/1.12/$ReferenceFile/download"
 $ExpectedInstallerSha256 = "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 $ExpectedInstallerSize = 9322919
-$ExpectedVc90RuntimeVersion = "9.0.30729.6161"
-$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with file versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
+$RequiredVc90RuntimeFamily = "9.0"
+$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
 
 function Fail([string]$Message) {
     throw "phase6c-original-windows-fixtures: $Message"
@@ -266,10 +266,13 @@ function Write-LoadedVc90RuntimeInventory(
                     }
 
                     if ($normalizedVersion -and
-                        $normalizedVersion -ne $ExpectedVc90RuntimeVersion) {
+                        -not $normalizedVersion.StartsWith(
+                            "$RequiredVc90RuntimeFamily.",
+                            [System.StringComparison]::Ordinal
+                        )) {
                         $diagnostics.Add(
-                            "loaded VC90 module version mismatch for $($name): " +
-                            "expected=$ExpectedVc90RuntimeVersion actual=$normalizedVersion"
+                            "loaded module is outside the VC90 runtime family for $($name): " +
+                            "required_family=$RequiredVc90RuntimeFamily actual=$normalizedVersion"
                         )
                     }
 
@@ -308,7 +311,7 @@ function Write-LoadedVc90RuntimeInventory(
         schema_version = 1
         reference_build = $ReferenceBuild
         process_id = $Process.Id
-        expected_vc90_version = $ExpectedVc90RuntimeVersion
+        required_vc90_family = $RequiredVc90RuntimeFamily
         modules = $modules.ToArray()
         diagnostics = @($diagnostics | Select-Object -Unique)
     }
@@ -1030,7 +1033,7 @@ try {
 - Rejection rule: only an error-bearing UI text item that is explicitly associated with this fixture and load/open/read/parse/project semantics can classify the fixture as rejected; unrelated Psycle application errors force an inconclusive result instead.
 - Acceptance rule: the observer continues through the full polling window, performs a final complete Psycle-owned UI scan after runtime inventory hashing, and accepts only with a stable fixture marker, no application error, no UI Automation diagnostic, and the reference process still running when harness termination begins.
 - UI Automation failures and loaded-runtime identity failures are sticky harness diagnostics across the full observation and yield an inconclusive observation, never a rejection or later acceptance result.
-- Loaded VC90 runtime identity: each fixture records a hash-bound inventory of the VC90 CRT/MFC/ATL modules actually loaded by the live Psycle process, including absolute module path, size, SHA-256, and file/product version; missing or mismatched runtime identity prevents behavioural classification.
+- Loaded VC90 runtime identity: each fixture records a hash-bound inventory of the VC90 CRT/MFC/ATL modules actually loaded by the live Psycle process, including absolute module path, size, SHA-256, and file/product version. Windows SxS servicing revisions are recorded as observed and may differ between CRT/MFC components; missing identity or a module outside the VC90 9.0 family prevents behavioural classification.
 - Configuration isolation: the post-install HKCU\Software\Psycle baseline is restored before each fixture so PSY2 cannot influence PSY3.
 - Machine/plugin environment: the full installed payload, runtime Psycle registry state, configured plugin/machine roots, and conventional external VST/Psycle plugin roots are recorded in a fixture-specific SHA-256-bound machine-plugin inventory during each observation.
 - Classification policy: these observations do not change compatibility status by themselves; rows remain UNKNOWN until versioned original + candidate receipts and a comparison verdict are committed.
