@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "scope": "compatibility-comparison",
+  "contract": "project-io-psy2-parse",
+  "original_receipt": "phase6c/evidence/project-io-psy2-parse/original-psy2.json",
+  "candidate_receipt": "phase6c/evidence/project-io-psy2-parse/candidate-psy2.json",
+  "original_reference_build": "Psycle 1.12.0 x86",
+  "original_installer_sha256": "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769",
+  "original_installer_size_bytes": 9322919,
+  "candidate_snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+  "fixture_sha256": "ebef8216fe6b2b6cbaf1f169ff234115d6cf06cfda480b4433f9c2fa3ab400ba",
+  "original_observation": "stable-native-window-evidence-identifies-loaded-fixture-without-error",
+  "original_load_result": "accepted",
+  "candidate_observation": "load-and-clean-exit",
+  "candidate_exit_code": 0,
+  "verdict": "PASS",
+  "comparison_method": "Compare acceptance of the identical SHA-256-bound PSY2 fixture under the pinned original-reference observer and pinned Linux candidate player procedures; require original accepted-load semantics and candidate clean exit.",
+  "rationale": "Both the pinned original Psycle 1.12.0 x86 reference and the pinned r12005 Linux candidate accepted the exact same PSY2 fixture without a recorded parse/load error. This PASS is limited to parsing and load acceptance of this fixture under the stated procedures; it does not assert serialization, state equivalence, playback equivalence, or whole-subsystem parity.",
+  "source_evidence": {
+    "workflow_run_id": 35342946830,
+    "workflow_head_sha": "1f9afb8c8ac675f5bc06b172d3415fbaa136e201",
+    "merged_main_sha": "af23c420dcd6c7c62f4177f82eadca645db004a2",
+    "original_artifact_digest": "sha256:20957d9e23733bc3ce724611734f07f9d90a49450b66152c68ae186c1dd62595",
+    "candidate_artifact_digest": "sha256:b8d206aa16a2b820149e1e83f76c671fb0b584cea59ed8f69941846e183b6fcf"
+  }
+}
