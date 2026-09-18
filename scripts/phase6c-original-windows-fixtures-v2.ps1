@@ -194,7 +194,7 @@ function Write-MachinePluginInventory(
             }
     )
 
-    $registryEntries = New-Object System.Collections.Generic.List[object]
+    $registryEntries = [System.Collections.Generic.List[object]]::new()
     $registryRoot = "HKCU:\Software\Psycle"
     if (Test-Path -LiteralPath $registryRoot) {
         $registryKeys = @((Get-Item -LiteralPath $registryRoot))
@@ -278,7 +278,7 @@ function Write-MachinePluginInventory(
         }
     }
 
-    $pluginRoots = New-Object System.Collections.Generic.List[object]
+    $pluginRoots = [System.Collections.Generic.List[object]]::new()
     $externalPluginDllCount = 0
     foreach ($root in @($pluginRootSet | Sort-Object)) {
         $rootFull = [System.IO.Path]::GetFullPath([string]$root)
@@ -317,8 +317,8 @@ function Write-MachinePluginInventory(
         reference_executable_sha256 = Get-Sha256 $executableFull
         preexisting_psycle_registry = $PreexistingPsycleRegistry
         installed_payload_files = @($installedFiles)
-        psycle_registry = @($registryEntries)
-        plugin_roots = @($pluginRoots)
+        psycle_registry = $registryEntries.ToArray()
+        plugin_roots = $pluginRoots.ToArray()
         external_plugin_dll_count = $externalPluginDllCount
         configuration_baseline = "post-installer HKCU\Software\Psycle snapshot restored before this fixture"
         external_visibility_note = "Fresh runner required no pre-existing HKCU\Software\Psycle configuration. Installed payload, runtime Psycle registry state, configured plugin/machine paths, and conventional VST/Psycle plugin roots are SHA-256 inventoried during this observation."
