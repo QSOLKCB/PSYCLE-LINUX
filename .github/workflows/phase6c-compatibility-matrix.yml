@@ -230,7 +230,7 @@ jobs:
 
           @(
             "runtime=Microsoft Visual C++ 2008 SP1 x86 Redistributable MFC Security Update"
-            "version=$version"
+            "redistributable_version=$version"
             "url=$url"
             "sha256=$actualSha"
             "authenticode_status=$($signature.Status)"
