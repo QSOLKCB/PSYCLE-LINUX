@@ -399,12 +399,62 @@ def validate_pair(
         die(f"original-{name}.load_result is invalid: {result!r}")
 
     error_marker = original.get("error_marker")
+    application_error_marker = original.get("application_error_marker")
+    error_marker_scope = original.get("error_marker_scope")
     marker = original.get("load_evidence_marker")
     stable_polls = original.get("stable_marker_polls")
     diagnostics = original.get("ui_automation_diagnostics")
     exit_code = original.get("exit_code_before_termination")
     running_before_termination = original.get("process_running_before_termination")
     termination = original.get("termination")
+    if error_marker is not None and (
+        not isinstance(error_marker, str) or not error_marker.strip()
+    ):
+        die(f"original-{name}.error_marker must be null or a non-empty string")
+    if application_error_marker is not None and (
+        not isinstance(application_error_marker, str)
+        or not application_error_marker.strip()
+    ):
+        die(
+            f"original-{name}.application_error_marker must be null "
+            "or a non-empty string"
+        )
+    if error_marker_scope not in {
+        "none",
+        "fixture-load",
+        "application-unassociated",
+    }:
+        die(f"original-{name}.error_marker_scope is invalid: {error_marker_scope!r}")
+
+    if error_marker_scope == "fixture-load":
+        if error_marker is None or application_error_marker is None:
+            die(
+                f"original-{name} fixture-load error scope requires both "
+                "fixture and application error evidence"
+            )
+        if result != "rejected":
+            die(
+                f"original-{name} fixture-load error scope must classify "
+                "the observation as rejected"
+            )
+    elif error_marker_scope == "application-unassociated":
+        if error_marker is not None or application_error_marker is None:
+            die(
+                f"original-{name} application-unassociated error scope must "
+                "contain only application-level error evidence"
+            )
+        if result != "inconclusive":
+            die(
+                f"original-{name} unassociated application errors must force "
+                "an inconclusive result"
+            )
+    else:
+        if error_marker is not None or application_error_marker is not None:
+            die(
+                f"original-{name} error_marker_scope=none conflicts with "
+                "recorded application error evidence"
+            )
+
     if not isinstance(diagnostics, list) or any(not isinstance(x, str) for x in diagnostics):
         die(f"original-{name}.ui_automation_diagnostics must be a string array")
     if not isinstance(stable_polls, int) or stable_polls < 0:
@@ -419,8 +469,10 @@ def validate_pair(
     if result == "accepted":
         if not isinstance(marker, str) or not marker.strip():
             die(f"original-{name} accepted result lacks a concrete load evidence marker")
-        if error_marker not in (None, ""):
+        if error_marker is not None or application_error_marker is not None:
             die(f"original-{name} accepted result also contains application error evidence")
+        if error_marker_scope != "none":
+            die(f"original-{name} accepted result has a non-empty error scope")
         if diagnostics:
             die(f"original-{name} accepted result contains UI Automation harness diagnostics")
         if stable_polls < 4:
@@ -435,11 +487,22 @@ def validate_pair(
             die(f"original-{name} accepted result lacks successful harness-controlled termination")
     elif result == "rejected":
         if not isinstance(error_marker, str) or not error_marker.strip():
-            die(f"original-{name} rejected result lacks concrete application error evidence")
+            die(f"original-{name} rejected result lacks concrete fixture-load error evidence")
+        if not isinstance(application_error_marker, str) or not application_error_marker.strip():
+            die(f"original-{name} rejected result lacks application error evidence")
+        if error_marker_scope != "fixture-load":
+            die(f"original-{name} rejected result is not scoped to a fixture-load failure")
         if error_marker.startswith("UI_") or "Automation" in error_marker:
             die(f"original-{name} rejection incorrectly uses harness diagnostics as application evidence")
     else:
-        pass
+        if (
+            application_error_marker is not None
+            and error_marker_scope != "application-unassociated"
+        ):
+            die(
+                f"original-{name} inconclusive application error evidence "
+                "is not scoped as application-unassociated"
+            )
 
     if diagnostics and result != "inconclusive":
         die(f"original-{name} UI Automation diagnostics must force an inconclusive result")
