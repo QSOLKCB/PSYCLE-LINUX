@@ -535,6 +535,7 @@ def validate_pair(
     marker = original.get("load_evidence_marker")
     stable_polls = original.get("stable_marker_polls")
     diagnostics = original.get("ui_automation_diagnostics")
+    startup_bootstrap = original.get("startup_bootstrap")
     runtime_diagnostics = original.get("runtime_identity_diagnostics")
     exit_code = original.get("exit_code_before_termination")
     running_before_termination = original.get("process_running_before_termination")
@@ -589,6 +590,78 @@ def validate_pair(
 
     if not isinstance(diagnostics, list) or any(not isinstance(x, str) for x in diagnostics):
         die(f"original-{name}.ui_automation_diagnostics must be a string array")
+
+    if not isinstance(startup_bootstrap, dict):
+        die(f"original-{name}.startup_bootstrap must be an object")
+    for field in (
+        "settings_dialog_seen",
+        "signature_verified",
+        "attempted",
+        "dismissed",
+    ):
+        if not isinstance(startup_bootstrap.get(field), bool):
+            die(f"original-{name}.startup_bootstrap.{field} must be boolean")
+    action = startup_bootstrap.get("action")
+    if action is not None and action != "invoke-ok":
+        die(f"original-{name}.startup_bootstrap.action is invalid")
+    outcome = startup_bootstrap.get("outcome")
+    allowed_bootstrap_outcomes = {
+        "not-seen",
+        "dismissed",
+        "desktop-root-missing",
+        "signature-read-failed",
+        "signature-mismatch",
+        "invoke-failed",
+        "close-timeout",
+        "automation-failed",
+    }
+    if outcome not in allowed_bootstrap_outcomes:
+        die(f"original-{name}.startup_bootstrap.outcome is invalid: {outcome!r}")
+    bootstrap_diagnostics = startup_bootstrap.get("diagnostics")
+    if not isinstance(bootstrap_diagnostics, list) or any(
+        not isinstance(x, str) or not x.strip() for x in bootstrap_diagnostics
+    ):
+        die(f"original-{name}.startup_bootstrap.diagnostics must be a string array")
+    if any(value not in diagnostics for value in bootstrap_diagnostics):
+        die(
+            f"original-{name} startup bootstrap diagnostics are not retained "
+            "in the sticky UI Automation diagnostics"
+        )
+
+    bootstrap_seen = startup_bootstrap["settings_dialog_seen"]
+    bootstrap_signature = startup_bootstrap["signature_verified"]
+    bootstrap_attempted = startup_bootstrap["attempted"]
+    bootstrap_dismissed = startup_bootstrap["dismissed"]
+
+    if outcome == "not-seen":
+        if (
+            bootstrap_seen
+            or bootstrap_signature
+            or bootstrap_attempted
+            or bootstrap_dismissed
+            or action is not None
+            or bootstrap_diagnostics
+        ):
+            die(f"original-{name} startup bootstrap not-seen state is inconsistent")
+    elif outcome == "dismissed":
+        if not (
+            bootstrap_seen
+            and bootstrap_signature
+            and bootstrap_attempted
+            and bootstrap_dismissed
+            and action == "invoke-ok"
+        ):
+            die(f"original-{name} dismissed startup bootstrap state is inconsistent")
+        if bootstrap_diagnostics:
+            die(f"original-{name} dismissed startup bootstrap contains diagnostics")
+    else:
+        if bootstrap_dismissed:
+            die(f"original-{name} failed startup bootstrap cannot be marked dismissed")
+        if not bootstrap_diagnostics:
+            die(f"original-{name} failed startup bootstrap lacks a harness diagnostic")
+        if result != "inconclusive":
+            die(f"original-{name} failed startup bootstrap must force an inconclusive result")
+
     if not isinstance(runtime_diagnostics, list) or any(
         not isinstance(x, str) or not x.strip() for x in runtime_diagnostics
     ):
@@ -616,6 +689,8 @@ def validate_pair(
             die(f"original-{name} accepted result has a non-empty error scope")
         if diagnostics:
             die(f"original-{name} accepted result contains UI Automation harness diagnostics")
+        if bootstrap_seen and not bootstrap_dismissed:
+            die(f"original-{name} accepted result did not complete the first-run settings bootstrap")
         if runtime_diagnostics or not runtime_identity_valid:
             die(f"original-{name} accepted result lacks verified loaded VC90 runtime identity")
         if stable_polls < 4:
