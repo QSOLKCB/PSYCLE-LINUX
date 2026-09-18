@@ -691,6 +691,8 @@ def validate_pair(
         "signature-read-failed",
         "signature-mismatch",
         "invoke-failed",
+        "legacy-action-failed",
+        "close-verification-failed",
         "close-timeout",
         "automation-failed",
     }
