@@ -14,7 +14,7 @@ $ReferenceUrl = "https://sourceforge.net/projects/psycle/files/psycle/1.12/$Refe
 $ExpectedInstallerSha256 = "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 $ExpectedInstallerSize = 9322919
 $RequiredVc90RuntimeFamily = "9.0"
-$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 BM_CLICK on the uniquely verified native OK child only if the old MFC button ignores a successful UIA InvokePattern, and only after enumerating native top-level windows for the same Psycle process, requiring exactly one DirectSound Output driver #32770 dialog, correlating that unique native dialog to the unique process-owned UI Automation dialog by exact PID/title and a fresh verification of the same error-message/single-OK signature, then requiring exactly one direct child with the same Psycle PID, exact OK text retrieved through timeout-bounded WM_GETTEXT, Button class and IDOK control ID, attaching the harness thread input queue to the verified Psycle dialog thread only for the native action, verifying that exact dialog is active, and sending timeout-bounded BM_CLICK to the verified child; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
+$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 BM_CLICK on the uniquely verified native OK child only if the old MFC button ignores a successful UIA InvokePattern, and only after enumerating native top-level windows for the same Psycle process, requiring exactly one DirectSound Output driver #32770 dialog, correlating that unique native dialog to the unique process-owned UI Automation dialog by exact PID/title and a fresh verification of the same error-message/single-OK signature, then correlating exactly one native Button descendant under that verified dialog to the unique UI Automation OK button by same Psycle PID, exact OK text retrieved through timeout-bounded WM_GETTEXT, live visible/enabled state, and strongly overlapping screen bounds, attaching the harness thread input queue to the verified Psycle dialog thread only for the native action, verifying that exact dialog is active, and sending timeout-bounded BM_CLICK to the correlated descendant; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
 
 function Fail([string]$Message) {
     throw "phase6c-original-windows-fixtures: $Message"
@@ -505,9 +505,12 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
                 # button action. The fallback therefore targets only the
                 # already-verified process-owned DirectSound dialog, resolves
                 # that native modal by PID + exact title + #32770 class, and
-                # independently resolves exactly one direct native child with
-                # the same Psycle PID, exact OK text, Button class and IDOK.
-                # BM_CLICK is sent only to that verified child HWND.
+                # independently resolves exactly one native Button descendant
+                # under that dialog whose PID/text and screen bounds correlate
+                # to the unique already-verified UIA OK button. This avoids
+                # assuming a direct-child/IDOK topology that the pinned build
+                # does not expose on the hosted runner. BM_CLICK is sent only
+                # to that correlated descendant HWND.
                 $result.action = "invoke-ok-win32-bm-click"
                 try {
                     $Process.Refresh()
@@ -554,7 +557,7 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
                         [System.Windows.Automation.Condition]::TrueCondition
                     )
                     $correlatedMessageSeen = $false
-                    $correlatedOkCount = 0
+                    $correlatedOkButtons = [System.Collections.Generic.List[object]]::new()
                     foreach ($correlatedNode in $correlatedNodes) {
                         $correlatedName = [string]$correlatedNode.Current.Name
                         if ($correlatedName -ceq "Failed to create DirectSound object") {
@@ -563,30 +566,44 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
                         if ($correlatedName -ceq "OK" -and
                             $correlatedNode.Current.ControlType -eq
                                 [System.Windows.Automation.ControlType]::Button) {
-                            $correlatedOkCount += 1
+                            $correlatedOkButtons.Add($correlatedNode)
                         }
                     }
-                    if (-not $correlatedMessageSeen -or $correlatedOkCount -ne 1) {
+                    if (-not $correlatedMessageSeen -or $correlatedOkButtons.Count -ne 1) {
                         throw (
                             "DirectSound bootstrap native/UIA correlation signature changed: " +
-                            "message_seen=$correlatedMessageSeen ok_buttons=$correlatedOkCount"
+                            "message_seen=$correlatedMessageSeen ok_buttons=$($correlatedOkButtons.Count)"
                         )
                     }
 
+                    $verifiedOkBounds = $correlatedOkButtons[0].Current.BoundingRectangle
+                    if ($verifiedOkBounds.IsEmpty -or
+                        $verifiedOkBounds.Width -le 0 -or
+                        $verifiedOkBounds.Height -le 0) {
+                        throw "DirectSound bootstrap verified UIA OK button lacks usable screen bounds"
+                    }
+                    $verifiedOkRight = $verifiedOkBounds.X + $verifiedOkBounds.Width
+                    $verifiedOkBottom = $verifiedOkBounds.Y + $verifiedOkBounds.Height
+
                     $nativeOkButtons = @(
-                        [Phase6cNativeButton]::FindDirectChildButtons(
+                        [Phase6cNativeButton]::FindCorrelatedDescendantButtons(
                             $dialogHandle,
                             [uint32]$Process.Id,
                             "OK",
                             "Button",
-                            1,
+                            [int][Math]::Round($verifiedOkBounds.X),
+                            [int][Math]::Round($verifiedOkBounds.Y),
+                            [int][Math]::Round($verifiedOkRight),
+                            [int][Math]::Round($verifiedOkBottom),
+                            [double]0.90,
                             [uint32]500
                         )
                     )
                     if ($nativeOkButtons.Count -ne 1) {
                         throw (
-                            "DirectSound bootstrap expected exactly one native direct child " +
-                            "OK Button with IDOK: count=$($nativeOkButtons.Count)"
+                            "DirectSound bootstrap expected exactly one native descendant " +
+                            "OK Button correlated to the verified UIA control: " +
+                            "count=$($nativeOkButtons.Count)"
                         )
                     }
                     $buttonHandle = [IntPtr]$nativeOkButtons[0]
@@ -606,7 +623,7 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
                         $nativeActionStage = switch ($nativeActionStatus) {
                             1 { "dialog-window-invalid" }
                             2 { "button-window-invalid" }
-                            3 { "button-parent-mismatch" }
+                            3 { "button-descendant-mismatch" }
                             4 { "native-thread-or-process-identity-mismatch" }
                             5 { "attach-thread-input-failed" }
                             6 { "dialog-activation-failed" }
@@ -1090,8 +1107,17 @@ public static class Phase6cNativeButton
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr GetParent(IntPtr hWnd);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
     [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetDlgCtrlID(IntPtr hWnd);
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool IsWindowEnabled(IntPtr hWnd);
@@ -1193,29 +1219,99 @@ public static class Phase6cNativeButton
         out IntPtr result
     );
 
-    public static IntPtr[] FindDirectChildButtons(
+    private static bool IsDescendantOf(IntPtr ancestor, IntPtr child)
+    {
+        IntPtr current = child;
+        for (int depth = 0; depth < 64; ++depth)
+        {
+            current = GetParent(current);
+            if (current == IntPtr.Zero)
+            {
+                return false;
+            }
+            if (current == ancestor)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool StronglyOverlaps(
+        RECT nativeRect,
+        int expectedLeft,
+        int expectedTop,
+        int expectedRight,
+        int expectedBottom,
+        double minimumCoverage
+    )
+    {
+        int nativeWidth = nativeRect.Right - nativeRect.Left;
+        int nativeHeight = nativeRect.Bottom - nativeRect.Top;
+        int expectedWidth = expectedRight - expectedLeft;
+        int expectedHeight = expectedBottom - expectedTop;
+        if (
+            nativeWidth <= 0 ||
+            nativeHeight <= 0 ||
+            expectedWidth <= 0 ||
+            expectedHeight <= 0
+        )
+        {
+            return false;
+        }
+
+        int intersectionLeft = Math.Max(nativeRect.Left, expectedLeft);
+        int intersectionTop = Math.Max(nativeRect.Top, expectedTop);
+        int intersectionRight = Math.Min(nativeRect.Right, expectedRight);
+        int intersectionBottom = Math.Min(nativeRect.Bottom, expectedBottom);
+        int intersectionWidth = intersectionRight - intersectionLeft;
+        int intersectionHeight = intersectionBottom - intersectionTop;
+        if (intersectionWidth <= 0 || intersectionHeight <= 0)
+        {
+            return false;
+        }
+
+        double intersectionArea =
+            (double)intersectionWidth * (double)intersectionHeight;
+        double nativeArea = (double)nativeWidth * (double)nativeHeight;
+        double expectedArea = (double)expectedWidth * (double)expectedHeight;
+        return (
+            intersectionArea / nativeArea >= minimumCoverage &&
+            intersectionArea / expectedArea >= minimumCoverage
+        );
+    }
+
+    public static IntPtr[] FindCorrelatedDescendantButtons(
         IntPtr dialogHandle,
         uint processId,
         string expectedTitle,
         string expectedClass,
-        int expectedControlId,
+        int expectedLeft,
+        int expectedTop,
+        int expectedRight,
+        int expectedBottom,
+        double minimumCoverage,
         uint textTimeoutMilliseconds
     )
     {
+        if (minimumCoverage <= 0.0 || minimumCoverage > 1.0)
+        {
+            throw new ArgumentOutOfRangeException("minimumCoverage");
+        }
+
         var matches = new List<IntPtr>();
         string textQueryFailure = null;
         bool enumResult = EnumChildWindows(
             dialogHandle,
             delegate (IntPtr hWnd, IntPtr lParam)
             {
-                if (GetParent(hWnd) != dialogHandle)
-                {
-                    return true;
-                }
-
                 uint ownerProcessId;
                 GetWindowThreadProcessId(hWnd, out ownerProcessId);
                 if (ownerProcessId != processId)
+                {
+                    return true;
+                }
+                if (!IsDescendantOf(dialogHandle, hWnd))
                 {
                     return true;
                 }
@@ -1230,18 +1326,30 @@ public static class Phase6cNativeButton
                 {
                     return true;
                 }
-
-                if (GetDlgCtrlID(hWnd) != expectedControlId)
-                {
-                    return true;
-                }
                 if (!IsWindow(hWnd) || !IsWindowEnabled(hWnd) || !IsWindowVisible(hWnd))
                 {
                     return true;
                 }
 
+                RECT nativeRect;
+                if (!GetWindowRect(hWnd, out nativeRect))
+                {
+                    return true;
+                }
+                if (!StronglyOverlaps(
+                    nativeRect,
+                    expectedLeft,
+                    expectedTop,
+                    expectedRight,
+                    expectedBottom,
+                    minimumCoverage
+                ))
+                {
+                    return true;
+                }
+
                 // GetWindowText cannot retrieve another process' child-control
-                // label. Query only the already-filtered Button/IDOK candidate
+                // label. Query only the already-correlated Button candidate
                 // with a bounded system message instead.
                 var title = new StringBuilder(256);
                 IntPtr textResult;
@@ -1258,7 +1366,7 @@ public static class Phase6cNativeButton
                 {
                     int lastError = Marshal.GetLastWin32Error();
                     textQueryFailure =
-                        "WM_GETTEXT failed or timed out for candidate child: win32_error=" +
+                        "WM_GETTEXT failed or timed out for correlated button: win32_error=" +
                         lastError;
                     return false;
                 }
@@ -1285,7 +1393,7 @@ public static class Phase6cNativeButton
         {
             int lastError = Marshal.GetLastWin32Error();
             throw new InvalidOperationException(
-                "EnumChildWindows failed while resolving native OK control: win32_error=" +
+                "EnumChildWindows failed while correlating native OK control: win32_error=" +
                 lastError
             );
         }
@@ -1309,7 +1417,7 @@ public static class Phase6cNativeButton
         {
             return 2;
         }
-        if (GetParent(buttonHandle) != dialogHandle)
+        if (!IsDescendantOf(dialogHandle, buttonHandle))
         {
             return 3;
         }
@@ -1326,7 +1434,7 @@ public static class Phase6cNativeButton
         );
         if (
             dialogThreadId == 0 ||
-            buttonThreadId != dialogThreadId ||
+            buttonThreadId == 0 ||
             dialogProcessId != processId ||
             buttonProcessId != processId
         )
@@ -2021,7 +2129,7 @@ try {
 - Rejection rule: only an error-bearing UI text item that is explicitly associated with this fixture and load/open/read/parse/project semantics can classify the fixture as rejected; unrelated Psycle application errors force an inconclusive result instead.
 - Acceptance rule: the observer continues through the full polling window, performs a final complete Psycle-owned UI scan after runtime inventory hashing, and accepts only with a stable fixture marker, no application error, no UI Automation diagnostic, and the reference process still running when harness termination begins.
 - First-run bootstrap: only a Psycle-owned top-level window exactly named Psycle Settings with the expected OK, Cancel, Defaults and System controls may be automated, and only its OK button is invoked. Bootstrap ambiguity/failure is a sticky UI Automation diagnostic and therefore inconclusive.
-- Headless-runner audio bootstrap: only a Psycle-owned top-level window exactly named DirectSound Output driver with the exact Failed to create DirectSound object message and exactly one OK button may be dismissed. UIA InvokePattern is tried first; if the verified old MFC dialog remains open, a timeout-bounded Win32 BM_CLICK fallback is permitted only after exactly one native top-level #32770 dialog for the same Psycle PID and exact title is found and correlated to the unique process-owned UI Automation dialog by exact PID/title plus a fresh verification of the same error-message/single-OK signature from the HWND-bound element, then exactly one direct native child is required with the same Psycle PID, exact OK text retrieved through timeout-bounded WM_GETTEXT, Button class and IDOK control ID; for BM_CLICK the harness temporarily attaches its input queue to the verified dialog thread, activates and verifies that exact dialog, sends the timeout-bounded click to the verified child, and detaches again. The action is recorded separately as environment bootstrap evidence and never treated as fixture rejection; ambiguity/failure is sticky and inconclusive.
+- Headless-runner audio bootstrap: only a Psycle-owned top-level window exactly named DirectSound Output driver with the exact Failed to create DirectSound object message and exactly one OK button may be dismissed. UIA InvokePattern is tried first; if the verified old MFC dialog remains open, a timeout-bounded Win32 BM_CLICK fallback is permitted only after exactly one native top-level #32770 dialog for the same Psycle PID and exact title is found and correlated to the unique process-owned UI Automation dialog by exact PID/title plus a fresh verification of the same error-message/single-OK signature from the HWND-bound element, then exactly one native Button descendant under that verified dialog is correlated to the unique UI Automation OK button by same Psycle PID, exact OK text retrieved through timeout-bounded WM_GETTEXT, live visible/enabled state, and strongly overlapping screen bounds; for BM_CLICK the harness temporarily attaches its input queue to the verified dialog thread, activates and verifies that exact dialog, sends the timeout-bounded click to the correlated descendant, and detaches again. The action is recorded separately as environment bootstrap evidence and never treated as fixture rejection; ambiguity/failure is sticky and inconclusive.
 - UI Automation failures and loaded-runtime identity failures are sticky harness diagnostics across the full observation and yield an inconclusive observation, never a rejection or later acceptance result.
 - Loaded VC90 runtime identity: each fixture records a hash-bound inventory of the VC90 CRT/MFC/ATL modules actually loaded by the live Psycle process, including absolute module path, size, SHA-256, and file/product version. Windows SxS servicing revisions are recorded as observed and may differ between CRT/MFC components; missing identity or a module outside the VC90 9.0 family prevents behavioural classification.
 - Configuration isolation: the post-install HKCU\Software\Psycle baseline is restored before each fixture so PSY2 cannot influence PSY3.
