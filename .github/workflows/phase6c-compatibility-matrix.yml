@@ -131,9 +131,24 @@ jobs:
           set -euo pipefail
           DEST='psycle-cpp-r12005-sanitized/diversalis'
           test ! -e "$DEST"
-          svn export --quiet --force -r 12005 \
-            'https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005' \
-            "$DEST"
+          SVN_URL='https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005'
+          exported=false
+          for attempt in 1 2 3 4; do
+            rm -rf -- "$DEST"
+            if svn export --quiet --force -r 12005 "$SVN_URL" "$DEST"; then
+              exported=true
+              break
+            fi
+            rm -rf -- "$DEST"
+            if [[ "$attempt" -lt 4 ]]; then
+              echo "diversalis export transient failure; retry $attempt/3" >&2
+              sleep "$((attempt * 2))"
+            fi
+          done
+          [[ "$exported" == true ]] || {
+            echo "diversalis export failed after 4 attempts" >&2
+            exit 2
+          }
           manifest="$(mktemp)"
           (
             cd "$DEST"
