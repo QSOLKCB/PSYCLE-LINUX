@@ -158,9 +158,12 @@ def validate_machine_plugin_inventory(
     if not isinstance(mapping, dict):
         die(f"original-{name}.environment.machine_plugin_inventory must be an object")
 
+    inventory_ref = mapping.get("path")
+    if inventory_ref != f"machine-plugin-inventory-{name}.json":
+        die(f"original-{name} is not bound to its fixture-specific machine/plugin inventory")
     inventory_path = resolve_artifact_path(
         original_root,
-        mapping.get("path"),
+        inventory_ref,
         f"original-{name}.environment.machine_plugin_inventory.path",
     )
     expected_hash = require_hash(
@@ -299,6 +302,10 @@ def validate_machine_plugin_inventory(
             f"original-{name} machine/plugin inventory external DLL count mismatch: "
             f"claimed={claimed_external_count} actual={external_count}"
         )
+
+    baseline = inventory.get("configuration_baseline")
+    if baseline != "post-installer HKCU\\Software\\Psycle snapshot restored before this fixture":
+        die(f"original-{name} machine/plugin inventory lacks the isolated registry baseline binding")
 
     note = inventory.get("external_visibility_note")
     if not isinstance(note, str) or not note.strip():
