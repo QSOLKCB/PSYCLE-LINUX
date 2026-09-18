@@ -291,7 +291,7 @@ Audit at minimum:
 
 - [ ] PSY2/PSY3 parsing and serialization against the pinned original reference;
   - [x] PSY2 parse/load acceptance for the exact project-authored PSY2SONG fixture is classified `PASS` against pinned Psycle 1.12.0 x86.
-  - [ ] PSY3 parsing remains `UNKNOWN` because the original-reference observation has not yet produced a stable fixture-load marker.
+  - [ ] PSY3 parsing remains `UNKNOWN`; the original-reference observer now signature-verifies and dismisses the exact Psycle 1.12.0 `Load Warning` shown for the project-authored PSY3 fixture, so the next evidence run can inspect the post-warning load state for a stable fixture marker or concrete load error.
   - [ ] Serialization / round-trip remains a separate `UNKNOWN` contract and is not implied by the PSY2 parse PASS.
 - [ ] sequence/pattern timing;
 - [ ] BPM/LPB/tick behaviour;
@@ -309,7 +309,7 @@ Audit at minimum:
 
 Do **not** assume C-Psycle's event sequencer is authoritative when it differs from original Psycle. The point of this phase is to discover and document differences.
 
-**Phase 6C status: active.** The matrix, evidence schema and candidate lane are established, and the first versioned comparison now classifies PSY2 parsing as a scoped `PASS`; 19 contracts remain `UNKNOWN`. PSY3 and serialization remain open and no `DIFFERENT` / `MISSING` result yet justifies Phase 7 implementation work.
+**Phase 6C status: active.** The matrix, evidence schema and candidate lane are established, and the first versioned comparison now classifies PSY2 parsing as a scoped `PASS`; 19 contracts remain `UNKNOWN`. The PSY3 original-reference lane now contains a signature-verified fixture-specific bootstrap for Psycle 1.12.0's exact `Load Warning`, but PSY3 remains `UNKNOWN` until a fresh post-warning observation yields conclusive evidence. Serialization remains open and no `DIFFERENT` / `MISSING` result yet justifies Phase 7 implementation work.
 
 ### 6D — parity report
 
