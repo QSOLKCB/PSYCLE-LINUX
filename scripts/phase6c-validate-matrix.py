@@ -155,6 +155,24 @@ def validate_classification_receipt(
             die(f"{context}.observation receipt has the wrong reference installer SHA-256")
         if receipt.get("reference_installer_size_bytes") != EXPECTED_ORIGINAL_SIZE:
             die(f"{context}.observation receipt has the wrong reference installer size")
+
+        source_evidence = receipt.get("source_evidence")
+        if not isinstance(source_evidence, dict):
+            die(f"{context}.observation receipt lacks source_evidence")
+        require_sha256(
+            source_evidence.get("artifact_receipt_sha256"),
+            f"{context}.observation receipt source artifact_receipt_sha256",
+        )
+        if source_evidence.get("projection_type") != (
+            "field-preserving-classification-projection"
+        ):
+            die(f"{context}.observation receipt has unsupported projection type")
+        projection_note = source_evidence.get("projection_note")
+        if not isinstance(projection_note, str) or not projection_note.strip():
+            die(f"{context}.observation receipt lacks projection provenance")
+        require_concrete_evidence_value(
+            projection_note, f"{context}.observation receipt projection_note"
+        )
     elif role == "candidate":
         if receipt.get("snapshot") != EXPECTED_CANDIDATE_BASELINE:
             die(f"{context}.observation receipt is bound to the wrong candidate snapshot")
@@ -196,6 +214,10 @@ def validate_parse_pass_semantics(
         die(f"{row_id} PASS original receipt is not an accepted load")
     if original_receipt.get("error_marker_scope") != "none":
         die(f"{row_id} PASS original receipt contains scoped application errors")
+    if original_receipt.get("error_marker") is not None:
+        die(f"{row_id} PASS original receipt contains an error marker")
+    if original_receipt.get("application_error_marker") is not None:
+        die(f"{row_id} PASS original receipt contains an application error marker")
     if original_receipt.get("ui_automation_diagnostics") != []:
         die(f"{row_id} PASS original receipt contains UI Automation diagnostics")
     if original_receipt.get("runtime_identity_diagnostics") != []:
@@ -319,6 +341,19 @@ def validate_comparison_receipt(
         die(f"{row_id}.comparison receipt has the wrong original installer size")
     if comparison.get("candidate_snapshot") != EXPECTED_CANDIDATE_BASELINE:
         die(f"{row_id}.comparison receipt is bound to the wrong candidate snapshot")
+
+    original_source_evidence = original_receipt.get("source_evidence")
+    if not isinstance(original_source_evidence, dict):
+        die(f"{row_id} original receipt lacks source_evidence")
+    original_source_receipt_sha256 = require_sha256(
+        original_source_evidence.get("artifact_receipt_sha256"),
+        f"{row_id} original source receipt SHA-256",
+    )
+    if comparison.get("original_source_receipt_sha256") != original_source_receipt_sha256:
+        die(
+            f"{row_id}.comparison receipt does not bind the original source "
+            "receipt SHA-256"
+        )
 
     if original_fixture_sha256 != candidate_fixture_sha256:
         die(f"{row_id} original/candidate receipts do not identify the same fixture")
