@@ -14,7 +14,7 @@ $ReferenceUrl = "https://sourceforge.net/projects/psycle/files/psycle/1.12/$Refe
 $ExpectedInstallerSha256 = "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 $ExpectedInstallerSize = 9322919
 $RequiredVc90RuntimeFamily = "9.0"
-$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 BM_CLICK on the uniquely verified native OK child only if the old MFC button ignores a successful UIA InvokePattern, and only after enumerating native top-level windows for the same Psycle process, requiring exactly one DirectSound Output driver #32770 dialog, correlating that unique native dialog to the unique process-owned UI Automation dialog by exact PID/title and a fresh verification of the same error-message/single-OK signature, then correlating exactly one native Button descendant under that verified dialog to the unique UI Automation OK button by same Psycle PID, exact OK text retrieved through timeout-bounded WM_GETTEXT, live visible/enabled state, and strongly overlapping screen bounds, attaching the harness thread input queue to the verified Psycle dialog thread only for the native action, verifying that exact dialog is active, and sending timeout-bounded BM_CLICK to the correlated descendant; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
+$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 BM_CLICK on the uniquely verified native OK child only if the old MFC button ignores a successful UIA InvokePattern, and only after enumerating native top-level windows for the same Psycle process, requiring exactly one DirectSound Output driver #32770 dialog, correlating that unique native dialog to the unique process-owned UI Automation dialog by exact PID/title and a fresh verification of the same error-message/single-OK signature, then correlating exactly one native Button descendant under that verified dialog to the unique UI Automation OK button by same Psycle PID, exact OK text retrieved through timeout-bounded WM_GETTEXT, live visible/enabled state, and strongly overlapping screen bounds, attaching the harness thread input queue to the verified Psycle dialog thread only for the native action, verifying that exact dialog is active, and sending timeout-bounded BM_CLICK to the correlated descendant; when and only when the fixture specification requires the exact Psycle Load Warning dialog with the exact message This file is from a newer version of Psycle! This process will try to load it anyway. and exactly one OK button, invoke that OK button through UI Automation, verify the modal closes, and record the fixture-specific bootstrap outcome; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
 
 function Fail([string]$Message) {
     throw "phase6c-original-windows-fixtures: $Message"
@@ -676,6 +676,214 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
     catch {
         $diagnostics.Add(
             "DirectSound bootstrap UI Automation failed: $($_.Exception.Message)"
+        )
+        $result.outcome = "automation-failed"
+    }
+
+    if ($result.outcome -ceq "not-seen" -and $diagnostics.Count -gt 0) {
+        $result.outcome = "automation-failed"
+    }
+    $result.diagnostics = @($diagnostics | Select-Object -Unique)
+    return $result
+}
+
+function Invoke-ExpectedLoadWarning(
+    [System.Diagnostics.Process]$Process,
+    [bool]$Required,
+    [string]$ExpectedMessage
+) {
+    $diagnostics = [System.Collections.Generic.List[string]]::new()
+    $result = [ordered]@{
+        required = $Required
+        expected_title = if ($Required) { "Load Warning" } else { $null }
+        expected_message = if ($Required) { $ExpectedMessage } else { $null }
+        dialog_seen = $false
+        signature_verified = $false
+        attempted = $false
+        action = $null
+        dismissed = $false
+        outcome = if ($Required) { "not-seen" } else { "not-required" }
+        diagnostics = @()
+    }
+
+    if (-not $Required) {
+        return $result
+    }
+
+    try {
+        $Process.Refresh()
+        if ($Process.HasExited) {
+            return $result
+        }
+
+        $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+        if ($null -eq $desktop) {
+            $diagnostics.Add("load-warning bootstrap UI Automation returned no desktop root element")
+            $result.outcome = "desktop-root-missing"
+            $result.diagnostics = $diagnostics.ToArray()
+            return $result
+        }
+
+        $processCondition = [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+            $Process.Id
+        )
+        $windows = $desktop.FindAll(
+            [System.Windows.Automation.TreeScope]::Children,
+            $processCondition
+        )
+
+        $matching = [System.Collections.Generic.List[object]]::new()
+        foreach ($candidateWindow in $windows) {
+            try {
+                if ([string]$candidateWindow.Current.Name -ceq "Load Warning") {
+                    $matching.Add($candidateWindow)
+                }
+            }
+            catch {
+                $diagnostics.Add(
+                    "load-warning bootstrap Psycle top-level window read failed: $($_.Exception.Message)"
+                )
+            }
+        }
+
+        if ($matching.Count -gt 1) {
+            $result.dialog_seen = $true
+            $diagnostics.Add(
+                "load-warning bootstrap signature mismatch: multiple process-owned Load Warning dialogs=$($matching.Count)"
+            )
+            $result.outcome = "signature-mismatch"
+            $result.diagnostics = @($diagnostics | Select-Object -Unique)
+            return $result
+        }
+
+        foreach ($window in $matching) {
+            $result.dialog_seen = $true
+            $nodes = $null
+            try {
+                $nodes = $window.FindAll(
+                    [System.Windows.Automation.TreeScope]::Descendants,
+                    [System.Windows.Automation.Condition]::TrueCondition
+                )
+            }
+            catch {
+                $diagnostics.Add(
+                    "load-warning bootstrap descendant enumeration failed: $($_.Exception.Message)"
+                )
+                $result.outcome = "signature-read-failed"
+                break
+            }
+
+            $messageSeen = $false
+            $okButtons = [System.Collections.Generic.List[object]]::new()
+            foreach ($node in $nodes) {
+                try {
+                    $name = [string]$node.Current.Name
+                    if ($name -ceq $ExpectedMessage) {
+                        $messageSeen = $true
+                    }
+                    if ($name -ceq "OK" -and
+                        $node.Current.ControlType -eq
+                            [System.Windows.Automation.ControlType]::Button) {
+                        $okButtons.Add($node)
+                    }
+                }
+                catch {
+                    $diagnostics.Add(
+                        "load-warning bootstrap UI element read failed: $($_.Exception.Message)"
+                    )
+                }
+            }
+
+            if (-not $messageSeen -or $okButtons.Count -ne 1) {
+                $diagnostics.Add(
+                    "load-warning bootstrap signature mismatch: " +
+                    "message_seen=$messageSeen ok_buttons=$($okButtons.Count)"
+                )
+                $result.outcome = "signature-mismatch"
+                break
+            }
+
+            $result.signature_verified = $true
+            $result.attempted = $true
+            $result.action = "invoke-ok"
+            try {
+                $invokePattern = [System.Windows.Automation.InvokePattern](
+                    $okButtons[0].GetCurrentPattern(
+                        [System.Windows.Automation.InvokePattern]::Pattern
+                    )
+                )
+                $invokePattern.Invoke()
+            }
+            catch {
+                $diagnostics.Add(
+                    "load-warning bootstrap OK invoke failed: $($_.Exception.Message)"
+                )
+                $result.outcome = "invoke-failed"
+                break
+            }
+
+            $closed = $false
+            try {
+                for ($attempt = 0; $attempt -lt 20; $attempt += 1) {
+                    Start-Sleep -Milliseconds 100
+                    $Process.Refresh()
+                    if ($Process.HasExited) {
+                        throw "load-warning bootstrap process exited during close verification"
+                    }
+
+                    $remaining = $desktop.FindAll(
+                        [System.Windows.Automation.TreeScope]::Children,
+                        $processCondition
+                    )
+                    $warningStillPresent = $false
+                    foreach ($remainingWindow in $remaining) {
+                        try {
+                            if ([string]$remainingWindow.Current.Name -ceq "Load Warning") {
+                                $warningStillPresent = $true
+                                break
+                            }
+                        }
+                        catch {
+                            throw (
+                                "load-warning bootstrap close verification failed: " +
+                                "$($_.Exception.Message)"
+                            )
+                        }
+                    }
+                    if (-not $warningStillPresent) {
+                        $Process.Refresh()
+                        if ($Process.HasExited) {
+                            throw "load-warning bootstrap process exited during close verification"
+                        }
+                        $closed = $true
+                        break
+                    }
+                }
+            }
+            catch {
+                $diagnostics.Add([string]$_.Exception.Message)
+                $result.outcome = "close-verification-failed"
+            }
+
+            if ($result.outcome -ceq "close-verification-failed") {
+                break
+            }
+            if ($closed) {
+                $result.dismissed = $true
+                $result.outcome = "dismissed"
+            } else {
+                $diagnostics.Add(
+                    "load-warning bootstrap dialog remained open after invoking OK"
+                )
+                $result.outcome = "close-timeout"
+            }
+            break
+        }
+    }
+    catch {
+        $diagnostics.Add(
+            "load-warning bootstrap UI Automation failed: $($_.Exception.Message)"
         )
         $result.outcome = "automation-failed"
     }
@@ -1641,12 +1849,16 @@ try {
             candidate_receipt = "candidate-psy2.json"
             expected_contract = "project-io-psy2-parse"
             expected_song_title = "QSOL PSY2 compatibility fixture"
+            load_warning_required = $false
+            expected_load_warning_message = $null
         },
         [ordered]@{
             name = "psy3"
             candidate_receipt = "candidate-psy3.json"
             expected_contract = "project-io-psy3-parse"
             expected_song_title = "PSYCLE-LINUX Phase 4 synthetic fixture"
+            load_warning_required = $true
+            expected_load_warning_message = "This file is from a newer version of Psycle! This process will try to load it anyway."
         }
     )
 
@@ -1748,6 +1960,23 @@ try {
             outcome = "not-seen"
             diagnostics = @()
         }
+        $loadWarningBootstrapTerminal = -not [bool]$spec.load_warning_required
+        $loadWarningBootstrap = [ordered]@{
+            required = [bool]$spec.load_warning_required
+            expected_title = if ([bool]$spec.load_warning_required) { "Load Warning" } else { $null }
+            expected_message = if ([bool]$spec.load_warning_required) {
+                [string]$spec.expected_load_warning_message
+            } else {
+                $null
+            }
+            dialog_seen = $false
+            signature_verified = $false
+            attempted = $false
+            action = $null
+            dismissed = $false
+            outcome = if ([bool]$spec.load_warning_required) { "not-seen" } else { "not-required" }
+            diagnostics = @()
+        }
 
         while ((Get-Date) -lt $deadline) {
             Start-Sleep -Milliseconds 500
@@ -1781,6 +2010,25 @@ try {
                     $directSoundBootstrap = $driverBootstrapObservation
                 }
                 foreach ($diagnostic in @($driverBootstrapObservation.diagnostics)) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
+                        [void]$uiDiagnosticSet.Add([string]$diagnostic)
+                    }
+                }
+            }
+
+            if (-not $loadWarningBootstrapTerminal) {
+                $warningObservation = Invoke-ExpectedLoadWarning `
+                    -Process $process `
+                    -Required ([bool]$spec.load_warning_required) `
+                    -ExpectedMessage ([string]$spec.expected_load_warning_message)
+                if ($warningObservation.dialog_seen) {
+                    $loadWarningBootstrapTerminal = $true
+                }
+                if ($warningObservation.outcome -ne "not-seen" -or
+                    $warningObservation.dialog_seen) {
+                    $loadWarningBootstrap = $warningObservation
+                }
+                foreach ($diagnostic in @($warningObservation.diagnostics)) {
                     if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
                         [void]$uiDiagnosticSet.Add([string]$diagnostic)
                     }
@@ -1847,6 +2095,15 @@ try {
             if ($fixtureLoadErrorMarker) {
                 break
             }
+        }
+
+        if ([bool]$spec.load_warning_required -and
+            -not [bool]$loadWarningBootstrap.dialog_seen) {
+            $message = "required fixture Load Warning was not observed for $($spec.name)"
+            [void]$uiDiagnosticSet.Add($message)
+            $loadWarningBootstrap.outcome = "required-not-seen"
+            $loadWarningBootstrap.diagnostics = @($message)
+            $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
         }
 
         $process.Refresh()
@@ -1957,6 +2214,13 @@ try {
         $evidenceLines.Add("directsound_bootstrap_action=$($directSoundBootstrap.action)")
         $evidenceLines.Add("directsound_bootstrap_dismissed=$($directSoundBootstrap.dismissed)")
         $evidenceLines.Add("directsound_bootstrap_outcome=$($directSoundBootstrap.outcome)")
+        $evidenceLines.Add("load_warning_required=$($loadWarningBootstrap.required)")
+        $evidenceLines.Add("load_warning_seen=$($loadWarningBootstrap.dialog_seen)")
+        $evidenceLines.Add("load_warning_signature_verified=$($loadWarningBootstrap.signature_verified)")
+        $evidenceLines.Add("load_warning_attempted=$($loadWarningBootstrap.attempted)")
+        $evidenceLines.Add("load_warning_action=$($loadWarningBootstrap.action)")
+        $evidenceLines.Add("load_warning_dismissed=$($loadWarningBootstrap.dismissed)")
+        $evidenceLines.Add("load_warning_outcome=$($loadWarningBootstrap.outcome)")
         if ($null -ne $exitCode) {
             $evidenceLines.Add("exit_code=$exitCode")
         }
@@ -2087,6 +2351,9 @@ try {
             environment_bootstrap = [ordered]@{
                 directsound = $directSoundBootstrap
             }
+            fixture_bootstrap = [ordered]@{
+                load_warning = $loadWarningBootstrap
+            }
             runtime_identity_diagnostics = @($runtimeIdentityDiagnostics)
             main_window_seen = $mainWindowSeen
             main_window_title = $windowTitle
@@ -2130,6 +2397,7 @@ try {
 - Acceptance rule: the observer continues through the full polling window, performs a final complete Psycle-owned UI scan after runtime inventory hashing, and accepts only with a stable fixture marker, no application error, no UI Automation diagnostic, and the reference process still running when harness termination begins.
 - First-run bootstrap: only a Psycle-owned top-level window exactly named Psycle Settings with the expected OK, Cancel, Defaults and System controls may be automated, and only its OK button is invoked. Bootstrap ambiguity/failure is a sticky UI Automation diagnostic and therefore inconclusive.
 - Headless-runner audio bootstrap: only a Psycle-owned top-level window exactly named DirectSound Output driver with the exact Failed to create DirectSound object message and exactly one OK button may be dismissed. UIA InvokePattern is tried first; if the verified old MFC dialog remains open, a timeout-bounded Win32 BM_CLICK fallback is permitted only after exactly one native top-level #32770 dialog for the same Psycle PID and exact title is found and correlated to the unique process-owned UI Automation dialog by exact PID/title plus a fresh verification of the same error-message/single-OK signature from the HWND-bound element, then exactly one native Button descendant under that verified dialog is correlated to the unique UI Automation OK button by same Psycle PID, exact OK text retrieved through timeout-bounded WM_GETTEXT, live visible/enabled state, and strongly overlapping screen bounds; for BM_CLICK the harness temporarily attaches its input queue to the verified dialog thread, activates and verifies that exact dialog, sends the timeout-bounded click to the correlated descendant, and detaches again. The action is recorded separately as environment bootstrap evidence and never treated as fixture rejection; ambiguity/failure is sticky and inconclusive.
+- PSY3 fixture bootstrap: the project-authored PSY3 fixture is expected to trigger exactly one Psycle-owned Load Warning dialog whose message is exactly This file is from a newer version of Psycle! This process will try to load it anyway. The observer invokes only the sole verified OK button through UI Automation and verifies the modal closes before continuing load observation. Missing, ambiguous, or failed warning handling is sticky harness evidence and remains inconclusive rather than being treated as fixture rejection or acceptance.
 - UI Automation failures and loaded-runtime identity failures are sticky harness diagnostics across the full observation and yield an inconclusive observation, never a rejection or later acceptance result.
 - Loaded VC90 runtime identity: each fixture records a hash-bound inventory of the VC90 CRT/MFC/ATL modules actually loaded by the live Psycle process, including absolute module path, size, SHA-256, and file/product version. Windows SxS servicing revisions are recorded as observed and may differ between CRT/MFC components; missing identity or a module outside the VC90 9.0 family prevents behavioural classification.
 - Configuration isolation: the post-install HKCU\Software\Psycle baseline is restored before each fixture so PSY2 cannot influence PSY3.

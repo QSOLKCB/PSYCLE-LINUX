@@ -291,7 +291,7 @@ Audit at minimum:
 
 - [ ] PSY2/PSY3 parsing and serialization against the pinned original reference;
   - [x] PSY2 parse/load acceptance for the exact project-authored PSY2SONG fixture is classified `PASS` against pinned Psycle 1.12.0 x86.
-  - [ ] PSY3 parsing remains `UNKNOWN` because the original-reference observation has not yet produced a stable fixture-load marker.
+  - [ ] PSY3 parsing remains `UNKNOWN`; PR #61 Phase 6C run `35364406445` showed pinned Psycle 1.12.0 accepting the exact project-authored PSY3 fixture after the signature-verified `Load Warning` bootstrap, with marker `phase4-first.psy`, 40 stable polls, and no application/harness/runtime diagnostic. The candidate receipt still records `timeout` / exit `124`, even though its log reaches the version-3 loader, creates Sampler/Master, and reaches `playing...`; a parse-specific candidate receipt is still required before comparison/classification.
   - [ ] Serialization / round-trip remains a separate `UNKNOWN` contract and is not implied by the PSY2 parse PASS.
 - [ ] sequence/pattern timing;
 - [ ] BPM/LPB/tick behaviour;
@@ -309,7 +309,7 @@ Audit at minimum:
 
 Do **not** assume C-Psycle's event sequencer is authoritative when it differs from original Psycle. The point of this phase is to discover and document differences.
 
-**Phase 6C status: active.** The matrix, evidence schema and candidate lane are established, and the first versioned comparison now classifies PSY2 parsing as a scoped `PASS`; 19 contracts remain `UNKNOWN`. PSY3 and serialization remain open and no `DIFFERENT` / `MISSING` result yet justifies Phase 7 implementation work.
+**Phase 6C status: active.** The matrix, evidence schema and candidate lane are established, and the first versioned comparison now classifies PSY2 parsing as a scoped `PASS`; 19 contracts remain `UNKNOWN`. The PSY3 original-reference gap is now resolved at the observation layer: run `35364406445` produced a clean accepted-load observation after the exact `Load Warning` bootstrap. PSY3 nevertheless remains `UNKNOWN` because the candidate receipt still conflates successful parse/playback startup with the noninteractive player timeout; the next evidence step is to record candidate parse acceptance independently of process-lifetime termination. Serialization remains open and no `DIFFERENT` / `MISSING` result yet justifies Phase 7 implementation work.
 
 ### 6D — parity report
 
