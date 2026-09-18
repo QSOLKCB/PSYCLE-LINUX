@@ -1220,6 +1220,29 @@ public static class Phase6cNativeButton
                     return true;
                 }
 
+                var className = new StringBuilder(64);
+                GetClassName(hWnd, className, className.Capacity);
+                if (!string.Equals(
+                    className.ToString(),
+                    expectedClass,
+                    StringComparison.Ordinal
+                ))
+                {
+                    return true;
+                }
+
+                if (GetDlgCtrlID(hWnd) != expectedControlId)
+                {
+                    return true;
+                }
+                if (!IsWindow(hWnd) || !IsWindowEnabled(hWnd) || !IsWindowVisible(hWnd))
+                {
+                    return true;
+                }
+
+                // GetWindowText cannot retrieve another process' child-control
+                // label. Query only the already-filtered Button/IDOK candidate
+                // with a bounded system message instead.
                 var title = new StringBuilder(256);
                 IntPtr textResult;
                 IntPtr textSendResult = SendMessageTimeoutText(
@@ -1244,26 +1267,6 @@ public static class Phase6cNativeButton
                     expectedTitle,
                     StringComparison.Ordinal
                 ))
-                {
-                    return true;
-                }
-
-                var className = new StringBuilder(64);
-                GetClassName(hWnd, className, className.Capacity);
-                if (!string.Equals(
-                    className.ToString(),
-                    expectedClass,
-                    StringComparison.Ordinal
-                ))
-                {
-                    return true;
-                }
-
-                if (GetDlgCtrlID(hWnd) != expectedControlId)
-                {
-                    return true;
-                }
-                if (!IsWindow(hWnd) || !IsWindowEnabled(hWnd) || !IsWindowVisible(hWnd))
                 {
                     return true;
                 }
