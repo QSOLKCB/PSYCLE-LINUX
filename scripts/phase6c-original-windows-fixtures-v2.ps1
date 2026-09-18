@@ -13,7 +13,7 @@ $ReferenceFile = "PsycleInstallerx86-1.12.0.exe"
 $ReferenceUrl = "https://sourceforge.net/projects/psycle/files/psycle/1.12/$ReferenceFile/download"
 $ExpectedInstallerSha256 = "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 $ExpectedInstallerSize = 9322919
-$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\\Software\\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; enumerate every top-level window owned by the reference process and its descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, and conventional external VST/Psycle roots for that observation; reject only on concrete application error text; accept only after a stable fixture marker is observed with no application error or UI Automation failure and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
+$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; enumerate every top-level window owned by the reference process and its descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, and conventional external VST/Psycle roots for that observation; reject only on concrete application error text; accept only after a stable fixture marker is observed with no application error or UI Automation failure and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
 
 function Fail([string]$Message) {
     throw "phase6c-original-windows-fixtures: $Message"
@@ -320,8 +320,8 @@ function Write-MachinePluginInventory(
         psycle_registry = @($registryEntries)
         plugin_roots = @($pluginRoots)
         external_plugin_dll_count = $externalPluginDllCount
-        configuration_baseline = "post-installer HKCU\\Software\\Psycle snapshot restored before this fixture"
-        external_visibility_note = "Fresh runner required no pre-existing HKCU\\Software\\Psycle configuration. Installed payload, runtime Psycle registry state, configured plugin/machine paths, and conventional VST/Psycle plugin roots are SHA-256 inventoried during this observation."
+        configuration_baseline = "post-installer HKCU\Software\Psycle snapshot restored before this fixture"
+        external_visibility_note = "Fresh runner required no pre-existing HKCU\Software\Psycle configuration. Installed payload, runtime Psycle registry state, configured plugin/machine paths, and conventional VST/Psycle plugin roots are SHA-256 inventoried during this observation."
     }
     Write-JsonUtf8 $Path $inventory
     return [ordered]@{
@@ -826,7 +826,7 @@ try {
 - Inputs: exact project-authored fixture bytes copied into this artifact and SHA-256-bound to the corresponding candidate receipts.
 - Acceptance rule: application load errors from every Psycle-owned top-level window take precedence over any filename/title marker; acceptance requires a stable fixture marker across four polls, no application error marker, no UI Automation diagnostic, and the reference process still running when harness termination begins.
 - UI Automation failures are sticky harness diagnostics across the full observation and yield an inconclusive observation, never a rejection or later acceptance result.
-- Configuration isolation: the post-install HKCU\\Software\\Psycle baseline is restored before each fixture so PSY2 cannot influence PSY3.
+- Configuration isolation: the post-install HKCU\Software\Psycle baseline is restored before each fixture so PSY2 cannot influence PSY3.
 - Machine/plugin environment: the full installed payload, runtime Psycle registry state, configured plugin/machine roots, and conventional external VST/Psycle plugin roots are recorded in a fixture-specific SHA-256-bound machine-plugin inventory during each observation.
 - Classification policy: these observations do not change compatibility status by themselves; rows remain UNKNOWN until versioned original + candidate receipts and a comparison verdict are committed.
 "@
@@ -837,6 +837,9 @@ try {
     )
 }
 finally {
+    if (-not $preexistingPsycleRegistry -and (Test-Path -LiteralPath "HKCU:\Software\Psycle")) {
+        Remove-Item -LiteralPath "HKCU:\Software\Psycle" -Recurse -Force -ErrorAction SilentlyContinue
+    }
     if (Test-Path -LiteralPath $workRoot) {
         Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
