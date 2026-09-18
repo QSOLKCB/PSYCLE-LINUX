@@ -65,7 +65,7 @@ Candidate observation receipts still do not self-promote parity. For PSY2, a sep
 | Subsystem / contract | Original reference evidence | Candidate C++ evidence | C-Psycle evidence reusable? | Status | Next evidence |
 | --- | --- | --- | --- | --- | --- |
 | PSY2 parsing | [`original-psy2.json`](phase6c/evidence/project-io-psy2-parse/original-psy2.json): pinned 1.12.0 accepted the exact fixture with stable marker evidence and no harness/runtime diagnostic | [`candidate-psy2.json`](phase6c/evidence/project-io-psy2-parse/candidate-psy2.json): pinned r12005 player loaded the same fixture and exited 0 | yes; project fixture exists | PASS | expand separately to serialization, state/playback semantics and additional PSY2 fixtures; see [`comparison.json`](phase6c/evidence/project-io-psy2-parse/comparison.json) |
-| PSY3 parsing | native-Windows observer previously reached Psycle 1.12.0 `Load Warning` but no stable fixture marker; the observer now verifies/dismisses that exact modal for a fresh post-warning observation | Phase 6C candidate receipt lane established | yes; project fixture exists | UNKNOWN | collect the fresh post-warning original receipt; classify only if it yields a stable fixture marker or concrete fixture-scoped load error |
+| PSY3 parsing | PR #61 run `35364406445`: pinned 1.12.0 dismissed the exact verified `Load Warning`, then exposed `phase4-first.psy` for 40 stable polls with no application/harness/runtime diagnostic | candidate receipt still says `timeout` / exit `124`; log reaches version-3 loader, creates Sampler/Master and reaches `playing...` | yes; project fixture exists | UNKNOWN | version a candidate parse-specific receipt that separates successful parse/load evidence from the player's noninteractive lifetime timeout, then compare against the clean original receipt |
 | Serialization / round-trip | pending | pending | yes | UNKNOWN | distinguish semantic round-trip from byte identity |
 | Malformed-file behaviour | pending | pending | partial | UNKNOWN | define rejection/recovery fixtures and original behaviour |
 | Sequence / pattern order | pending | pending | partial | UNKNOWN | original sequence semantics are authoritative |
@@ -134,7 +134,7 @@ Phase 6C now justifies this evidence backlog:
 
 1. keep the machine-readable matrix and validation gate green;
 2. preserve the first classified PSY2 parse receipt/verdict and keep its scoped PASS mechanically validated;
-3. rerun the original-reference PSY3 observation through the new signature-verified `Load Warning` bootstrap, then keep serialization separate from parse acceptance;
+3. preserve the clean original PSY3 observation from run `35364406445`, then make the candidate receipt express parse/load acceptance separately from its noninteractive timeout before attempting a PSY3 comparison; keep serialization separate from parse acceptance;
 4. classify only additional rows for which versioned original + candidate receipts and a comparison verdict are sufficient;
 5. expand to timing, tracker commands, routing, sampler, native-state, WAV and render fixtures in that order as evidence becomes reproducible;
 6. generate the first Phase 7 behavioural backlog only from confirmed `DIFFERENT` / `MISSING` results.
