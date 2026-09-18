@@ -14,7 +14,7 @@ $ReferenceUrl = "https://sourceforge.net/projects/psycle/files/psycle/1.12/$Refe
 $ExpectedInstallerSha256 = "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 $ExpectedInstallerSize = 9322919
 $RequiredVc90RuntimeFamily = "9.0"
-$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 WM_COMMAND/IDOK only if the old MFC button ignores a successful UIA InvokePattern, and only after enumerating native top-level windows for the same Psycle process, requiring exactly one DirectSound Output driver #32770 dialog, and correlating that HWND back to the already-verified UI Automation dialog runtime identity; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
+$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 WM_COMMAND/IDOK only if the old MFC button ignores a successful UIA InvokePattern, and only after enumerating native top-level windows for the same Psycle process, requiring exactly one DirectSound Output driver #32770 dialog, and correlating that HWND back to the already-verified UI Automation dialog by screen geometry before re-verifying the exact dialog signature; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
 
 function Fail([string]$Message) {
     throw "phase6c-original-windows-fixtures: $Message"
@@ -495,7 +495,8 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
                 # the already-verified process-owned DirectSound dialog and
                 # resolves the native modal by PID + exact title + #32770
                 # class, then correlates that HWND back to the verified UIA
-                # dialog runtime identity before issuing standard IDOK.
+                # dialog using strongly overlapping screen bounds and a fresh
+                # exact signature check before issuing standard IDOK.
                 $result.action = "invoke-ok-win32-wm-command"
                 try {
                     $Process.Refresh()
@@ -533,18 +534,32 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
                         throw "DirectSound bootstrap native/UIA dialog identity correlation failed"
                     }
 
-                    $verifiedRuntimeId = @($window.GetRuntimeId())
-                    $nativeRuntimeId = @($nativeDialogElement.GetRuntimeId())
-                    if ($verifiedRuntimeId.Count -ne $nativeRuntimeId.Count) {
-                        throw "DirectSound bootstrap native/UIA dialog runtime identity length mismatch"
+                    $verifiedBounds = $window.Current.BoundingRectangle
+                    $nativeBounds = $nativeDialogElement.Current.BoundingRectangle
+                    if ($verifiedBounds.IsEmpty -or $nativeBounds.IsEmpty -or
+                        $verifiedBounds.Width -le 0 -or $verifiedBounds.Height -le 0 -or
+                        $nativeBounds.Width -le 0 -or $nativeBounds.Height -le 0) {
+                        throw "DirectSound bootstrap native/UIA dialog correlation lacks usable screen bounds"
                     }
-                    for ($runtimeIndex = 0;
-                        $runtimeIndex -lt $verifiedRuntimeId.Count;
-                        $runtimeIndex += 1) {
-                        if ($verifiedRuntimeId[$runtimeIndex] -ne
-                            $nativeRuntimeId[$runtimeIndex]) {
-                            throw "DirectSound bootstrap native HWND does not correlate to the verified UIA dialog"
-                        }
+                    $intersection = [System.Windows.Rect]::Intersect(
+                        $verifiedBounds,
+                        $nativeBounds
+                    )
+                    if ($intersection.IsEmpty -or
+                        $intersection.Width -le 0 -or
+                        $intersection.Height -le 0) {
+                        throw "DirectSound bootstrap native HWND does not overlap the verified UIA dialog"
+                    }
+                    $intersectionArea = $intersection.Width * $intersection.Height
+                    $verifiedArea = $verifiedBounds.Width * $verifiedBounds.Height
+                    $nativeArea = $nativeBounds.Width * $nativeBounds.Height
+                    $verifiedCoverage = $intersectionArea / $verifiedArea
+                    $nativeCoverage = $intersectionArea / $nativeArea
+                    if ($verifiedCoverage -lt 0.90 -or $nativeCoverage -lt 0.90) {
+                        throw (
+                            "DirectSound bootstrap native/UIA dialog geometry mismatch: " +
+                            "verified_coverage=$verifiedCoverage native_coverage=$nativeCoverage"
+                        )
                     }
 
                     $correlatedNodes = $nativeDialogElement.FindAll(
@@ -1736,7 +1751,7 @@ try {
 - Rejection rule: only an error-bearing UI text item that is explicitly associated with this fixture and load/open/read/parse/project semantics can classify the fixture as rejected; unrelated Psycle application errors force an inconclusive result instead.
 - Acceptance rule: the observer continues through the full polling window, performs a final complete Psycle-owned UI scan after runtime inventory hashing, and accepts only with a stable fixture marker, no application error, no UI Automation diagnostic, and the reference process still running when harness termination begins.
 - First-run bootstrap: only a Psycle-owned top-level window exactly named Psycle Settings with the expected OK, Cancel, Defaults and System controls may be automated, and only its OK button is invoked. Bootstrap ambiguity/failure is a sticky UI Automation diagnostic and therefore inconclusive.
-- Headless-runner audio bootstrap: only a Psycle-owned top-level window exactly named DirectSound Output driver with the exact Failed to create DirectSound object message and exactly one OK button may be dismissed. UIA InvokePattern is tried first; if the verified old MFC dialog remains open, a timeout-bounded Win32 WM_COMMAND/IDOK fallback is permitted only after exactly one native top-level #32770 dialog for the same Psycle PID and exact title is found and correlated back to the already-verified UI Automation dialog runtime identity. The action is recorded separately as environment bootstrap evidence and never treated as fixture rejection; ambiguity/failure is sticky and inconclusive.
+- Headless-runner audio bootstrap: only a Psycle-owned top-level window exactly named DirectSound Output driver with the exact Failed to create DirectSound object message and exactly one OK button may be dismissed. UIA InvokePattern is tried first; if the verified old MFC dialog remains open, a timeout-bounded Win32 WM_COMMAND/IDOK fallback is permitted only after exactly one native top-level #32770 dialog for the same Psycle PID and exact title is found and correlated back to the already-verified UI Automation dialog using strongly overlapping screen bounds before the exact message/single-OK signature is reverified from the HWND-bound element. The action is recorded separately as environment bootstrap evidence and never treated as fixture rejection; ambiguity/failure is sticky and inconclusive.
 - UI Automation failures and loaded-runtime identity failures are sticky harness diagnostics across the full observation and yield an inconclusive observation, never a rejection or later acceptance result.
 - Loaded VC90 runtime identity: each fixture records a hash-bound inventory of the VC90 CRT/MFC/ATL modules actually loaded by the live Psycle process, including absolute module path, size, SHA-256, and file/product version. Windows SxS servicing revisions are recorded as observed and may differ between CRT/MFC components; missing identity or a module outside the VC90 9.0 family prevents behavioural classification.
 - Configuration isolation: the post-install HKCU\Software\Psycle baseline is restored before each fixture so PSY2 cannot influence PSY3.
