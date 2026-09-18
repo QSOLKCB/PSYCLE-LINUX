@@ -713,6 +713,7 @@ def validate_pair(
         None,
         "invoke-ok",
         "invoke-ok-win32-wm-command",
+        "invoke-ok-win32-bm-click",
     }:
         die(f"original-{name} DirectSound bootstrap action is invalid")
     directsound_outcome = directsound_bootstrap.get("outcome")
@@ -760,22 +761,20 @@ def validate_pair(
             True,
             "invoke-ok-win32-wm-command",
         ),
-        "close-timeout": (
-            True,
-            True,
-            True,
-            "invoke-ok-win32-wm-command",
-        ),
+    }
+    directsound_win32_states = {
+        (True, True, True, "invoke-ok-win32-wm-command"),
+        (True, True, True, "invoke-ok-win32-bm-click"),
     }
     directsound_close_verification_states = {
         (True, True, True, "invoke-ok"),
-        (True, True, True, "invoke-ok-win32-wm-command"),
+        *directsound_win32_states,
     }
     directsound_automation_states = {
         (False, False, False, None),
         (True, False, False, None),
         (True, True, True, "invoke-ok"),
-        (True, True, True, "invoke-ok-win32-wm-command"),
+        *directsound_win32_states,
     }
 
     if directsound_outcome == "not-seen":
@@ -797,6 +796,7 @@ def validate_pair(
             and directsound_action in {
                 "invoke-ok",
                 "invoke-ok-win32-wm-command",
+                "invoke-ok-win32-bm-click",
             }
         ):
             die(f"original-{name} dismissed DirectSound bootstrap state is inconsistent")
@@ -818,6 +818,12 @@ def validate_pair(
             if directsound_state not in directsound_close_verification_states:
                 die(
                     f"original-{name} DirectSound close-verification-failed "
+                    "state is inconsistent"
+                )
+        elif directsound_outcome in {"win32-action-failed", "close-timeout"}:
+            if directsound_state not in directsound_win32_states:
+                die(
+                    f"original-{name} DirectSound {directsound_outcome} "
                     "state is inconsistent"
                 )
         elif directsound_outcome == "automation-failed":
