@@ -285,6 +285,10 @@ function Invoke-ExpectedFirstRunSettings([System.Diagnostics.Process]$Process) {
                         }
                     }
                     if (-not $settingsStillPresent) {
+                        $Process.Refresh()
+                        if ($Process.HasExited) {
+                            throw "settings bootstrap process exited during close verification"
+                        }
                         $closed = $true
                         break
                     }
@@ -459,6 +463,10 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
                     catch {
                         throw "DirectSound bootstrap close verification failed: $($_.Exception.Message)"
                     }
+                }
+                $Process.Refresh()
+                if ($Process.HasExited) {
+                    throw "DirectSound bootstrap process exited during close verification"
                 }
                 return $true
             }
