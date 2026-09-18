@@ -257,40 +257,47 @@ function Invoke-ExpectedFirstRunSettings([System.Diagnostics.Process]$Process) {
             }
 
             $closed = $false
-            for ($attempt = 0; $attempt -lt 20; $attempt += 1) {
-                Start-Sleep -Milliseconds 100
-                $Process.Refresh()
-                if ($Process.HasExited) {
-                    break
-                }
+            try {
+                for ($attempt = 0; $attempt -lt 20; $attempt += 1) {
+                    Start-Sleep -Milliseconds 100
+                    $Process.Refresh()
+                    if ($Process.HasExited) {
+                        throw "settings bootstrap process exited during close verification"
+                    }
 
-                $remaining = $desktop.FindAll(
-                    [System.Windows.Automation.TreeScope]::Children,
-                    $processCondition
-                )
-                $settingsStillPresent = $false
-                foreach ($remainingWindow in $remaining) {
-                    try {
-                        if ([string]$remainingWindow.Current.Name -ceq "Psycle Settings") {
-                            $settingsStillPresent = $true
-                            break
+                    $remaining = $desktop.FindAll(
+                        [System.Windows.Automation.TreeScope]::Children,
+                        $processCondition
+                    )
+                    $settingsStillPresent = $false
+                    foreach ($remainingWindow in $remaining) {
+                        try {
+                            if ([string]$remainingWindow.Current.Name -ceq "Psycle Settings") {
+                                $settingsStillPresent = $true
+                                break
+                            }
+                        }
+                        catch {
+                            throw (
+                                "settings bootstrap close verification failed: " +
+                                "$($_.Exception.Message)"
+                            )
                         }
                     }
-                    catch {
-                        $diagnostics.Add(
-                            "settings bootstrap close verification failed: " +
-                            "$($_.Exception.Message)"
-                        )
-                        $settingsStillPresent = $true
+                    if (-not $settingsStillPresent) {
+                        $closed = $true
                         break
                     }
                 }
-                if (-not $settingsStillPresent) {
-                    $closed = $true
-                    break
-                }
+            }
+            catch {
+                $diagnostics.Add([string]$_.Exception.Message)
+                $result.outcome = "close-verification-failed"
             }
 
+            if ($result.outcome -ceq "close-verification-failed") {
+                break
+            }
             if ($closed) {
                 $result.dismissed = $true
                 $result.outcome = "dismissed"
