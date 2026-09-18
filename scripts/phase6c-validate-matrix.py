@@ -30,6 +30,10 @@ EXPECTED_CANDIDATE_BASELINE = (
 )
 ALLOWED_STATUS = {"PASS", "DIFFERENT", "MISSING", "UNKNOWN"}
 CLASSIFIED_STATUS = ALLOWED_STATUS - {"UNKNOWN"}
+PARSE_CONTRACT_IDS = {
+    "project-io-psy2-parse",
+    "project-io-psy3-parse",
+}
 REQUIRED_IDS = {
     "project-io-psy2-parse",
     "project-io-psy3-parse",
@@ -124,8 +128,8 @@ def validate_classification_receipt(
     row_id: str,
     role: str,
     context: str,
-) -> tuple[str, str]:
-    """Validate one versioned observation receipt and return its ref and fixture hash."""
+) -> tuple[str, str, dict[str, object]]:
+    """Validate one versioned observation receipt and return ref, fixture hash and receipt."""
     for field in ("fixture", "procedure"):
         value = mapping[field]
         assert isinstance(value, str)
@@ -176,7 +180,59 @@ def validate_classification_receipt(
     require_concrete_evidence_value(
         receipt_observation, f"{context}.observation receipt observation"
     )
-    return observation_ref, fixture_sha256
+    return observation_ref, fixture_sha256, receipt
+
+
+def validate_parse_pass_semantics(
+    row_id: str,
+    original_receipt: dict[str, object],
+    candidate_receipt: dict[str, object],
+    comparison: dict[str, object],
+) -> None:
+    """Require concrete successful parse observations before a parse row may PASS."""
+    if original_receipt.get("original_psycle_observed") is not True:
+        die(f"{row_id} PASS original receipt was not observed on original Psycle")
+    if original_receipt.get("load_result") != "accepted":
+        die(f"{row_id} PASS original receipt is not an accepted load")
+    if original_receipt.get("error_marker_scope") != "none":
+        die(f"{row_id} PASS original receipt contains scoped application errors")
+    if original_receipt.get("ui_automation_diagnostics") != []:
+        die(f"{row_id} PASS original receipt contains UI Automation diagnostics")
+    if original_receipt.get("runtime_identity_diagnostics") != []:
+        die(f"{row_id} PASS original receipt contains runtime identity diagnostics")
+    stable_polls = original_receipt.get("stable_marker_polls")
+    if (
+        not isinstance(stable_polls, int)
+        or isinstance(stable_polls, bool)
+        or stable_polls < 4
+    ):
+        die(f"{row_id} PASS original receipt lacks the stable marker window")
+    if original_receipt.get("main_window_seen") is not True:
+        die(f"{row_id} PASS original receipt lacks an observed main window")
+    if original_receipt.get("exit_code_before_termination") is not None:
+        die(f"{row_id} PASS original receipt exited before harness termination")
+    if original_receipt.get("process_running_before_termination") is not True:
+        die(f"{row_id} PASS original receipt was not live at harness termination")
+
+    if candidate_receipt.get("observation") != "load-and-clean-exit":
+        die(f"{row_id} PASS candidate receipt is not a clean load observation")
+    if candidate_receipt.get("exit_code") != 0:
+        die(f"{row_id} PASS candidate receipt does not have exit_code=0")
+    if candidate_receipt.get("original_psycle_observed") is not False:
+        die(f"{row_id} candidate receipt has invalid original_psycle_observed flag")
+
+    expected_bindings = {
+        "original_observation": original_receipt.get("observation"),
+        "original_load_result": original_receipt.get("load_result"),
+        "candidate_observation": candidate_receipt.get("observation"),
+        "candidate_exit_code": candidate_receipt.get("exit_code"),
+    }
+    for field, expected in expected_bindings.items():
+        if comparison.get(field) != expected:
+            die(
+                f"{row_id}.comparison receipt {field} does not bind the "
+                "observation used for the PASS verdict"
+            )
 
 
 def validate_comparison_receipt(
@@ -187,6 +243,8 @@ def validate_comparison_receipt(
     candidate_ref: str,
     original_fixture_sha256: str,
     candidate_fixture_sha256: str,
+    original_receipt: dict[str, object],
+    candidate_receipt: dict[str, object],
 ) -> None:
     """Bind the matrix status to a versioned comparison verdict over both receipts."""
     comparison_ref = row.get("comparison")
@@ -225,6 +283,14 @@ def validate_comparison_receipt(
         die(
             f"{row_id} matrix status {status!r} does not match comparison "
             f"verdict {verdict!r}"
+        )
+
+    if status == "PASS" and row_id in PARSE_CONTRACT_IDS:
+        validate_parse_pass_semantics(
+            row_id,
+            original_receipt,
+            candidate_receipt,
+            comparison,
         )
 
     for field in ("comparison_method", "rationale"):
@@ -317,10 +383,18 @@ def main() -> int:
                     "candidate baseline"
                 )
 
-            original_ref, original_fixture_sha256 = validate_classification_receipt(
+            (
+                original_ref,
+                original_fixture_sha256,
+                original_receipt,
+            ) = validate_classification_receipt(
                 row["original"], row_id, "original", f"{row_id}.original"
             )
-            candidate_ref, candidate_fixture_sha256 = validate_classification_receipt(
+            (
+                candidate_ref,
+                candidate_fixture_sha256,
+                candidate_receipt,
+            ) = validate_classification_receipt(
                 row["candidate"], row_id, "candidate", f"{row_id}.candidate"
             )
             validate_comparison_receipt(
@@ -331,6 +405,8 @@ def main() -> int:
                 candidate_ref,
                 original_fixture_sha256,
                 candidate_fixture_sha256,
+                original_receipt,
+                candidate_receipt,
             )
 
     missing = REQUIRED_IDS - seen
