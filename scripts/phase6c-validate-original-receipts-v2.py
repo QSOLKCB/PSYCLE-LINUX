@@ -613,6 +613,8 @@ def validate_pair(
         "signature-read-failed",
         "signature-mismatch",
         "invoke-failed",
+        "legacy-action-failed",
+        "close-verification-failed",
         "close-timeout",
         "automation-failed",
     }
@@ -675,7 +677,11 @@ def validate_pair(
                 "must be boolean"
             )
     directsound_action = directsound_bootstrap.get("action")
-    if directsound_action is not None and directsound_action != "invoke-ok":
+    if directsound_action not in {
+        None,
+        "invoke-ok",
+        "invoke-ok-legacy-default-action",
+    }:
         die(f"original-{name} DirectSound bootstrap action is invalid")
     directsound_outcome = directsound_bootstrap.get("outcome")
     allowed_directsound_outcomes = {
@@ -725,7 +731,10 @@ def validate_pair(
             and directsound_signature
             and directsound_attempted
             and directsound_dismissed
-            and directsound_action == "invoke-ok"
+            and directsound_action in {
+                "invoke-ok",
+                "invoke-ok-legacy-default-action",
+            }
         ):
             die(f"original-{name} dismissed DirectSound bootstrap state is inconsistent")
         if directsound_diagnostics:
