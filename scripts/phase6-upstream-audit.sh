@@ -72,6 +72,58 @@ mkdir -- "$OUT/components"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+svn_info_with_retry() {
+  local pinned_url="$1"
+  local output_path="$2"
+  local attempt tmp_path
+  tmp_path="${output_path}.tmp"
+
+  for attempt in 1 2 3 4; do
+    rm -f -- "$tmp_path"
+    if svn info -r "$SVN_REVISION" "$pinned_url" > "$tmp_path"; then
+      mv -- "$tmp_path" "$output_path"
+      return 0
+    fi
+    rm -f -- "$tmp_path"
+    if [ "$attempt" -lt 4 ]; then
+      echo "phase6-upstream-audit: svn info transient failure for $pinned_url; retry $attempt/3" >&2
+      sleep "$((attempt * 2))"
+    fi
+  done
+
+  echo "phase6-upstream-audit: svn info failed after 4 attempts: $pinned_url" >&2
+  return 1
+}
+
+svn_export_with_retry() {
+  local pinned_url="$1"
+  local destination="$2"
+  local attempt
+
+  case "$destination" in
+    "$WORK"/*) ;;
+    *)
+      echo "phase6-upstream-audit: refusing retry cleanup outside work root: $destination" >&2
+      return 2
+      ;;
+  esac
+
+  for attempt in 1 2 3 4; do
+    rm -rf -- "$destination"
+    if svn export --quiet --force -r "$SVN_REVISION" "$pinned_url" "$destination"; then
+      return 0
+    fi
+    rm -rf -- "$destination"
+    if [ "$attempt" -lt 4 ]; then
+      echo "phase6-upstream-audit: svn export transient failure for $pinned_url; retry $attempt/3" >&2
+      sleep "$((attempt * 2))"
+    fi
+  done
+
+  echo "phase6-upstream-audit: svn export failed after 4 attempts: $pinned_url" >&2
+  return 1
+}
+
 SUMMARY="$OUT/summary.md"
 {
   echo '# Phase 6 upstream provenance receipt'
@@ -98,8 +150,8 @@ for component in "${COMPONENTS[@]}"; do
   # Use an explicit peg revision as well as an operative revision so a future
   # rename/delete/replacement at HEAD cannot make the frozen historical node
   # unreachable to this audit.
-  svn info -r "$SVN_REVISION" "$pinned_url" > "$component_out/svn-info.txt"
-  svn export --quiet --force -r "$SVN_REVISION" "$pinned_url" "$export_dir"
+  svn_info_with_retry "$pinned_url" "$component_out/svn-info.txt"
+  svn_export_with_retry "$pinned_url" "$export_dir"
 
   (
     cd "$export_dir"
