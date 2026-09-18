@@ -236,7 +236,253 @@ function Write-LoadedVc90RuntimeInventory(
             foreach ($module in $Process.Modules) {
                 try {
                     $name = [string]$module.ModuleName
-                    if ($name -notmatch '^(?i:msvcr90|msvcp90|mfc90|mfc90u|atl90)\.dllfunction Write-InstallerDiagnostics([string]$FrameworkPath, [string]$InstallPath) {
+                    if ($name -notmatch '^(?i:msvcr90|msvcp90|mfc90|mfc90u|atl90)\.dll$') {
+                        continue
+                    }
+
+                    $filePath = [string]$module.FileName
+                    if ([string]::IsNullOrWhiteSpace($filePath) -or
+                        -not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
+                        $diagnostics.Add("loaded VC90 module has no readable file path: $name")
+                        continue
+                    }
+                    $filePath = [System.IO.Path]::GetFullPath($filePath)
+                    if (-not $seenPaths.Add($filePath)) {
+                        continue
+                    }
+
+                    $item = Get-Item -LiteralPath $filePath
+                    $versionInfo = $item.VersionInfo
+                    $fileVersionRaw = [string]$versionInfo.FileVersion
+                    $normalizedVersion = $null
+                    if ($fileVersionRaw -match '(\d+)\.(\d+)\.(\d+)\.(\d+)') {
+                        $normalizedVersion = "{0}.{1}.{2}.{3}" -f
+                            [int]$Matches[1], [int]$Matches[2],
+                            [int]$Matches[3], [int]$Matches[4]
+                    } else {
+                        $diagnostics.Add(
+                            "could not normalize loaded VC90 module version for $($name): $fileVersionRaw"
+                        )
+                    }
+
+                    if ($normalizedVersion -and
+                        $normalizedVersion -ne $ExpectedVc90RuntimeVersion) {
+                        $diagnostics.Add(
+                            "loaded VC90 module version mismatch for $($name): " +
+                            "expected=$ExpectedVc90RuntimeVersion actual=$normalizedVersion"
+                        )
+                    }
+
+                    $modules.Add([ordered]@{
+                        name = $name.ToLowerInvariant()
+                        path = $filePath
+                        size_bytes = [long]$item.Length
+                        sha256 = Get-Sha256 $filePath
+                        file_version = $normalizedVersion
+                        file_version_raw = $fileVersionRaw
+                        product_version = [string]$versionInfo.ProductVersion
+                    })
+                }
+                catch {
+                    $diagnostics.Add("loaded VC90 module inspection failed: $($_.Exception.Message)")
+                }
+            }
+        }
+    }
+    catch {
+        $diagnostics.Add("loaded VC90 module enumeration failed: $($_.Exception.Message)")
+    }
+
+    $hasMsvcr90 = $false
+    foreach ($module in $modules) {
+        if ($module.name -ieq "msvcr90.dll") {
+            $hasMsvcr90 = $true
+            break
+        }
+    }
+    if (-not $hasMsvcr90) {
+        $diagnostics.Add("live Psycle process did not expose msvcr90.dll in its loaded module set")
+    }
+
+    $inventory = [ordered]@{
+        schema_version = 1
+        reference_build = $ReferenceBuild
+        process_id = $Process.Id
+        expected_vc90_version = $ExpectedVc90RuntimeVersion
+        modules = $modules.ToArray()
+        diagnostics = @($diagnostics | Select-Object -Unique)
+    }
+    Write-JsonUtf8 $Path $inventory
+
+    return [ordered]@{
+        binding = [ordered]@{
+            path = [System.IO.Path]::GetFileName($Path)
+            sha256 = Get-Sha256 $Path
+        }
+        diagnostics = @($inventory.diagnostics)
+    }
+}
+
+function Write-MachinePluginInventory(
+    [string]$InstallRoot,
+    [string]$ExecutablePath,
+    [string]$Path,
+    [bool]$PreexistingPsycleRegistry
+) {
+    $installFull = [System.IO.Path]::GetFullPath($InstallRoot)
+    $executableFull = [System.IO.Path]::GetFullPath($ExecutablePath)
+    $installPrefix = $installFull.TrimEnd([System.IO.Path]::DirectorySeparatorChar) +
+        [System.IO.Path]::DirectorySeparatorChar
+
+    $installedFiles = @(
+        Get-ChildItem -LiteralPath $installFull -Recurse -File |
+            Sort-Object FullName |
+            ForEach-Object {
+                [ordered]@{
+                    path = [System.IO.Path]::GetRelativePath($installFull, $_.FullName).Replace("\", "/")
+                    size_bytes = [long]$_.Length
+                    sha256 = Get-Sha256 $_.FullName
+                }
+            }
+    )
+
+    $registryEntries = [System.Collections.Generic.List[object]]::new()
+    $registryRoot = "HKCU:\Software\Psycle"
+    if (Test-Path -LiteralPath $registryRoot) {
+        $registryKeys = @((Get-Item -LiteralPath $registryRoot))
+        $registryKeys += @(Get-ChildItem -LiteralPath $registryRoot -Recurse -ErrorAction SilentlyContinue)
+        foreach ($key in $registryKeys) {
+            try {
+                $properties = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop
+                foreach ($property in $properties.PSObject.Properties) {
+                    if ($property.Name -match "^PS(Path|ParentPath|ChildName|Drive|Provider)$") {
+                        continue
+                    }
+                    $rawValue = $property.Value
+                    $textValue = if ($null -eq $rawValue) {
+                        ""
+                    } elseif ($rawValue -is [System.Array]) {
+                        (@($rawValue | ForEach-Object { [string]$_ }) -join ";")
+                    } else {
+                        [string]$rawValue
+                    }
+                    $registryEntries.Add([ordered]@{
+                        key = [string]$key.Name
+                        name = [string]$property.Name
+                        value = $textValue
+                    })
+                }
+            }
+            catch {
+                Fail "could not inventory Psycle registry key $($key.Name): $($_.Exception.Message)"
+            }
+        }
+    }
+
+    $pluginRootSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in $registryEntries) {
+        $searchable = "$($entry.key) $($entry.name) $($entry.value)"
+        if ($searchable -notmatch "(?i)(plugin|vst|machine)") {
+            continue
+        }
+        foreach ($piece in ([string]$entry.value -split ";")) {
+            $candidate = [Environment]::ExpandEnvironmentVariables($piece.Trim().Trim('"'))
+            if ([string]::IsNullOrWhiteSpace($candidate)) {
+                continue
+            }
+            try {
+                if ([System.IO.Path]::IsPathRooted($candidate)) {
+                    $candidate = [System.IO.Path]::GetFullPath($candidate)
+                } elseif ($candidate -match "[\\/]") {
+                    $candidate = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $executableFull) $candidate))
+                } else {
+                    continue
+                }
+                [void]$pluginRootSet.Add($candidate)
+            }
+            catch {
+                Fail "invalid plugin/machine path in Psycle registry inventory: $candidate"
+            }
+        }
+    }
+
+    $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+    $knownRoots = @(
+        (Join-Path $installFull "PsyclePlugins"),
+        (Join-Path $installFull "VstPlugins"),
+        (Join-Path $installFull "Vst64Plugins"),
+        (Join-Path $env:USERPROFILE "PsyclePlugins"),
+        (Join-Path $env:USERPROFILE "VstPlugins"),
+        (Join-Path $env:USERPROFILE "Vst64Plugins"),
+        (Join-Path $env:USERPROFILE "Documents\Psycle\PsyclePlugins"),
+        (Join-Path $env:USERPROFILE "Documents\Psycle\VstPlugins"),
+        (Join-Path $env:USERPROFILE "Documents\Psycle\Vst64Plugins"),
+        (Join-Path $env:ProgramFiles "Steinberg\VstPlugins"),
+        (Join-Path $env:ProgramFiles "Common Files\VST2")
+    )
+    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
+        $knownRoots += (Join-Path $programFilesX86 "Steinberg\VstPlugins")
+        $knownRoots += (Join-Path $programFilesX86 "Common Files\VST2")
+    }
+    foreach ($root in $knownRoots) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$root)) {
+            [void]$pluginRootSet.Add([System.IO.Path]::GetFullPath([string]$root))
+        }
+    }
+
+    $pluginRoots = [System.Collections.Generic.List[object]]::new()
+    $externalPluginDllCount = 0
+    foreach ($root in @($pluginRootSet | Sort-Object)) {
+        $rootFull = [System.IO.Path]::GetFullPath([string]$root)
+        $insideInstall = $rootFull.Equals($installFull, [System.StringComparison]::OrdinalIgnoreCase) -or
+            $rootFull.StartsWith($installPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+        $exists = Test-Path -LiteralPath $rootFull -PathType Container
+        $dlls = @()
+        if ($exists) {
+            $dlls = @(
+                Get-ChildItem -LiteralPath $rootFull -Recurse -File -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Extension -ieq ".dll" } |
+                    Sort-Object FullName |
+                    ForEach-Object {
+                        [ordered]@{
+                            path = [System.IO.Path]::GetRelativePath($rootFull, $_.FullName).Replace("\", "/")
+                            size_bytes = [long]$_.Length
+                            sha256 = Get-Sha256 $_.FullName
+                        }
+                    }
+            )
+        }
+        if (-not $insideInstall) {
+            $externalPluginDllCount += $dlls.Count
+        }
+        $pluginRoots.Add([ordered]@{
+            path = $rootFull
+            scope = if ($insideInstall) { "installed-payload" } else { "external" }
+            exists = [bool]$exists
+            dlls = @($dlls)
+        })
+    }
+
+    $inventory = [ordered]@{
+        schema_version = 1
+        reference_build = $ReferenceBuild
+        reference_executable_sha256 = Get-Sha256 $executableFull
+        preexisting_psycle_registry = $PreexistingPsycleRegistry
+        installed_payload_files = @($installedFiles)
+        psycle_registry = $registryEntries.ToArray()
+        plugin_roots = $pluginRoots.ToArray()
+        external_plugin_dll_count = $externalPluginDllCount
+        configuration_baseline = "post-installer HKCU\Software\Psycle snapshot restored before this fixture"
+        external_visibility_note = "Fresh runner required no pre-existing HKCU\Software\Psycle configuration. Installed payload, runtime Psycle registry state, configured plugin/machine paths, and conventional VST/Psycle plugin roots are SHA-256 inventoried during this observation."
+    }
+    Write-JsonUtf8 $Path $inventory
+    return [ordered]@{
+        path = [System.IO.Path]::GetFileName($Path)
+        sha256 = Get-Sha256 $Path
+    }
+}
+
+function Write-InstallerDiagnostics([string]$FrameworkPath, [string]$InstallPath) {
     if (Test-Path -LiteralPath $FrameworkPath -PathType Leaf) {
         Write-Host "--- installer-framework.txt ---"
         Get-Content -LiteralPath $FrameworkPath | ForEach-Object { Write-Host $_ }
