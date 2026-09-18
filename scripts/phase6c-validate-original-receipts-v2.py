@@ -33,6 +33,22 @@ EXPECTED = {
     "psy3": "project-io-psy3-parse",
 }
 ALLOWED_LOAD_RESULT = {"accepted", "rejected", "inconclusive"}
+ALLOWED_TERMINATION = {
+    "already-exited",
+    "exited-before-close-request",
+    "killed-without-closeable-main-window",
+    "killed-after-observation",
+    "closed-after-observation",
+    "exited-during-close-error",
+    "killed-after-close-error",
+    "termination-error",
+}
+ACCEPTED_TERMINATION = {
+    "killed-without-closeable-main-window",
+    "killed-after-observation",
+    "closed-after-observation",
+    "killed-after-close-error",
+}
 ALLOWED_ARTIFACT_SUFFIXES = {".json", ".txt", ".log", ".png", ".md", ".psy"}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -132,6 +148,163 @@ def validate_runtime(environment: dict[str, object], original_root: pathlib.Path
         die(f"original-{name} VC90 runtime receipt is not signed by Microsoft")
 
 
+def validate_machine_plugin_inventory(
+    environment: dict[str, object],
+    original_root: pathlib.Path,
+    name: str,
+    reference_executable_hash: str,
+) -> None:
+    mapping = environment.get("machine_plugin_inventory")
+    if not isinstance(mapping, dict):
+        die(f"original-{name}.environment.machine_plugin_inventory must be an object")
+
+    inventory_path = resolve_artifact_path(
+        original_root,
+        mapping.get("path"),
+        f"original-{name}.environment.machine_plugin_inventory.path",
+    )
+    expected_hash = require_hash(
+        mapping.get("sha256"),
+        f"original-{name}.environment.machine_plugin_inventory.sha256",
+    )
+    actual_hash = sha256(inventory_path)
+    if actual_hash != expected_hash:
+        die(
+            f"original-{name} machine/plugin inventory SHA-256 mismatch: "
+            f"expected={expected_hash} actual={actual_hash}"
+        )
+
+    inventory = load_json(inventory_path)
+    if inventory.get("schema_version") != 1:
+        die(f"original-{name} machine/plugin inventory has the wrong schema version")
+    if inventory.get("reference_build") != EXPECTED_REFERENCE_BUILD:
+        die(f"original-{name} machine/plugin inventory has the wrong reference build")
+    if inventory.get("reference_executable_sha256") != reference_executable_hash:
+        die(f"original-{name} machine/plugin inventory is bound to the wrong executable")
+    if inventory.get("preexisting_psycle_registry") is not False:
+        die(f"original-{name} machine/plugin inventory did not start from clean Psycle registry state")
+
+    installed = inventory.get("installed_payload_files")
+    if not isinstance(installed, list) or not installed:
+        die(f"original-{name} machine/plugin inventory has no installed payload manifest")
+
+    psycle_exe_seen = False
+    seen_installed_paths: set[str] = set()
+    for index, entry in enumerate(installed):
+        context = f"original-{name}.machine_plugin_inventory.installed_payload_files[{index}]"
+        if not isinstance(entry, dict):
+            die(f"{context} must be an object")
+        rel = entry.get("path")
+        if not isinstance(rel, str) or not rel.strip():
+            die(f"{context}.path must be non-empty")
+        pure = pathlib.PurePosixPath(rel.replace("\\", "/"))
+        if pure.is_absolute() or ".." in pure.parts:
+            die(f"{context}.path must remain relative to the transient install root")
+        normalized = pure.as_posix().lower()
+        if normalized in seen_installed_paths:
+            die(f"{context}.path is duplicated")
+        seen_installed_paths.add(normalized)
+
+        size = entry.get("size_bytes")
+        if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+            die(f"{context}.size_bytes must be a non-negative integer")
+        digest = require_hash(entry.get("sha256"), f"{context}.sha256")
+        if pure.name.lower() == "psycle.exe":
+            if digest != reference_executable_hash:
+                die(f"{context} psycle.exe hash does not match the receipt executable")
+            psycle_exe_seen = True
+
+    if not psycle_exe_seen:
+        die(f"original-{name} machine/plugin inventory does not contain psycle.exe")
+
+    registry = inventory.get("psycle_registry")
+    if not isinstance(registry, list):
+        die(f"original-{name} machine/plugin inventory psycle_registry must be an array")
+    for index, entry in enumerate(registry):
+        context = f"original-{name}.machine_plugin_inventory.psycle_registry[{index}]"
+        if not isinstance(entry, dict):
+            die(f"{context} must be an object")
+        for field in ("key", "name", "value"):
+            if not isinstance(entry.get(field), str):
+                die(f"{context}.{field} must be a string")
+
+    roots = inventory.get("plugin_roots")
+    if not isinstance(roots, list) or not roots:
+        die(f"original-{name} machine/plugin inventory has no plugin-root audit")
+    external_count = 0
+    installed_scope_seen = False
+    seen_roots: set[str] = set()
+    for index, root in enumerate(roots):
+        context = f"original-{name}.machine_plugin_inventory.plugin_roots[{index}]"
+        if not isinstance(root, dict):
+            die(f"{context} must be an object")
+        root_path = root.get("path")
+        if not isinstance(root_path, str) or not root_path.strip():
+            die(f"{context}.path must be non-empty")
+        pure_root = pathlib.PureWindowsPath(root_path)
+        if not pure_root.is_absolute():
+            die(f"{context}.path must be an absolute Windows path")
+        normalized_root = str(pure_root).lower()
+        if normalized_root in seen_roots:
+            die(f"{context}.path is duplicated")
+        seen_roots.add(normalized_root)
+
+        scope = root.get("scope")
+        if scope not in {"installed-payload", "external"}:
+            die(f"{context}.scope is invalid")
+        if scope == "installed-payload":
+            installed_scope_seen = True
+        exists = root.get("exists")
+        if not isinstance(exists, bool):
+            die(f"{context}.exists must be boolean")
+        dlls = root.get("dlls")
+        if not isinstance(dlls, list):
+            die(f"{context}.dlls must be an array")
+        if not exists and dlls:
+            die(f"{context} cannot list DLLs for a missing root")
+
+        seen_dlls: set[str] = set()
+        for dll_index, dll in enumerate(dlls):
+            dll_context = f"{context}.dlls[{dll_index}]"
+            if not isinstance(dll, dict):
+                die(f"{dll_context} must be an object")
+            rel = dll.get("path")
+            if not isinstance(rel, str) or not rel.strip():
+                die(f"{dll_context}.path must be non-empty")
+            pure = pathlib.PurePosixPath(rel.replace("\\", "/"))
+            if pure.is_absolute() or ".." in pure.parts:
+                die(f"{dll_context}.path must remain relative to the audited plugin root")
+            normalized = pure.as_posix().lower()
+            if normalized in seen_dlls:
+                die(f"{dll_context}.path is duplicated")
+            seen_dlls.add(normalized)
+            size = dll.get("size_bytes")
+            if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+                die(f"{dll_context}.size_bytes must be a non-negative integer")
+            require_hash(dll.get("sha256"), f"{dll_context}.sha256")
+            if scope == "external":
+                external_count += 1
+
+    if not installed_scope_seen:
+        die(f"original-{name} machine/plugin inventory does not audit the installed plugin root")
+    claimed_external_count = inventory.get("external_plugin_dll_count")
+    if (
+        not isinstance(claimed_external_count, int)
+        or isinstance(claimed_external_count, bool)
+        or claimed_external_count < 0
+    ):
+        die(f"original-{name} machine/plugin inventory external_plugin_dll_count is invalid")
+    if claimed_external_count != external_count:
+        die(
+            f"original-{name} machine/plugin inventory external DLL count mismatch: "
+            f"claimed={claimed_external_count} actual={external_count}"
+        )
+
+    note = inventory.get("external_visibility_note")
+    if not isinstance(note, str) or not note.strip():
+        die(f"original-{name} machine/plugin inventory lacks its visibility-scope note")
+
+
 def validate_pair(
     name: str,
     contract: str,
@@ -160,7 +333,7 @@ def validate_pair(
         die(f"original-{name} has the wrong installer SHA-256")
     if original.get("reference_installer_size_bytes") != EXPECTED_REFERENCE_SIZE:
         die(f"original-{name} has the wrong installer size")
-    require_hash(
+    reference_executable_hash = require_hash(
         original.get("reference_executable_sha256"),
         f"original-{name}.reference_executable_sha256",
     )
@@ -210,6 +383,9 @@ def validate_pair(
     if environment.get("installer_framework") not in {"inno-setup", "nsis"}:
         die(f"original-{name} has unsupported installer framework metadata")
     validate_runtime(environment, original_root, name)
+    validate_machine_plugin_inventory(
+        environment, original_root, name, reference_executable_hash
+    )
 
     result = original.get("load_result")
     if result not in ALLOWED_LOAD_RESULT:
@@ -219,10 +395,19 @@ def validate_pair(
     marker = original.get("load_evidence_marker")
     stable_polls = original.get("stable_marker_polls")
     diagnostics = original.get("ui_automation_diagnostics")
+    exit_code = original.get("exit_code_before_termination")
+    running_before_termination = original.get("process_running_before_termination")
+    termination = original.get("termination")
     if not isinstance(diagnostics, list) or any(not isinstance(x, str) for x in diagnostics):
         die(f"original-{name}.ui_automation_diagnostics must be a string array")
     if not isinstance(stable_polls, int) or stable_polls < 0:
         die(f"original-{name}.stable_marker_polls must be a non-negative integer")
+    if exit_code is not None and (not isinstance(exit_code, int) or isinstance(exit_code, bool)):
+        die(f"original-{name}.exit_code_before_termination must be integer or null")
+    if not isinstance(running_before_termination, bool):
+        die(f"original-{name}.process_running_before_termination must be boolean")
+    if termination not in ALLOWED_TERMINATION:
+        die(f"original-{name}.termination is invalid: {termination!r}")
 
     if result == "accepted":
         if not isinstance(marker, str) or not marker.strip():
@@ -233,6 +418,14 @@ def validate_pair(
             die(f"original-{name} accepted result contains UI Automation harness diagnostics")
         if stable_polls < 4:
             die(f"original-{name} accepted result lacks the required stable marker window")
+        if original.get("main_window_seen") is not True:
+            die(f"original-{name} accepted result lacks an observed Psycle-owned window")
+        if exit_code is not None:
+            die(f"original-{name} accepted result exited before harness termination")
+        if running_before_termination is not True:
+            die(f"original-{name} accepted result was not running when harness termination began")
+        if termination not in ACCEPTED_TERMINATION:
+            die(f"original-{name} accepted result lacks successful harness-controlled termination")
     elif result == "rejected":
         if not isinstance(error_marker, str) or not error_marker.strip():
             die(f"original-{name} rejected result lacks concrete application error evidence")
