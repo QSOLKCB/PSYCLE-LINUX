@@ -181,7 +181,7 @@ function Invoke-ExpectedFirstRunSettings([System.Diagnostics.Process]$Process) {
                 )
                 continue
             }
-            if ($windowName -ne "Psycle Settings") {
+            if ($windowName -cne "Psycle Settings") {
                 continue
             }
 
@@ -211,7 +211,7 @@ function Invoke-ExpectedFirstRunSettings([System.Diagnostics.Process]$Process) {
                     if (-not [string]::IsNullOrWhiteSpace($name)) {
                         [void]$names.Add($name.Trim())
                     }
-                    if ($name -eq "OK" -and
+                    if ($name -ceq "OK" -and
                         $node.Current.ControlType -eq
                             [System.Windows.Automation.ControlType]::Button) {
                         $okButtons.Add($node)
@@ -271,7 +271,7 @@ function Invoke-ExpectedFirstRunSettings([System.Diagnostics.Process]$Process) {
                 $settingsStillPresent = $false
                 foreach ($remainingWindow in $remaining) {
                     try {
-                        if ([string]$remainingWindow.Current.Name -eq "Psycle Settings") {
+                        if ([string]$remainingWindow.Current.Name -ceq "Psycle Settings") {
                             $settingsStillPresent = $true
                             break
                         }
@@ -310,6 +310,9 @@ function Invoke-ExpectedFirstRunSettings([System.Diagnostics.Process]$Process) {
         $result.outcome = "automation-failed"
     }
 
+    if ($result.outcome -ceq "not-seen" -and $diagnostics.Count -gt 0) {
+        $result.outcome = "automation-failed"
+    }
     $result.diagnostics = @($diagnostics | Select-Object -Unique)
     return $result
 }
@@ -361,7 +364,7 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
                 )
                 continue
             }
-            if ($windowName -ne "DirectSound Output driver") {
+            if ($windowName -cne "DirectSound Output driver") {
                 continue
             }
 
@@ -386,10 +389,10 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
             foreach ($node in $nodes) {
                 try {
                     $name = [string]$node.Current.Name
-                    if ($name -eq "Failed to create DirectSound object") {
+                    if ($name -ceq "Failed to create DirectSound object") {
                         $messageSeen = $true
                     }
-                    if ($name -eq "OK" -and
+                    if ($name -ceq "OK" -and
                         $node.Current.ControlType -eq
                             [System.Windows.Automation.ControlType]::Button) {
                         $okButtons.Add($node)
@@ -433,7 +436,7 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
             $dialogIsClosed = {
                 $Process.Refresh()
                 if ($Process.HasExited) {
-                    return $true
+                    throw "DirectSound bootstrap process exited during close verification"
                 }
                 $remaining = $desktop.FindAll(
                     [System.Windows.Automation.TreeScope]::Children,
@@ -441,7 +444,7 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
                 )
                 foreach ($remainingWindow in $remaining) {
                     try {
-                        if ([string]$remainingWindow.Current.Name -eq
+                        if ([string]$remainingWindow.Current.Name -ceq
                             "DirectSound Output driver") {
                             return $false
                         }
@@ -527,6 +530,9 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
         $result.outcome = "automation-failed"
     }
 
+    if ($result.outcome -ceq "not-seen" -and $diagnostics.Count -gt 0) {
+        $result.outcome = "automation-failed"
+    }
     $result.diagnostics = @($diagnostics | Select-Object -Unique)
     return $result
 }
@@ -1214,6 +1220,28 @@ try {
             $combined = @($windowTitle) + $uiValues
             $assessment = Get-FixtureUiAssessment -Texts $combined -Markers $markers
 
+            if (-not $directSoundBootstrapTerminal -and
+                [string]$assessment.application_error_marker -ceq
+                    "Failed to create DirectSound object") {
+                $driverBootstrapObservation = Invoke-ExpectedDirectSoundFailure $process
+                if ($driverBootstrapObservation.dialog_seen) {
+                    $directSoundBootstrapTerminal = $true
+                }
+                if ($driverBootstrapObservation.outcome -ne "not-seen" -or
+                    $driverBootstrapObservation.dialog_seen) {
+                    $directSoundBootstrap = $driverBootstrapObservation
+                }
+                foreach ($diagnostic in @($driverBootstrapObservation.diagnostics)) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
+                        [void]$uiDiagnosticSet.Add([string]$diagnostic)
+                    }
+                }
+                $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
+                if ($driverBootstrapObservation.dialog_seen) {
+                    $assessment.application_error_marker = $null
+                }
+            }
+
             if ($null -eq $applicationErrorMarker -and $assessment.application_error_marker) {
                 $applicationErrorMarker = [string]$assessment.application_error_marker
             }
@@ -1273,6 +1301,27 @@ try {
             $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
             $finalCombined = @($windowTitle) + $uiValues
             $finalAssessment = Get-FixtureUiAssessment -Texts $finalCombined -Markers $markers
+            if (-not $directSoundBootstrapTerminal -and
+                [string]$finalAssessment.application_error_marker -ceq
+                    "Failed to create DirectSound object") {
+                $driverBootstrapObservation = Invoke-ExpectedDirectSoundFailure $process
+                if ($driverBootstrapObservation.dialog_seen) {
+                    $directSoundBootstrapTerminal = $true
+                }
+                if ($driverBootstrapObservation.outcome -ne "not-seen" -or
+                    $driverBootstrapObservation.dialog_seen) {
+                    $directSoundBootstrap = $driverBootstrapObservation
+                }
+                foreach ($diagnostic in @($driverBootstrapObservation.diagnostics)) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
+                        [void]$uiDiagnosticSet.Add([string]$diagnostic)
+                    }
+                }
+                $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
+                if ($driverBootstrapObservation.dialog_seen) {
+                    $finalAssessment.application_error_marker = $null
+                }
+            }
             if ($null -eq $applicationErrorMarker -and $finalAssessment.application_error_marker) {
                 $applicationErrorMarker = [string]$finalAssessment.application_error_marker
             }
