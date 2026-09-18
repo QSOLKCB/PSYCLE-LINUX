@@ -14,7 +14,7 @@ $ReferenceUrl = "https://sourceforge.net/projects/psycle/files/psycle/1.12/$Refe
 $ExpectedInstallerSha256 = "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 $ExpectedInstallerSize = 9322919
 $RequiredVc90RuntimeFamily = "9.0"
-$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 WM_COMMAND/IDOK only if the old MFC button ignores a successful UIA InvokePattern, and only after enumerating native top-level windows for the same Psycle process, requiring exactly one DirectSound Output driver #32770 dialog, and correlating that unique native dialog to the unique process-owned UI Automation dialog by exact PID/title and a fresh verification of the same error-message/single-OK signature; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
+$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 BM_CLICK on the uniquely verified native OK child only if the old MFC button ignores a successful UIA InvokePattern, and only after enumerating native top-level windows for the same Psycle process, requiring exactly one DirectSound Output driver #32770 dialog, correlating that unique native dialog to the unique process-owned UI Automation dialog by exact PID/title and a fresh verification of the same error-message/single-OK signature, then requiring exactly one direct child with the same Psycle PID, exact OK text retrieved through timeout-bounded WM_GETTEXT, Button class and IDOK control ID, attaching the harness thread input queue to the verified Psycle dialog thread only for the native action, verifying that exact dialog is active, and sending timeout-bounded BM_CLICK to the verified child; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
 
 function Fail([string]$Message) {
     throw "phase6c-original-windows-fixtures: $Message"
@@ -502,18 +502,17 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
             if (-not $closed) {
                 # Psycle 1.12 uses an old MFC message box. On the hosted runner
                 # UIA InvokePattern can report success without dispatching the
-                # button action, while the UIA child proxy does not expose a
-                # live native button HWND. The fallback therefore targets only
-                # the already-verified process-owned DirectSound dialog and
-                # resolves the native modal by PID + exact title + #32770
-                # class. Both the UIA and native searches must be unique; the
-                # HWND-bound UIA element must then reproduce the same exact
-                # PID/title/error-message/single-OK signature before IDOK.
-                $result.action = "invoke-ok-win32-wm-command"
+                # button action. The fallback therefore targets only the
+                # already-verified process-owned DirectSound dialog, resolves
+                # that native modal by PID + exact title + #32770 class, and
+                # independently resolves exactly one direct native child with
+                # the same Psycle PID, exact OK text, Button class and IDOK.
+                # BM_CLICK is sent only to that verified child HWND.
+                $result.action = "invoke-ok-win32-bm-click"
                 try {
                     $Process.Refresh()
                     if ($Process.HasExited) {
-                        throw "DirectSound bootstrap process exited before native dialog action"
+                        throw "DirectSound bootstrap process exited before native button action"
                     }
 
                     $nativeDialogs = @(
@@ -574,24 +573,50 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
                         )
                     }
 
-                    $WM_COMMAND = [uint32]0x0111
-                    $IDOK = [IntPtr]::new(1)
-                    $SMTO_ABORTIFHUNG = [uint32]0x0002
-                    [IntPtr]$messageResult = [IntPtr]::Zero
-                    $sendResult = [Phase6cNativeButton]::SendMessageTimeout(
-                        $dialogHandle,
-                        $WM_COMMAND,
-                        $IDOK,
-                        [IntPtr]::Zero,
-                        $SMTO_ABORTIFHUNG,
-                        [uint32]2000,
-                        [ref]$messageResult
+                    $nativeOkButtons = @(
+                        [Phase6cNativeButton]::FindDirectChildButtons(
+                            $dialogHandle,
+                            [uint32]$Process.Id,
+                            "OK",
+                            "Button",
+                            1,
+                            [uint32]500
+                        )
                     )
-                    if ($sendResult -eq [IntPtr]::Zero) {
-                        $lastError = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+                    if ($nativeOkButtons.Count -ne 1) {
                         throw (
-                            "DirectSound bootstrap WM_COMMAND/IDOK failed or timed out: " +
-                            "win32_error=$lastError"
+                            "DirectSound bootstrap expected exactly one native direct child " +
+                            "OK Button with IDOK: count=$($nativeOkButtons.Count)"
+                        )
+                    }
+                    $buttonHandle = [IntPtr]$nativeOkButtons[0]
+                    if (-not [Phase6cNativeButton]::IsWindow($buttonHandle)) {
+                        throw "DirectSound bootstrap resolved native OK HWND is not a live window"
+                    }
+
+                    [int]$nativeActionError = 0
+                    $nativeActionStatus = [Phase6cNativeButton]::ActivateDialogAndClickButton(
+                        $dialogHandle,
+                        $buttonHandle,
+                        [uint32]$Process.Id,
+                        [uint32]2000,
+                        [ref]$nativeActionError
+                    )
+                    if ($nativeActionStatus -ne 0) {
+                        $nativeActionStage = switch ($nativeActionStatus) {
+                            1 { "dialog-window-invalid" }
+                            2 { "button-window-invalid" }
+                            3 { "button-parent-mismatch" }
+                            4 { "native-thread-or-process-identity-mismatch" }
+                            5 { "attach-thread-input-failed" }
+                            6 { "dialog-activation-failed" }
+                            7 { "bm-click-failed-or-timed-out" }
+                            8 { "detach-thread-input-failed" }
+                            default { "unknown-native-action-failure" }
+                        }
+                        throw (
+                            "DirectSound bootstrap activate-and-click failed: " +
+                            "stage=$nativeActionStage win32_error=$nativeActionError"
                         )
                     }
                 }
@@ -1055,6 +1080,25 @@ public static class Phase6cNativeButton
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool EnumChildWindows(
+        IntPtr hWndParent,
+        EnumWindowsProc callback,
+        IntPtr lParam
+    );
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr GetParent(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int GetDlgCtrlID(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool IsWindowEnabled(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
     public static IntPtr[] FindTopLevelWindows(
         uint processId,
         string expectedTitle,
@@ -1102,8 +1146,28 @@ public static class Phase6cNativeButton
         return matches.ToArray();
     }
 
+    private const uint WM_GETTEXT = 0x000D;
+    private const uint BM_CLICK = 0x00F5;
+    private const uint SMTO_ABORTIFHUNG = 0x0002;
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
     [DllImport("user32.dll", SetLastError = true)]
-    public static extern IntPtr SendMessageTimeout(
+    private static extern bool AttachThreadInput(
+        uint idAttach,
+        uint idAttachTo,
+        bool attach
+    );
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetActiveWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetActiveWindow();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SendMessageTimeout(
         IntPtr hWnd,
         uint msg,
         IntPtr wParam,
@@ -1112,6 +1176,224 @@ public static class Phase6cNativeButton
         uint timeout,
         out IntPtr result
     );
+
+    [DllImport(
+        "user32.dll",
+        CharSet = CharSet.Unicode,
+        SetLastError = true,
+        EntryPoint = "SendMessageTimeoutW"
+    )]
+    private static extern IntPtr SendMessageTimeoutText(
+        IntPtr hWnd,
+        uint msg,
+        IntPtr wParam,
+        StringBuilder lParam,
+        uint flags,
+        uint timeout,
+        out IntPtr result
+    );
+
+    public static IntPtr[] FindDirectChildButtons(
+        IntPtr dialogHandle,
+        uint processId,
+        string expectedTitle,
+        string expectedClass,
+        int expectedControlId,
+        uint textTimeoutMilliseconds
+    )
+    {
+        var matches = new List<IntPtr>();
+        string textQueryFailure = null;
+        bool enumResult = EnumChildWindows(
+            dialogHandle,
+            delegate (IntPtr hWnd, IntPtr lParam)
+            {
+                if (GetParent(hWnd) != dialogHandle)
+                {
+                    return true;
+                }
+
+                uint ownerProcessId;
+                GetWindowThreadProcessId(hWnd, out ownerProcessId);
+                if (ownerProcessId != processId)
+                {
+                    return true;
+                }
+
+                var className = new StringBuilder(64);
+                GetClassName(hWnd, className, className.Capacity);
+                if (!string.Equals(
+                    className.ToString(),
+                    expectedClass,
+                    StringComparison.Ordinal
+                ))
+                {
+                    return true;
+                }
+
+                if (GetDlgCtrlID(hWnd) != expectedControlId)
+                {
+                    return true;
+                }
+                if (!IsWindow(hWnd) || !IsWindowEnabled(hWnd) || !IsWindowVisible(hWnd))
+                {
+                    return true;
+                }
+
+                // GetWindowText cannot retrieve another process' child-control
+                // label. Query only the already-filtered Button/IDOK candidate
+                // with a bounded system message instead.
+                var title = new StringBuilder(256);
+                IntPtr textResult;
+                IntPtr textSendResult = SendMessageTimeoutText(
+                    hWnd,
+                    WM_GETTEXT,
+                    new IntPtr(title.Capacity),
+                    title,
+                    SMTO_ABORTIFHUNG,
+                    textTimeoutMilliseconds,
+                    out textResult
+                );
+                if (textSendResult == IntPtr.Zero)
+                {
+                    int lastError = Marshal.GetLastWin32Error();
+                    textQueryFailure =
+                        "WM_GETTEXT failed or timed out for candidate child: win32_error=" +
+                        lastError;
+                    return false;
+                }
+                if (!string.Equals(
+                    title.ToString(),
+                    expectedTitle,
+                    StringComparison.Ordinal
+                ))
+                {
+                    return true;
+                }
+
+                matches.Add(hWnd);
+                return true;
+            },
+            IntPtr.Zero
+        );
+
+        if (textQueryFailure != null)
+        {
+            throw new InvalidOperationException(textQueryFailure);
+        }
+        if (!enumResult)
+        {
+            int lastError = Marshal.GetLastWin32Error();
+            throw new InvalidOperationException(
+                "EnumChildWindows failed while resolving native OK control: win32_error=" +
+                lastError
+            );
+        }
+        return matches.ToArray();
+    }
+
+    public static int ActivateDialogAndClickButton(
+        IntPtr dialogHandle,
+        IntPtr buttonHandle,
+        uint processId,
+        uint timeoutMilliseconds,
+        out int win32Error
+    )
+    {
+        win32Error = 0;
+        if (!IsWindow(dialogHandle))
+        {
+            return 1;
+        }
+        if (!IsWindow(buttonHandle))
+        {
+            return 2;
+        }
+        if (GetParent(buttonHandle) != dialogHandle)
+        {
+            return 3;
+        }
+
+        uint dialogProcessId;
+        uint dialogThreadId = GetWindowThreadProcessId(
+            dialogHandle,
+            out dialogProcessId
+        );
+        uint buttonProcessId;
+        uint buttonThreadId = GetWindowThreadProcessId(
+            buttonHandle,
+            out buttonProcessId
+        );
+        if (
+            dialogThreadId == 0 ||
+            buttonThreadId != dialogThreadId ||
+            dialogProcessId != processId ||
+            buttonProcessId != processId
+        )
+        {
+            return 4;
+        }
+
+        uint currentThreadId = GetCurrentThreadId();
+        bool attached = false;
+        int status = 0;
+        try
+        {
+            if (currentThreadId != dialogThreadId)
+            {
+                if (!AttachThreadInput(currentThreadId, dialogThreadId, true))
+                {
+                    win32Error = Marshal.GetLastWin32Error();
+                    status = 5;
+                }
+                else
+                {
+                    attached = true;
+                }
+            }
+
+            if (status == 0)
+            {
+                SetActiveWindow(dialogHandle);
+                if (GetActiveWindow() != dialogHandle)
+                {
+                    win32Error = Marshal.GetLastWin32Error();
+                    status = 6;
+                }
+            }
+
+            if (status == 0)
+            {
+                IntPtr messageResult;
+                IntPtr sendResult = SendMessageTimeout(
+                    buttonHandle,
+                    BM_CLICK,
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    SMTO_ABORTIFHUNG,
+                    timeoutMilliseconds,
+                    out messageResult
+                );
+                if (sendResult == IntPtr.Zero)
+                {
+                    win32Error = Marshal.GetLastWin32Error();
+                    status = 7;
+                }
+            }
+        }
+        finally
+        {
+            if (attached && !AttachThreadInput(currentThreadId, dialogThreadId, false))
+            {
+                if (status == 0)
+                {
+                    win32Error = Marshal.GetLastWin32Error();
+                    status = 8;
+                }
+            }
+        }
+        return status;
+    }
 }
 "@
 
@@ -1739,7 +2021,7 @@ try {
 - Rejection rule: only an error-bearing UI text item that is explicitly associated with this fixture and load/open/read/parse/project semantics can classify the fixture as rejected; unrelated Psycle application errors force an inconclusive result instead.
 - Acceptance rule: the observer continues through the full polling window, performs a final complete Psycle-owned UI scan after runtime inventory hashing, and accepts only with a stable fixture marker, no application error, no UI Automation diagnostic, and the reference process still running when harness termination begins.
 - First-run bootstrap: only a Psycle-owned top-level window exactly named Psycle Settings with the expected OK, Cancel, Defaults and System controls may be automated, and only its OK button is invoked. Bootstrap ambiguity/failure is a sticky UI Automation diagnostic and therefore inconclusive.
-- Headless-runner audio bootstrap: only a Psycle-owned top-level window exactly named DirectSound Output driver with the exact Failed to create DirectSound object message and exactly one OK button may be dismissed. UIA InvokePattern is tried first; if the verified old MFC dialog remains open, a timeout-bounded Win32 WM_COMMAND/IDOK fallback is permitted only after exactly one native top-level #32770 dialog for the same Psycle PID and exact title is found and correlated to the unique process-owned UI Automation dialog by exact PID/title plus a fresh verification of the same error-message/single-OK signature from the HWND-bound element. The action is recorded separately as environment bootstrap evidence and never treated as fixture rejection; ambiguity/failure is sticky and inconclusive.
+- Headless-runner audio bootstrap: only a Psycle-owned top-level window exactly named DirectSound Output driver with the exact Failed to create DirectSound object message and exactly one OK button may be dismissed. UIA InvokePattern is tried first; if the verified old MFC dialog remains open, a timeout-bounded Win32 BM_CLICK fallback is permitted only after exactly one native top-level #32770 dialog for the same Psycle PID and exact title is found and correlated to the unique process-owned UI Automation dialog by exact PID/title plus a fresh verification of the same error-message/single-OK signature from the HWND-bound element, then exactly one direct native child is required with the same Psycle PID, exact OK text retrieved through timeout-bounded WM_GETTEXT, Button class and IDOK control ID; for BM_CLICK the harness temporarily attaches its input queue to the verified dialog thread, activates and verifies that exact dialog, sends the timeout-bounded click to the verified child, and detaches again. The action is recorded separately as environment bootstrap evidence and never treated as fixture rejection; ambiguity/failure is sticky and inconclusive.
 - UI Automation failures and loaded-runtime identity failures are sticky harness diagnostics across the full observation and yield an inconclusive observation, never a rejection or later acceptance result.
 - Loaded VC90 runtime identity: each fixture records a hash-bound inventory of the VC90 CRT/MFC/ATL modules actually loaded by the live Psycle process, including absolute module path, size, SHA-256, and file/product version. Windows SxS servicing revisions are recorded as observed and may differ between CRT/MFC components; missing identity or a module outside the VC90 9.0 family prevents behavioural classification.
 - Configuration isolation: the post-install HKCU\Software\Psycle baseline is restored before each fixture so PSY2 cannot influence PSY3.
