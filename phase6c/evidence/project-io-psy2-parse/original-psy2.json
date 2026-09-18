@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "scope": "original-observation",
+  "contract": "project-io-psy2-parse",
+  "evidence_role": "original",
+  "reference_build": "Psycle 1.12.0 x86",
+  "reference_file": "PsycleInstallerx86-1.12.0.exe",
+  "reference_installer_sha256": "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769",
+  "reference_installer_size_bytes": 9322919,
+  "reference_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+  "fixture": "fixtures/psy2/phase4-historical-psy2.psy",
+  "fixture_sha256": "ebef8216fe6b2b6cbaf1f169ff234115d6cf06cfda480b4433f9c2fa3ab400ba",
+  "procedure": "GitHub Actions Windows 2022 run 35342946830 installed the pinned Psycle 1.12.0 x86 reference and pinned Microsoft VC90 x86 runtime, restored the clean post-install HKCU\\\\Software\\\\Psycle baseline, copied the SHA-256-bound project-authored PSY2 fixture, launched the installed psycle.exe with that fixture, dismissed only the signature-verified Psycle Settings and DirectSound Output driver bootstrap dialogs, required a stable fixture marker for at least four polls with no application, UI Automation or loaded-runtime diagnostic, then captured evidence before harness-controlled termination.",
+  "observation": "stable-native-window-evidence-identifies-loaded-fixture-without-error",
+  "load_result": "accepted",
+  "load_evidence_marker": "phase4-historical-psy2.psy",
+  "stable_marker_polls": 38,
+  "error_marker": null,
+  "application_error_marker": null,
+  "error_marker_scope": "none",
+  "ui_automation_diagnostics": [],
+  "startup_bootstrap": {
+    "settings_dialog_seen": true,
+    "signature_verified": true,
+    "attempted": true,
+    "action": "invoke-ok",
+    "dismissed": true,
+    "outcome": "dismissed",
+    "diagnostics": []
+  },
+  "environment_bootstrap": {
+    "directsound": {
+      "dialog_seen": true,
+      "signature_verified": true,
+      "attempted": true,
+      "action": "invoke-ok-win32-bm-click",
+      "dismissed": true,
+      "outcome": "dismissed",
+      "diagnostics": []
+    }
+  },
+  "runtime_identity_diagnostics": [],
+  "main_window_seen": true,
+  "exit_code_before_termination": null,
+  "process_running_before_termination": true,
+  "termination": "killed-without-closeable-main-window",
+  "original_psycle_observed": true,
+  "parity_status": "UNKNOWN",
+  "source_evidence": {
+    "workflow": "Phase 6C compatibility matrix",
+    "run_id": 35342946830,
+    "event": "pull_request",
+    "head_sha": "1f9afb8c8ac675f5bc06b172d3415fbaa136e201",
+    "merged_main_sha": "af23c420dcd6c7c62f4177f82eadca645db004a2",
+    "job_id": 105593457296,
+    "artifact_id": 10546630670,
+    "artifact_digest": "sha256:20957d9e23733bc3ce724611734f07f9d90a49450b66152c68ae186c1dd62595",
+    "artifact_receipt": "original-psy2.json"
+  }
+}
