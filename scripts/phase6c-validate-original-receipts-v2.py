@@ -755,12 +755,6 @@ def validate_pair(
         "signature-read-failed": (True, False, False, None),
         "signature-mismatch": (True, False, False, None),
         "invoke-failed": (True, True, True, "invoke-ok"),
-        "win32-action-failed": (
-            True,
-            True,
-            True,
-            "invoke-ok-win32-wm-command",
-        ),
     }
     directsound_win32_states = {
         (True, True, True, "invoke-ok-win32-wm-command"),
