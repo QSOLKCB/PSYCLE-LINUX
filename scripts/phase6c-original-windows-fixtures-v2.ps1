@@ -14,7 +14,7 @@ $ReferenceUrl = "https://sourceforge.net/projects/psycle/files/psycle/1.12/$Refe
 $ExpectedInstallerSha256 = "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 $ExpectedInstallerSize = 9322919
 $RequiredVc90RuntimeFamily = "9.0"
-$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
+$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
 
 function Fail([string]$Message) {
     throw "phase6c-original-windows-fixtures: $Message"
@@ -132,6 +132,186 @@ function Get-UiObservation([System.Diagnostics.Process]$Process) {
         diagnostics = @($diagnostics | Select-Object -Unique)
         top_level_window_count = $topLevelWindowCount
     }
+}
+
+
+function Invoke-ExpectedFirstRunSettings([System.Diagnostics.Process]$Process) {
+    $diagnostics = [System.Collections.Generic.List[string]]::new()
+    $result = [ordered]@{
+        settings_dialog_seen = $false
+        signature_verified = $false
+        attempted = $false
+        action = $null
+        dismissed = $false
+        outcome = "not-seen"
+        diagnostics = @()
+    }
+
+    try {
+        $Process.Refresh()
+        if ($Process.HasExited) {
+            return $result
+        }
+
+        $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+        if ($null -eq $desktop) {
+            $diagnostics.Add("settings bootstrap UI Automation returned no desktop root element")
+            $result.outcome = "desktop-root-missing"
+            $result.diagnostics = $diagnostics.ToArray()
+            return $result
+        }
+
+        $processCondition = [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+            $Process.Id
+        )
+        $windows = $desktop.FindAll(
+            [System.Windows.Automation.TreeScope]::Children,
+            $processCondition
+        )
+
+        foreach ($window in $windows) {
+            $windowName = ""
+            try {
+                $windowName = [string]$window.Current.Name
+            }
+            catch {
+                $diagnostics.Add(
+                    "settings bootstrap Psycle top-level window read failed: $($_.Exception.Message)"
+                )
+                continue
+            }
+            if ($windowName -ne "Psycle Settings") {
+                continue
+            }
+
+            $result.settings_dialog_seen = $true
+            $nodes = $null
+            try {
+                $nodes = $window.FindAll(
+                    [System.Windows.Automation.TreeScope]::Descendants,
+                    [System.Windows.Automation.Condition]::TrueCondition
+                )
+            }
+            catch {
+                $diagnostics.Add(
+                    "settings bootstrap descendant enumeration failed: $($_.Exception.Message)"
+                )
+                $result.outcome = "signature-read-failed"
+                break
+            }
+
+            $names = [System.Collections.Generic.HashSet[string]]::new(
+                [System.StringComparer]::Ordinal
+            )
+            $okButtons = [System.Collections.Generic.List[object]]::new()
+            foreach ($node in $nodes) {
+                try {
+                    $name = [string]$node.Current.Name
+                    if (-not [string]::IsNullOrWhiteSpace($name)) {
+                        [void]$names.Add($name.Trim())
+                    }
+                    if ($name -eq "OK" -and
+                        $node.Current.ControlType -eq
+                            [System.Windows.Automation.ControlType]::Button) {
+                        $okButtons.Add($node)
+                    }
+                }
+                catch {
+                    $diagnostics.Add(
+                        "settings bootstrap UI element read failed: $($_.Exception.Message)"
+                    )
+                }
+            }
+
+            $requiredNames = @("OK", "Cancel", "Defaults", "System")
+            $missingNames = @(
+                $requiredNames | Where-Object { -not $names.Contains($_) }
+            )
+            if ($missingNames.Count -gt 0 -or $okButtons.Count -ne 1) {
+                $diagnostics.Add(
+                    "settings bootstrap signature mismatch: " +
+                    "missing=$($missingNames -join ',') ok_buttons=$($okButtons.Count)"
+                )
+                $result.outcome = "signature-mismatch"
+                break
+            }
+
+            $result.signature_verified = $true
+            $result.attempted = $true
+            $result.action = "invoke-ok"
+            try {
+                $invokePattern = [System.Windows.Automation.InvokePattern](
+                    $okButtons[0].GetCurrentPattern(
+                        [System.Windows.Automation.InvokePattern]::Pattern
+                    )
+                )
+                $invokePattern.Invoke()
+            }
+            catch {
+                $diagnostics.Add(
+                    "settings bootstrap OK invoke failed: $($_.Exception.Message)"
+                )
+                $result.outcome = "invoke-failed"
+                break
+            }
+
+            $closed = $false
+            for ($attempt = 0; $attempt -lt 20; $attempt += 1) {
+                Start-Sleep -Milliseconds 100
+                $Process.Refresh()
+                if ($Process.HasExited) {
+                    break
+                }
+
+                $remaining = $desktop.FindAll(
+                    [System.Windows.Automation.TreeScope]::Children,
+                    $processCondition
+                )
+                $settingsStillPresent = $false
+                foreach ($remainingWindow in $remaining) {
+                    try {
+                        if ([string]$remainingWindow.Current.Name -eq "Psycle Settings") {
+                            $settingsStillPresent = $true
+                            break
+                        }
+                    }
+                    catch {
+                        $diagnostics.Add(
+                            "settings bootstrap close verification failed: " +
+                            "$($_.Exception.Message)"
+                        )
+                        $settingsStillPresent = $true
+                        break
+                    }
+                }
+                if (-not $settingsStillPresent) {
+                    $closed = $true
+                    break
+                }
+            }
+
+            if ($closed) {
+                $result.dismissed = $true
+                $result.outcome = "dismissed"
+            } else {
+                $diagnostics.Add(
+                    "settings bootstrap dialog remained open after invoking OK"
+                )
+                $result.outcome = "close-timeout"
+            }
+            break
+        }
+    }
+    catch {
+        $diagnostics.Add(
+            "settings bootstrap UI Automation failed: $($_.Exception.Message)"
+        )
+        $result.outcome = "automation-failed"
+    }
+
+    $result.diagnostics = @($diagnostics | Select-Object -Unique)
+    return $result
 }
 
 function Get-FixtureUiAssessment([object[]]$Texts, [string[]]$Markers) {
@@ -743,6 +923,16 @@ try {
         $applicationErrorMarker = $null
         $fixtureLoadErrorMarker = $null
         $stableMarkerPolls = 0
+        $settingsBootstrapTerminal = $false
+        $settingsBootstrap = [ordered]@{
+            settings_dialog_seen = $false
+            signature_verified = $false
+            attempted = $false
+            action = $null
+            dismissed = $false
+            outcome = "not-seen"
+            diagnostics = @()
+        }
 
         while ((Get-Date) -lt $deadline) {
             Start-Sleep -Milliseconds 500
@@ -750,6 +940,22 @@ try {
             if ($process.HasExited) {
                 break
             }
+            if (-not $settingsBootstrapTerminal) {
+                $bootstrapObservation = Invoke-ExpectedFirstRunSettings $process
+                if ($bootstrapObservation.settings_dialog_seen) {
+                    $settingsBootstrapTerminal = $true
+                }
+                if ($bootstrapObservation.outcome -ne "not-seen" -or
+                    $bootstrapObservation.settings_dialog_seen) {
+                    $settingsBootstrap = $bootstrapObservation
+                }
+                foreach ($diagnostic in @($bootstrapObservation.diagnostics)) {
+                    if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
+                        [void]$uiDiagnosticSet.Add([string]$diagnostic)
+                    }
+                }
+            }
+
             $windowTitle = $process.MainWindowTitle
             $uiObservation = Get-UiObservation $process
             if ($process.MainWindowHandle -ne 0 -or [int]$uiObservation.top_level_window_count -gt 0) {
@@ -865,6 +1071,12 @@ try {
         $evidenceLines.Add("stable_marker_polls=$stableMarkerPolls")
         $evidenceLines.Add("application_error_marker=$applicationErrorMarker")
         $evidenceLines.Add("fixture_load_error_marker=$fixtureLoadErrorMarker")
+        $evidenceLines.Add("settings_bootstrap_seen=$($settingsBootstrap.settings_dialog_seen)")
+        $evidenceLines.Add("settings_bootstrap_signature_verified=$($settingsBootstrap.signature_verified)")
+        $evidenceLines.Add("settings_bootstrap_attempted=$($settingsBootstrap.attempted)")
+        $evidenceLines.Add("settings_bootstrap_action=$($settingsBootstrap.action)")
+        $evidenceLines.Add("settings_bootstrap_dismissed=$($settingsBootstrap.dismissed)")
+        $evidenceLines.Add("settings_bootstrap_outcome=$($settingsBootstrap.outcome)")
         if ($null -ne $exitCode) {
             $evidenceLines.Add("exit_code=$exitCode")
         }
@@ -991,6 +1203,7 @@ try {
                 "none"
             }
             ui_automation_diagnostics = @($uiDiagnostics)
+            startup_bootstrap = $settingsBootstrap
             runtime_identity_diagnostics = @($runtimeIdentityDiagnostics)
             main_window_seen = $mainWindowSeen
             main_window_title = $windowTitle
@@ -1032,6 +1245,7 @@ try {
 - Inputs: exact project-authored fixture bytes copied into this artifact and SHA-256-bound to the corresponding candidate receipts.
 - Rejection rule: only an error-bearing UI text item that is explicitly associated with this fixture and load/open/read/parse/project semantics can classify the fixture as rejected; unrelated Psycle application errors force an inconclusive result instead.
 - Acceptance rule: the observer continues through the full polling window, performs a final complete Psycle-owned UI scan after runtime inventory hashing, and accepts only with a stable fixture marker, no application error, no UI Automation diagnostic, and the reference process still running when harness termination begins.
+- First-run bootstrap: only a Psycle-owned top-level window exactly named Psycle Settings with the expected OK, Cancel, Defaults and System controls may be automated, and only its OK button is invoked. Bootstrap ambiguity/failure is a sticky UI Automation diagnostic and therefore inconclusive.
 - UI Automation failures and loaded-runtime identity failures are sticky harness diagnostics across the full observation and yield an inconclusive observation, never a rejection or later acceptance result.
 - Loaded VC90 runtime identity: each fixture records a hash-bound inventory of the VC90 CRT/MFC/ATL modules actually loaded by the live Psycle process, including absolute module path, size, SHA-256, and file/product version. Windows SxS servicing revisions are recorded as observed and may differ between CRT/MFC components; missing identity or a module outside the VC90 9.0 family prevents behavioural classification.
 - Configuration isolation: the post-install HKCU\Software\Psycle baseline is restored before each fixture so PSY2 cannot influence PSY3.
