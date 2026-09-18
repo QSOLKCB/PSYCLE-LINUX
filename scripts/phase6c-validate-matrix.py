@@ -9,6 +9,7 @@ original-reference evidence, candidate evidence, and a versioned comparison verd
 
 from __future__ import annotations
 
+import hashlib
 import json
 import pathlib
 import re
@@ -28,6 +29,20 @@ EXPECTED_ORIGINAL_SIZE = 9322919
 EXPECTED_CANDIDATE_BASELINE = (
     "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a"
 )
+EXPECTED_ORIGINAL_SOURCE_IDENTITIES = {
+    "project-io-psy2-parse": {
+        "receipt_sha256": "1b9d05dd5caafc8120ade51e28086d02f05800bcba0479aa4325680333fb6b74",
+        "procedure_sha256": "b1d0a80417d8589d458e35386b9051b039210144df707e1aea57ba65ca6b5a6d",
+        "artifact_digest": "sha256:20957d9e23733bc3ce724611734f07f9d90a49450b66152c68ae186c1dd62595",
+    }
+}
+EXPECTED_CANDIDATE_SOURCE_IDENTITIES = {
+    "project-io-psy2-parse": {
+        "receipt_sha256": "feee397beec6babfc715ad05be08037789e881cecb77abb174e934dbbc42a230",
+        "executable_sha256": "79b8bc04918039cca8be4db0909f826b55ad6538b6edf1f1689ec0eb8dcac330",
+        "artifact_digest": "sha256:b8d206aa16a2b820149e1e83f76c671fb0b584cea59ed8f69941846e183b6fcf",
+    }
+}
 ALLOWED_STATUS = {"PASS", "DIFFERENT", "MISSING", "UNKNOWN"}
 CLASSIFIED_STATUS = ALLOWED_STATUS - {"UNKNOWN"}
 PARSE_CONTRACT_IDS = {
@@ -162,13 +177,20 @@ def validate_classification_receipt(
         if receipt.get("reference_installer_size_bytes") != EXPECTED_ORIGINAL_SIZE:
             die(f"{context}.observation receipt has the wrong reference installer size")
 
+        expected_source = EXPECTED_ORIGINAL_SOURCE_IDENTITIES.get(row_id)
+        if not isinstance(expected_source, dict):
+            die(f"{context}.observation receipt lacks a pinned source identity")
         source_evidence = receipt.get("source_evidence")
         if not isinstance(source_evidence, dict):
             die(f"{context}.observation receipt lacks source_evidence")
-        require_sha256(
+        source_receipt_sha256 = require_sha256(
             source_evidence.get("artifact_receipt_sha256"),
             f"{context}.observation receipt source artifact_receipt_sha256",
         )
+        if source_receipt_sha256 != expected_source["receipt_sha256"]:
+            die(f"{context}.observation receipt is bound to the wrong source receipt")
+        if source_evidence.get("artifact_digest") != expected_source["artifact_digest"]:
+            die(f"{context}.observation receipt is bound to the wrong source artifact")
         if source_evidence.get("projection_type") != (
             "field-preserving-classification-projection"
         ):
@@ -179,13 +201,37 @@ def validate_classification_receipt(
         require_concrete_evidence_value(
             projection_note, f"{context}.observation receipt projection_note"
         )
+        procedure = receipt.get("procedure")
+        if not isinstance(procedure, str):
+            die(f"{context}.observation receipt procedure must be a string")
+        procedure_sha256 = hashlib.sha256(procedure.encode("utf-8")).hexdigest()
+        if procedure_sha256 != expected_source["procedure_sha256"]:
+            die(f"{context}.observation receipt procedure differs from source artifact")
     elif role == "candidate":
         if receipt.get("snapshot") != EXPECTED_CANDIDATE_BASELINE:
             die(f"{context}.observation receipt is bound to the wrong candidate snapshot")
-        require_sha256(
+        expected_source = EXPECTED_CANDIDATE_SOURCE_IDENTITIES.get(row_id)
+        if not isinstance(expected_source, dict):
+            die(f"{context}.observation receipt lacks a pinned candidate source identity")
+        executable_sha256 = require_sha256(
             receipt.get("executable_sha256"),
             f"{context}.observation receipt executable_sha256",
         )
+        if executable_sha256 != expected_source["executable_sha256"]:
+            die(f"{context}.observation receipt executable SHA-256 is not pinned")
+        receipt_path = resolve_versioned_receipt(
+            observation_ref, f"{context}.observation"
+        )
+        committed_receipt_sha256 = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+        if committed_receipt_sha256 != expected_source["receipt_sha256"]:
+            die(f"{context}.observation receipt differs from the source artifact receipt")
+        if receipt.get("original_psycle_observed") is not False:
+            die(f"{context}.observation receipt must remain candidate-only")
+        if receipt.get("parity_status") != "UNKNOWN":
+            die(f"{context}.observation receipt candidate parity_status must remain UNKNOWN")
+        exit_code = receipt.get("exit_code")
+        if not isinstance(exit_code, int) or isinstance(exit_code, bool):
+            die(f"{context}.observation receipt exit_code must be an integer")
     else:
         die(f"{context} has unsupported evidence role: {role}")
 
@@ -385,9 +431,27 @@ def validate_parse_pass_semantics(
             "candidate_exit_code=0"
         )
 
-    if candidate_receipt.get("original_psycle_observed") is not False:
-        die(f"{row_id} candidate receipt has invalid original_psycle_observed flag")
+def canonical_candidate_parse_result(
+    candidate_receipt: dict[str, object],
+) -> str:
+    observation = candidate_receipt.get("observation")
+    if observation == "load-and-clean-exit":
+        return "accepted"
+    if observation == "load-returned-nonzero":
+        return "rejected"
+    if observation == "capability-missing":
+        return "missing"
+    return "inconclusive"
 
+
+def validate_parse_classification_semantics(
+    row_id: str,
+    status: str,
+    original_receipt: dict[str, object],
+    candidate_receipt: dict[str, object],
+    comparison: dict[str, object],
+) -> None:
+    """Require verdict-specific parse evidence rather than trusting the label."""
     expected_bindings = {
         "original_observation": original_receipt.get("observation"),
         "original_load_result": original_receipt.get("load_result"),
@@ -398,8 +462,49 @@ def validate_parse_pass_semantics(
         if comparison.get(field) != expected:
             die(
                 f"{row_id}.comparison receipt {field} does not bind the "
-                "observation used for the PASS verdict"
+                "underlying parse observations"
             )
+
+    if status == "PASS":
+        validate_parse_pass_semantics(
+            row_id,
+            original_receipt,
+            candidate_receipt,
+            comparison,
+        )
+        return
+
+    original_result = original_receipt.get("load_result")
+    candidate_result = canonical_candidate_parse_result(candidate_receipt)
+
+    if status == "DIFFERENT":
+        if original_result not in {"accepted", "rejected"}:
+            die(f"{row_id} DIFFERENT original parse result is not conclusive")
+        if candidate_result not in {"accepted", "rejected"}:
+            die(f"{row_id} DIFFERENT candidate parse result is not conclusive")
+        if original_result == candidate_result:
+            die(
+                f"{row_id} DIFFERENT verdict lacks differing conclusive "
+                "parse outcomes"
+            )
+        return
+
+    if status == "MISSING":
+        if original_result != "accepted":
+            die(f"{row_id} MISSING requires an accepted original capability")
+        if candidate_result != "missing":
+            die(
+                f"{row_id} MISSING requires candidate observation "
+                "'capability-missing'"
+            )
+        if comparison.get("candidate_missing_capability") is not True:
+            die(
+                f"{row_id}.comparison receipt must explicitly bind "
+                "candidate_missing_capability=true"
+            )
+        return
+
+    die(f"{row_id} unsupported classified parse status: {status!r}")
 
 
 def validate_comparison_receipt(
@@ -451,6 +556,39 @@ def validate_comparison_receipt(
             "receipt SHA-256"
         )
 
+    expected_candidate_source = EXPECTED_CANDIDATE_SOURCE_IDENTITIES.get(row_id)
+    if not isinstance(expected_candidate_source, dict):
+        die(f"{row_id} comparison lacks a pinned candidate source identity")
+    if (
+        comparison.get("candidate_source_receipt_sha256")
+        != expected_candidate_source["receipt_sha256"]
+    ):
+        die(
+            f"{row_id}.comparison receipt does not bind the candidate source "
+            "receipt SHA-256"
+        )
+    candidate_executable_sha256 = require_sha256(
+        candidate_receipt.get("executable_sha256"),
+        f"{row_id} candidate executable SHA-256",
+    )
+    if (
+        comparison.get("candidate_executable_sha256")
+        != expected_candidate_source["executable_sha256"]
+        or candidate_executable_sha256
+        != expected_candidate_source["executable_sha256"]
+    ):
+        die(f"{row_id}.comparison receipt does not bind the candidate executable")
+    source_evidence = comparison.get("source_evidence")
+    if not isinstance(source_evidence, dict):
+        die(f"{row_id}.comparison receipt lacks source_evidence")
+    if (
+        source_evidence.get("candidate_artifact_digest")
+        != expected_candidate_source["artifact_digest"]
+    ):
+        die(f"{row_id}.comparison receipt has the wrong candidate artifact digest")
+    if source_evidence.get("candidate_artifact_receipt") != "candidate-psy2.json":
+        die(f"{row_id}.comparison receipt has the wrong candidate artifact receipt")
+
     if original_fixture_sha256 != candidate_fixture_sha256:
         die(f"{row_id} original/candidate receipts do not identify the same fixture")
     if comparison.get("fixture_sha256") != original_fixture_sha256:
@@ -465,9 +603,10 @@ def validate_comparison_receipt(
             f"verdict {verdict!r}"
         )
 
-    if status == "PASS" and row_id in PARSE_CONTRACT_IDS:
-        validate_parse_pass_semantics(
+    if row_id in PARSE_CONTRACT_IDS:
+        validate_parse_classification_semantics(
             row_id,
+            status,
             original_receipt,
             candidate_receipt,
             comparison,
