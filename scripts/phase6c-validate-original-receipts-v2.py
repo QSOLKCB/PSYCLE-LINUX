@@ -613,7 +613,6 @@ def validate_pair(
         "signature-read-failed",
         "signature-mismatch",
         "invoke-failed",
-        "close-verification-failed",
         "close-timeout",
         "automation-failed",
     }
@@ -640,7 +639,6 @@ def validate_pair(
         "signature-read-failed": (True, False, False, None),
         "signature-mismatch": (True, False, False, None),
         "invoke-failed": (True, True, True, "invoke-ok"),
-        "close-verification-failed": (True, True, True, "invoke-ok"),
         "close-timeout": (True, True, True, "invoke-ok"),
     }
     startup_automation_states = {
