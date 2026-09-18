@@ -14,7 +14,7 @@ $ReferenceUrl = "https://sourceforge.net/projects/psycle/files/psycle/1.12/$Refe
 $ExpectedInstallerSha256 = "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 $ExpectedInstallerSize = 9322919
 $RequiredVc90RuntimeFamily = "9.0"
-$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using the legacy accessibility default action only if the old MFC button ignores a successful UIA InvokePattern; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
+$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 BM_CLICK only if the old MFC button ignores a successful UIA InvokePattern, and only after binding the button HWND to the same Psycle process and the exact Windows Button class; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
 
 function Fail([string]$Message) {
     throw "phase6c-original-windows-fixtures: $Message"
@@ -488,25 +488,70 @@ function Invoke-ExpectedDirectSoundFailure([System.Diagnostics.Process]$Process)
             }
 
             if (-not $closed) {
-                # Psycle 1.12 uses old MFC controls. On the hosted runner the
+                # Psycle 1.12 uses an old MFC message box. On the hosted runner
                 # UIA InvokePattern can report success without dispatching the
-                # actual button action, while LegacyIAccessible still exposes
-                # the Win32 default action. This fallback remains bound to the
-                # same exact dialog/message/button signature above.
-                $result.action = "invoke-ok-legacy-default-action"
+                # button action. The fallback remains bound to the same exact
+                # dialog/message/single-OK signature above and additionally
+                # requires a live native Button HWND owned by the same Psycle
+                # process before issuing a timeout-bounded BM_CLICK.
+                $result.action = "invoke-ok-win32-bm-click"
                 try {
-                    $legacyPattern = [System.Windows.Automation.LegacyIAccessiblePattern](
-                        $okButtons[0].GetCurrentPattern(
-                            [System.Windows.Automation.LegacyIAccessiblePattern]::Pattern
-                        )
+                    $buttonHandleValue = [int64]$okButtons[0].Current.NativeWindowHandle
+                    if ($buttonHandleValue -eq 0) {
+                        throw "DirectSound bootstrap verified OK button has no native HWND"
+                    }
+                    $buttonHandle = [IntPtr]::new($buttonHandleValue)
+                    if (-not [Phase6cNativeButton]::IsWindow($buttonHandle)) {
+                        throw "DirectSound bootstrap verified OK HWND is not a live window"
+                    }
+
+                    [uint32]$buttonProcessId = 0
+                    [void][Phase6cNativeButton]::GetWindowThreadProcessId(
+                        $buttonHandle,
+                        [ref]$buttonProcessId
                     )
-                    $legacyPattern.DoDefaultAction()
+                    if ($buttonProcessId -ne [uint32]$Process.Id) {
+                        throw (
+                            "DirectSound bootstrap verified OK HWND belongs to the wrong process: " +
+                            "expected=$($Process.Id) actual=$buttonProcessId"
+                        )
+                    }
+
+                    $className = [System.Text.StringBuilder]::new(64)
+                    $classLength = [Phase6cNativeButton]::GetClassName(
+                        $buttonHandle,
+                        $className,
+                        $className.Capacity
+                    )
+                    if ($classLength -le 0 -or $className.ToString() -cne "Button") {
+                        throw (
+                            "DirectSound bootstrap verified OK HWND has unexpected class: " +
+                            "$($className.ToString())"
+                        )
+                    }
+
+                    $BM_CLICK = [uint32]0x00F5
+                    $SMTO_ABORTIFHUNG = [uint32]0x0002
+                    [IntPtr]$messageResult = [IntPtr]::Zero
+                    $sendResult = [Phase6cNativeButton]::SendMessageTimeout(
+                        $buttonHandle,
+                        $BM_CLICK,
+                        [IntPtr]::Zero,
+                        [IntPtr]::Zero,
+                        $SMTO_ABORTIFHUNG,
+                        [uint32]2000,
+                        [ref]$messageResult
+                    )
+                    if ($sendResult -eq [IntPtr]::Zero) {
+                        $lastError = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+                        throw "DirectSound bootstrap BM_CLICK failed or timed out: win32_error=$lastError"
+                    }
                 }
                 catch {
                     $diagnostics.Add(
-                        "DirectSound bootstrap legacy OK action failed: $($_.Exception.Message)"
+                        "DirectSound bootstrap Win32 OK action failed: $($_.Exception.Message)"
                     )
-                    $result.outcome = "legacy-action-failed"
+                    $result.outcome = "win32-action-failed"
                     break
                 }
 
@@ -937,6 +982,34 @@ Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class Phase6cNativeButton
+{
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool IsWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maxCount);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SendMessageTimeout(
+        IntPtr hWnd,
+        uint msg,
+        IntPtr wParam,
+        IntPtr lParam,
+        uint flags,
+        uint timeout,
+        out IntPtr result
+    );
+}
+"@
 
 $workRoot = Join-Path $env:RUNNER_TEMP ("psycle-phase6c-original-" + [Guid]::NewGuid().ToString("N"))
 $installRoot = Join-Path $workRoot "installed"
