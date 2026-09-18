@@ -13,7 +13,7 @@ $ReferenceFile = "PsycleInstallerx86-1.12.0.exe"
 $ReferenceUrl = "https://sourceforge.net/projects/psycle/files/psycle/1.12/$ReferenceFile/download"
 $ExpectedInstallerSha256 = "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
 $ExpectedInstallerSize = 9322919
-$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; enumerate every top-level window owned by the reference process and its descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, and conventional external VST/Psycle roots for that observation; reject only on concrete application error text; accept only after a stable fixture marker is observed with no application error or UI Automation failure and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
+$Procedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\Software\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; enumerate every top-level window owned by the reference process and its descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, and conventional external VST/Psycle roots for that observation; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or UI Automation failure and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload"
 
 function Fail([string]$Message) {
     throw "phase6c-original-windows-fixtures: $Message"
@@ -136,6 +136,58 @@ function Get-UiObservation([System.Diagnostics.Process]$Process) {
         values = @($values | Select-Object -Unique)
         diagnostics = @($diagnostics | Select-Object -Unique)
         top_level_window_count = $topLevelWindowCount
+    }
+}
+
+function Get-FixtureUiAssessment([object[]]$Texts, [string[]]$Markers) {
+    $applicationErrorMarker = $null
+    $fixtureLoadErrorMarker = $null
+    $fixtureMarker = $null
+
+    foreach ($candidateText in @($Texts)) {
+        if ([string]::IsNullOrWhiteSpace([string]$candidateText)) {
+            continue
+        }
+        $text = [string]$candidateText
+
+        foreach ($marker in @($Markers)) {
+            if ([string]::IsNullOrWhiteSpace([string]$marker)) {
+                continue
+            }
+            if ($text.IndexOf([string]$marker, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                if ($null -eq $fixtureMarker) {
+                    $fixtureMarker = [string]$marker
+                }
+            }
+        }
+
+        $isApplicationError = $text -match '(?i)\b(error|failed|unsupported|corrupt|invalid)\b'
+        if ($isApplicationError -and $null -eq $applicationErrorMarker) {
+            $applicationErrorMarker = $text
+        }
+
+        if ($isApplicationError -and
+            $text -match '(?i)\b(load|loading|loaded|open|opening|read|reading|parse|parsing|file|song|project)\b') {
+            foreach ($marker in @($Markers)) {
+                if ([string]::IsNullOrWhiteSpace([string]$marker)) {
+                    continue
+                }
+                if ($text.IndexOf([string]$marker, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                    $fixtureLoadErrorMarker = $text
+                    break
+                }
+            }
+        }
+
+        if ($fixtureLoadErrorMarker) {
+            break
+        }
+    }
+
+    return [ordered]@{
+        fixture_marker = $fixtureMarker
+        application_error_marker = $applicationErrorMarker
+        fixture_load_error_marker = $fixtureLoadErrorMarker
     }
 }
 
@@ -579,8 +631,14 @@ try {
         $uiValues = @()
         $uiDiagnostics = @()
         $uiDiagnosticSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+        $markers = @(
+            [System.IO.Path]::GetFileName($fixtureCopy),
+            [System.IO.Path]::GetFileNameWithoutExtension($fixtureCopy),
+            $spec.expected_song_title
+        )
         $matchedMarker = $null
-        $errorMarker = $null
+        $applicationErrorMarker = $null
+        $fixtureLoadErrorMarker = $null
         $stableMarkerPolls = 0
 
         while ((Get-Date) -lt $deadline) {
@@ -602,32 +660,16 @@ try {
             }
             $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
             $combined = @($windowTitle) + $uiValues
+            $assessment = Get-FixtureUiAssessment -Texts $combined -Markers $markers
 
-            $errorMarker = $null
-            foreach ($candidateText in $combined) {
-                if ($candidateText -match '(?i)\b(error|failed|unsupported|corrupt|invalid)\b') {
-                    $errorMarker = $candidateText
-                    break
-                }
+            if ($null -eq $applicationErrorMarker -and $assessment.application_error_marker) {
+                $applicationErrorMarker = [string]$assessment.application_error_marker
             }
-            if ($errorMarker) {
-                break
+            if ($assessment.fixture_load_error_marker) {
+                $fixtureLoadErrorMarker = [string]$assessment.fixture_load_error_marker
             }
 
-            $pollMarker = $null
-            $markers = @(
-                [System.IO.Path]::GetFileName($fixtureCopy),
-                [System.IO.Path]::GetFileNameWithoutExtension($fixtureCopy),
-                $spec.expected_song_title
-            )
-            foreach ($marker in $markers) {
-                if ([string]::IsNullOrWhiteSpace($marker)) { continue }
-                if ($combined | Where-Object { $_.IndexOf($marker, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 }) {
-                    $pollMarker = $marker
-                    break
-                }
-            }
-
+            $pollMarker = $assessment.fixture_marker
             if ($pollMarker -and $uiDiagnostics.Count -eq 0) {
                 if ($matchedMarker -eq $pollMarker) {
                     $stableMarkerPolls += 1
@@ -640,7 +682,7 @@ try {
                 $stableMarkerPolls = 0
             }
 
-            if ($stableMarkerPolls -ge 4) {
+            if ($fixtureLoadErrorMarker) {
                 break
             }
         }
@@ -651,7 +693,58 @@ try {
             $exitCode = $process.ExitCode
         }
 
-        $evidenceLines = New-Object System.Collections.Generic.List[string]
+        $machinePluginInventoryPath = Join-Path $outRoot ("machine-plugin-inventory-{0}.json" -f $spec.name)
+        $machinePluginInventory = Write-MachinePluginInventory -InstallRoot $installRoot -ExecutablePath $psycleExe.FullName -Path $machinePluginInventoryPath -PreexistingPsycleRegistry $preexistingPsycleRegistry
+        $environment["machine_plugin_inventory"] = $machinePluginInventory
+
+        # Inventory hashing can take long enough for a late parse/machine error
+        # dialog to appear. Re-scan the complete Psycle-owned UI immediately
+        # before liveness capture and harness termination.
+        $process.Refresh()
+        if (-not $process.HasExited) {
+            $windowTitle = $process.MainWindowTitle
+            $finalUiObservation = Get-UiObservation $process
+            if ($process.MainWindowHandle -ne 0 -or [int]$finalUiObservation.top_level_window_count -gt 0) {
+                $mainWindowSeen = $true
+            }
+            $uiValues = @($finalUiObservation.values)
+            foreach ($diagnostic in @($finalUiObservation.diagnostics)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
+                    [void]$uiDiagnosticSet.Add([string]$diagnostic)
+                }
+            }
+            $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
+            $finalCombined = @($windowTitle) + $uiValues
+            $finalAssessment = Get-FixtureUiAssessment -Texts $finalCombined -Markers $markers
+            if ($null -eq $applicationErrorMarker -and $finalAssessment.application_error_marker) {
+                $applicationErrorMarker = [string]$finalAssessment.application_error_marker
+            }
+            if ($finalAssessment.fixture_load_error_marker) {
+                $fixtureLoadErrorMarker = [string]$finalAssessment.fixture_load_error_marker
+            }
+
+            $finalMarker = $finalAssessment.fixture_marker
+            if ($finalMarker -and $uiDiagnostics.Count -eq 0) {
+                if ($matchedMarker -eq $finalMarker) {
+                    $stableMarkerPolls += 1
+                } else {
+                    $matchedMarker = $finalMarker
+                    $stableMarkerPolls = 1
+                }
+            } else {
+                $matchedMarker = $finalMarker
+                $stableMarkerPolls = 0
+            }
+        }
+
+        $process.Refresh()
+        $exitedBeforeHarnessTermination = $process.HasExited
+        if ($exitedBeforeHarnessTermination -and $null -eq $exitCode) {
+            $exitCode = $process.ExitCode
+        }
+        $processRunningBeforeTermination = -not $exitedBeforeHarnessTermination
+
+        $evidenceLines = [System.Collections.Generic.List[string]]::new()
         $evidenceLines.Add("reference_build=$ReferenceBuild")
         $evidenceLines.Add("contract=$($spec.expected_contract)")
         $evidenceLines.Add("candidate_fixture=$($candidate.fixture)")
@@ -662,7 +755,8 @@ try {
         $evidenceLines.Add("main_window_title=$windowTitle")
         $evidenceLines.Add("matched_marker=$matchedMarker")
         $evidenceLines.Add("stable_marker_polls=$stableMarkerPolls")
-        $evidenceLines.Add("error_marker=$errorMarker")
+        $evidenceLines.Add("application_error_marker=$applicationErrorMarker")
+        $evidenceLines.Add("fixture_load_error_marker=$fixtureLoadErrorMarker")
         if ($null -ne $exitCode) {
             $evidenceLines.Add("exit_code=$exitCode")
         }
@@ -686,17 +780,6 @@ try {
                 sha256 = Get-Sha256 $screenshotPath
             }
         }
-
-        $machinePluginInventoryPath = Join-Path $outRoot ("machine-plugin-inventory-{0}.json" -f $spec.name)
-        $machinePluginInventory = Write-MachinePluginInventory -InstallRoot $installRoot -ExecutablePath $psycleExe.FullName -Path $machinePluginInventoryPath -PreexistingPsycleRegistry $preexistingPsycleRegistry
-        $environment["machine_plugin_inventory"] = $machinePluginInventory
-
-        $process.Refresh()
-        $exitedBeforeHarnessTermination = $process.HasExited
-        if ($exitedBeforeHarnessTermination -and $null -eq $exitCode) {
-            $exitCode = $process.ExitCode
-        }
-        $processRunningBeforeTermination = -not $exitedBeforeHarnessTermination
 
         $termination = "already-exited"
         if ($processRunningBeforeTermination) {
@@ -742,9 +825,12 @@ try {
             }
         }
 
-        if ($errorMarker) {
+        if ($fixtureLoadErrorMarker) {
             $loadResult = "rejected"
-            $observation = "native-window-evidence-reports-load-error"
+            $observation = "fixture-associated-native-window-evidence-reports-load-error"
+        } elseif ($applicationErrorMarker) {
+            $loadResult = "inconclusive"
+            $observation = "application-error-not-bound-to-fixture-load"
         } elseif ($uiDiagnostics.Count -gt 0) {
             $loadResult = "inconclusive"
             $observation = "ui-automation-harness-diagnostic-prevents-behaviour-classification"
@@ -784,7 +870,15 @@ try {
             load_result = $loadResult
             load_evidence_marker = $matchedMarker
             stable_marker_polls = $stableMarkerPolls
-            error_marker = $errorMarker
+            error_marker = $fixtureLoadErrorMarker
+            application_error_marker = $applicationErrorMarker
+            error_marker_scope = if ($fixtureLoadErrorMarker) {
+                "fixture-load"
+            } elseif ($applicationErrorMarker) {
+                "application-unassociated"
+            } else {
+                "none"
+            }
             ui_automation_diagnostics = @($uiDiagnostics)
             main_window_seen = $mainWindowSeen
             main_window_title = $windowTitle
@@ -824,7 +918,8 @@ try {
 - Observation environment: native GitHub-hosted Windows runner.
 - Reference installer and installed executable payload: transient only; not retained in this evidence directory.
 - Inputs: exact project-authored fixture bytes copied into this artifact and SHA-256-bound to the corresponding candidate receipts.
-- Acceptance rule: application load errors from every Psycle-owned top-level window take precedence over any filename/title marker; acceptance requires a stable fixture marker across four polls, no application error marker, no UI Automation diagnostic, and the reference process still running when harness termination begins.
+- Rejection rule: only an error-bearing UI text item that is explicitly associated with this fixture and load/open/read/parse/project semantics can classify the fixture as rejected; unrelated Psycle application errors force an inconclusive result instead.
+- Acceptance rule: the observer continues through the full polling window, performs a final complete Psycle-owned UI scan after runtime inventory hashing, and accepts only with a stable fixture marker, no application error, no UI Automation diagnostic, and the reference process still running when harness termination begins.
 - UI Automation failures are sticky harness diagnostics across the full observation and yield an inconclusive observation, never a rejection or later acceptance result.
 - Configuration isolation: the post-install HKCU\Software\Psycle baseline is restored before each fixture so PSY2 cannot influence PSY3.
 - Machine/plugin environment: the full installed payload, runtime Psycle registry state, configured plugin/machine roots, and conventional external VST/Psycle plugin roots are recorded in a fixture-specific SHA-256-bound machine-plugin inventory during each observation.
