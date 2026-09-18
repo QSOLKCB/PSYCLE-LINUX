@@ -268,7 +268,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: phase6c-original-reference-evidence
-          path: |
-            phase6c-original-evidence/
-            phase6c-vc90-runtime.txt
+          path: phase6c-original-evidence/
           if-no-files-found: warn
