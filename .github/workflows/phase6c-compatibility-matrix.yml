@@ -15,6 +15,7 @@ on:
       - 'cpsycle/**'
       - 'scripts/phase6*.sh'
       - 'scripts/phase6*.py'
+      - 'scripts/phase6*.ps1'
       - 'scripts/phase4-historical-psy2-smoke.sh'
       - 'scripts/phase4-core-workflow-smoke.sh'
       - 'tests/phase4_historical_psy2.c'
@@ -31,6 +32,7 @@ on:
       - 'cpsycle/**'
       - 'scripts/phase6*.sh'
       - 'scripts/phase6*.py'
+      - 'scripts/phase6*.ps1'
       - 'scripts/phase4-historical-psy2-smoke.sh'
       - 'scripts/phase4-core-workflow-smoke.sh'
       - 'tests/phase4_historical_psy2.c'
@@ -166,10 +168,105 @@ jobs:
           set -euo pipefail
           bash scripts/phase6c-candidate-fixtures.sh phase6c-evidence
 
-      - name: Upload Phase 6C evidence
+      - name: Upload Phase 6C candidate evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: phase6c-compatibility-evidence
           path: phase6c-evidence/
+          if-no-files-found: warn
+
+  original-reference-evidence:
+    needs: candidate-evidence
+    runs-on: windows-2022
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download exact candidate fixture artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: phase6c-compatibility-evidence
+          path: phase6c-candidate-artifact
+
+      - name: Install pinned Microsoft VC90 x86 runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x86.exe'
+          $expectedSha = '8742bcbf24ef328a72d2a27b693cc7071e38d3bb4b9b44dec42aa3d2c8d61d92'
+          $version = '9.0.30729.6161'
+          $runtime = Join-Path $env:RUNNER_TEMP 'psycle-vc90-vcredist_x86.exe'
+          $receipt = Join-Path $PWD 'phase6c-vc90-runtime.txt'
+
+          & curl.exe --fail --location --retry 3 --silent --show-error --output $runtime $url
+          if ($LASTEXITCODE -ne 0) {
+            throw "VC90 runtime download failed with curl exit $LASTEXITCODE"
+          }
+
+          $actualSha = (Get-FileHash -LiteralPath $runtime -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha -ne $expectedSha) {
+            throw "VC90 runtime SHA-256 mismatch: expected=$expectedSha actual=$actualSha"
+          }
+
+          $signature = Get-AuthenticodeSignature -FilePath $runtime
+          if ($signature.Status -ne 'Valid') {
+            throw "VC90 runtime Authenticode status is not Valid: $($signature.Status)"
+          }
+          if ($null -eq $signature.SignerCertificate -or
+              $signature.SignerCertificate.Subject -notmatch '(?i)Microsoft') {
+            throw "VC90 runtime signer is not Microsoft"
+          }
+
+          $process = Start-Process -FilePath $runtime `
+            -ArgumentList '/Q','/NORESTART' `
+            -Wait `
+            -PassThru
+          if ($process.ExitCode -notin @(0, 3010)) {
+            throw "VC90 runtime installer returned exit code $($process.ExitCode)"
+          }
+
+          @(
+            "runtime=Microsoft Visual C++ 2008 SP1 x86 Redistributable MFC Security Update"
+            "redistributable_version=$version"
+            "url=$url"
+            "sha256=$actualSha"
+            "authenticode_status=$($signature.Status)"
+            "signer_subject=$($signature.SignerCertificate.Subject)"
+            "installer_exit_code=$($process.ExitCode)"
+          ) | Set-Content -LiteralPath $receipt -Encoding utf8
+
+          Remove-Item -LiteralPath $runtime -Force
+
+          "PSYCLE_PHASE6C_VC90_RUNTIME_URL=$url" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "PSYCLE_PHASE6C_VC90_RUNTIME_SHA256=$actualSha" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "PSYCLE_PHASE6C_VC90_RUNTIME_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "PSYCLE_PHASE6C_VC90_RUNTIME_RECEIPT=$receipt" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          Get-Content -LiteralPath $receipt | ForEach-Object { Write-Host $_ }
+
+      - name: Observe pinned original Psycle against shared fixtures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./scripts/phase6c-original-windows-fixtures.ps1 `
+            -CandidateArtifactRoot 'phase6c-candidate-artifact' `
+            -Out 'phase6c-original-evidence'
+
+      - name: Validate original-reference evidence integrity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python scripts/phase6c-validate-original-receipts.py `
+            phase6c-candidate-artifact `
+            phase6c-original-evidence
+
+      - name: Upload Phase 6C original-reference evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-original-reference-evidence
+          path: phase6c-original-evidence/
           if-no-files-found: warn
