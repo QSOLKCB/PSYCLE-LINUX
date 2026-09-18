@@ -36,6 +36,45 @@ EXPECTED_ORIGINAL_SOURCE_IDENTITIES = {
         "artifact_digest": "sha256:20957d9e23733bc3ce724611734f07f9d90a49450b66152c68ae186c1dd62595",
     }
 }
+EXPECTED_ORIGINAL_CLASSIFICATION_FIELDS = {
+    "project-io-psy2-parse": {
+        "observation": "stable-native-window-evidence-identifies-loaded-fixture-without-error",
+        "load_result": "accepted",
+        "load_evidence_marker": "phase4-historical-psy2.psy",
+        "stable_marker_polls": 38,
+        "error_marker": None,
+        "application_error_marker": None,
+        "error_marker_scope": "none",
+        "ui_automation_diagnostics": [],
+        "startup_bootstrap": {
+            "settings_dialog_seen": True,
+            "signature_verified": True,
+            "attempted": True,
+            "action": "invoke-ok",
+            "dismissed": True,
+            "outcome": "dismissed",
+            "diagnostics": [],
+        },
+        "environment_bootstrap": {
+            "directsound": {
+                "dialog_seen": True,
+                "signature_verified": True,
+                "attempted": True,
+                "action": "invoke-ok-win32-bm-click",
+                "dismissed": True,
+                "outcome": "dismissed",
+                "diagnostics": [],
+            }
+        },
+        "runtime_identity_diagnostics": [],
+        "main_window_seen": True,
+        "exit_code_before_termination": None,
+        "process_running_before_termination": True,
+        "termination": "killed-without-closeable-main-window",
+        "original_psycle_observed": True,
+        "parity_status": "UNKNOWN",
+    }
+}
 EXPECTED_CANDIDATE_SOURCE_IDENTITIES = {
     "project-io-psy2-parse": {
         "receipt_sha256": "feee397beec6babfc715ad05be08037789e881cecb77abb174e934dbbc42a230",
@@ -207,6 +246,16 @@ def validate_classification_receipt(
         procedure_sha256 = hashlib.sha256(procedure.encode("utf-8")).hexdigest()
         if procedure_sha256 != expected_source["procedure_sha256"]:
             die(f"{context}.observation receipt procedure differs from source artifact")
+
+        expected_classification = EXPECTED_ORIGINAL_CLASSIFICATION_FIELDS.get(row_id)
+        if not isinstance(expected_classification, dict):
+            die(f"{context}.observation receipt lacks pinned classification fields")
+        for field, expected_value in expected_classification.items():
+            if field not in receipt or receipt[field] != expected_value:
+                die(
+                    f"{context}.observation receipt {field} differs from "
+                    "the pinned source classification"
+                )
     elif role == "candidate":
         if receipt.get("snapshot") != EXPECTED_CANDIDATE_BASELINE:
             die(f"{context}.observation receipt is bound to the wrong candidate snapshot")
@@ -586,7 +635,11 @@ def validate_comparison_receipt(
         != expected_candidate_source["artifact_digest"]
     ):
         die(f"{row_id}.comparison receipt has the wrong candidate artifact digest")
-    if source_evidence.get("candidate_artifact_receipt") != "candidate-psy2.json":
+    expected_candidate_artifact_receipt = pathlib.PurePosixPath(candidate_ref).name
+    if (
+        source_evidence.get("candidate_artifact_receipt")
+        != expected_candidate_artifact_receipt
+    ):
         die(f"{row_id}.comparison receipt has the wrong candidate artifact receipt")
 
     if original_fixture_sha256 != candidate_fixture_sha256:
