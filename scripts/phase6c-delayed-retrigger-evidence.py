@@ -465,8 +465,6 @@ def validate_original_source_bytes(player: bytes, structs: bytes) -> dict:
         "((entry._parameter+1)*SamplesPerRow())/256",
         "pMachine->RetriggerRate[track] = (entry._parameter+1);",
         "if(entry._parameter&0xf0) pMachine->RetriggerRate[track] = (entry._parameter&0xf0);",
-        "if ( (pEntry->_parameter&0xE0) == 0 )",
-        "SetBPM(-1,pEntry->_parameter);",
     ]
     for marker in required_structs:
         if structs_text.count(marker) != 1:
@@ -474,6 +472,13 @@ def validate_original_source_bytes(player: bytes, structs: bytes) -> dict:
     for marker in required_player:
         if player_text.count(marker) != 1:
             raise ValueError("original scheduling marker changed: " + marker)
+    extended_lpb = re.compile(
+        r"if\s*\(\s*\(pEntry->_parameter&0xE0\)\s*==\s*0\s*\)"
+        r"[^{}]*\{\s*SetBPM\(-1,pEntry->_parameter\);",
+        re.MULTILINE,
+    )
+    if len(extended_lpb.findall(player_text)) != 1:
+        raise ValueError("original extended-LPB scheduling block changed")
     return {
         "command_ids": {
             "note_delay": 0xFD,
