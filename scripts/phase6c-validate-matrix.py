@@ -1756,6 +1756,19 @@ def validate_delayed_retrigger_deferred_comparison(
             die(f"{row_id} {context} raw artifact receipt name changed")
         if evidence.get("artifact_receipt_sha256") != raw_sha256:
             die(f"{row_id} {context} raw artifact receipt SHA-256 changed")
+        expected_procedure_sha256 = {
+            "original": EXPECTED_DELAYED_RETRIGGER_IDENTITIES[
+                "original_procedure_sha256"
+            ],
+            "candidate": EXPECTED_DELAYED_RETRIGGER_IDENTITIES[
+                "candidate_procedure_sha256"
+            ],
+        }.get(context)
+        if (
+            expected_procedure_sha256 is not None
+            and evidence.get("procedure_sha256") != expected_procedure_sha256
+        ):
+            die(f"{row_id} {context} procedure SHA-256 changed")
         if evidence.get("projection_type") != "field-preserving-comparison-projection":
             die(f"{row_id} {context} projection type changed")
         if (
