@@ -134,11 +134,24 @@
       "id": "sequencer-bpm-lpb-tick",
       "subsystem": "Sequencer",
       "contract": "BPM, LPB and tick timing",
-      "status": "UNKNOWN",
-      "original": {},
-      "candidate": {},
-      "cpsycle": {"reusable": "partial"},
-      "notes": "Do not assume C-Psycle event-sequencer timing is authoritative."
+      "status": "DIFFERENT",
+      "original": {
+        "reference_build": "Psycle 1.12.0 x86",
+        "fixture": "fixtures/bpm-lpb-tick/phase6c-bpm-lpb-tick.psy",
+        "procedure": "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\\Software\\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 BM_CLICK on the uniquely verified native OK child only if the old MFC button ignores a successful UIA InvokePattern, and only after enumerating native top-level windows for the same Psycle process, requiring exactly one DirectSound Output driver #32770 dialog, correlating that unique native dialog to the unique process-owned UI Automation dialog by exact PID/title and a fresh verification of the same error-message/single-OK signature, then correlating exactly one native Button descendant under that verified dialog to the unique UI Automation OK button by same Psycle PID, exact OK text retrieved through timeout-bounded WM_GETTEXT, live visible/enabled state, and strongly overlapping screen bounds, attaching the harness thread input queue to the verified Psycle dialog thread only for the native action, verifying that exact dialog is active, and sending timeout-bounded BM_CLICK to the correlated descendant; when and only when the fixture specification requires the exact Psycle Load Warning dialog with the exact message This file is from a newer version of Psycle! This process will try to load it anyway. and exactly one OK button, invoke that OK button through UI Automation, verify the modal closes, and record the fixture-specific bootstrap outcome; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload; for the sequencer-bpm-lpb-tick contract inspect the exact process-owned Song Information timing controls without editing them, require four identical complete value bindings, and apply the same clean accepted-load, runtime-identity and liveness gates before interpreting timing metadata; before launch install pinned Microsoft Visual C++ 2008 SP1 x86 redistributable version 9.0.30729.6161 from https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x86.exe with SHA-256 8742bcbf24ef328a72d2a27b693cc7071e38d3bb4b9b44dec42aa3d2c8d61d92; loaded VC90 module identity is recorded separately from the live Psycle process",
+        "observation": "phase6c/evidence/sequencer-bpm-lpb-tick/original-bpm-lpb-tick.json"
+      },
+      "candidate": {
+        "snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+        "fixture": "bpm-lpb-tick/phase6c-bpm-lpb-tick.psy",
+        "procedure": "generate the project-authored PSY3 timing fixture at BPM 137, LPB 8, TPB 24 and extra ticks 0 with four consecutive line markers; build a separate probe against the frozen Phase 6B core; preserve the exact probe bytes inside the evidence artifact and execute that preserved copy without playback using PSYCLE_THREADS=1; record loaded timing metadata, marker spacing and derived sample intervals at 44100 and 48000 Hz",
+        "observation": "phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json"
+      },
+      "cpsycle": {
+        "reusable": "fixture-construction-only"
+      },
+      "notes": "Scoped DIFFERENT: BPM 137 and LPB 8 agree, but original Psycle preserves TPB 24 / extra tick 0 while the frozen C++ candidate loads LPB 8 into tick_speed with is_ticks=true, so PlayerTimeInfo uses beat/8 as tick cadence. Delayed/retrigger commands, tempo changes, playback duration, sampler tick behaviour and UI editing remain unclassified.",
+      "comparison": "phase6c/evidence/sequencer-bpm-lpb-tick/comparison.json"
     },
     {
       "id": "sequencer-delayed-retrigger",

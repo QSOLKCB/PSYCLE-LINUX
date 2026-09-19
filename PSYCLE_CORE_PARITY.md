@@ -2,7 +2,7 @@
 
 ## Status
 
-**Phase 6C active — PSY2 and PSY3 parse/load acceptance plus sequence/pattern order are scoped PASS results, serialization/save capability is MISSING for the exact hash-bound PSY3 operation, and 16 contracts remain UNKNOWN.**
+**Phase 6C active — PSY2 and PSY3 parse/load acceptance plus sequence/pattern order are scoped PASS results, serialization/save capability is MISSING, BPM/LPB/tick timing is DIFFERENT for the exact hash-bound timing fixture, and 15 contracts remain UNKNOWN.**
 
 This document is the human-readable view of the machine-readable contract in [`phase6c/compatibility-matrix.json`](phase6c/compatibility-matrix.json). The matrix compares three separately identified evidence sources:
 
@@ -12,7 +12,7 @@ This document is the human-readable view of the machine-readable contract in [`p
 
 Phase 6B is complete. The sanitized C++ source is committed under `psycle-cpp-r12005-sanitized/`, the historical qmake path builds `psycle-player` on Ubuntu 24.04, the missing historical support inputs are staged with pinned identities, and the final Phase 6B historical-player CI run completed successfully.
 
-Phase 6C has crossed from evidence collection into evidence-backed classification. Versioned original/candidate comparisons classify PSY2 and PSY3 parse/load acceptance for one fixture each, classify sequence/pattern order as PASS for the exact legacy single-sequence `0,2,1,2` fixture, and classify the tested PSY3 serialization/save capability as MISSING. Sequence timing, playback, multi-sequence behaviour and editing semantics remain separate; byte identity and complete semantic round-trip state are explicitly outside the save-capability verdict.
+Phase 6C has crossed from evidence collection into evidence-backed classification. Versioned original/candidate comparisons classify PSY2 and PSY3 parse/load acceptance for one fixture each, classify sequence/pattern order as PASS for the exact legacy single-sequence `0,2,1,2` fixture, classify the tested PSY3 serialization/save capability as MISSING, and classify the scoped BPM/LPB/tick contract as DIFFERENT. For the timing fixture, both sides preserve BPM 137 and LPB 8, but original Psycle reports TPB 24 while the candidate loads LPB 8 into `tick_speed` with `is_ticks=true`, making `PlayerTimeInfo` use a beat/8 tick cadence. Delayed/retrigger commands, playback, sampler tick processing, multi-sequence behaviour and editing semantics remain separate; byte identity and complete semantic round-trip state are explicitly outside the save-capability verdict.
 
 ## Evidence rule
 
@@ -39,7 +39,7 @@ Candidate-only or C-Psycle-only observations may be useful and may expose implem
 
 | Role | Identity | Status |
 | --- | --- | --- |
-| Original Psycle | `Psycle 1.12.0 x86 / PsycleInstallerx86-1.12.0.exe` — 9,322,919 bytes — SHA-256 `f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769` | **PINNED**; executable is not redistributed; PSY2/PSY3 parse/load acceptance, the scoped sequence/pattern-order observation, and the scoped Save As/fresh-reopen capability are versioned; broader behavioural observations remain open |
+| Original Psycle | `Psycle 1.12.0 x86 / PsycleInstallerx86-1.12.0.exe` — 9,322,919 bytes — SHA-256 `f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769` | **PINNED**; executable is not redistributed; PSY2/PSY3 parse/load acceptance, scoped sequence/pattern order, Save As/fresh reopen, and scoped Song Information BPM/LPB/TPB timing are versioned; broader behavioural observations remain open |
 | Candidate C++ | SourceForge SVN r12005 sanitized Phase 6B baseline `00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a` | **IMPORTED / BUILDABLE** |
 | Historical player build | Ubuntu 24.04 qmake build; Phase 6B run `35196962690` | **PASS** as a build/runtime smoke, not an original-Psycle parity claim |
 | C-Psycle oracle | repository baseline `cpsycle-r12005-baseline` plus merged Phase 2–5 regressions | **AVAILABLE** |
@@ -90,7 +90,7 @@ playback, serialized state, clean termination, or general PSY3 support.
 | Serialization / round-trip | [`serialization-save.json`](phase6c/evidence/project-io-serialization-roundtrip/serialization-save.json): pinned 1.12.0 saved the exact PSY3 input to a fresh PSY3 output and a fresh process accepted it | [`candidate-serialization.json`](phase6c/evidence/project-io-serialization-roundtrip/candidate-serialization.json): `CoreSong::save` versions 2, 3 and 4 each returned false, emitted no output and exited 0 | yes | MISSING | implement the evidenced save capability in Phase 7, then measure semantic round-trip state separately; see [`comparison.json`](phase6c/evidence/project-io-serialization-roundtrip/comparison.json) |
 | Malformed-file behaviour | pending | pending | partial | UNKNOWN | define rejection/recovery fixtures and original behaviour |
 | Sequence / pattern order | [`original-sequence-order.json`](phase6c/evidence/sequencer-pattern-order/original-sequence-order.json): pinned 1.12.0 accepted the exact fixture and exposed stable labels `00: 00, 01: 02, 02: 01, 03: 02` for 38 polls | [`candidate-sequence-order.json`](phase6c/evidence/sequencer-pattern-order/candidate-sequence-order.json): clean probe exit with canonical Master line and musical play order `0,2,1,2` | fixture construction only | PASS | exact legacy single-sequence order only; timing, playback, multi-sequence and editing remain separate; see [`comparison.json`](phase6c/evidence/sequencer-pattern-order/comparison.json) |
-| BPM / LPB / tick timing | pending | pending | partial | UNKNOWN | capture deterministic timing receipts from original |
+| BPM / LPB / tick timing | [`original-bpm-lpb-tick.json`](phase6c/evidence/sequencer-bpm-lpb-tick/original-bpm-lpb-tick.json): pinned 1.12.0 accepted the exact fixture and stably exposed BPM 137 / LPB 8 / TPB 24 / extra tick 0 | [`candidate-bpm-lpb-tick.json`](phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json): clean probe observes BPM 137 / derived LPB 8 but `tick_speed=8`, `is_ticks=true`, so `PlayerTimeInfo` uses beat/8 tick cadence | fixture construction only | DIFFERENT | restore distinct legacy TPB/extra-tick semantics without conflating LPB; delayed/retrigger commands remain a separate contract; see [`comparison.json`](phase6c/evidence/sequencer-bpm-lpb-tick/comparison.json) |
 | Delayed / retrigger / extended commands | pending | pending | partial | UNKNOWN | use minimal deterministic patterns |
 | Sampler PS1 | pending | pending | yes | UNKNOWN | compare pitch, envelopes, looping and commands |
 | XMSampler / Sampulse-related playback | pending | pending | partial | UNKNOWN | pin exact feature/version scope |
@@ -136,8 +136,8 @@ Phase 6 separates engine gaps from UI gaps. The absence of a full tracker UI in 
 
 ### Requires original-Psycle confirmation first
 
-- sequencer timing and event-ordering semantics beyond the classified single-sequence play-order fixture;
-- tracker tick/line timing details;
+- sequencer timing and event-ordering semantics beyond the classified single-sequence play-order and scoped BPM/LPB/tick fixtures;
+- tracker tick/line timing details beyond the classified LPB/TPB distinction;
 - delayed/retrigger command implementation;
 - mixer/send semantics;
 - automation routing;
@@ -157,12 +157,13 @@ Phase 6C now justifies this evidence backlog:
 2. preserve the scoped PSY2 and PSY3 parse/load PASS comparisons, including the PSY3 timeout as a separate process-lifetime result;
 3. preserve the scoped serialization/save MISSING comparison from final PR #63 run `35439069516`; byte identity and complete semantic round-trip state remain separate;
 4. preserve the scoped sequence/pattern-order PASS from final PR #65 run `35443357239`, including its exact single-sequence fixture boundary;
-5. move the next Phase 6C evidence slice to BPM/LPB/tick timing, then continue to tracker commands, routing, sampler, native-state, WAV and render contracts as evidence becomes reproducible;
-6. classify only additional rows for which versioned original + candidate receipts and a comparison verdict are sufficient;
-7. extend Phase 7 only from confirmed `DIFFERENT` / `MISSING` results.
+5. preserve the scoped BPM/LPB/tick DIFFERENT result from final PR #67 run `35453296036`: BPM 137 and LPB 8 match, while original TPB 24 differs from the candidate beat/8 tick cadence;
+6. move the next Phase 6C evidence slice to delayed/retrigger/extended tracker commands, then continue to routing, sampler, native-state, WAV and render contracts as evidence becomes reproducible;
+7. classify only additional rows for which versioned original + candidate receipts and a comparison verdict are sufficient;
+8. extend Phase 7 only from confirmed `DIFFERENT` / `MISSING` results.
 
 ### First Phase 7 implementation backlog
 
-The first evidence-backed engine item is now frozen: add the missing candidate PSY3 serialization/save capability required to perform the tested original Save As operation and produce an output that can be reopened. Byte-for-byte identity is not required by this backlog item, and complete semantic state preservation must be measured separately after the candidate can actually serialize.
+Two evidence-backed engine items are now frozen. First, add the missing candidate PSY3 serialization/save capability required to perform the tested original Save As operation and produce an output that can be reopened; byte-for-byte identity is not required, and complete semantic state preservation must be measured separately. Second, separate legacy TPB/extra-tick timing from LPB in the C++ timing model so an LPB 8 song with TPB 24 no longer drives `PlayerTimeInfo` at a beat/8 tick cadence. Delayed/retrigger semantics must still be measured independently before broad tracker-command changes.
 
 No Phase 7 engine change is justified merely because C-Psycle and the C++ candidate differ. Original Psycle remains the compatibility target.

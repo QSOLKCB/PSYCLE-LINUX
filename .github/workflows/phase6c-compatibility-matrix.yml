@@ -23,6 +23,7 @@ on:
       - 'tests/phase6c_candidate_parse.py'
       - 'tests/phase6c_serialization*'
       - 'tests/phase6c_sequence_order*'
+      - 'tests/phase6c_bpm_lpb_tick*'
       - '.github/workflows/phase6c-compatibility-matrix.yml'
   pull_request:
     paths:
@@ -43,6 +44,7 @@ on:
       - 'tests/phase6c_candidate_parse.py'
       - 'tests/phase6c_serialization*'
       - 'tests/phase6c_sequence_order*'
+      - 'tests/phase6c_bpm_lpb_tick*'
       - '.github/workflows/phase6c-compatibility-matrix.yml'
   workflow_dispatch:
 
@@ -100,6 +102,7 @@ jobs:
           python3 tests/phase6c_candidate_parse.py
           python3 tests/phase6c_serialization.py
           python3 tests/phase6c_sequence_order.py
+          python3 tests/phase6c_bpm_lpb_tick.py
 
       - name: Parse original Windows observer
         shell: pwsh

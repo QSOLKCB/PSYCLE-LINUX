@@ -1,0 +1,80 @@
+{
+  "bpm": 137.0,
+  "contract": "sequencer-bpm-lpb-tick",
+  "derived_lpb": 8.0,
+  "evidence_role": "candidate",
+  "exit_code": 0,
+  "fixture": "bpm-lpb-tick/phase6c-bpm-lpb-tick.psy",
+  "fixture_expected": {
+    "bpm": 137,
+    "extra_ticks_per_beat": 0,
+    "lpb": 8,
+    "marker_positions": [
+      0.0,
+      0.125,
+      0.25,
+      0.375
+    ],
+    "ticks_per_beat": 24
+  },
+  "fixture_generator_log": {
+    "path": "bpm-lpb-tick/fixture-generator.log",
+    "sha256": "b1e116072ae975e6467655efb02f6ef4eb3b8a99db815b45e5aa9c2260ab262f"
+  },
+  "fixture_sha256": "c880f05993e2d33e460bdec824095c0a1e5e63d004755ad8b2227290dd270bd0",
+  "is_ticks": true,
+  "log": {
+    "path": "bpm-lpb-tick/candidate-probe.log",
+    "sha256": "9aa071c8766a0b9263c72ad436bbc3ce8adaaf46c638be19b510a78419e60b09"
+  },
+  "marker_positions": [
+    0.0,
+    0.125,
+    0.25,
+    0.375
+  ],
+  "observation": "timing-model-observed",
+  "original_psycle_observed": false,
+  "parity_note": "Candidate execution and C-Psycle fixture evidence cannot classify compatibility without a versioned original observation and comparison verdict.",
+  "parity_status": "UNKNOWN",
+  "phase": "6C",
+  "probe": {
+    "path": "bpm-lpb-tick/candidate-probe.bin",
+    "sha256": "facbfbdcbc253ef3fbc68b8d13f8a0bc92aaa3c90ae1a8f8e3a09b350c05968b"
+  },
+  "probe_sha256": "facbfbdcbc253ef3fbc68b8d13f8a0bc92aaa3c90ae1a8f8e3a09b350c05968b",
+  "procedure": "generate the project-authored PSY3 timing fixture at BPM 137, LPB 8, TPB 24 and extra ticks 0 with four consecutive line markers; build a separate probe against the frozen Phase 6B core; preserve the exact probe bytes inside the evidence artifact and execute that preserved copy without playback using PSYCLE_THREADS=1; record loaded timing metadata, marker spacing and derived sample intervals at 44100 and 48000 Hz",
+  "raw_probe": {
+    "path": "bpm-lpb-tick/candidate-probe.json",
+    "sha256": "fc84b973bbdfd874f7d3703f2aa6217bda274d260c969e258226dc7c97e788e2"
+  },
+  "reports": [
+    "Load Warning: This file is from a newer version of Psycle! This process will try to load it anyway."
+  ],
+  "sample_rates": [
+    {
+      "sample_rate": 44100,
+      "samples_per_beat": 19313.869140625,
+      "samples_per_fixture_line": 2414.23364257812,
+      "samples_per_tick": 2414.23364257812
+    },
+    {
+      "sample_rate": 48000,
+      "samples_per_beat": 21021.8984375,
+      "samples_per_fixture_line": 2627.7373046875,
+      "samples_per_tick": 2627.7373046875
+    }
+  ],
+  "schema_version": 1,
+  "scope": "candidate-observation",
+  "snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+  "source_sha256": {
+    "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/playertimeinfo.cpp": "438a450c18fec8a527c502ff1eeeca72dcbcb8db54e8e26fdcc5fa91cb599d43",
+    "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.cpp": "450ff82d77bc03f08ab8810a28453e830a86d695665ed44ac1c93a6fb1fc1814",
+    "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/song.h": "12428b66de42819be35ac8930f24dec3fcd495853d73d57bbe030bc377753289",
+    "tests/phase6c_bpm_lpb_tick.cpp": "571fedd0ea2eb6b302978dd3a19e09b416e867b687554859fa72063700cdd50e",
+    "tests/phase6c_bpm_lpb_tick.pro": "5779b4329954bcaca24d8a0a6c525dd9cc9b030492ba848b90ad7b58fc8c6169",
+    "tests/phase6c_bpm_lpb_tick_fixture.c": "f29ccdb265c0b414ded6271cdbd89929be85be2ae40f5e5479cafba9fd60d4f8"
+  },
+  "tick_speed": 8
+}

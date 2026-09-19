@@ -333,6 +333,128 @@ EXPECTED_CANDIDATE_SOURCE_IDENTITIES[SEQUENCE_ORDER_CONTRACT_ID] = {
     "artifact_digest": "sha256:fda24b038aeb448256aac63ecaa5da376e58f967d65f951544f63e09c3f0f1af",
 }
 
+TIMING_CONTRACT_ID = "sequencer-bpm-lpb-tick"
+EXPECTED_TIMING_ORIGINAL_VALUES = {
+    "tempo": 137,
+    "lines_per_beat": 8,
+    "ticks_per_beat": 24,
+    "extra_tick_per_line": 0,
+    "real_tempo": 137,
+    "real_ticks_per_beat": 24,
+}
+EXPECTED_TIMING_FIXTURE = {
+    "bpm": 137,
+    "extra_ticks_per_beat": 0,
+    "lpb": 8,
+    "marker_positions": [0.0, 0.125, 0.25, 0.375],
+    "ticks_per_beat": 24,
+}
+EXPECTED_TIMING_SAMPLE_RATES = [
+    {
+        "sample_rate": 44100,
+        "samples_per_beat": 19313.869140625,
+        "samples_per_fixture_line": 2414.23364257812,
+        "samples_per_tick": 2414.23364257812,
+    },
+    {
+        "sample_rate": 48000,
+        "samples_per_beat": 21021.8984375,
+        "samples_per_fixture_line": 2627.7373046875,
+        "samples_per_tick": 2627.7373046875,
+    },
+]
+EXPECTED_ORIGINAL_SOURCE_IDENTITIES[TIMING_CONTRACT_ID] = {
+    "receipt_sha256": "8cbf3f514d8c007887f33222af65832205268c2c94bd79e2bf7e498ca1220b1c",
+    "procedure_sha256": "03be5be6ba98384a2abd0c88882b2e890d746bb7a6a49ccdb52316226c369e26",
+    "executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+    "artifact_digest": "sha256:5a8a90ae36c57d87ecc81e1ff81d38e198aad599feddd2585542f967294d7720",
+}
+EXPECTED_WORKFLOW_ATTRIBUTION[TIMING_CONTRACT_ID] = {
+    "workflow": "Phase 6C BPM LPB tick observation",
+    "run_id": 35453296036,
+    "event": "pull_request",
+    "head_sha": "41c58bdd660215be30f64aab7bf1e5f358440cf3",
+    "merged_main_sha": "e7e43aaa46b8f295eebc9bd8edbe14a806621460",
+    "original_job_id": 105924357507,
+    "original_artifact_id": 10587446916,
+    "candidate_job_id": 105924083635,
+    "candidate_artifact_id": 10587596435,
+}
+EXPECTED_ORIGINAL_CLASSIFICATION_FIELDS[TIMING_CONTRACT_ID] = {
+    "reference_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+    "fixture": "fixtures/bpm-lpb-tick/phase6c-bpm-lpb-tick.psy",
+    "observation": "stable-native-window-evidence-identifies-loaded-fixture-without-error",
+    "load_result": "accepted",
+    "load_evidence_marker": "phase6c-bpm-lpb-tick.psy",
+    "stable_marker_polls": 45,
+    "error_marker": None,
+    "application_error_marker": None,
+    "error_marker_scope": "none",
+    "ui_automation_diagnostics": [],
+    "startup_bootstrap": {
+        "settings_dialog_seen": False,
+        "signature_verified": False,
+        "attempted": False,
+        "action": None,
+        "dismissed": False,
+        "outcome": "not-seen",
+        "diagnostics": [],
+    },
+    "environment_bootstrap": {
+        "directsound": {
+            "dialog_seen": True,
+            "signature_verified": True,
+            "attempted": True,
+            "action": "invoke-ok-win32-bm-click",
+            "dismissed": True,
+            "outcome": "dismissed",
+            "diagnostics": [],
+        }
+    },
+    "fixture_bootstrap": {
+        "load_warning": {
+            "required": True,
+            "expected_title": "Load Warning",
+            "expected_message": "This file is from a newer version of Psycle! This process will try to load it anyway.",
+            "dialog_seen": True,
+            "signature_verified": True,
+            "attempted": True,
+            "action": "invoke-ok",
+            "dismissed": True,
+            "outcome": "dismissed",
+            "diagnostics": [],
+        }
+    },
+    "timing_ui": {
+        "expected_values": EXPECTED_TIMING_ORIGINAL_VALUES,
+        "observed_values": EXPECTED_TIMING_ORIGINAL_VALUES,
+        "stable_polls": 4,
+        "result": "observed",
+        "matches_fixture_expected": True,
+        "dialog_bootstrap": {
+            "opened": True,
+            "dialog_seen_before": True,
+            "file_menu_invoked": False,
+            "menu_item_seen": False,
+            "attempted": False,
+            "outcome": "already-open",
+            "diagnostics": [],
+        },
+    },
+    "runtime_identity_diagnostics": [],
+    "main_window_seen": True,
+    "exit_code_before_termination": None,
+    "process_running_before_termination": True,
+    "termination": "killed-without-closeable-main-window",
+    "original_psycle_observed": True,
+    "parity_status": "UNKNOWN",
+}
+EXPECTED_CANDIDATE_SOURCE_IDENTITIES[TIMING_CONTRACT_ID] = {
+    "receipt_sha256": "7efaabf1598f8c77066c3316c6528e88185aa50dc922ffd96fcedc107bfa47ec",
+    "executable_sha256": "facbfbdcbc253ef3fbc68b8d13f8a0bc92aaa3c90ae1a8f8e3a09b350c05968b",
+    "artifact_digest": "sha256:f1daf3100a8199335f4ba188519e17a0f6551ee3447f0d3dfee6bb11233f5eb8",
+}
+
 ALLOWED_STATUS = {"PASS", "DIFFERENT", "MISSING", "UNKNOWN"}
 CLASSIFIED_STATUS = ALLOWED_STATUS - {"UNKNOWN"}
 PARSE_CONTRACT_IDS = {
@@ -555,7 +677,7 @@ def validate_classification_receipt(
             die(f"{context}.observation receipt lacks a pinned candidate source identity")
         executable_field = (
             "probe_sha256"
-            if row_id in {SERIALIZATION_CONTRACT_ID, SEQUENCE_ORDER_CONTRACT_ID}
+            if row_id in {SERIALIZATION_CONTRACT_ID, SEQUENCE_ORDER_CONTRACT_ID, TIMING_CONTRACT_ID}
             else "executable_sha256"
         )
         executable_sha256 = require_sha256(
@@ -1091,6 +1213,129 @@ def validate_sequence_order_classification_semantics(
             )
 
 
+def validate_timing_classification_semantics(
+    status: str,
+    original_receipt: dict[str, object],
+    candidate_receipt: dict[str, object],
+    comparison: dict[str, object],
+) -> None:
+    """Require the frozen BPM/LPB match and the observed TPB/tick-cadence difference."""
+    if status != "DIFFERENT":
+        die(
+            f"{TIMING_CONTRACT_ID} currently supports only the "
+            "evidence-backed DIFFERENT verdict"
+        )
+
+    if original_receipt.get("original_psycle_observed") is not True:
+        die(f"{TIMING_CONTRACT_ID} original Psycle was not observed")
+    if original_receipt.get("load_result") != "accepted":
+        die(f"{TIMING_CONTRACT_ID} original timing fixture load was not accepted")
+    if original_receipt.get("ui_automation_diagnostics") != []:
+        die(f"{TIMING_CONTRACT_ID} original UI observation is contaminated")
+    if original_receipt.get("runtime_identity_diagnostics") != []:
+        die(f"{TIMING_CONTRACT_ID} original runtime identity is contaminated")
+
+    timing_ui = original_receipt.get("timing_ui")
+    if not isinstance(timing_ui, dict):
+        die(f"{TIMING_CONTRACT_ID} original receipt lacks timing_ui")
+    stable_polls = timing_ui.get("stable_polls")
+    if (
+        not isinstance(stable_polls, int)
+        or isinstance(stable_polls, bool)
+        or stable_polls < 4
+    ):
+        die(f"{TIMING_CONTRACT_ID} original timing observation is not stable")
+    if timing_ui.get("result") != "observed":
+        die(f"{TIMING_CONTRACT_ID} original timing values were not observed")
+    if timing_ui.get("expected_values") != EXPECTED_TIMING_ORIGINAL_VALUES:
+        die(f"{TIMING_CONTRACT_ID} original expected timing values changed")
+    if timing_ui.get("observed_values") != EXPECTED_TIMING_ORIGINAL_VALUES:
+        die(f"{TIMING_CONTRACT_ID} original observed timing values changed")
+    if timing_ui.get("matches_fixture_expected") is not True:
+        die(f"{TIMING_CONTRACT_ID} original timing values do not match the fixture")
+    dialog_bootstrap = timing_ui.get("dialog_bootstrap")
+    if (
+        not isinstance(dialog_bootstrap, dict)
+        or dialog_bootstrap.get("opened") is not True
+        or dialog_bootstrap.get("outcome") not in {"already-open", "opened"}
+        or dialog_bootstrap.get("diagnostics") != []
+    ):
+        die(f"{TIMING_CONTRACT_ID} original timing dialog binding is not clean")
+
+    exit_code = candidate_receipt.get("exit_code")
+    if (
+        not isinstance(exit_code, int)
+        or isinstance(exit_code, bool)
+        or exit_code != 0
+    ):
+        die(f"{TIMING_CONTRACT_ID} candidate timing probe did not exit cleanly")
+    if candidate_receipt.get("observation") != "timing-model-observed":
+        die(f"{TIMING_CONTRACT_ID} candidate timing model was not observed")
+    if candidate_receipt.get("fixture_expected") != EXPECTED_TIMING_FIXTURE:
+        die(f"{TIMING_CONTRACT_ID} candidate fixture timing expectations changed")
+    if candidate_receipt.get("marker_positions") != EXPECTED_TIMING_FIXTURE["marker_positions"]:
+        die(f"{TIMING_CONTRACT_ID} candidate marker positions changed")
+    if candidate_receipt.get("bpm") != 137.0:
+        die(f"{TIMING_CONTRACT_ID} candidate BPM changed")
+    if candidate_receipt.get("derived_lpb") != 8.0:
+        die(f"{TIMING_CONTRACT_ID} candidate derived LPB changed")
+    tick_speed = candidate_receipt.get("tick_speed")
+    if not isinstance(tick_speed, int) or isinstance(tick_speed, bool) or tick_speed != 8:
+        die(f"{TIMING_CONTRACT_ID} candidate tick speed changed")
+    if candidate_receipt.get("is_ticks") is not True:
+        die(f"{TIMING_CONTRACT_ID} candidate tick-speed mode changed")
+    if candidate_receipt.get("sample_rates") != EXPECTED_TIMING_SAMPLE_RATES:
+        die(f"{TIMING_CONTRACT_ID} candidate sample timing changed")
+    for sample in EXPECTED_TIMING_SAMPLE_RATES:
+        if sample["samples_per_tick"] != sample["samples_per_fixture_line"]:
+            die(f"{TIMING_CONTRACT_ID} frozen candidate tick/line relation changed")
+
+    comparison_exit_code = comparison.get("candidate_exit_code")
+    if (
+        not isinstance(comparison_exit_code, int)
+        or isinstance(comparison_exit_code, bool)
+        or comparison_exit_code != 0
+    ):
+        die(
+            f"{TIMING_CONTRACT_ID}.comparison receipt candidate_exit_code "
+            "must be the integer 0"
+        )
+
+    expected_bindings = {
+        "original_load_result": "accepted",
+        "original_timing_result": "observed",
+        "original_observed_values": EXPECTED_TIMING_ORIGINAL_VALUES,
+        "original_matches_fixture_expected": True,
+        "candidate_observation": "timing-model-observed",
+        "candidate_exit_code": 0,
+        "candidate_bpm": 137.0,
+        "candidate_derived_lpb": 8.0,
+        "candidate_tick_speed": 8,
+        "candidate_is_ticks": True,
+        "candidate_sample_rates": EXPECTED_TIMING_SAMPLE_RATES,
+        "fixture_expected": EXPECTED_TIMING_FIXTURE,
+        "bpm_matches": True,
+        "lpb_matches": True,
+        "original_ticks_per_beat": 24,
+        "original_extra_tick_per_line": 0,
+        "candidate_timing_ticks_per_beat": 8,
+        "tick_semantics_match": False,
+    }
+    for field, expected in expected_bindings.items():
+        if comparison.get(field) != expected:
+            die(
+                f"{TIMING_CONTRACT_ID}.comparison receipt {field} "
+                "does not bind the underlying timing observations"
+            )
+
+    if (
+        comparison["original_ticks_per_beat"]
+        == comparison["candidate_timing_ticks_per_beat"]
+    ):
+        die(f"{TIMING_CONTRACT_ID} comparison no longer demonstrates a tick difference")
+
+
+
 def validate_comparison_receipt(
     row: dict[str, object],
     row_id: str,
@@ -1223,7 +1468,7 @@ def validate_comparison_receipt(
         )
     candidate_executable_field = (
         "probe_sha256"
-        if row_id in {SERIALIZATION_CONTRACT_ID, SEQUENCE_ORDER_CONTRACT_ID}
+        if row_id in {SERIALIZATION_CONTRACT_ID, SEQUENCE_ORDER_CONTRACT_ID, TIMING_CONTRACT_ID}
         else "executable_sha256"
     )
     candidate_executable_sha256 = require_sha256(
@@ -1280,6 +1525,13 @@ def validate_comparison_receipt(
         )
     elif row_id == SEQUENCE_ORDER_CONTRACT_ID:
         validate_sequence_order_classification_semantics(
+            status,
+            original_receipt,
+            candidate_receipt,
+            comparison,
+        )
+    elif row_id == TIMING_CONTRACT_ID:
+        validate_timing_classification_semantics(
             status,
             original_receipt,
             candidate_receipt,
