@@ -312,6 +312,13 @@ class MatrixDelayedRetriggerComparison(unittest.TestCase):
         )
         self.check(False)
 
+    def test_projection_procedure_digest_is_frozen(self):
+        self.mutate(
+            "candidate-delayed-retrigger.json",
+            lambda d: d["source_evidence"].update(procedure_sha256="0" * 64),
+        )
+        self.check(False)
+
     def test_deferred_verdict_cannot_be_relabelled_pass(self):
         self.mutate(
             "comparison.json",
