@@ -23,6 +23,240 @@ function Get-Phase6cTimingInteger([object]$Element) {
     return $null
 }
 
+function Open-Phase6cSongInformationDialog([System.Diagnostics.Process]$Process) {
+    $diagnostics = [System.Collections.Generic.List[string]]::new()
+    $result = [ordered]@{
+        opened = $false
+        dialog_seen_before = $false
+        file_menu_invoked = $false
+        menu_item_seen = $false
+        attempted = $false
+        outcome = "not-opened"
+        diagnostics = @()
+    }
+
+    try {
+        $Process.Refresh()
+        if ($Process.HasExited) {
+            $result.outcome = "process-exited"
+            return $result
+        }
+
+        $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+        if ($null -eq $desktop) {
+            $diagnostics.Add("timing dialog bootstrap UI Automation returned no desktop root element")
+            $result.outcome = "desktop-root-missing"
+            $result.diagnostics = $diagnostics.ToArray()
+            return $result
+        }
+        $processCondition = [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+            $Process.Id
+        )
+
+        $findDialogs = {
+            $found = [System.Collections.Generic.List[object]]::new()
+            $windows = $desktop.FindAll(
+                [System.Windows.Automation.TreeScope]::Children,
+                $processCondition
+            )
+            foreach ($window in $windows) {
+                try {
+                    if ([string]$window.Current.Name -ceq "Song Information") {
+                        $found.Add($window)
+                    }
+                }
+                catch {
+                    $diagnostics.Add(
+                        "timing dialog bootstrap top-level window read failed: $($_.Exception.Message)"
+                    )
+                }
+            }
+            return $found.ToArray()
+        }
+
+        $findMenuItems = {
+            param([string]$ExactName)
+            $found = [System.Collections.Generic.List[object]]::new()
+            $windows = $desktop.FindAll(
+                [System.Windows.Automation.TreeScope]::Children,
+                $processCondition
+            )
+            foreach ($window in $windows) {
+                try {
+                    $nodes = $window.FindAll(
+                        [System.Windows.Automation.TreeScope]::Descendants,
+                        [System.Windows.Automation.Condition]::TrueCondition
+                    )
+                    foreach ($node in $nodes) {
+                        try {
+                            if (
+                                $node.Current.ControlType -eq
+                                    [System.Windows.Automation.ControlType]::MenuItem -and
+                                [string]$node.Current.Name -ceq $ExactName
+                            ) {
+                                $found.Add($node)
+                            }
+                        }
+                        catch {
+                            $diagnostics.Add(
+                                "timing dialog bootstrap menu-item read failed: $($_.Exception.Message)"
+                            )
+                        }
+                    }
+                }
+                catch {
+                    $diagnostics.Add(
+                        "timing dialog bootstrap window traversal failed: $($_.Exception.Message)"
+                    )
+                }
+            }
+            return $found.ToArray()
+        }
+
+        $dialogs = @(& $findDialogs)
+        if ($diagnostics.Count -gt 0) {
+            $result.outcome = "automation-failed"
+            $result.diagnostics = @($diagnostics | Select-Object -Unique)
+            return $result
+        }
+        if ($dialogs.Count -gt 1) {
+            $diagnostics.Add(
+                "timing dialog bootstrap expected at most one Song Information window: count=$($dialogs.Count)"
+            )
+            $result.outcome = "dialog-ambiguous"
+            $result.diagnostics = $diagnostics.ToArray()
+            return $result
+        }
+        if ($dialogs.Count -eq 1) {
+            $result.dialog_seen_before = $true
+            $result.opened = $true
+            $result.outcome = "already-open"
+            return $result
+        }
+
+        # Psycle 1.12 exposes the timing dialog as File > Song Properties and
+        # titles the resulting process-owned window "Song Information".
+        $songPropertyItems = @(& $findMenuItems "Song Properties")
+        if ($diagnostics.Count -gt 0) {
+            $result.outcome = "automation-failed"
+            $result.diagnostics = @($diagnostics | Select-Object -Unique)
+            return $result
+        }
+
+        if ($songPropertyItems.Count -eq 0) {
+            $fileItems = @(& $findMenuItems "File")
+            if ($diagnostics.Count -gt 0) {
+                $result.outcome = "automation-failed"
+                $result.diagnostics = @($diagnostics | Select-Object -Unique)
+                return $result
+            }
+            if ($fileItems.Count -ne 1) {
+                $diagnostics.Add(
+                    "timing dialog bootstrap expected exactly one File menu item: count=$($fileItems.Count)"
+                )
+                $result.outcome = "file-menu-ambiguous"
+                $result.diagnostics = $diagnostics.ToArray()
+                return $result
+            }
+            if (-not $fileItems[0].Current.IsEnabled) {
+                $diagnostics.Add("timing dialog bootstrap File menu item is disabled")
+                $result.outcome = "file-menu-disabled"
+                $result.diagnostics = $diagnostics.ToArray()
+                return $result
+            }
+
+            $filePatternObject = $null
+            if (-not $fileItems[0].TryGetCurrentPattern(
+                    [System.Windows.Automation.InvokePattern]::Pattern,
+                    [ref]$filePatternObject)) {
+                $diagnostics.Add("timing dialog bootstrap File menu item has no InvokePattern")
+                $result.outcome = "file-menu-not-invokable"
+                $result.diagnostics = $diagnostics.ToArray()
+                return $result
+            }
+            $result.attempted = $true
+            ([System.Windows.Automation.InvokePattern]$filePatternObject).Invoke()
+            $result.file_menu_invoked = $true
+            Start-Sleep -Milliseconds 150
+            $songPropertyItems = @(& $findMenuItems "Song Properties")
+        }
+
+        if ($diagnostics.Count -gt 0) {
+            $result.outcome = "automation-failed"
+            $result.diagnostics = @($diagnostics | Select-Object -Unique)
+            return $result
+        }
+        if ($songPropertyItems.Count -ne 1) {
+            $diagnostics.Add(
+                "timing dialog bootstrap expected exactly one Song Properties menu item: count=$($songPropertyItems.Count)"
+            )
+            $result.outcome = "song-properties-menu-ambiguous"
+            $result.diagnostics = $diagnostics.ToArray()
+            return $result
+        }
+
+        $result.menu_item_seen = $true
+        if (-not $songPropertyItems[0].Current.IsEnabled) {
+            $diagnostics.Add("timing dialog bootstrap Song Properties menu item is disabled")
+            $result.outcome = "song-properties-menu-disabled"
+            $result.diagnostics = $diagnostics.ToArray()
+            return $result
+        }
+        $invokeObject = $null
+        if (-not $songPropertyItems[0].TryGetCurrentPattern(
+                [System.Windows.Automation.InvokePattern]::Pattern,
+                [ref]$invokeObject)) {
+            $diagnostics.Add("timing dialog bootstrap Song Properties menu item has no InvokePattern")
+            $result.outcome = "song-properties-menu-not-invokable"
+            $result.diagnostics = $diagnostics.ToArray()
+            return $result
+        }
+
+        $result.attempted = $true
+        ([System.Windows.Automation.InvokePattern]$invokeObject).Invoke()
+
+        for ($attempt = 0; $attempt -lt 20; $attempt += 1) {
+            Start-Sleep -Milliseconds 100
+            $Process.Refresh()
+            if ($Process.HasExited) {
+                $diagnostics.Add("timing dialog bootstrap process exited while opening Song Information")
+                $result.outcome = "process-exited"
+                break
+            }
+            $dialogs = @(& $findDialogs)
+            if ($diagnostics.Count -gt 0) {
+                $result.outcome = "automation-failed"
+                break
+            }
+            if ($dialogs.Count -gt 1) {
+                $diagnostics.Add(
+                    "timing dialog bootstrap opened multiple Song Information windows: count=$($dialogs.Count)"
+                )
+                $result.outcome = "dialog-ambiguous"
+                break
+            }
+            if ($dialogs.Count -eq 1) {
+                $result.opened = $true
+                $result.outcome = "opened"
+                break
+            }
+        }
+
+        if (-not $result.opened -and $diagnostics.Count -eq 0) {
+            $diagnostics.Add("timing dialog bootstrap timed out waiting for Song Information")
+            $result.outcome = "open-timeout"
+        }
+    }
+    catch {
+        $diagnostics.Add("timing dialog bootstrap UI Automation failed: $($_.Exception.Message)")
+        $result.outcome = "automation-failed"
+    }
+
+    $result.diagnostics = @($diagnostics | Select-Object -Unique)
+    return $result
+}
+
 function Get-Phase6cTimingUiObservation([System.Diagnostics.Process]$Process) {
     $diagnostics = [System.Collections.Generic.List[string]]::new()
     $result = [ordered]@{
