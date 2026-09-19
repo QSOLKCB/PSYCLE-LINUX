@@ -15,6 +15,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
+import struct
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a"
@@ -85,24 +86,48 @@ def close(lhs: object, rhs: float, tolerance: float = 1e-7) -> bool:
     return type(lhs) in (int, float) and not isinstance(lhs, bool) and math.isclose(float(lhs), rhs, rel_tol=0.0, abs_tol=tolerance)
 
 
+def float32(value: float) -> float:
+    return struct.unpack("!f", struct.pack("!f", float(value)))[0]
+
+
+def expected_sample_timing(sample_rate: int, tick_speed: int, is_ticks: bool) -> tuple[float, float, float]:
+    # PlayerTimeInfo stores samplesPerBeat_ and samplesPerTick_ as float.
+    beat = float32(sample_rate * 60.0 / BPM)
+    if is_ticks:
+        tick = float32(beat / tick_speed)
+    else:
+        tick = float32(float32(beat * tick_speed) / 24.0)
+    # The probe divides the float samplesPerBeat() result by a double LPB.
+    line = beat / LPB
+    return beat, tick, line
+
+
 def diagnostics_clean(log: bytes) -> bool:
     try:
         lines = log.decode("utf-8").splitlines()
     except UnicodeError:
         return False
     saw_loader = saw_warning = saw_master = False
+    loader_prefix = "psycle: core: psy3 loader: loading psycle song fileformat version 3: "
+    master_message = "psycle: core: machine factory: create machine: loading with host: 0, plugin: <master>"
     for line in lines:
         match = LOG_LINE.fullmatch(line)
         if not match:
             return False
         level, _thread, message = match.groups()
-        if "psy3 loader: loading psycle song fileformat version 3:" in message and message.endswith(FIXTURE):
+        if level == "T" and message.startswith(loader_prefix) and message.endswith(FIXTURE):
+            if saw_loader:
+                return False
             saw_loader = True
         elif level == "W" and message == WARNING:
+            if saw_warning:
+                return False
             saw_warning = True
-        elif "machine factory: create machine: loading with host: 0, plugin: <master>" in message:
+        elif level == "I" and message == master_message:
+            if saw_master:
+                return False
             saw_master = True
-        elif level not in {"T", "I", "W"}:
+        else:
             return False
     return saw_loader and saw_warning and saw_master
 
@@ -141,9 +166,7 @@ def parse_probe(raw: bytes, log: bytes, exit_code: object) -> dict:
     for mapping, expected_rate in zip(rates, RATES):
         if not isinstance(mapping, dict) or type(mapping.get("sample_rate")) is not int or mapping.get("sample_rate") != expected_rate:
             return inconclusive
-        beat = expected_rate * 60.0 / BPM
-        tick = beat / tick_speed if is_ticks else tick_speed * beat / 24.0
-        line = beat / LPB
+        beat, tick, line = expected_sample_timing(expected_rate, tick_speed, is_ticks)
         if not close(mapping.get("samples_per_beat"), beat, 1e-6):
             return inconclusive
         if not close(mapping.get("samples_per_tick"), tick, 1e-6):
