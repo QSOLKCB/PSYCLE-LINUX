@@ -45,7 +45,9 @@ The matching original observation targets pinned Psycle 1.12.0 x86 and the same 
 - Real tempo;
 - Real ticks per beat.
 
-The expected values are `137`, `8`, `24`, `0`, `137`, and `24`. At least four identical polls plus the existing clean accepted-load, runtime-identity and liveness gates are required. Missing, ambiguous, contradictory, unstable, or automation-derived values remain inconclusive.
+The fixture-derived expected values are `137`, `8`, `24`, `0`, `137`, and `24`. The Windows harness must first identify exactly one process-owned **Song Information** window or open it through the unique process-owned **File > Song Properties** menu item, then verify that exactly one such dialog exists before polling. At least four identical complete polls plus the existing clean accepted-load, runtime-identity and liveness gates are required. Missing, ambiguous, contradictory, unstable, or automation-derived values remain inconclusive.
+
+A clean stable original observation is retained even when one or more values differ from the fixture-derived expectations. In that case `matches_fixture_expected` is `false`; the observed values remain authoritative original-reference evidence and `parity_status` remains `UNKNOWN` until a separately versioned comparison classifies the scoped contract. The dedicated observation workflow requires an actual `observed` result and cannot pass merely because an inconclusive receipt was well-formed.
 
 The original receipt shape is validated now, but no original value is committed or treated as observed until a clean native-Windows artifact is produced.
 
