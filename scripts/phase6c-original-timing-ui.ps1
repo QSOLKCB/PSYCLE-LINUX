@@ -422,14 +422,18 @@ function Get-Phase6cTimingUiObservation([System.Diagnostics.Process]$Process) {
         values = [ordered]@{}
         diagnostics = @()
     }
-    $labels = [ordered]@{
-        tempo = 'Tempo'
-        lines_per_beat = 'Lines per beat'
-        ticks_per_beat = 'Ticks per beat'
-        extra_tick_per_line = 'Extra tick per line'
-        real_tempo = 'Real tempo'
-        real_ticks_per_beat = 'Real ticks per beat'
+    # Psycle 1.12 CSongpDlg binds these fields to fixed Win32 resource IDs
+    # in SongpDlg.cpp / resources.hpp. Win32 UI Automation exposes those native
+    # control IDs as AutomationId, which is stronger than duplicated label text.
+    $controlIds = [ordered]@{
+        tempo = '2146'                # IDC_EDIT_TEMPO
+        lines_per_beat = '2148'       # IDC_EDIT_LPB
+        ticks_per_beat = '2150'       # IDC_EDIT_TPB
+        extra_tick_per_line = '2151'  # IDC_EDIT_EXTRATICK
+        real_ticks_per_beat = '2153'  # IDC_EDIT_REALTPB
+        real_tempo = '2154'           # IDC_EDIT_REALTEMPO
     }
+    $result.control_ids = $controlIds
 
     try {
         $Process.Refresh()
@@ -467,117 +471,51 @@ function Get-Phase6cTimingUiObservation([System.Diagnostics.Process]$Process) {
             [System.Windows.Automation.TreeScope]::Descendants,
             [System.Windows.Automation.Condition]::TrueCondition
         )
-        $labelElements = @{}
-        foreach ($key in $labels.Keys) {
-            $found = [System.Collections.Generic.List[object]]::new()
+        foreach ($key in $controlIds.Keys) {
+            $matchesById = [System.Collections.Generic.List[object]]::new()
             foreach ($node in $nodes) {
                 try {
-                    if ([string]$node.Current.Name -ceq [string]$labels[$key]) {
+                    if (
+                        [string]$node.Current.AutomationId -ceq [string]$controlIds[$key] -and
+                        $node.Current.ControlType -eq
+                            [System.Windows.Automation.ControlType]::Edit
+                    ) {
                         $duplicateVisual = $false
-                        foreach ($existingLabel in $found) {
-                            if (Test-Phase6cSameVisualElement $existingLabel $node) {
+                        foreach ($existing in $matchesById) {
+                            if (Test-Phase6cSameVisualElement $existing $node) {
                                 $duplicateVisual = $true
                                 break
                             }
                         }
                         if (-not $duplicateVisual) {
-                            $found.Add($node)
+                            $matchesById.Add($node)
                         }
                     }
                 }
                 catch {
-                    $diagnostics.Add("timing observer label read failed: $($_.Exception.Message)")
+                    $diagnostics.Add(
+                        "timing observer control-id '$($controlIds[$key])' read failed: $($_.Exception.Message)"
+                    )
                 }
             }
-            if ($found.Count -ne 1) {
-                $diagnostics.Add("timing observer label '$($labels[$key])' count=$($found.Count)")
-            } else {
-                $labelElements[$key] = $found[0]
-            }
-        }
-        if ($diagnostics.Count -gt 0) {
-            $result.diagnostics = @($diagnostics | Select-Object -Unique)
-            return $result
-        }
 
-        $used = [System.Collections.Generic.List[object]]::new()
-        foreach ($key in $labels.Keys) {
-            $label = $labelElements[$key]
-            $labelBounds = $label.Current.BoundingRectangle
-            $candidates = [System.Collections.Generic.List[object]]::new()
-            foreach ($node in $nodes) {
-                $value = Get-Phase6cTimingInteger $node
-                if ($null -eq $value) {
-                    continue
-                }
-                $alreadyUsed = $false
-                foreach ($usedNode in $used) {
-                    if (Test-Phase6cSameVisualElement $usedNode $node) {
-                        $alreadyUsed = $true
-                        break
-                    }
-                }
-                if ($alreadyUsed) {
-                    continue
-                }
-
-                $boundByLabel = $false
-                try {
-                    $labeledBy = $node.Current.LabeledBy
-                    if ($null -ne $labeledBy -and
-                        [System.Windows.Automation.Automation]::Compare($labeledBy, $label)) {
-                        $boundByLabel = $true
-                    }
-                }
-                catch { }
-
-                $bounds = $node.Current.BoundingRectangle
-                if ($bounds.IsEmpty -or $bounds.Width -le 0 -or $bounds.Height -le 0) {
-                    continue
-                }
-                $labelCenter = $labelBounds.X + ($labelBounds.Width / 2.0)
-                $valueCenter = $bounds.X + ($bounds.Width / 2.0)
-                $verticalGap = $bounds.Y - ($labelBounds.Y + $labelBounds.Height)
-                $columnMatch = (
-                    $verticalGap -ge -3 -and $verticalGap -le 35 -and
-                    [Math]::Abs($valueCenter - $labelCenter) -le
-                        [Math]::Max(35.0, ($labelBounds.Width + $bounds.Width) / 2.0)
+            if ($matchesById.Count -ne 1) {
+                $diagnostics.Add(
+                    "timing observer expected exactly one Edit control for '$key' " +
+                    "AutomationId=$($controlIds[$key]): count=$($matchesById.Count)"
                 )
-                if ($boundByLabel -or $columnMatch) {
-                    $duplicateCandidate = $false
-                    foreach ($existingCandidate in $candidates) {
-                        if (
-                            [int]$existingCandidate.value -eq [int]$value -and
-                            (Test-Phase6cSameVisualElement $existingCandidate.element $node)
-                        ) {
-                            $duplicateCandidate = $true
-                            break
-                        }
-                    }
-                    if (-not $duplicateCandidate) {
-                        $candidates.Add([ordered]@{
-                            element = $node
-                            value = $value
-                            rank = if ($boundByLabel) { -100000.0 } else {
-                                [Math]::Abs($verticalGap) + [Math]::Abs($valueCenter - $labelCenter)
-                            }
-                        })
-                    }
-                }
-            }
-            $orderedCandidates = @($candidates | Sort-Object rank)
-            if ($orderedCandidates.Count -eq 0) {
-                $diagnostics.Add("timing observer found no numeric control for '$($labels[$key])'")
                 continue
             }
-            if ($orderedCandidates.Count -gt 1 -and
-                [Math]::Abs([double]$orderedCandidates[0].rank - [double]$orderedCandidates[1].rank) -lt 0.001) {
-                $diagnostics.Add("timing observer numeric control for '$($labels[$key])' is ambiguous")
+
+            $value = Get-Phase6cTimingInteger $matchesById[0]
+            if ($null -eq $value) {
+                $diagnostics.Add(
+                    "timing observer control '$key' AutomationId=$($controlIds[$key]) " +
+                    "does not expose an integer value"
+                )
                 continue
             }
-            $selected = $orderedCandidates[0]
-            $used.Add($selected.element)
-            $result.values[$key] = [int]$selected.value
+            $result.values[$key] = [int]$value
         }
         if ($diagnostics.Count -eq 0 -and $result.values.Count -eq $labels.Count) {
             $result.complete = $true
