@@ -1,0 +1,258 @@
+name: Phase 6C BPM LPB tick observation
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-6c/**'
+    paths:
+      - 'phase6c/BPM_LPB_TICK.md'
+      - 'phase6c/compatibility-matrix.json'
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
+      - 'scripts/phase6b-verify-committed-source.sh'
+      - 'scripts/phase6b-verify-qmake-support.sh'
+      - 'scripts/phase6c-candidate-fixtures.sh'
+      - 'scripts/phase6c-candidate-parse.py'
+      - 'scripts/phase6c-validate-matrix.py'
+      - 'scripts/phase4-historical-psy2-smoke.sh'
+      - 'scripts/phase4-core-workflow-smoke.sh'
+      - 'tests/phase4_historical_psy2.c'
+      - 'tests/phase4_core_workflow.c'
+      - 'tests/phase6c_bpm_lpb_tick*'
+      - 'scripts/phase6c-bpm-lpb-tick-*'
+      - 'scripts/phase6c-build-timing-observer.py'
+      - 'scripts/phase6c-original-timing-ui.ps1'
+      - 'scripts/phase6c-original-windows-fixtures.ps1'
+      - 'scripts/phase6c-original-windows-fixtures-v2.ps1'
+      - 'scripts/phase6c-validate-original-receipts-v2.py'
+      - 'psycle-cpp-r12005-sanitized/**'
+      - 'cpsycle/**'
+      - '.github/workflows/phase6c-bpm-lpb-tick.yml'
+  pull_request:
+    paths:
+      - 'phase6c/BPM_LPB_TICK.md'
+      - 'phase6c/compatibility-matrix.json'
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
+      - 'scripts/phase6b-verify-committed-source.sh'
+      - 'scripts/phase6b-verify-qmake-support.sh'
+      - 'scripts/phase6c-candidate-fixtures.sh'
+      - 'scripts/phase6c-candidate-parse.py'
+      - 'scripts/phase6c-validate-matrix.py'
+      - 'scripts/phase4-historical-psy2-smoke.sh'
+      - 'scripts/phase4-core-workflow-smoke.sh'
+      - 'tests/phase4_historical_psy2.c'
+      - 'tests/phase4_core_workflow.c'
+      - 'tests/phase6c_bpm_lpb_tick*'
+      - 'scripts/phase6c-bpm-lpb-tick-*'
+      - 'scripts/phase6c-build-timing-observer.py'
+      - 'scripts/phase6c-original-timing-ui.ps1'
+      - 'scripts/phase6c-original-windows-fixtures.ps1'
+      - 'scripts/phase6c-original-windows-fixtures-v2.ps1'
+      - 'scripts/phase6c-validate-original-receipts-v2.py'
+      - 'psycle-cpp-r12005-sanitized/**'
+      - 'cpsycle/**'
+      - '.github/workflows/phase6c-bpm-lpb-tick.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6c-bpm-lpb-tick-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  candidate-timing-observation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates curl subversion file build-essential pkg-config \
+            qt5-qmake qtbase5-dev libboost-thread-dev libboost-filesystem-dev \
+            libboost-system-dev libboost-chrono-dev libboost-date-time-dev \
+            libxml++2.6-dev zlib1g-dev libsoxr-dev libasound2-dev \
+            libjack-jackd2-dev liblilv-dev liblua5.4-dev
+
+      - name: Check timing evidence negative controls
+        run: python3 tests/phase6c_bpm_lpb_tick.py
+
+      - name: Verify frozen Phase 6B source identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/phase6-upstream-audit.sh phase6-upstream-audit
+          bash scripts/phase6b-sanitized-manifest.sh \
+            phase6-upstream-audit phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-committed-source.sh \
+            psycle-cpp-r12005-sanitized phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-qmake-support.sh \
+            psycle-cpp-r12005-sanitized/build-systems/qmake
+
+      - name: Stage pinned historical plugin interface
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/psycle-plugins/src/psycle/plugin_interface.hpp'
+          ARCHIVE_COMMIT='1863c4177d38d37e8eba9e4eb8857e5023debe6d'
+          EXPECTED_BLOB='2cf4d8f756fa58098fd84b7b44d0ebe1350594c5'
+          test ! -e "$DEST"
+          mkdir -p "$(dirname "$DEST")"
+          curl -fsSL --retry 3 \
+            "https://raw.githubusercontent.com/QSOLKCB/PSYCLE-LINUX/${ARCHIVE_COMMIT}/cpsycle/plugins/psycle/plugin_interface.hpp" \
+            -o "$DEST"
+          actual_blob="$(git hash-object "$DEST")"
+          [[ "$actual_blob" == "$EXPECTED_BLOB" ]] || {
+            echo "historical plugin interface blob mismatch: $actual_blob" >&2
+            exit 2
+          }
+
+      - name: Stage pinned historical diversalis dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/diversalis'
+          test ! -e "$DEST"
+          exported=false
+          for attempt in 1 2 3 4; do
+            rm -rf -- "$DEST"
+            if svn export --quiet --force -r 12005 \
+              'https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005' "$DEST"; then
+              exported=true
+              break
+            fi
+            sleep "$((attempt * 2))"
+          done
+          [[ "$exported" == true ]]
+
+      - name: Build pinned historical player support
+        shell: bash
+        working-directory: psycle-cpp-r12005-sanitized/psycle-player
+        run: |
+          set -euo pipefail
+          qmake CONFIG-=shared CONFIG+=release psycle-player.pro
+          make -j2
+
+      - name: Collect shared parse fixtures for original harness
+        shell: bash
+        run: bash scripts/phase6c-candidate-fixtures.sh phase6c-timing-evidence
+
+      - name: Collect candidate BPM LPB tick evidence
+        shell: bash
+        run: bash scripts/phase6c-bpm-lpb-tick-candidate.sh phase6c-timing-evidence
+
+      - name: Upload candidate timing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-bpm-lpb-tick-candidate
+          path: phase6c-timing-evidence/
+          if-no-files-found: warn
+
+  original-timing-observation:
+    needs: candidate-timing-observation
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download exact candidate timing artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: phase6c-bpm-lpb-tick-candidate
+          path: phase6c-timing-candidate
+
+      - name: Install pinned Microsoft VC90 x86 runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x86.exe'
+          $expectedSha = '8742bcbf24ef328a72d2a27b693cc7071e38d3bb4b9b44dec42aa3d2c8d61d92'
+          $version = '9.0.30729.6161'
+          $runtime = Join-Path $env:RUNNER_TEMP 'psycle-vc90-vcredist_x86.exe'
+          $receipt = Join-Path $PWD 'phase6c-vc90-runtime.txt'
+
+          & curl.exe --fail --location --retry 3 --silent --show-error --output $runtime $url
+          if ($LASTEXITCODE -ne 0) { throw "VC90 runtime download failed" }
+          $actualSha = (Get-FileHash -LiteralPath $runtime -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha -ne $expectedSha) { throw "VC90 runtime SHA-256 mismatch" }
+          $signature = Get-AuthenticodeSignature -FilePath $runtime
+          if ($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate -or
+              $signature.SignerCertificate.Subject -notmatch '(?i)Microsoft') {
+            throw "VC90 runtime signature is not valid Microsoft Authenticode"
+          }
+          $process = Start-Process -FilePath $runtime -ArgumentList '/Q','/NORESTART' -Wait -PassThru
+          if ($process.ExitCode -notin @(0, 3010)) { throw "VC90 runtime install failed" }
+          @(
+            "runtime=Microsoft Visual C++ 2008 SP1 x86 Redistributable MFC Security Update"
+            "redistributable_version=$version"
+            "url=$url"
+            "sha256=$actualSha"
+            "authenticode_status=$($signature.Status)"
+            "signer_subject=$($signature.SignerCertificate.Subject)"
+            "installer_exit_code=$($process.ExitCode)"
+          ) | Set-Content -LiteralPath $receipt -Encoding utf8
+          Remove-Item -LiteralPath $runtime -Force
+          "PSYCLE_PHASE6C_VC90_RUNTIME_URL=$url" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PSYCLE_PHASE6C_VC90_RUNTIME_SHA256=$actualSha" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PSYCLE_PHASE6C_VC90_RUNTIME_VERSION=$version" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PSYCLE_PHASE6C_VC90_RUNTIME_RECEIPT=$receipt" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Generate and parse timing-enabled observer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $base = 'scripts/phase6c-original-windows-fixtures-v2.ps1'
+          $generated = 'scripts/phase6c-original-windows-fixtures-v2.generated.ps1'
+          python scripts/phase6c-build-timing-observer.py $base $generated
+          if ($LASTEXITCODE -ne 0) { throw "timing observer generation failed" }
+          foreach ($path in @($generated, 'scripts/phase6c-original-timing-ui.ps1', 'scripts/phase6c-original-windows-fixtures.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -ne 0) {
+              $errors | ForEach-Object { Write-Error ("PowerShell parse error in ${path}: " + $_.Message) }
+              throw "PowerShell parse failed"
+            }
+          }
+          Move-Item -LiteralPath $generated -Destination $base -Force
+
+      - name: Observe pinned original timing controls
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./scripts/phase6c-original-windows-fixtures.ps1 `
+            -CandidateArtifactRoot 'phase6c-timing-candidate' `
+            -Out 'phase6c-timing-original' `
+            -ObserveBpmLpbTick
+
+      - name: Validate paired timing observations
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python scripts/phase6c-bpm-lpb-tick-evidence.py candidate phase6c-timing-candidate
+          if ($LASTEXITCODE -ne 0) { throw "candidate timing validation failed" }
+          python scripts/phase6c-bpm-lpb-tick-original.py phase6c-timing-candidate phase6c-timing-original
+          if ($LASTEXITCODE -ne 0) { throw "original timing validation failed" }
+
+      - name: Upload original timing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-bpm-lpb-tick-original
+          path: phase6c-timing-original/
+          if-no-files-found: warn
