@@ -100,21 +100,27 @@ class CandidateParser(unittest.TestCase):
 
 
 class GeneratedObserver(unittest.TestCase):
+    def generate(self, source: Path, output: Path):
+        return subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/phase6c-build-timing-observer.py"),
+                str(source),
+                str(output),
+            ],
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+
     def test_dialog_is_opened_before_timing_poll(self):
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp) / "generated.ps1"
-            process = subprocess.run(
-                [
-                    sys.executable,
-                    str(ROOT / "scripts/phase6c-build-timing-observer.py"),
-                    str(ROOT / "scripts/phase6c-original-windows-fixtures-v2.ps1"),
-                    str(output),
-                ],
-                cwd=ROOT,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
+            process = self.generate(
+                ROOT / "scripts/phase6c-original-windows-fixtures-v2.ps1",
+                output,
             )
             self.assertEqual(process.returncode, 0, process.stderr)
             generated = output.read_text(encoding="utf-8")
@@ -129,6 +135,19 @@ class GeneratedObserver(unittest.TestCase):
                 "dialog_bootstrap = $timingDialogBootstrap",
                 generated,
             )
+
+    def test_builder_accepts_crlf_checkout_of_pinned_base(self):
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            source = temp_path / "base.ps1"
+            output = temp_path / "generated.ps1"
+            canonical = (
+                ROOT / "scripts/phase6c-original-windows-fixtures-v2.ps1"
+            ).read_text(encoding="utf-8")
+            source.write_bytes(canonical.replace("\n", "\r\n").encode("utf-8"))
+            process = self.generate(source, output)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertTrue(output.is_file())
 
 
 class OriginalProjection(unittest.TestCase):
