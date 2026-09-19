@@ -8,13 +8,22 @@ param(
 
     [switch]$ObserveSequenceOrder,
 
-    [switch]$ObserveBpmLpbTick
+    [switch]$ObserveBpmLpbTick,
+
+    [switch]$ObserveDelayedRetrigger
 )
 
 $ErrorActionPreference = "Stop"
 
 $baseObserver = Join-Path $PSScriptRoot "phase6c-original-windows-fixtures-v2.ps1"
-if ($ObserveBpmLpbTick) {
+if ($ObserveDelayedRetrigger) {
+    & $baseObserver `
+        -CandidateArtifactRoot $CandidateArtifactRoot `
+        -Out $Out `
+        -ObserveSerialization:$ObserveSerialization `
+        -ObserveSequenceOrder:$ObserveSequenceOrder `
+        -ObserveDelayedRetrigger
+} elseif ($ObserveBpmLpbTick) {
     & $baseObserver `
         -CandidateArtifactRoot $CandidateArtifactRoot `
         -Out $Out `
@@ -64,6 +73,9 @@ if ($ObserveSequenceOrder -and (Test-Path -LiteralPath (Join-Path $outRoot "orig
 }
 if ($ObserveBpmLpbTick -and (Test-Path -LiteralPath (Join-Path $outRoot "original-bpm-lpb-tick.json"))) {
     $receiptNames += "bpm-lpb-tick"
+}
+if ($ObserveDelayedRetrigger -and (Test-Path -LiteralPath (Join-Path $outRoot "original-delayed-retrigger.json"))) {
+    $receiptNames += "delayed-retrigger"
 }
 foreach ($name in $receiptNames) {
     $receiptPath = Join-Path $outRoot ("original-{0}.json" -f $name)

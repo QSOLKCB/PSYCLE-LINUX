@@ -304,6 +304,8 @@ Audit at minimum:
   - [x] Establish the paired observation lane with a project-authored BPM 137 / LPB 8 / TPB 24 / extra-tick 0 fixture and clean Linux-candidate + pinned-Windows-original receipts in final PR #67 run `35453296036`.
   - [x] Version the exact paired receipts and classify `sequencer-bpm-lpb-tick` as scoped `DIFFERENT`: BPM and LPB agree, but original TPB 24 is not equivalent to the candidate's `tick_speed=8`, `is_ticks=true` beat/8 cadence. Delayed/retrigger commands and broader playback timing remain separate.
 - [ ] tracker commands and delayed/retrigger events;
+  - [x] Establish the observation lane with a project-authored `FD 7F` / `FB 3F` / `FA 42` / `FE04` PSY3 fixture, a frozen-candidate scheduling probe, pinned original-source semantics and a guarded native-Windows load observation. See `phase6c/DELAYED_RETRIGGER.md`.
+  - [ ] Version a clean paired run and classify only the command semantics supported by like-for-like evidence; keep native runtime execution semantics `UNKNOWN` where source evidence plus load acceptance is insufficient.
 - [ ] Sampler PS1 behaviour;
 - [ ] XMSampler behaviour;
 - [ ] mixer/master/routing semantics;
@@ -317,7 +319,7 @@ Audit at minimum:
 
 Do **not** assume C-Psycle's event sequencer is authoritative when it differs from original Psycle. The point of this phase is to discover and document differences.
 
-**Phase 6C status: active.** PSY2 and PSY3 parse/load acceptance plus sequence/pattern order are scoped `PASS` results for exact project-authored fixtures, serialization/save capability is scoped `MISSING`, and BPM/LPB/tick timing is scoped `DIFFERENT`; 15 contracts remain `UNKNOWN`. The timing verdict is limited to the exact BPM 137 / LPB 8 / TPB 24 fixture: original Psycle preserves TPB 24 while the candidate feeds LPB 8 into its legacy tick-speed path with `is_ticks=true`. It does not classify delayed/retrigger commands, sampler tick processing, playback duration, tempo changes, multi-sequence behaviour or UI editing. The confirmed `MISSING` serializer gap and `DIFFERENT` tick-semantics gap now both justify narrow Phase 7 convergence backlog items. The next Phase 6C evidence slice is delayed/retrigger/extended tracker-command behaviour.
+**Phase 6C status: active.** PSY2 and PSY3 parse/load acceptance plus sequence/pattern order are scoped `PASS` results for exact project-authored fixtures, serialization/save capability is scoped `MISSING`, and BPM/LPB/tick timing is scoped `DIFFERENT`; 15 contracts remain `UNKNOWN`. The timing verdict is limited to the exact BPM 137 / LPB 8 / TPB 24 fixture: original Psycle preserves TPB 24 while the candidate feeds LPB 8 into its legacy tick-speed path with `is_ticks=true`. It does not classify delayed/retrigger commands, sampler tick processing, playback duration, tempo changes, multi-sequence behaviour or UI editing. The confirmed `MISSING` serializer gap and `DIFFERENT` tick-semantics gap now both justify narrow Phase 7 convergence backlog items. The delayed/retrigger/extended tracker-command observation lane is now implemented but remains unclassified; the next step is to obtain a clean paired run and decide whether the source-plus-runtime evidence is sufficient for a scoped comparison or whether a stronger original execution trace is required.
 
 ### 6D — parity report
 
