@@ -89,7 +89,7 @@ playback, serialized state, clean termination, or general PSY3 support.
 | PSY3 parsing | [`original-psy3.json`](phase6c/evidence/project-io-psy3-parse/original-psy3.json): pinned 1.12.0 accepted the exact fixture after verified `Load Warning` dismissal, with 40 stable marker polls | [`candidate-psy3-parse.json`](phase6c/evidence/project-io-psy3-parse/candidate-psy3-parse.json): ordered load markers and scoped diagnostics establish parse acceptance; raw process evidence remains `timeout` / exit `124` | yes; project fixture exists | PASS | serialization/state/playback remain separate; see [`comparison.json`](phase6c/evidence/project-io-psy3-parse/comparison.json) |
 | Serialization / round-trip | [`serialization-save.json`](phase6c/evidence/project-io-serialization-roundtrip/serialization-save.json): pinned 1.12.0 saved the exact PSY3 input to a fresh PSY3 output and a fresh process accepted it | [`candidate-serialization.json`](phase6c/evidence/project-io-serialization-roundtrip/candidate-serialization.json): `CoreSong::save` versions 2, 3 and 4 each returned false, emitted no output and exited 0 | yes | MISSING | implement the evidenced save capability in Phase 7, then measure semantic round-trip state separately; see [`comparison.json`](phase6c/evidence/project-io-serialization-roundtrip/comparison.json) |
 | Malformed-file behaviour | pending | pending | partial | UNKNOWN | define rejection/recovery fixtures and original behaviour |
-| Sequence / pattern order | guarded Psycle 1.12.0 UI Automation order-list observer added; runtime result not yet versioned | separate candidate probe loads the exact single-sequence PSY3 fixture and enumerates `SequenceLine` entries/pattern IDs | partial; C-Psycle builds/verifies the fixture only | UNKNOWN | run the paired observation lane and version the comparison; see [sequence-order contract](phase6c/SEQUENCE_ORDER.md) |
+| Sequence / pattern order | [`original-sequence-order.json`](phase6c/evidence/sequencer-pattern-order/original-sequence-order.json): pinned 1.12.0 accepted the exact fixture and exposed stable labels `00: 00, 01: 02, 02: 01, 03: 02` for 38 polls | [`candidate-sequence-order.json`](phase6c/evidence/sequencer-pattern-order/candidate-sequence-order.json): clean probe exit with canonical Master line and musical play order `0,2,1,2` | fixture construction only | PASS | exact legacy single-sequence order only; timing, playback, multi-sequence and editing remain separate; see [`comparison.json`](phase6c/evidence/sequencer-pattern-order/comparison.json) |
 | BPM / LPB / tick timing | pending | pending | partial | UNKNOWN | capture deterministic timing receipts from original |
 | Delayed / retrigger / extended commands | pending | pending | partial | UNKNOWN | use minimal deterministic patterns |
 | Sampler PS1 | pending | pending | yes | UNKNOWN | compare pitch, envelopes, looping and commands |
@@ -136,7 +136,7 @@ Phase 6 separates engine gaps from UI gaps. The absence of a full tracker UI in 
 
 ### Requires original-Psycle confirmation first
 
-- sequencer/event ordering;
+- sequencer timing and event-ordering semantics beyond the classified single-sequence play-order fixture;
 - tracker tick/line timing details;
 - delayed/retrigger command implementation;
 - mixer/send semantics;
@@ -156,9 +156,10 @@ Phase 6C now justifies this evidence backlog:
 1. keep the machine-readable matrix and validation gate green;
 2. preserve the scoped PSY2 and PSY3 parse/load PASS comparisons, including the PSY3 timeout as a separate process-lifetime result;
 3. preserve the scoped serialization/save MISSING comparison from final PR #63 run `35439069516`; byte identity and complete semantic round-trip state remain separate;
-4. run and version the newly implemented sequence/pattern-order observation lane, then continue to timing, tracker commands, routing, sampler, native-state, WAV and render contracts as evidence becomes reproducible;
-5. classify only additional rows for which versioned original + candidate receipts and a comparison verdict are sufficient;
-6. extend Phase 7 only from confirmed `DIFFERENT` / `MISSING` results.
+4. preserve the scoped sequence/pattern-order PASS from final PR #65 run `35443357239`, including its exact single-sequence fixture boundary;
+5. move the next Phase 6C evidence slice to BPM/LPB/tick timing, then continue to tracker commands, routing, sampler, native-state, WAV and render contracts as evidence becomes reproducible;
+6. classify only additional rows for which versioned original + candidate receipts and a comparison verdict are sufficient;
+7. extend Phase 7 only from confirmed `DIFFERENT` / `MISSING` results.
 
 ### First Phase 7 implementation backlog
 
