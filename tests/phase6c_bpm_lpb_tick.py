@@ -47,10 +47,20 @@ def valid_value():
 
 def clean_log():
     return (
-        "log: 1us: T: bpm-lpb-tick-probe: psycle: core: psy3 loader: loading psycle song fileformat version 3: /tmp/" + m.FIXTURE + "\n"
-        "log: 2us: W: bpm-lpb-tick-probe: " + m.WARNING + "\n"
-        "log: 3us: I: bpm-lpb-tick-probe: psycle: core: machine factory: create machine: loading with host: 0, plugin: <master>\n"
+        "log: 0us: T: thread-id-123: # universalis # ../src/universalis/os/thread_name.cpp:56 # void universalis::os::thread_name::set_tls()\n"
+        "log: 1us: T: thread-id-123: setting name for thread: id: 123, name: bpm-lpb-tick-probe\n"
+        "log: 2us: T: bpm-lpb-tick-probe: # psycle-core # ../src/psycle/core/player.cpp:66 # void psycle::core::Player::start_threads()\n"
+        "log: 3us: T: bpm-lpb-tick-probe: psycle: core: player: starting scheduler threads\n"
+        "log: 4us: I: bpm-lpb-tick-probe: psycle: core: player: using 1 threads\n"
+        "log: 5us: T: bpm-lpb-tick-probe: psycle: core: psy3 loader: loading psycle song fileformat version 3: /tmp/" + m.FIXTURE + "\n"
+        "log: 6us: W: bpm-lpb-tick-probe: " + m.WARNING + "\n"
+        "log: 7us: I: bpm-lpb-tick-probe: psycle: core: machine factory: create machine: loading with host: 0, plugin: <master>\n"
+        "log: 8us: T: thread-id-123: # psycle-core # ../src/psycle/core/player.cpp:452 # void psycle::core::Player::stop_threads()\n"
+        "log: 9us: T: thread-id-123: terminating and joining scheduler threads ...\n"
+        "log: 10us: T: thread-id-123: # psycle-core # ../src/psycle/core/player.cpp:454 # void psycle::core::Player::stop_threads()\n"
+        "log: 11us: T: thread-id-123: scheduler threads were not running\n"
     ).encode()
+
 
 
 class CandidateParser(unittest.TestCase):
