@@ -55,7 +55,7 @@ class ParityReportSummary(unittest.TestCase):
 
     def test_unknown_count_must_match_complete_numeral(self):
         self.mutate_report(
-            "16 contracts remain UNKNOWN",
+            "15 contracts remain UNKNOWN",
             "116 contracts remain UNKNOWN",
         )
         self.check(False)
