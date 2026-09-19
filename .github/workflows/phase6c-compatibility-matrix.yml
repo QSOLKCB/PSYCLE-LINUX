@@ -20,6 +20,7 @@ on:
       - 'scripts/phase4-core-workflow-smoke.sh'
       - 'tests/phase4_historical_psy2.c'
       - 'tests/phase4_core_workflow.c'
+      - 'tests/phase6c_candidate_parse.py'
       - '.github/workflows/phase6c-compatibility-matrix.yml'
   pull_request:
     paths:
@@ -37,6 +38,7 @@ on:
       - 'scripts/phase4-core-workflow-smoke.sh'
       - 'tests/phase4_historical_psy2.c'
       - 'tests/phase4_core_workflow.c'
+      - 'tests/phase6c_candidate_parse.py'
       - '.github/workflows/phase6c-compatibility-matrix.yml'
   workflow_dispatch:
 
@@ -88,6 +90,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/phase6c-validate-matrix.py phase6c/compatibility-matrix.json
+
+      - name: Check candidate parse evidence negative controls
+        run: python3 tests/phase6c_candidate_parse.py
 
       - name: Verify frozen Phase 6B source identities
         shell: bash

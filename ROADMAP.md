@@ -291,7 +291,7 @@ Audit at minimum:
 
 - [ ] PSY2/PSY3 parsing and serialization against the pinned original reference;
   - [x] PSY2 parse/load acceptance for the exact project-authored PSY2SONG fixture is classified `PASS` against pinned Psycle 1.12.0 x86.
-  - [ ] PSY3 parsing remains `UNKNOWN`; PR #61 Phase 6C run `35364406445` showed pinned Psycle 1.12.0 accepting the exact project-authored PSY3 fixture after the signature-verified `Load Warning` bootstrap, with marker `phase4-first.psy`, 40 stable polls, and no application/harness/runtime diagnostic. The candidate receipt still records `timeout` / exit `124`, even though its log reaches the version-3 loader, creates Sampler/Master, and reaches `playing...`; a parse-specific candidate receipt is still required before comparison/classification.
+  - [x] PSY3 parse/load acceptance for the exact project-authored Phase 4 fixture is classified `PASS` using PR #61 run `35364406445`: original 1.12.0 accepted after verified warning dismissal; a separately derived candidate parse receipt proves ordered load completion without disqualifying diagnostics. The unchanged candidate process receipt remains `timeout` / exit `124`; playback and termination are not classified.
   - [ ] Serialization / round-trip remains a separate `UNKNOWN` contract and is not implied by the PSY2 parse PASS.
 - [ ] sequence/pattern timing;
 - [ ] BPM/LPB/tick behaviour;
@@ -309,18 +309,18 @@ Audit at minimum:
 
 Do **not** assume C-Psycle's event sequencer is authoritative when it differs from original Psycle. The point of this phase is to discover and document differences.
 
-**Phase 6C status: active.** The matrix, evidence schema and candidate lane are established, and the first versioned comparison now classifies PSY2 parsing as a scoped `PASS`; 19 contracts remain `UNKNOWN`. The PSY3 original-reference gap is now resolved at the observation layer: run `35364406445` produced a clean accepted-load observation after the exact `Load Warning` bootstrap. PSY3 nevertheless remains `UNKNOWN` because the candidate receipt still conflates successful parse/playback startup with the noninteractive player timeout; the next evidence step is to record candidate parse acceptance independently of process-lifetime termination. Serialization remains open and no `DIFFERENT` / `MISSING` result yet justifies Phase 7 implementation work.
+**Phase 6C status: active.** PSY2 and PSY3 parse/load acceptance are now scoped `PASS` results for one exact fixture each; 18 contracts remain `UNKNOWN`. PSY3 parse evidence is independently derived from the unchanged PR #61 process receipt and full log, retaining timeout separately. The next evidence slice is original save/reopen and candidate serialization/round-trip observation with semantic state distinguished from byte identity. No `DIFFERENT` / `MISSING` result yet justifies Phase 7 engine convergence.
 
 ### 6D — parity report
 
 - [x] Produce `PSYCLE_CORE_PARITY.md` with PASS / DIFFERENT / MISSING / UNKNOWN for each subsystem.
-- [x] Mechanically require the original-Psycle version/build and versioned evidence receipts for every non-`UNKNOWN` row; the first classified row is the scoped PSY2 parsing `PASS`.
+- [x] Mechanically require the original-Psycle version/build and versioned evidence receipts for every non-`UNKNOWN` row; the classified rows are scoped PSY2 and PSY3 parse/load acceptance `PASS` results.
 - [x] Separate engine gaps from UI-only gaps.
 - [x] Identify which existing C-Psycle tests are portable shared contracts, which need original-Psycle confirmation, and which remain C-Psycle-only historical evidence.
 - [x] Add `scripts/phase6d-validate-parity-report.py` plus a maintained Phase 6D workflow so the human-readable 20-row report cannot drift from the canonical matrix status inventory.
 - [ ] Freeze the first Phase 7 implementation backlog from confirmed `DIFFERENT` / `MISSING` evidence rather than intuition.
 
-**Phase 6D status: report contract established.** The human report now projects the first classified PASS. Final Phase 7 backlog generation remains blocked because there is still no confirmed `DIFFERENT` / `MISSING` evidence to implement.
+**Phase 6D status: report contract established.** The human report now projects the two scoped parse/load PASS results. Final Phase 7 backlog generation remains blocked because there is still no confirmed `DIFFERENT` / `MISSING` evidence to implement.
 
 ### 6E — active-track CI foundation
 

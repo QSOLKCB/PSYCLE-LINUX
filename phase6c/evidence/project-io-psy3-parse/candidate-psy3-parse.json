@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "scope": "candidate-parse-observation",
+  "contract": "project-io-psy3-parse",
+  "evidence_role": "candidate",
+  "snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+  "executable_sha256": "086d4e4cd477100bad08d137c3baf0fdb4df3cfd8a9946ba24ba123fb972f318",
+  "fixture": "cpsycle-psy3/phase4-first.psy",
+  "fixture_sha256": "db18fbf83afd13c28ff7cf01a20ebd2e97018b4ecf77496afe936c5c20050065",
+  "procedure": "Derive PSY3 parse/load acceptance from the hash-bound candidate process receipt and complete log; require the exact project-authored fixture, dummy driver, ordered single load/PSY3-loader/Sampler/Master/playing markers, and no unrecognized warning, error or log line; retain the recorded process exit and timeout independently. No playback or serialization claim.",
+  "source_receipt": {
+    "path": "candidate-psy3.json",
+    "sha256": "4e83b81fae782192b735e04ea55e188de615589c3ebdfd4bf7ecd45175171618"
+  },
+  "log": {
+    "path": "candidate-psy3.log",
+    "sha256": "230ac56352060c8c89dcba75abcbcc03ccd529c5875c93eb99c0e454b2be136f"
+  },
+  "parse_result": "accepted",
+  "markers": [
+    {
+      "marker": "driver",
+      "line": 37
+    },
+    {
+      "marker": "load-request",
+      "line": 42
+    },
+    {
+      "marker": "psy3-loader",
+      "line": 43
+    },
+    {
+      "marker": "sampler",
+      "line": 45
+    },
+    {
+      "marker": "master",
+      "line": 54
+    },
+    {
+      "marker": "load-returned-success",
+      "line": 55
+    }
+  ],
+  "allowed_warnings": [
+    {
+      "line": 9,
+      "message": "psycle: player: native plugin path not configured. You can set the PSYCLE_PATH environment variable."
+    },
+    {
+      "line": 10,
+      "message": "psycle: player: ladspa plugin path not configured. You can set the LADSPA_PATH environment variable."
+    },
+    {
+      "line": 30,
+      "message": "# psycle-core # ../src/psycle/core/player.cpp:279 # void psycle::core::Player::thread_function(std::size_t)"
+    },
+    {
+      "line": 31,
+      "message": "no permission to set thread scheduling policy and priority to realtime: standard error: 1 0x1: Operation not permitted"
+    },
+    {
+      "line": 38,
+      "message": "# psycle-core # ../src/psycle/core/player.cpp:279 # void psycle::core::Player::thread_function(std::size_t)"
+    },
+    {
+      "line": 39,
+      "message": "no permission to set thread scheduling policy and priority to realtime: standard error: 1 0x1: Operation not permitted"
+    },
+    {
+      "line": 40,
+      "message": "# psycle-core # ../src/psycle/core/player.cpp:279 # void psycle::core::Player::thread_function(std::size_t)"
+    },
+    {
+      "line": 41,
+      "message": "no permission to set thread scheduling policy and priority to realtime: standard error: 1 0x1: Operation not permitted"
+    },
+    {
+      "line": 44,
+      "message": "This file is from a newer version of Psycle! This process will try to load it anyway."
+    },
+    {
+      "line": 52,
+      "message": "# psycle-core # ../src/psycle/core/player.cpp:279 # void psycle::core::Player::thread_function(std::size_t)"
+    },
+    {
+      "line": 53,
+      "message": "no permission to set thread scheduling policy and priority to realtime: standard error: 1 0x1: Operation not permitted"
+    }
+  ],
+  "diagnostics": [],
+  "process_observation": "timeout",
+  "process_exit_code": 124,
+  "original_psycle_observed": false,
+  "parity_status": "UNKNOWN"
+}

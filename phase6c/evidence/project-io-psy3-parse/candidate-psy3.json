@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "scope": "candidate-observation",
+  "contract": "project-io-psy3-parse",
+  "evidence_role": "candidate",
+  "snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+  "fixture": "cpsycle-psy3/phase4-first.psy",
+  "fixture_sha256": "db18fbf83afd13c28ff7cf01a20ebd2e97018b4ecf77496afe936c5c20050065",
+  "procedure": "timeout 20s psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player --output-driver dummy --input-file <fixture> </dev/null > <log> 2>&1",
+  "observation": "timeout",
+  "source_revision": "SourceForge SVN r12005",
+  "executable": "psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player",
+  "executable_sha256": "086d4e4cd477100bad08d137c3baf0fdb4df3cfd8a9946ba24ba123fb972f318",
+  "exit_code": 124,
+  "log": {
+    "path": "candidate-psy3.log",
+    "sha256": "230ac56352060c8c89dcba75abcbcc03ccd529c5875c93eb99c0e454b2be136f"
+  },
+  "original_psycle_observed": false,
+  "parity_status": "UNKNOWN",
+  "parity_note": "Candidate execution evidence alone cannot classify compatibility with the pinned original Psycle reference."
+}
