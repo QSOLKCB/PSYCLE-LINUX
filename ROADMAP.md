@@ -296,7 +296,9 @@ Audit at minimum:
     - [x] Add a separate runtime probe for candidate `CoreSong::save` versions 2/3/4 and a guarded original Save As/fresh-reopen observation with independent receipt validation. See `phase6c/SERIALIZATION.md`.
     - [x] Record paired runtime observations: candidate save versions 2/3/4 return false without output; original Save As succeeds and a fresh process accepts the saved output. The final PR #63 run `35439069516` reproduces this at head `b6c3a7d4f026200477929c96d641592ef52384c2`.
     - [x] Commit a versioned comparison and classify the required save capability `MISSING`; keep byte equality and complete semantic state preservation outside that verdict. See `phase6c/evidence/project-io-serialization-roundtrip/comparison.json`.
-- [ ] sequence/pattern timing;
+- [ ] sequence/pattern order;
+  - [x] Add a project-authored single-sequence PSY3 fixture with non-monotonic order `0,2,1,2`, a candidate model probe, and a guarded original UI Automation order-list observer. See `phase6c/SEQUENCE_ORDER.md`.
+  - [ ] Record paired runtime observations and commit a versioned comparison before changing `sequencer-pattern-order` from `UNKNOWN`.
 - [ ] BPM/LPB/tick behaviour;
 - [ ] tracker commands and delayed/retrigger events;
 - [ ] Sampler PS1 behaviour;
@@ -312,7 +314,7 @@ Audit at minimum:
 
 Do **not** assume C-Psycle's event sequencer is authoritative when it differs from original Psycle. The point of this phase is to discover and document differences.
 
-**Phase 6C status: active.** PSY2 and PSY3 parse/load acceptance are scoped `PASS` results for one exact fixture each, and the serialization/save-capability contract is now a scoped `MISSING` result; 17 contracts remain `UNKNOWN`. The save verdict is limited to the required ability to emit a PSY3 output for the tested operation: byte identity is recorded separately and complete semantic round-trip state remains unmeasured. This first confirmed `MISSING` result justifies a Phase 7 serializer backlog item. The next Phase 6C evidence slice moves to sequence/pattern order rather than guessing further engine changes.
+**Phase 6C status: active.** PSY2 and PSY3 parse/load acceptance are scoped `PASS` results for one exact fixture each, and the serialization/save-capability contract is now a scoped `MISSING` result; 17 contracts remain `UNKNOWN`. The save verdict is limited to the required ability to emit a PSY3 output for the tested operation: byte identity is recorded separately and complete semantic round-trip state remains unmeasured. This first confirmed `MISSING` result justifies a Phase 7 serializer backlog item. The sequence/pattern-order evidence lane is now implemented around one legacy single-sequence PSY3 fixture; the next step is to record the paired Windows/Linux runtime observations and version the comparison before changing that row from `UNKNOWN`.
 
 ### 6D — parity report
 
