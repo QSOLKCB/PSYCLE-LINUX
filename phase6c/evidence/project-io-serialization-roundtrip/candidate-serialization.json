@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "scope": "candidate-serialization-observation",
+  "contract": "project-io-serialization-roundtrip",
+  "evidence_role": "candidate",
+  "snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+  "fixture": "cpsycle-psy3/phase4-first.psy",
+  "fixture_sha256": "db18fbf83afd13c28ff7cf01a20ebd2e97018b4ecf77496afe936c5c20050065",
+  "probe_sha256": "2e272e7ad6fedd88262e993b0e6ef27e3d5b632e671bdd1976eb1d5c95be669e",
+  "probe_sources": {
+    "tests/phase6c_serialization.cpp": "31955d3fbda6aa1d180f988077a8ab59b80489ea3e5aaadc50278394a5ac718f",
+    "tests/phase6c_serialization.pro": "631993edd2a5a26ba5dfc2d6cf1e7d91c921a38fbc32e1c22d6d1f6e85ab8be9",
+    "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/song.cpp": "3577bf3b26c05d467a92d9edadb3da90847a067b4a80a4a5ec36943ea1d61462",
+    "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/songserializer.cpp": "07707fb0427305cb9886f33617b204fc1cdc6a854b34eb6932d1f0098bbb4809",
+    "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy2filter.h": "8b7e5fa92cad26cc236d6040f04cd374719aa123475548ea4cfa1c037ddd8a7f",
+    "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.h": "d37c3cd9a77d350724c0c8c3f9b74e2489164de1ac1a84392d5ca59cb75c9aa2"
+  },
+  "core_archive_sha256": "a893e798a046ccfb65be94ad31fc76f99f3829eee35b311cff68e9a1cee2cb25",
+  "procedure": "Build a separate probe against the verified historical static core; in one fresh process per format version load the exact PSY3 fixture without playback using PSYCLE_THREADS=1 and call CoreSong::save(path, version) for versions 2, 3 and 4; record API returns, limited before/after state, reports, process result, logs and any new output bytes. No serializer is substituted.",
+  "state_scope": "Metadata, timing scalars and occupied machine slots only; not full semantic song state or a round-trip equivalence claim.",
+  "attempts": [
+    {
+      "format_version": 2,
+      "exit_code": 0,
+      "observation": "save-returned-false-without-output",
+      "probe_result": {
+        "path": "serialization/candidate-v2.json",
+        "sha256": "77cbe7ec900af7db871883eb206befa5cb357ca7747dcc6138ffc86de60f8441"
+      },
+      "log": {
+        "path": "serialization/candidate-v2.log",
+        "sha256": "2580123bda9ec32565fc1b354fc40b6ff672c0094753441ad09aa8bb713ddd23"
+      },
+      "output": null
+    },
+    {
+      "format_version": 3,
+      "exit_code": 0,
+      "observation": "save-returned-false-without-output",
+      "probe_result": {
+        "path": "serialization/candidate-v3.json",
+        "sha256": "6f206d16d8f573c44847bf6ca41151ea395727dfd5bd68d4d5174616553838b1"
+      },
+      "log": {
+        "path": "serialization/candidate-v3.log",
+        "sha256": "db5302281162a08f83b002eeea6907c29da9b2e60ffe874f5bb1a9c2b262268f"
+      },
+      "output": null
+    },
+    {
+      "format_version": 4,
+      "exit_code": 0,
+      "observation": "save-returned-false-without-output",
+      "probe_result": {
+        "path": "serialization/candidate-v4.json",
+        "sha256": "16e9061a2609149a34ae1e945ac1602235485760971c839a822dfc1bb348280d"
+      },
+      "log": {
+        "path": "serialization/candidate-v4.log",
+        "sha256": "d39409cec2c1b4dc3c884bfcd1f6b1716041712bcbe07e801b7e71d7085c6d5e"
+      },
+      "output": null
+    }
+  ],
+  "original_psycle_observed": false,
+  "parity_status": "UNKNOWN"
+}
