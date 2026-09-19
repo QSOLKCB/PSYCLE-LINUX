@@ -64,6 +64,21 @@ class ParseEvidence(unittest.TestCase):
         self.assertEqual(self.derive(LOG.decode().replace('I: main: psycle: player: playing...',
                                                         'I: thread-id-1: psycle: player: playing...'))['parse_result'], 'inconclusive')
 
+    def test_unrecognized_trace_and_information_fail_closed(self):
+        for level in ('T', 'I'):
+            for thread in ('main', 'thread-id-1', 'psycle::core::Player#0'):
+                with self.subTest(level=level, thread=thread):
+                    text=LOG.decode()+f'log: 99999us: {level}: {thread}: unexpected loader diagnostic\n'
+                    self.assertEqual(self.derive(text)['parse_result'], 'inconclusive')
+
+    def test_invalid_utf8_records_inconclusive_evidence(self):
+        raw=json.loads(RAW)
+        log=LOG+b'\xff\n'
+        raw['log']['sha256']=parse.sha(log)
+        result=parse.derive(json.dumps(raw).encode(),log)
+        self.assertEqual(result['parse_result'],'inconclusive')
+        self.assertIn('candidate log is not valid UTF-8',result['diagnostics'])
+
     def test_signal_and_harness_failures_never_accept(self):
         for rc in (1,2,125,126,127,137,139,-11):
             with self.subTest(rc=rc):

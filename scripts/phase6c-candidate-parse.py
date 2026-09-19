@@ -33,6 +33,25 @@ SCHEDULER_WARNING = ('no permission to set thread scheduling policy and priority
                      'standard error: 1 0x1: Operation not permitted')
 PROMPT = ('psycle: player: currently, we have no way find out when the song is finished with the sequence... '
           'for now, please press enter or ctrl+d (EOF) to stop.')
+# Exhaustive non-marker messages for the pinned player and this fixture. Runtime
+# IDs/counts vary; diagnostic wording and source locations do not. An unfamiliar
+# message at *any* severity requires investigation before accepting a fresh run.
+RUNTIME_MESSAGES = (
+    ('T', r'thread-id-\d+', r'\# universalis \# \.\./src/universalis/os/thread_name\.cpp:56 \# void universalis::os::thread_name::set_tls\(\)'),
+    ('T', r'thread-id-\d+', r'setting name for thread: id: \d+, name: (main|psycle::core::Player#\d+)'),
+    ('T', 'main', r'psycle: player: config: audio driver registered: (dummy|wavefileout|alsa|jack)'),
+    ('T', 'main', r'psycle: player: config: audio driver set to: (dummy|alsa)'),
+    ('T', 'main', r'\# psycle-core \# \.\./src/psycle/core/player\.cpp:66 \# void psycle::core::Player::start_threads\(\)'),
+    ('T', 'main', r'psycle: core: player: starting scheduler threads'),
+    ('I', 'main', r'psycle: core: player: using \d+ threads'),
+    ('T', r'thread-id-\d+', r'\# psycle-core \# \.\./src/psycle/core/player\.cpp:254 \# void psycle::core::Player::thread_function\(std::size_t\)'),
+    ('T', r'thread-id-\d+', r'psycle: core: player: scheduler thread #\d+ started'),
+    ('T', r'psycle::core::Player#\d+', r'\# universalis \# \.\./src/universalis/cpu/exception\.cpu\.cpp:92 \# void universalis::cpu::exceptions::install_handler_in_thread\(\)'),
+    ('T', r'psycle::core::Player#\d+', r'installing cpu/os exception handler in thread: name: psycle::core::Player#\d+'),
+    ('I', 'main', r'psycle: player: setting output driver name to: dummy'),
+    ('T', 'main', r'\# psycle-core \# \.\./src/psycle/core/player\.cpp:536 \# void psycle::core::Player::setDriver\(psycle::audiodrivers::AudioDriver&\)'),
+    ('I', 'main', r'psycle: core: player: (starting|stopping)'),
+)
 
 
 def sha(data: bytes) -> str:
@@ -78,7 +97,13 @@ def derive(raw_bytes: bytes, log_bytes: bytes) -> dict:
         'psycle: core: machine factory: create machine: loading with host: 0, plugin: <master>': ('master', 'I'),
         'psycle: player: playing...': ('load-returned-success', 'I'),
     }
-    for number, line in enumerate(log_bytes.decode('utf-8').splitlines(), 1):
+    try:
+        lines = log_bytes.decode('utf-8').splitlines()
+    except UnicodeDecodeError:
+        # Preserve the complete bytes/hash; do not ignore or replace corrupt text.
+        lines = []
+        diagnostics.append('candidate log is not valid UTF-8')
+    for number, line in enumerate(lines, 1):
         match = LINE.fullmatch(line)
         if not match:
             if line != PROMPT:
@@ -95,23 +120,28 @@ def derive(raw_bytes: bytes, log_bytes: bytes) -> dict:
                 diagnostics.append(f'unrecognized warning at line {number}: {message}')
         elif level not in {'T', 'I'}:
             diagnostics.append(f'candidate diagnostic at line {number}: {message}')
-        if thread != 'main':
-            continue
+        recognized = any(level == allowed_level and re.fullmatch(allowed_thread, thread)
+                         and re.fullmatch(message_pattern, message)
+                         for allowed_level, allowed_thread, message_pattern in RUNTIME_MESSAGES)
         for prefix, event, expected_level in (
             ('psycle: player: loading song file: ', 'load-request', 'I'),
             ('psycle: core: psy3 loader: loading psycle song fileformat version 3: ', 'psy3-loader', 'T'),
         ):
-            if message.startswith(prefix):
+            if thread == 'main' and message.startswith(prefix):
+                recognized = True
                 path = message[len(prefix):]
                 paths.append(path)
                 if not path.startswith('/') or not path.endswith('/' + FIXTURE) or level != expected_level:
                     diagnostics.append(f'wrong fixture load marker at line {number}')
                 events.append({'marker': event, 'line': number})
-        if message in markers:
+        if thread == 'main' and message in markers:
+            recognized = True
             event, expected_level = markers[message]
             if level != expected_level:
                 diagnostics.append(f'wrong marker severity at line {number}')
             events.append({'marker': event, 'line': number})
+        if level in {'T', 'I'} and not recognized:
+            diagnostics.append(f'unrecognized structured log line {number}: {message}')
     if [e['marker'] for e in events] != ['driver', 'load-request', 'psy3-loader', 'sampler', 'master', 'load-returned-success']:
         diagnostics.append('missing, duplicate or out-of-order load markers')
     if len(paths) != 2 or paths[0] != paths[1]:
