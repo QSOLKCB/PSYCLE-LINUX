@@ -14,6 +14,7 @@ import math
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 import subprocess
 import struct
 
@@ -21,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASELINE = "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a"
 CONTRACT = "sequencer-bpm-lpb-tick"
 FIXTURE = "bpm-lpb-tick/phase6c-bpm-lpb-tick.psy"
+PROBE_ARTIFACT = "bpm-lpb-tick/candidate-probe.bin"
 TITLE = "PSYCLE-LINUX Phase 6C timing fixture"
 BPM = 137.0
 LPB = 8
@@ -78,8 +80,36 @@ def bound_bytes(root: Path, mapping: object) -> bytes:
     return data
 
 
+def canonical_text_bytes(data: bytes) -> bytes:
+    normalized = data.replace(b"\r\n", b"\n")
+    if b"\r" in normalized:
+        raise ValueError("source contains unsupported carriage returns")
+    return normalized
+
+
 def source_hashes() -> dict[str, str]:
-    return {path: digest((ROOT / path).read_bytes()) for path in SOURCE_PATHS}
+    return {
+        path: digest(canonical_text_bytes((ROOT / path).read_bytes()))
+        for path in SOURCE_PATHS
+    }
+
+
+def validate_probe_identity(root: Path, receipt: dict) -> bytes:
+    mapping = receipt.get("probe")
+    if not isinstance(mapping, dict) or mapping.get("path") != PROBE_ARTIFACT:
+        raise ValueError("candidate probe binding path mismatch")
+    data = bound_bytes(root, mapping)
+    if receipt.get("probe_sha256") != digest(data):
+        raise ValueError("candidate probe identity mismatch")
+    return data
+
+
+def require_candidate_observed(parsed: dict) -> dict:
+    if parsed.get("observation") != "timing-model-observed":
+        raise ValueError(
+            "candidate timing observation is inconclusive; raw evidence retained for diagnostics"
+        )
+    return parsed
 
 
 def close(lhs: object, rhs: float, tolerance: float = 1e-7) -> bool:
@@ -198,10 +228,16 @@ def collect(root: Path, probe: Path) -> None:
     out = child(root, "bpm-lpb-tick")
     raw_path = out / "candidate-probe.json"
     log_path = out / "candidate-probe.log"
+    probe_path = child(root, PROBE_ARTIFACT)
     receipt_path = root / "candidate-bpm-lpb-tick.json"
-    if raw_path.exists() or log_path.exists() or receipt_path.exists():
+    if raw_path.exists() or log_path.exists() or probe_path.exists() or receipt_path.exists():
         raise ValueError("refusing stale timing evidence")
-    process = subprocess.run([str(probe), str(fixture)], cwd=ROOT,
+    shutil.copy2(probe, probe_path)
+    if not probe_path.is_file() or not os.access(probe_path, os.X_OK):
+        raise ValueError("preserved timing probe is not executable")
+    if digest(probe_path.read_bytes()) != digest(probe.read_bytes()):
+        raise ValueError("preserved timing probe differs from build output")
+    process = subprocess.run([str(probe_path), str(fixture)], cwd=ROOT,
         env={**os.environ, "PSYCLE_THREADS": "1"}, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, timeout=20, check=False)
     raw_path.write_bytes(process.stdout); log_path.write_bytes(process.stderr)
@@ -213,8 +249,9 @@ def collect(root: Path, probe: Path) -> None:
         "fixture_expected": {"bpm": 137, "lpb": LPB, "ticks_per_beat": TPB,
                              "extra_ticks_per_beat": EXTRA_TICKS, "marker_positions": POSITIONS},
         "fixture_generator_log": binding(root, out / "fixture-generator.log"),
-        "procedure": "generate the project-authored PSY3 timing fixture at BPM 137, LPB 8, TPB 24 and extra ticks 0 with four consecutive line markers; build a separate probe against the frozen Phase 6B core; load without playback using PSYCLE_THREADS=1; record loaded timing metadata, marker spacing and derived sample intervals at 44100 and 48000 Hz",
-        "probe_sha256": digest(probe.read_bytes()), "source_sha256": source_hashes(),
+        "procedure": "generate the project-authored PSY3 timing fixture at BPM 137, LPB 8, TPB 24 and extra ticks 0 with four consecutive line markers; build a separate probe against the frozen Phase 6B core; preserve the exact probe bytes inside the evidence artifact and execute that preserved copy without playback using PSYCLE_THREADS=1; record loaded timing metadata, marker spacing and derived sample intervals at 44100 and 48000 Hz",
+        "probe": binding(root, probe_path),
+        "probe_sha256": digest(probe_path.read_bytes()), "source_sha256": source_hashes(),
         "exit_code": process.returncode, "raw_probe": binding(root, raw_path),
         "log": binding(root, log_path), **parsed, "original_psycle_observed": False,
         "parity_status": "UNKNOWN",
@@ -242,12 +279,14 @@ def validate_candidate(root: Path) -> dict:
         raise ValueError("fixture generator did not record PASS")
     if receipt.get("source_sha256") != source_hashes():
         raise ValueError("candidate source hash mismatch")
+    validate_probe_identity(root, receipt)
     parsed = parse_probe(bound_bytes(root, receipt["raw_probe"]),
                          bound_bytes(root, receipt["log"]), receipt.get("exit_code"))
     for key in ("observation", "bpm", "tick_speed", "is_ticks", "marker_positions",
                 "derived_lpb", "sample_rates", "reports"):
         if receipt.get(key) != parsed[key]:
             raise ValueError("candidate raw evidence mismatch: " + key)
+    require_candidate_observed(parsed)
     return {**parsed, "parity_status": "UNKNOWN"}
 
 
