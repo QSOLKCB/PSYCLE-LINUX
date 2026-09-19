@@ -455,15 +455,24 @@ def validate_pair(
     contract: str,
     candidate_root: pathlib.Path,
     original_root: pathlib.Path,
+    *,
+    saved_fixture: bool = False,
 ) -> str:
-    candidate = load_json(candidate_root / f"candidate-{name}.json")
+    # A saved original output is an explicitly separate input role, never Linux
+    # candidate evidence. This reuses all original observation integrity checks.
+    if saved_fixture and (name != "psy3-reopen" or contract != "project-io-serialization-roundtrip"):
+        die("saved-fixture mode is restricted to the original PSY3 reopen observation")
+    source_path = candidate_root / ("serialization/saved-fixture.json" if saved_fixture else f"candidate-{name}.json")
+    candidate = load_json(source_path)
     original = load_json(original_root / f"original-{name}.json")
 
     if candidate.get("schema_version") != 1 or candidate.get("phase") != "6C":
         die(f"candidate-{name} has unexpected schema_version/phase")
-    if candidate.get("contract") != contract or candidate.get("evidence_role") != "candidate":
+    if candidate.get("contract") != contract or candidate.get("evidence_role") != ("original-saved-fixture" if saved_fixture else "candidate"):
         die(f"candidate-{name} is bound to the wrong contract/role")
 
+    if saved_fixture and original.get("source_fixture_role") != "original-saved-fixture":
+        die("original reopen observation must identify its original-saved-fixture input role")
     if original.get("schema_version") != 1 or original.get("phase") != "6C":
         die(f"original-{name} has unexpected schema_version/phase")
     if original.get("scope") != "original-observation":

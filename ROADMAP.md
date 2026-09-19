@@ -293,6 +293,8 @@ Audit at minimum:
   - [x] PSY2 parse/load acceptance for the exact project-authored PSY2SONG fixture is classified `PASS` against pinned Psycle 1.12.0 x86.
   - [x] PSY3 parse/load acceptance for the exact project-authored Phase 4 fixture is classified `PASS` using PR #61 run `35364406445`: original 1.12.0 accepted after verified warning dismissal; a separately derived candidate parse receipt proves ordered load completion without disqualifying diagnostics. The unchanged candidate process receipt remains `timeout` / exit `124`; playback and termination are not classified.
   - [ ] Serialization / round-trip remains a separate `UNKNOWN` contract and is not implied by the PSY2 parse PASS.
+    - [x] Add a separate runtime probe for candidate `CoreSong::save` versions 2/3/4 and a guarded original Save As/fresh-reopen observation with independent receipt validation. See `phase6c/SERIALIZATION.md`.
+    - [ ] Version the resulting observations and classify the precise serialization capability/state contract only when both sides supply conclusive evidence.
 - [ ] sequence/pattern timing;
 - [ ] BPM/LPB/tick behaviour;
 - [ ] tracker commands and delayed/retrigger events;
