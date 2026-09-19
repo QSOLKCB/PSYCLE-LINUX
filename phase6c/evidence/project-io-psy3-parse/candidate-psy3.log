@@ -1,0 +1,58 @@
+log:       0us: T: thread-id-140688442789824: # universalis # ../src/universalis/os/thread_name.cpp:56 # void universalis::os::thread_name::set_tls()
+log:      14us: T: thread-id-140688442789824: setting name for thread: id: 140688442789824, name: main
+log:      19us: T: main: psycle: player: config: audio driver registered: dummy
+log:      21us: T: main: psycle: player: config: audio driver set to: dummy
+log:      37us: T: main: psycle: player: config: audio driver registered: wavefileout
+log:      39us: T: main: psycle: player: config: audio driver registered: alsa
+log:      39us: T: main: psycle: player: config: audio driver set to: alsa
+log:      41us: T: main: psycle: player: config: audio driver registered: jack
+log:      51us: W: main: psycle: player: native plugin path not configured. You can set the PSYCLE_PATH environment variable.
+log:      52us: W: main: psycle: player: ladspa plugin path not configured. You can set the LADSPA_PATH environment variable.
+log:      63us: T: main: # psycle-core # ../src/psycle/core/player.cpp:66 # void psycle::core::Player::start_threads()
+log:      64us: T: main: psycle: core: player: starting scheduler threads
+log:      78us: I: main: psycle: core: player: using 4 threads
+log:     176us: T: thread-id-140688397690560: # psycle-core # ../src/psycle/core/player.cpp:254 # void psycle::core::Player::thread_function(std::size_t)
+log:     179us: T: thread-id-140688397690560: psycle: core: player: scheduler thread #0 started
+log:     190us: T: thread-id-140688397690560: # universalis # ../src/universalis/os/thread_name.cpp:56 # void universalis::os::thread_name::set_tls()
+log:     191us: T: thread-id-140688397690560: setting name for thread: id: 140688397690560, name: psycle::core::Player#0
+log:     206us: T: psycle::core::Player#0: # universalis # ../src/universalis/cpu/exception.cpu.cpp:92 # void universalis::cpu::exceptions::install_handler_in_thread()
+log:     207us: T: psycle::core::Player#0: installing cpu/os exception handler in thread: name: psycle::core::Player#0
+log:     219us: T: thread-id-140688380909248: # psycle-core # ../src/psycle/core/player.cpp:254 # void psycle::core::Player::thread_function(std::size_t)
+log:     222us: T: thread-id-140688380909248: psycle: core: player: scheduler thread #1 started
+log:     235us: T: thread-id-140688380909248: # universalis # ../src/universalis/os/thread_name.cpp:56 # void universalis::os::thread_name::set_tls()
+log:     237us: T: thread-id-140688380909248: setting name for thread: id: 140688380909248, name: psycle::core::Player#1
+log:     239us: T: psycle::core::Player#1: # universalis # ../src/universalis/cpu/exception.cpu.cpp:92 # void universalis::cpu::exceptions::install_handler_in_thread()
+log:     240us: T: psycle::core::Player#1: installing cpu/os exception handler in thread: name: psycle::core::Player#1
+log:     248us: T: thread-id-140688364127936: # psycle-core # ../src/psycle/core/player.cpp:254 # void psycle::core::Player::thread_function(std::size_t)
+log:     250us: T: thread-id-140688364127936: psycle: core: player: scheduler thread #2 started
+log:     258us: T: thread-id-140688364127936: # universalis # ../src/universalis/os/thread_name.cpp:56 # void universalis::os::thread_name::set_tls()
+log:     259us: T: thread-id-140688364127936: setting name for thread: id: 140688364127936, name: psycle::core::Player#2
+log:     261us: W: psycle::core::Player#1: # psycle-core # ../src/psycle/core/player.cpp:279 # void psycle::core::Player::thread_function(std::size_t)
+log:     262us: W: psycle::core::Player#1: no permission to set thread scheduling policy and priority to realtime: standard error: 1 0x1: Operation not permitted
+log:     268us: T: psycle::core::Player#2: # universalis # ../src/universalis/cpu/exception.cpu.cpp:92 # void universalis::cpu::exceptions::install_handler_in_thread()
+log:     269us: T: psycle::core::Player#2: installing cpu/os exception handler in thread: name: psycle::core::Player#2
+log:     271us: I: main: psycle: player: setting output driver name to: dummy
+log:     273us: T: main: psycle: player: config: audio driver set to: dummy
+log:     298us: T: main: # psycle-core # ../src/psycle/core/player.cpp:536 # void psycle::core::Player::setDriver(psycle::audiodrivers::AudioDriver&)
+log:     299us: T: main: psycle: core: player: setting audio driver to: dummy
+log:     302us: W: psycle::core::Player#0: # psycle-core # ../src/psycle/core/player.cpp:279 # void psycle::core::Player::thread_function(std::size_t)
+log:     303us: W: psycle::core::Player#0: no permission to set thread scheduling policy and priority to realtime: standard error: 1 0x1: Operation not permitted
+log:     315us: W: psycle::core::Player#2: # psycle-core # ../src/psycle/core/player.cpp:279 # void psycle::core::Player::thread_function(std::size_t)
+log:     316us: W: psycle::core::Player#2: no permission to set thread scheduling policy and priority to realtime: standard error: 1 0x1: Operation not permitted
+log:     347us: I: main: psycle: player: loading song file: /home/runner/work/PSYCLE-LINUX/PSYCLE-LINUX/phase6c-evidence/cpsycle-psy3/phase4-first.psy
+log:     392us: T: main: psycle: core: psy3 loader: loading psycle song fileformat version 3: /home/runner/work/PSYCLE-LINUX/PSYCLE-LINUX/phase6c-evidence/cpsycle-psy3/phase4-first.psy
+log:     401us: W: main: This file is from a newer version of Psycle! This process will try to load it anyway.
+log:     565us: I: main: psycle: core: machine factory: create machine: loading with host: 0, plugin: <sampler>
+log:    2882us: T: thread-id-140688347346624: # psycle-core # ../src/psycle/core/player.cpp:254 # void psycle::core::Player::thread_function(std::size_t)
+log:    2883us: T: thread-id-140688347346624: psycle: core: player: scheduler thread #3 started
+log:    2890us: T: thread-id-140688347346624: # universalis # ../src/universalis/os/thread_name.cpp:56 # void universalis::os::thread_name::set_tls()
+log:    2890us: T: thread-id-140688347346624: setting name for thread: id: 140688347346624, name: psycle::core::Player#3
+log:    2892us: T: psycle::core::Player#3: # universalis # ../src/universalis/cpu/exception.cpu.cpp:92 # void universalis::cpu::exceptions::install_handler_in_thread()
+log:    2892us: T: psycle::core::Player#3: installing cpu/os exception handler in thread: name: psycle::core::Player#3
+log:    2903us: W: psycle::core::Player#3: # psycle-core # ../src/psycle/core/player.cpp:279 # void psycle::core::Player::thread_function(std::size_t)
+log:    2903us: W: psycle::core::Player#3: no permission to set thread scheduling policy and priority to realtime: standard error: 1 0x1: Operation not permitted
+log:   23895us: I: main: psycle: core: machine factory: create machine: loading with host: 0, plugin: <master>
+log:   23919us: I: main: psycle: player: playing...
+log:   23957us: I: main: psycle: core: player: stopping
+log:   23959us: I: main: psycle: core: player: starting
+psycle: player: currently, we have no way find out when the song is finished with the sequence... for now, please press enter or ctrl+d (EOF) to stop.

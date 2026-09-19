@@ -10,6 +10,7 @@ original-reference evidence, candidate evidence, and a versioned comparison verd
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import pathlib
 import re
@@ -98,6 +99,85 @@ EXPECTED_CANDIDATE_SOURCE_IDENTITIES = {
         "artifact_digest": "sha256:b8d206aa16a2b820149e1e83f76c671fb0b584cea59ed8f69941846e183b6fcf",
     }
 }
+
+# PR #61 archived PSY3 evidence. The parse sidecar is rederived, not retroactively
+# attributed to the historical workflow. PSY2 identities above remain frozen.
+EXPECTED_ORIGINAL_SOURCE_IDENTITIES["project-io-psy3-parse"] = {
+    "receipt_sha256": "b84debb60dbc9eb558f8cd4780f777c25143742c8ea1d87c471dc0ca09732a24",
+    "procedure_sha256": "53f62e55b10ceffb81ee55af08703ada323ba99bd3fa58681ebd62621a439454",
+    "executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+    "artifact_digest": "sha256:7d8d9df684324538c9d8a08959516d8002689eed681a1c10994c05e12bc5ff51"
+}
+EXPECTED_WORKFLOW_ATTRIBUTION["project-io-psy3-parse"] = {
+    "workflow": "Phase 6C compatibility matrix",
+    "run_id": 35364406445,
+    "event": "pull_request",
+    "head_sha": "118678d257afc0545f63b783098884e10a97e91e",
+    "merged_main_sha": "35d819374955e20e72e1669253e43252636cd3ff",
+    "original_job_id": 105664222147,
+    "original_artifact_id": 10556051657,
+    "candidate_job_id": 105663225924,
+    "candidate_artifact_id": 10556141223
+}
+EXPECTED_ORIGINAL_CLASSIFICATION_FIELDS["project-io-psy3-parse"] = {
+    "reference_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+    "fixture": "fixtures/psy3/phase4-first.psy",
+    "observation": "stable-native-window-evidence-identifies-loaded-fixture-without-error",
+    "load_result": "accepted",
+    "load_evidence_marker": "phase4-first.psy",
+    "stable_marker_polls": 40,
+    "error_marker": None,
+    "application_error_marker": None,
+    "error_marker_scope": "none",
+    "ui_automation_diagnostics": [],
+    "startup_bootstrap": {
+        "settings_dialog_seen": False,
+        "signature_verified": False,
+        "attempted": False,
+        "action": None,
+        "dismissed": False,
+        "outcome": "not-seen",
+        "diagnostics": []
+    },
+    "environment_bootstrap": {
+        "directsound": {
+            "dialog_seen": True,
+            "signature_verified": True,
+            "attempted": True,
+            "action": "invoke-ok-win32-bm-click",
+            "dismissed": True,
+            "outcome": "dismissed",
+            "diagnostics": []
+        }
+    },
+    "runtime_identity_diagnostics": [],
+    "main_window_seen": True,
+    "exit_code_before_termination": None,
+    "process_running_before_termination": True,
+    "termination": "killed-without-closeable-main-window",
+    "original_psycle_observed": True,
+    "parity_status": "UNKNOWN",
+    "fixture_bootstrap": {
+        "load_warning": {
+            "required": True,
+            "expected_title": "Load Warning",
+            "expected_message": "This file is from a newer version of Psycle! This process will try to load it anyway.",
+            "dialog_seen": True,
+            "signature_verified": True,
+            "attempted": True,
+            "action": "invoke-ok",
+            "dismissed": True,
+            "outcome": "dismissed",
+            "diagnostics": []
+        }
+    }
+}
+EXPECTED_CANDIDATE_SOURCE_IDENTITIES["project-io-psy3-parse"] = {
+    "receipt_sha256": "4e83b81fae782192b735e04ea55e188de615589c3ebdfd4bf7ecd45175171618",
+    "executable_sha256": "086d4e4cd477100bad08d137c3baf0fdb4df3cfd8a9946ba24ba123fb972f318",
+    "artifact_digest": "sha256:6b9e3dae1fd9d5137f172692ed49bad5a24ad000cd7cb9d658b9077def9aca1e"
+}
+
 ALLOWED_STATUS = {"PASS", "DIFFERENT", "MISSING", "UNKNOWN"}
 CLASSIFIED_STATUS = ALLOWED_STATUS - {"UNKNOWN"}
 PARSE_CONTRACT_IDS = {
@@ -357,6 +437,7 @@ def validate_parse_pass_semantics(
     original_receipt: dict[str, object],
     candidate_receipt: dict[str, object],
     comparison: dict[str, object],
+    candidate_parse: dict[str, object] | None = None,
 ) -> None:
     """Require concrete successful parse observations before a parse row may PASS."""
     if original_receipt.get("original_psycle_observed") is not True:
@@ -509,6 +590,15 @@ def validate_parse_pass_semantics(
             "harness-controlled termination"
         )
 
+    if row_id == "project-io-psy3-parse":
+        # The archived process receipt truthfully remains timeout/124. A separate
+        # independently rederived receipt establishes only load acceptance.
+        if not candidate_parse or candidate_parse.get("parse_result") != "accepted":
+            die(f"{row_id} PASS lacks accepted candidate parse evidence")
+        if candidate_parse.get("diagnostics") != []:
+            die(f"{row_id} PASS candidate parse evidence contains diagnostics")
+        return
+
     if candidate_receipt.get("observation") != "load-and-clean-exit":
         die(f"{row_id} PASS candidate receipt is not a clean load observation")
     candidate_exit_code = candidate_receipt.get("exit_code")
@@ -532,7 +622,10 @@ def validate_parse_pass_semantics(
 
 def canonical_candidate_parse_result(
     candidate_receipt: dict[str, object],
+    candidate_parse: dict[str, object] | None = None,
 ) -> str:
+    if candidate_parse is not None:
+        return str(candidate_parse["parse_result"])
     observation = candidate_receipt.get("observation")
     if observation == "load-and-clean-exit":
         return "accepted"
@@ -564,17 +657,43 @@ def validate_parse_classification_semantics(
                 "underlying parse observations"
             )
 
+    candidate_parse = None
+    if row_id == "project-io-psy3-parse":
+        reference = comparison.get("candidate_parse_receipt")
+        if not isinstance(reference, str):
+            die(f"{row_id} requires a separate candidate parse receipt")
+        parse_path = resolve_versioned_receipt(reference, f"{row_id}.candidate_parse_receipt")
+        process_path = resolve_versioned_receipt(
+            str(comparison["candidate_receipt"]), f"{row_id}.candidate_receipt"
+        )
+        if parse_path != process_path.parent / "candidate-psy3-parse.json":
+            die(f"{row_id} parse receipt must accompany the bound process receipt")
+        spec = importlib.util.spec_from_file_location(
+            "candidate_parse", REPO_ROOT / "scripts/phase6c-candidate-parse.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        try:
+            # Fixture bytes were verified during collection; the archived raw
+            # receipt is pinned byte-for-byte above. Do not redistribute it here.
+            candidate_parse = module.validate(process_path.parent, require_fixture=False)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            die(f"{row_id} invalid candidate parse evidence: {exc}")
+        if comparison.get("candidate_parse_result") != candidate_parse["parse_result"]:
+            die(f"{row_id} comparison does not bind candidate parse result")
+
     if status == "PASS":
         validate_parse_pass_semantics(
             row_id,
             original_receipt,
             candidate_receipt,
             comparison,
+            candidate_parse,
         )
         return
 
     original_result = original_receipt.get("load_result")
-    candidate_result = canonical_candidate_parse_result(candidate_receipt)
+    candidate_result = canonical_candidate_parse_result(candidate_receipt, candidate_parse)
 
     if status == "DIFFERENT":
         if original_result not in {"accepted", "rejected"}:
