@@ -74,6 +74,20 @@ class ParityReportSummary(unittest.TestCase):
         )
         self.check(False)
 
+    def test_sequence_order_later_comma_contradiction_is_rejected(self):
+        self.mutate_report(
+            "sequence/pattern order are scoped PASS results, serialization/save capability",
+            "sequence/pattern order are scoped PASS results, yet it remains UNKNOWN; serialization/save capability",
+        )
+        self.check(False)
+
+    def test_sequence_order_later_semicolon_contradiction_is_rejected(self):
+        self.mutate_report(
+            "sequence/pattern order are scoped PASS results, serialization/save capability",
+            "sequence/pattern order are scoped PASS results; nevertheless it remains UNKNOWN, serialization/save capability",
+        )
+        self.check(False)
+
 
 if __name__ == "__main__":
     unittest.main()
