@@ -160,6 +160,22 @@ class OriginalSourceContract(unittest.TestCase):
                     "extended": 0xFE,
                     "set_lpb_range": [0x00, 0x1F],
                 },
+                "semantics": {
+                    "note_delay_counter": "((parameter+1)*SamplesPerRow())/256",
+                    "retrigger_rate": "parameter+1",
+                    "retr_cont_rate_override": "parameter high nibble when nonzero",
+                    "extended_lpb": "FE00..FE1F calls SetBPM(-1, parameter)",
+                },
+                "files": {
+                    "psycle/src/psycle/host/Player.cpp": {
+                        "git_blob": m.PLAYER_BLOB,
+                        "sha256": "0" * 64,
+                    },
+                    "psycle/src/psycle/host/SongStructs.hpp": {
+                        "git_blob": m.SONGSTRUCTS_BLOB,
+                        "sha256": "1" * 64,
+                    },
+                },
                 "original_psycle_executed": False,
                 "parity_status": "UNKNOWN",
             }
