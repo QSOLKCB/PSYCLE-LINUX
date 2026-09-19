@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -214,6 +215,94 @@ class OriginalSourceContract(unittest.TestCase):
             )
             with self.assertRaises(ValueError):
                 m.validate_source(root)
+
+
+class MatrixDelayedRetriggerComparison(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        shutil.copytree(ROOT / "phase6c", self.root / "phase6c")
+        (self.root / "scripts").mkdir()
+        for name in ("phase6c-validate-matrix.py", "phase6c-candidate-parse.py"):
+            shutil.copyfile(ROOT / "scripts" / name, self.root / "scripts" / name)
+        self.evidence = (
+            self.root / "phase6c/evidence/sequencer-delayed-retrigger"
+        )
+
+    def check(self, success):
+        result = subprocess.run(
+            ["python3", "scripts/phase6c-validate-matrix.py"],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(
+            result.returncode == 0,
+            success,
+            result.stdout + result.stderr,
+        )
+
+    def mutate(self, name, change):
+        path = self.evidence / name
+        value = json.loads(path.read_text())
+        change(value)
+        path.write_text(json.dumps(value))
+
+    def delayed_row(self):
+        path = self.root / "phase6c/compatibility-matrix.json"
+        matrix = json.loads(path.read_text())
+        row = next(
+            item
+            for item in matrix["contracts"]
+            if item["id"] == "sequencer-delayed-retrigger"
+        )
+        return path, matrix, row
+
+    def test_versioned_deferred_comparison_validates(self):
+        self.check(True)
+
+    def test_original_runtime_trace_cannot_be_invented(self):
+        self.mutate(
+            "original-delayed-retrigger.json",
+            lambda d: d.update(runtime_execution_trace="observed"),
+        )
+        self.check(False)
+
+    def test_source_inspection_cannot_be_relabelled_execution(self):
+        self.mutate(
+            "original-source-delayed-retrigger.json",
+            lambda d: d.update(original_psycle_executed=True),
+        )
+        self.check(False)
+
+    def test_candidate_schedule_is_frozen(self):
+        self.mutate(
+            "candidate-delayed-retrigger.json",
+            lambda d: d["note_delay_events"][0].update(track=99),
+        )
+        self.check(False)
+
+    def test_final_run_attribution_is_frozen(self):
+        self.mutate(
+            "comparison.json",
+            lambda d: d["source_evidence"].update(workflow_run_id=1),
+        )
+        self.check(False)
+
+    def test_deferred_verdict_cannot_be_relabelled_pass(self):
+        self.mutate(
+            "comparison.json",
+            lambda d: d.update(verdict="PASS", classification_allowed=True),
+        )
+        self.check(False)
+
+    def test_matrix_status_cannot_promote_without_new_observer(self):
+        path, matrix, row = self.delayed_row()
+        row["status"] = "PASS"
+        path.write_text(json.dumps(matrix))
+        self.check(False)
 
 
 class GeneratedObserver(unittest.TestCase):
