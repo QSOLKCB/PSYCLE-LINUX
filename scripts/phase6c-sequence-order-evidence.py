@@ -229,13 +229,22 @@ def parse_probe(raw: bytes, log: bytes, exit_code: object) -> dict:
         for line in normalized
         if line not in musical_lines
     ]
+    master_line_valid = False
+    if len(auxiliary_lines) == 1:
+        master_line = auxiliary_lines[0]
+        master_entries = master_line["entries"]
+        master_line_valid = (
+            master_line["line_index"] == 0
+            and len(master_entries) == 1
+            and master_entries[0]["position"] == 0.0
+            and master_entries[0]["pattern_id"] == -1
+            and master_entries[0]["pattern_name"] == "master"
+        )
+
     if (
         len(musical_lines) == 1
-        and all(
-            line["entries"]
-            and all(entry["pattern_id"] == -1 for entry in line["entries"])
-            for line in auxiliary_lines
-        )
+        and musical_lines[0]["line_index"] == 1
+        and master_line_valid
     ):
         result["play_order"] = [
             entry["pattern_id"] for entry in musical_lines[0]["entries"]
@@ -406,6 +415,10 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
     if matches is not None and type(matches) is not bool:
         raise ValueError("original sequence order match flag is invalid")
     if result == "observed":
+        if load_result != "accepted":
+            raise ValueError(
+                "conclusive original sequence order requires a clean accepted load"
+            )
         if polls < 4 or len(labels) != len(EXPECTED_UI_LABELS):
             raise ValueError("conclusive original sequence order lacks stable complete labels")
         expected_match = labels == EXPECTED_UI_LABELS
