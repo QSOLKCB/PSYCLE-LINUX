@@ -157,6 +157,28 @@ def main() -> int:
             if not isinstance(comparison, str) or not comparison.strip():
                 die(f"{row_id} classified row lacks comparison receipt reference")
 
+    # Keep the prose status summary synchronized with the matrix inventory, not
+    # only the table cells. This prevents a newly classified row from leaving a
+    # stale UNKNOWN count or omitting the classification from the overview.
+    try:
+        status_section = report.split("## Status", 1)[1].split("## Evidence rule", 1)[0]
+    except IndexError:
+        die("missing status/evidence-rule section boundaries")
+    unknown_count = len(contracts) - classified
+    if f"{unknown_count} contracts remain UNKNOWN" not in status_section:
+        die(
+            "status summary UNKNOWN count does not match matrix inventory: "
+            f"expected {unknown_count}"
+        )
+    sequence_row = next(
+        row for row in contracts if row.get("id") == "sequencer-pattern-order"
+    )
+    if (
+        sequence_row.get("status") == "PASS"
+        and "sequence/pattern order" not in status_section.lower()
+    ):
+        die("status summary omits classified sequence/pattern order PASS")
+
     # Phase 6D must remain evidence-driven even while every compatibility row is UNKNOWN.
     backlog_section = report.split("## Current implementation backlog", 1)[1]
     required_backlog_language = (
