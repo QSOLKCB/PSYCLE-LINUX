@@ -1060,6 +1060,17 @@ def validate_sequence_order_classification_semantics(
     if [entry.get("pattern_id") for entry in musical_entries if isinstance(entry, dict)] != EXPECTED_SEQUENCE_ORDER:
         die(f"{SEQUENCE_ORDER_CONTRACT_ID} candidate musical entry order changed")
 
+    comparison_exit_code = comparison.get("candidate_exit_code")
+    if (
+        not isinstance(comparison_exit_code, int)
+        or isinstance(comparison_exit_code, bool)
+        or comparison_exit_code != 0
+    ):
+        die(
+            f"{SEQUENCE_ORDER_CONTRACT_ID}.comparison receipt candidate_exit_code "
+            "must be the integer 0"
+        )
+
     expected_bindings = {
         "original_load_result": "accepted",
         "original_sequence_order_result": "observed",
