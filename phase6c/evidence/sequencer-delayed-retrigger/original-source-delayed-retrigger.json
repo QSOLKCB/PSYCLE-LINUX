@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "scope": "original-source-observation",
+  "contract": "sequencer-delayed-retrigger",
+  "evidence_role": "original-source",
+  "source_repository": "jpaquim/psycle",
+  "source_commit": "7ac6d2c3553e2ee8dda55814d8e689919c345478",
+  "files": {
+    "psycle/src/psycle/host/Player.cpp": {
+      "git_blob": "b5c962cbcc15f267b9fa1ffe1c9ab21d881b8dbc"
+    },
+    "psycle/src/psycle/host/SongStructs.hpp": {
+      "git_blob": "3ad8cd1b1a0a41bc2225cfd3070bf205cbebec31"
+    }
+  },
+  "command_ids": {
+    "note_delay": 253,
+    "retrigger": 251,
+    "retr_cont": 250,
+    "extended": 254,
+    "set_lpb_range": [
+      0,
+      31
+    ]
+  },
+  "semantics": {
+    "note_delay_counter": "((parameter+1)*SamplesPerRow())/256",
+    "retrigger_rate": "parameter+1",
+    "retr_cont_rate_override": "parameter high nibble when nonzero",
+    "extended_lpb": "FE00..FE1F calls SetBPM(-1, parameter)"
+  },
+  "original_psycle_executed": false,
+  "parity_status": "UNKNOWN",
+  "source_evidence": {
+    "workflow": "Phase 6C delayed retrigger observation",
+    "workflow_run_id": 35457374404,
+    "workflow_event": "push",
+    "workflow_head_sha": "9310b08bae744093c068a4f557bbd1b80bd499c8",
+    "merged_main_sha": "b431ada663745b08331bcf322a12280867714322",
+    "original_job_id": 105935226848,
+    "original_artifact_id": 10588199755,
+    "candidate_job_id": 105934968007,
+    "candidate_artifact_id": 10589050157,
+    "original_artifact_digest": "sha256:b35374b007697909ef74f3a2120174c3228def7c876d350d619405e50a589902",
+    "candidate_artifact_digest": "sha256:f6601e7d37e1c3236c81765fc1aad042277d2d16aae704d0ecce62691f488dd5",
+    "artifact_receipt": "original-source-delayed-retrigger.json",
+    "artifact_receipt_sha256": "d398115ed459955c544cefa580d26e5b92da0a7b6629295d7d4bd5f5c8ed0718",
+    "artifact_digest": "sha256:f6601e7d37e1c3236c81765fc1aad042277d2d16aae704d0ecce62691f488dd5",
+    "projection_type": "field-preserving-comparison-projection",
+    "projection_note": "Projects the exact pinned original-source command identities and formulas from the final PR #69 candidate artifact. It remains source inspection, not an original runtime execution trace."
+  }
+}
