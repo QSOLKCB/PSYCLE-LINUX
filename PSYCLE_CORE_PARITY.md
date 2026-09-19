@@ -39,7 +39,7 @@ Candidate-only or C-Psycle-only observations may be useful and may expose implem
 
 | Role | Identity | Status |
 | --- | --- | --- |
-| Original Psycle | `Psycle 1.12.0 x86 / PsycleInstallerx86-1.12.0.exe` — 9,322,919 bytes — SHA-256 `f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769` | **PINNED**; executable is not redistributed; PSY2/PSY3 parse/load acceptance and the scoped Save As/fresh-reopen capability are versioned, broader behavioural observations remain open |
+| Original Psycle | `Psycle 1.12.0 x86 / PsycleInstallerx86-1.12.0.exe` — 9,322,919 bytes — SHA-256 `f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769` | **PINNED**; executable is not redistributed; PSY2/PSY3 parse/load acceptance, the scoped sequence/pattern-order observation, and the scoped Save As/fresh-reopen capability are versioned; broader behavioural observations remain open |
 | Candidate C++ | SourceForge SVN r12005 sanitized Phase 6B baseline `00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a` | **IMPORTED / BUILDABLE** |
 | Historical player build | Ubuntu 24.04 qmake build; Phase 6B run `35196962690` | **PASS** as a build/runtime smoke, not an original-Psycle parity claim |
 | C-Psycle oracle | repository baseline `cpsycle-r12005-baseline` plus merged Phase 2–5 regressions | **AVAILABLE** |
