@@ -167,16 +167,23 @@ function Open-Phase6cSongInformationDialog([System.Diagnostics.Process]$Process)
             }
 
             $filePatternObject = $null
-            if (-not $fileItems[0].TryGetCurrentPattern(
+            $result.attempted = $true
+            if ($fileItems[0].TryGetCurrentPattern(
+                    [System.Windows.Automation.ExpandCollapsePattern]::Pattern,
+                    [ref]$filePatternObject)) {
+                ([System.Windows.Automation.ExpandCollapsePattern]$filePatternObject).Expand()
+            } elseif ($fileItems[0].TryGetCurrentPattern(
                     [System.Windows.Automation.InvokePattern]::Pattern,
                     [ref]$filePatternObject)) {
-                $diagnostics.Add("timing dialog bootstrap File menu item has no InvokePattern")
-                $result.outcome = "file-menu-not-invokable"
+                ([System.Windows.Automation.InvokePattern]$filePatternObject).Invoke()
+            } else {
+                $diagnostics.Add(
+                    "timing dialog bootstrap File menu item has neither ExpandCollapsePattern nor InvokePattern"
+                )
+                $result.outcome = "file-menu-not-openable"
                 $result.diagnostics = $diagnostics.ToArray()
                 return $result
             }
-            $result.attempted = $true
-            ([System.Windows.Automation.InvokePattern]$filePatternObject).Invoke()
             $result.file_menu_invoked = $true
             Start-Sleep -Milliseconds 150
             $songPropertyItems = @(& $findMenuItems "Song Properties")
