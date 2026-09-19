@@ -420,6 +420,7 @@ function Get-Phase6cTimingUiObservation([System.Diagnostics.Process]$Process) {
         window_seen = $false
         complete = $false
         values = [ordered]@{}
+        control_ids = [ordered]@{}
         diagnostics = @()
     }
     # Psycle 1.12 CSongpDlg binds these fields to fixed Win32 resource IDs
@@ -517,7 +518,7 @@ function Get-Phase6cTimingUiObservation([System.Diagnostics.Process]$Process) {
             }
             $result.values[$key] = [int]$value
         }
-        if ($diagnostics.Count -eq 0 -and $result.values.Count -eq $labels.Count) {
+        if ($diagnostics.Count -eq 0 -and $result.values.Count -eq $controlIds.Count) {
             $result.complete = $true
         }
     }
