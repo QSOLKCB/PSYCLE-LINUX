@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "scope": "original-observation",
+  "contract": "sequencer-pattern-order",
+  "evidence_role": "original",
+  "reference_build": "Psycle 1.12.0 x86",
+  "reference_file": "PsycleInstallerx86-1.12.0.exe",
+  "reference_installer_sha256": "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769",
+  "reference_installer_size_bytes": 9322919,
+  "reference_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+  "fixture": "fixtures/sequence-order/phase6c-sequence-order.psy",
+  "fixture_sha256": "6a0c5073fb54b7bb7496a6dda85ece80abefe8ba6098491b1a06972fe619d5c0",
+  "procedure": "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\\Software\\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before each fixture; copy the exact project-authored fixture bytes into the evidence artifact; launch installed psycle.exe with the copied fixture; when and only when a Psycle-owned top-level window is exactly named Psycle Settings and exposes the expected OK, Cancel, Defaults and System controls, invoke its OK button once through UI Automation and record the bootstrap outcome; when and only when a later Psycle-owned top-level window is exactly named DirectSound Output driver and exposes the exact Failed to create DirectSound object message plus one OK button, invoke that OK as a separately recorded headless-runner environment bootstrap, using a timeout-bounded Win32 BM_CLICK on the uniquely verified native OK child only if the old MFC button ignores a successful UIA InvokePattern, and only after enumerating native top-level windows for the same Psycle process, requiring exactly one DirectSound Output driver #32770 dialog, correlating that unique native dialog to the unique process-owned UI Automation dialog by exact PID/title and a fresh verification of the same error-message/single-OK signature, then correlating exactly one native Button descendant under that verified dialog to the unique UI Automation OK button by same Psycle PID, exact OK text retrieved through timeout-bounded WM_GETTEXT, live visible/enabled state, and strongly overlapping screen bounds, attaching the harness thread input queue to the verified Psycle dialog thread only for the native action, verifying that exact dialog is active, and sending timeout-bounded BM_CLICK to the correlated descendant; when and only when the fixture specification requires the exact Psycle Load Warning dialog with the exact message This file is from a newer version of Psycle! This process will try to load it anyway. and exactly one OK button, invoke that OK button through UI Automation, verify the modal closes, and record the fixture-specific bootstrap outcome; enumerate top-level windows through a process-id UI Automation condition and inspect their descendants; inventory the complete installed payload, runtime Psycle registry state, configured plugin/machine paths, conventional external VST/Psycle roots, and the VC90 modules actually loaded by the live Psycle process with their real servicing versions and SHA-256s; reject only on concrete application error text; classify only fixture-associated load/parse application errors as rejection while unrelated application errors remain inconclusive; require runtime and UI harness identity to remain clean before behavioral classification; accept only after a stable fixture marker remains present through the full polling window and a final post-inventory UI scan, with no application error or harness diagnostic and while the process is still running when harness termination begins; capture logs/UI/screenshot evidence; terminate the process; delete installer, registry snapshot, and installed payload before artifact upload; for the sequencer-pattern-order contract enumerate the complete visible UI Automation order-label set matching NN: NN on every poll and require a stable complete set plus the same clean accepted-load/liveness gate before interpreting order",
+  "observation": "stable-native-window-evidence-identifies-loaded-fixture-without-error",
+  "load_result": "accepted",
+  "load_evidence_marker": "phase6c-sequence-order.psy",
+  "stable_marker_polls": 38,
+  "error_marker": null,
+  "application_error_marker": null,
+  "error_marker_scope": "none",
+  "ui_automation_diagnostics": [],
+  "startup_bootstrap": {
+    "settings_dialog_seen": false,
+    "signature_verified": false,
+    "attempted": false,
+    "action": null,
+    "dismissed": false,
+    "outcome": "not-seen",
+    "diagnostics": []
+  },
+  "environment_bootstrap": {
+    "directsound": {
+      "dialog_seen": true,
+      "signature_verified": true,
+      "attempted": true,
+      "action": "invoke-ok-win32-bm-click",
+      "dismissed": true,
+      "outcome": "dismissed",
+      "diagnostics": []
+    }
+  },
+  "fixture_bootstrap": {
+    "load_warning": {
+      "required": true,
+      "expected_title": "Load Warning",
+      "expected_message": "This file is from a newer version of Psycle! This process will try to load it anyway.",
+      "dialog_seen": true,
+      "signature_verified": true,
+      "attempted": true,
+      "action": "invoke-ok",
+      "dismissed": true,
+      "outcome": "dismissed",
+      "diagnostics": []
+    }
+  },
+  "sequence_order_ui": {
+    "expected_labels": [
+      "00: 00",
+      "01: 02",
+      "02: 01",
+      "03: 02"
+    ],
+    "observed_labels": [
+      "00: 00",
+      "01: 02",
+      "02: 01",
+      "03: 02"
+    ],
+    "stable_polls": 38,
+    "result": "observed",
+    "matches_fixture_expected": true
+  },
+  "runtime_identity_diagnostics": [],
+  "main_window_seen": true,
+  "exit_code_before_termination": null,
+  "process_running_before_termination": true,
+  "termination": "killed-without-closeable-main-window",
+  "original_psycle_observed": true,
+  "parity_status": "UNKNOWN",
+  "source_evidence": {
+    "workflow": "Phase 6C compatibility matrix",
+    "run_id": 35443357239,
+    "event": "pull_request",
+    "head_sha": "0a9eebcba7028bd808bfa32c3e654828db51d7fa",
+    "merged_main_sha": "875e9dd04a249b2e2da76ae3efce57283b24e4eb",
+    "job_id": 105898341707,
+    "artifact_id": 10585305304,
+    "artifact_digest": "sha256:19c9e4c0e9f4523d1caf2de1b8602399a8ef277914148a0a386bd0007becb0b2",
+    "artifact_receipt": "original-sequence-order.json",
+    "artifact_receipt_sha256": "eee554db9791168be25699601dd7ca138af2e0c34811283c25d24a27753b40e4",
+    "projection_type": "field-preserving-classification-projection",
+    "projection_note": "This committed receipt projects the classification-relevant fields from the final PR #65 original-reference artifact and binds the source receipt and artifact by SHA-256 without altering the observed load or sequence-order result."
+  }
+}
