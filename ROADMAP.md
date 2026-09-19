@@ -294,7 +294,8 @@ Audit at minimum:
   - [x] PSY3 parse/load acceptance for the exact project-authored Phase 4 fixture is classified `PASS` using PR #61 run `35364406445`: original 1.12.0 accepted after verified warning dismissal; a separately derived candidate parse receipt proves ordered load completion without disqualifying diagnostics. The unchanged candidate process receipt remains `timeout` / exit `124`; playback and termination are not classified.
   - [ ] Serialization / round-trip remains a separate `UNKNOWN` contract and is not implied by the PSY2 parse PASS.
     - [x] Add a separate runtime probe for candidate `CoreSong::save` versions 2/3/4 and a guarded original Save As/fresh-reopen observation with independent receipt validation. See `phase6c/SERIALIZATION.md`.
-    - [ ] Version the resulting observations and classify the precise serialization capability/state contract only when both sides supply conclusive evidence.
+    - [x] Record paired runtime observations from run `35437001654`: candidate save versions 2/3/4 return false without output; original Save As succeeds and a fresh process accepts the saved output. See the artifact identities and limits in `phase6c/SERIALIZATION.md`.
+    - [ ] Add a versioned comparison for the observed save capability gap; distinguish this from complete semantic state preservation before classifying the serialization contract.
 - [ ] sequence/pattern timing;
 - [ ] BPM/LPB/tick behaviour;
 - [ ] tracker commands and delayed/retrigger events;
@@ -311,7 +312,7 @@ Audit at minimum:
 
 Do **not** assume C-Psycle's event sequencer is authoritative when it differs from original Psycle. The point of this phase is to discover and document differences.
 
-**Phase 6C status: active.** PSY2 and PSY3 parse/load acceptance are now scoped `PASS` results for one exact fixture each; 18 contracts remain `UNKNOWN`. PSY3 parse evidence is independently derived from the unchanged PR #61 process receipt and full log, retaining timeout separately. The next evidence slice is original save/reopen and candidate serialization/round-trip observation with semantic state distinguished from byte identity. No `DIFFERENT` / `MISSING` result yet justifies Phase 7 engine convergence.
+**Phase 6C status: active.** PSY2 and PSY3 parse/load acceptance are now scoped `PASS` results for one exact fixture each; 18 contracts remain `UNKNOWN`. PSY3 parse evidence is independently derived from the unchanged PR #61 process receipt and full log, retaining timeout separately. Paired save observations are now recorded: the candidate declines all three save formats, while original Save As and fresh reopen succeed. The next slice is a versioned save-capability comparison with semantic state distinguished from byte identity. No `DIFFERENT` / `MISSING` result yet justifies Phase 7 engine convergence.
 
 ### 6D — parity report
 

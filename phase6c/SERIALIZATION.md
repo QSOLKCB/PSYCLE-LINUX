@@ -99,3 +99,40 @@ python3 tests/phase6c_serialization.py
 The next classification must distinguish an absent serialization capability
 from differences in serialized bytes and from semantic state preservation.
 Neither a successful save nor an accepted reopen by itself proves the latter.
+
+## First paired runtime observation
+
+Run [35437001654](https://github.com/QSOLKCB/PSYCLE-LINUX/actions/runs/35437001654)
+at head `db2297dd2f0353111de6d610bcaa0bbbc0bb7ee0` produced these observations:
+
+| Operation | Recorded result |
+| --- | --- |
+| Candidate save versions 2, 3, 4 | Each returned false, produced no output, exited 0, and retained the limited state slice. |
+| Original 1.12.0 Save As | Saved to the fresh output after four stable filename polls; output remained stable for 40 polls. |
+| Original fresh reopen | Accepted the saved output, with 42 stable marker polls and no load/error/UI diagnostics. |
+| Byte comparison | Saved output differs from the input; this is not a semantic compatibility verdict. |
+| Semantic round trip | Not measured; the matrix row remains UNKNOWN. |
+
+Saved PSY3 output SHA-256:
+`d043bb6bb8d7a01c4c248f8eaee363409698186c6f21324ae2316f60a05f0e7b`.
+The reference executable remains
+`fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6`.
+
+Artifact bindings (SHA-256 of the downloaded ZIP bytes):
+
+- Candidate artifact `10582966030`, job `105881284264`:
+  `d09fd48ad5464b30f47465458d4761e14f92d8b8eec770ec2c0b47b65017a2b0`.
+- Original artifact `10582816304`, job `105881570162`:
+  `0192b3540b461fd9d210fa7e7b2b7347885dc267ca1defad3c1beca0d7e02b57`.
+
+Both archives were downloaded and their ZIP hashes verified. The original job
+stopped at the old artifact-location guard, which allowed `.psy` inputs only
+inside `fixtures/`. The narrow extension now admits only
+`serialization/original-saved.psy`, requiring its explicit original-saved-fixture
+role, contract, path, SHA-256 and PSY3 header. The unchanged archived pair passes
+the updated artifact validator and full save/reopen validation. The native
+observer and raw receipts were not changed to obtain this validation result.
+
+The next slice is a versioned comparison of the now-observed save capability gap,
+with the contract distinguished from byte equality and complete semantic state.
+No serializer implementation or Phase 7 convergence change is included here.

@@ -62,6 +62,31 @@ class Candidate(unittest.TestCase):
                 with self.assertRaises(ValueError):m.child(root,value)
             with self.assertRaises(ValueError):m.bound_bytes(root,{'path':'log','sha256':'0'*64})
 
+class ArtifactInventory(unittest.TestCase):
+    def test_only_identified_original_saved_output_is_allowed(self):
+        validator=m.load_module('phase6c-validate-original-receipts-v2.py')
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);(root/'serialization').mkdir()
+            output=root/'serialization/original-saved.psy';output.write_bytes(b'PSY3SONG synthetic control')
+            receipt={'schema_version':1,'phase':'6C','contract':m.CONTRACT,
+                     'evidence_role':'original-saved-fixture','fixture':'serialization/original-saved.psy',
+                     'fixture_sha256':m.digest(output.read_bytes())}
+            metadata=root/'serialization/saved-fixture.json'
+            metadata.write_text(json.dumps(receipt))
+            validator.validate_artifact_inventory(root)
+            for field,value in (('evidence_role','candidate'),('fixture_sha256','0'*64),('schema_version',True)):
+                changed=dict(receipt);changed[field]=value;metadata.write_text(json.dumps(changed))
+                with self.assertRaises(SystemExit):validator.validate_artifact_inventory(root)
+            metadata.write_text(json.dumps(receipt))
+            output.rename(root/'serialization/unidentified.psy')
+            with self.assertRaises(SystemExit):validator.validate_artifact_inventory(root)
+    def test_original_executable_is_still_prohibited(self):
+        validator=m.load_module('phase6c-validate-original-receipts-v2.py')
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);(root/'psycle.exe').write_bytes(b'MZ synthetic control')
+            with self.assertRaises(SystemExit):validator.validate_artifact_inventory(root)
+
+
 class Original(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
