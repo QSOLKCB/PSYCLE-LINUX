@@ -108,6 +108,9 @@ class OriginalProjection(unittest.TestCase):
             "observed_values": {"tempo": 137, "lines_per_beat": 8, "ticks_per_beat": 24,
                 "extra_tick_per_line": 0, "real_tempo": 137, "real_ticks_per_beat": 24},
             "stable_polls": 4, "result": "observed", "matches_fixture_expected": True,
+            "dialog_bootstrap": {
+                "opened": True, "outcome": "opened", "diagnostics": [],
+            },
         }
         (self.original / "original-bpm-lpb-tick.json").write_text(json.dumps({"timing_ui": timing}))
 
@@ -131,8 +134,29 @@ class OriginalProjection(unittest.TestCase):
         self.mutate(lambda timing: timing.update(stable_polls=3))
         with self.assertRaises(ValueError): self.validate()
 
+    def test_stable_original_difference_is_preserved(self):
+        def change(timing):
+            timing["observed_values"]["ticks_per_beat"] = 8
+            timing["matches_fixture_expected"] = False
+        self.mutate(change)
+        result = self.validate()
+        self.assertEqual(result["timing_result"], "observed")
+        self.assertEqual(result["observed_values"]["ticks_per_beat"], 8)
+        self.assertIs(result["matches_fixture_expected"], False)
+        self.assertEqual(result["parity_status"], "UNKNOWN")
+
     def test_original_values_cannot_be_relabelled(self):
         self.mutate(lambda timing: timing["observed_values"].update(ticks_per_beat=8))
+        with self.assertRaises(ValueError): self.validate()
+
+    def test_original_match_flag_cannot_claim_difference_when_values_match(self):
+        self.mutate(lambda timing: timing.update(matches_fixture_expected=False))
+        with self.assertRaises(ValueError): self.validate()
+
+    def test_observed_original_requires_verified_dialog_bootstrap(self):
+        self.mutate(lambda timing: timing.update(dialog_bootstrap={
+            "opened": False, "outcome": "menu-item-missing", "diagnostics": ["missing"]
+        }))
         with self.assertRaises(ValueError): self.validate()
 
 
