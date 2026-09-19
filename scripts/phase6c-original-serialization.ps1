@@ -82,6 +82,7 @@ function Invoke-Phase6cSaveAs(
         command_dispatched = $false
         dialog_verified = $false
         path_set = $false
+        stable_path_polls = 0
         save_invoked = $false
         dialog_closed = $false
         stable_output_polls = 0
@@ -160,8 +161,19 @@ function Invoke-Phase6cSaveAs(
         $invoke = $buttons[0].GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
         if ($value.Current.IsReadOnly) { throw "Save As filename is read-only" }
         $result.dialog_verified = $true
+        # Let the shell finish populating the dialog, then focus the filename
+        # before editing. A transient SetValue/readback alone can be replaced
+        # by the shell's initial selection and save the original filename.
+        Start-Sleep -Milliseconds 500
+        $edits[0].SetFocus()
         $value.SetValue($OutputPath)
-        if ($value.Current.Value -cne $OutputPath) { throw "Save As path verification failed" }
+        $buttons[0].SetFocus()
+        for ($poll=0; $poll -lt 4; $poll++) {
+            Start-Sleep -Milliseconds 200
+            if ($value.Current.Value -cne $OutputPath) { throw "Save As path did not remain set before invocation" }
+            $result.stable_path_polls++
+        }
+        if (Test-Path -LiteralPath $OutputPath) { throw "serialization output appeared before Save" }
         $result.path_set = $true
         $invoke.Invoke()
         $result.save_invoked = $true
@@ -173,6 +185,9 @@ function Invoke-Phase6cSaveAs(
             $scan = Get-UiObservation $Process
             $result.after_save_ui = @($scan.values)
             if ($scan.diagnostics.Count -gt 0) { throw ($scan.diagnostics -join "; ") }
+            if (@($scan.values | Where-Object { $_ -ceq "Confirm Save As" }).Count) {
+                throw "unexpected overwrite confirmation; no response sent"
+            }
             $result.dialog_closed = -not (@($scan.values | Where-Object { $_ -ceq "Save As" }).Count)
             $assessment = Get-FixtureUiAssessment $scan.values @([System.IO.Path]::GetFileName($OutputPath))
             if ($assessment.application_error_marker) { throw "application error during save: $($assessment.application_error_marker)" }

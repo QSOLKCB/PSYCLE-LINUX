@@ -224,6 +224,9 @@ def validate_original(candidate_root: Path, root: Path) -> dict:
         polls=save.get('stable_output_polls')
         if type(polls) is not int or polls<4:
             raise ValueError('save output was not stable')
+        path_polls=save.get('stable_path_polls')
+        if type(path_polls) is not int or path_polls<4:
+            raise ValueError('save filename was not stable before invocation')
         commands=[c for c in save.get('menu_inventory',[]) if c.get('label','').split('\t')[0].replace('&','').strip() in ('Save As...','Save As','Save As…','Save as...')]
         if len(commands)!=1 or commands[0].get('enabled') is not True or commands[0].get('menu')!='File':
             raise ValueError('save menu evidence missing or ambiguous')

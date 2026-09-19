@@ -50,7 +50,10 @@ On a clean, stable PSY3 load, it:
    `35435580682`); this exact signature is accepted alongside the standard spelling.
 2. Requires one process-owned Save As dialog, one enabled filename edit with its
    known common-dialog identifier, and one enabled Save button.
-3. Sets and verifies a fresh output path, invokes Save, and records dialog
+3. Focuses the filename edit, sets a fresh native output path, moves focus to
+   Save, and requires four unchanged path polls before invocation. Any overwrite
+   confirmation is left untouched and makes the observation inconclusive.
+   Invokes Save and records dialog
    dismissal plus a stable nonempty PSY3 output over the full polling interval.
 4. Leaves the original input fixture bytes intact.
 5. Terminates the initial process and launches the saved output in a fresh

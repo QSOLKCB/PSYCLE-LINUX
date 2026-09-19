@@ -68,7 +68,7 @@ class Original(unittest.TestCase):
         self.root=Path(self.temp.name);(self.root/'serialization').mkdir()
         self.output=self.root/'serialization/original-saved.psy';self.output.write_bytes(b'PSY3SONG synthetic control')
         self.hash=m.digest(self.output.read_bytes())
-        self.save={'process_id':42,'schema_version':1,'outcome':'saved','diagnostics':[],'stable_output_polls':4,
+        self.save={'process_id':42,'schema_version':1,'outcome':'saved','diagnostics':[],'stable_output_polls':4,'stable_path_polls':4,
                    **{k:True for k in ('command_verified','command_dispatched','dialog_verified','path_set','save_invoked','dialog_closed')},
                    'menu_inventory':[{'menu':'File','label':'Save &As...','enabled':True}],
                    'dialog_inventory':[{'type':'ControlType.Edit','id':'1001','enabled':True},
@@ -93,6 +93,10 @@ class Original(unittest.TestCase):
         self.assertEqual(result['parity_status'],'UNKNOWN')
         self.assertEqual(result['semantic_roundtrip'],'not-measured')
         self.assertFalse(result['byte_identity'])
+    def test_unstable_save_filename_blocks_saved(self):
+        for value in (None,True,0,3):
+            self.save['stable_path_polls']=value
+            with self.assertRaises(ValueError):self.run_validation()
     def test_observed_original_menu_spelling(self):
         self.save['menu_inventory'][0]['label']='Save &as...'
         self.assertEqual(self.run_validation()['save'],'saved')
