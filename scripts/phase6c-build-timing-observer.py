@@ -82,35 +82,45 @@ def main() -> None:
         $timingObserved = [ordered]@{}
         $timingFingerprint = $null
         $timingStablePolls = 0
+        $timingDialogBootstrap = $null
         if ($null -ne $spec.expected_timing_values) {
             $timingExpected = $spec.expected_timing_values
-            for ($timingPoll = 0; $timingPoll -lt 4; $timingPoll += 1) {
-                $timingObservation = Get-Phase6cTimingUiObservation $process
-                foreach ($diagnostic in @($timingObservation.diagnostics)) {
-                    if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
-                        [void]$uiDiagnosticSet.Add([string]$diagnostic)
-                    }
+            $timingDialogBootstrap = Open-Phase6cSongInformationDialog $process
+            foreach ($diagnostic in @($timingDialogBootstrap.diagnostics)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
+                    [void]$uiDiagnosticSet.Add([string]$diagnostic)
                 }
-                $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
-                if ($timingObservation.complete -and $uiDiagnostics.Count -eq 0) {
-                    $candidateValues = [ordered]@{}
-                    foreach ($timingKey in @($timingExpected.Keys)) {
-                        $candidateValues[$timingKey] = [int]$timingObservation.values[$timingKey]
+            }
+            $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
+            if ($timingDialogBootstrap.opened -and $uiDiagnostics.Count -eq 0) {
+                for ($timingPoll = 0; $timingPoll -lt 4; $timingPoll += 1) {
+                    $timingObservation = Get-Phase6cTimingUiObservation $process
+                    foreach ($diagnostic in @($timingObservation.diagnostics)) {
+                        if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
+                            [void]$uiDiagnosticSet.Add([string]$diagnostic)
+                        }
                     }
-                    $fingerprint = ($candidateValues | ConvertTo-Json -Compress)
-                    if ($null -ne $timingFingerprint -and $fingerprint -ceq $timingFingerprint) {
-                        $timingStablePolls += 1
+                    $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
+                    if ($timingObservation.complete -and $uiDiagnostics.Count -eq 0) {
+                        $candidateValues = [ordered]@{}
+                        foreach ($timingKey in @($timingExpected.Keys)) {
+                            $candidateValues[$timingKey] = [int]$timingObservation.values[$timingKey]
+                        }
+                        $fingerprint = ($candidateValues | ConvertTo-Json -Compress)
+                        if ($null -ne $timingFingerprint -and $fingerprint -ceq $timingFingerprint) {
+                            $timingStablePolls += 1
+                        } else {
+                            $timingFingerprint = $fingerprint
+                            $timingStablePolls = 1
+                        }
+                        $timingObserved = $candidateValues
                     } else {
-                        $timingFingerprint = $fingerprint
-                        $timingStablePolls = 1
+                        $timingObserved = [ordered]@{}
+                        $timingFingerprint = $null
+                        $timingStablePolls = 0
                     }
-                    $timingObserved = $candidateValues
-                } else {
-                    $timingObserved = [ordered]@{}
-                    $timingFingerprint = $null
-                    $timingStablePolls = 0
+                    if ($timingPoll -lt 3) { Start-Sleep -Milliseconds 250 }
                 }
-                if ($timingPoll -lt 3) { Start-Sleep -Milliseconds 250 }
             }
         }
 '''
@@ -144,6 +154,7 @@ def main() -> None:
                 stable_polls = $timingStablePolls
                 result = $timingResult
                 matches_fixture_expected = $timingMatch
+                dialog_bootstrap = $timingDialogBootstrap
             }
         }
 '''
@@ -168,7 +179,7 @@ def main() -> None:
     text = replace_once(
         text,
         "- Sequence/order observation: when enabled,",
-        "- BPM/LPB/tick observation: when enabled, the project-authored timing fixture is inspected without UI input through the exact process-owned Song Information controls. Tempo, LPB, TPB, extra tick, real tempo and real TPB must form one complete stable value set for at least four polls and satisfy the same clean load/runtime/liveness gate; ambiguity or automation diagnostics remain inconclusive.\n- Sequence/order observation: when enabled,",
+        "- BPM/LPB/tick observation: when enabled, the harness opens only the unique process-owned File > Song Properties menu item (unless exactly one Song Information window is already open), verifies the resulting Song Information dialog, then reads its timing controls without editing them. Tempo, LPB, TPB, extra tick, real tempo and real TPB must form one complete stable value set for at least four polls and satisfy the same clean load/runtime/liveness gate; ambiguity or automation diagnostics remain inconclusive.\n- Sequence/order observation: when enabled,",
         "summary",
     )
 
