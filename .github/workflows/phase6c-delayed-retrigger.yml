@@ -7,6 +7,11 @@ on:
       - 'phase-6c/**'
     paths:
       - 'phase6c/DELAYED_RETRIGGER.md'
+      - 'phase6c/evidence/sequencer-delayed-retrigger/**'
+      - 'phase6c/compatibility-matrix.json'
+      - 'scripts/phase6c-validate-matrix.py'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'ROADMAP.md'
       - 'tests/phase6c_delayed_retrigger*'
       - 'scripts/phase6c-delayed-retrigger-*'
       - 'scripts/phase6c-build-delayed-retrigger-observer.py'
@@ -29,6 +34,11 @@ on:
   pull_request:
     paths:
       - 'phase6c/DELAYED_RETRIGGER.md'
+      - 'phase6c/evidence/sequencer-delayed-retrigger/**'
+      - 'phase6c/compatibility-matrix.json'
+      - 'scripts/phase6c-validate-matrix.py'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'ROADMAP.md'
       - 'tests/phase6c_delayed_retrigger*'
       - 'scripts/phase6c-delayed-retrigger-*'
       - 'scripts/phase6c-build-delayed-retrigger-observer.py'
@@ -80,6 +90,9 @@ jobs:
 
       - name: Check delayed command negative controls
         run: python3 tests/phase6c_delayed_retrigger.py
+
+      - name: Validate versioned compatibility matrix
+        run: python3 scripts/phase6c-validate-matrix.py phase6c/compatibility-matrix.json
 
       - name: Verify frozen Phase 6B source identities
         shell: bash
