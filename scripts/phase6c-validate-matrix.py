@@ -1584,6 +1584,44 @@ def validate_delayed_retrigger_deferred_comparison(
         die(
             f"{row_id} original receipt must not invent a command execution trace"
         )
+    if original_receipt.get("fixture_bootstrap") != {
+        "load_warning": {
+            "required": True,
+            "expected_title": "Load Warning",
+            "expected_message": (
+                "This file is from a newer version of Psycle! "
+                "This process will try to load it anyway."
+            ),
+            "dialog_seen": True,
+            "signature_verified": True,
+            "attempted": True,
+            "action": "invoke-ok",
+            "dismissed": True,
+            "outcome": "dismissed",
+            "diagnostics": [],
+        }
+    }:
+        die(f"{row_id} original Load Warning bootstrap changed")
+    if original_receipt.get("environment_bootstrap") != {
+        "directsound": {
+            "dialog_seen": True,
+            "signature_verified": True,
+            "attempted": True,
+            "action": "invoke-ok-win32-bm-click",
+            "dismissed": True,
+            "outcome": "dismissed",
+            "diagnostics": [],
+        }
+    }:
+        die(f"{row_id} original DirectSound bootstrap changed")
+    if original_receipt.get("main_window_seen") is not True:
+        die(f"{row_id} original main-window evidence changed")
+    if original_receipt.get("exit_code_before_termination") is not None:
+        die(f"{row_id} original process exited before harness termination")
+    if original_receipt.get("process_running_before_termination") is not True:
+        die(f"{row_id} original liveness evidence changed")
+    if original_receipt.get("termination") != "killed-without-closeable-main-window":
+        die(f"{row_id} original termination evidence changed")
 
     fixture_hash = EXPECTED_DELAYED_RETRIGGER_IDENTITIES["fixture_sha256"]
     if original_receipt.get("fixture_sha256") != fixture_hash:
@@ -1664,6 +1702,26 @@ def validate_delayed_retrigger_deferred_comparison(
         != EXPECTED_DELAYED_RETRIGGER_CONT_EVENTS
     ):
         die(f"{row_id} candidate retrigger-continue schedule changed")
+    if candidate_receipt.get("fixture_commands") != {
+        "extended_lpb": 4,
+        "note_delay": 127,
+        "retr_cont": 66,
+        "retrigger": 63,
+    }:
+        die(f"{row_id} candidate raw fixture commands changed")
+    if candidate_receipt.get("bpm") != 137.0:
+        die(f"{row_id} candidate BPM context changed")
+    tick_speed = candidate_receipt.get("tick_speed")
+    if not isinstance(tick_speed, int) or isinstance(tick_speed, bool) or tick_speed != 8:
+        die(f"{row_id} candidate tick-speed context changed")
+    if candidate_receipt.get("is_ticks") is not True:
+        die(f"{row_id} candidate tick-mode context changed")
+    if candidate_receipt.get("sample_rate") != 44100:
+        die(f"{row_id} candidate sample-rate context changed")
+    if candidate_receipt.get("samples_per_beat") != 19313.869140625:
+        die(f"{row_id} candidate samples-per-beat context changed")
+    if candidate_receipt.get("samples_per_tick") != 2414.233642578125:
+        die(f"{row_id} candidate samples-per-tick context changed")
 
     expected_projection_receipts = {
         "original": (
@@ -1700,6 +1758,12 @@ def validate_delayed_retrigger_deferred_comparison(
             die(f"{row_id} {context} raw artifact receipt SHA-256 changed")
         if evidence.get("projection_type") != "field-preserving-comparison-projection":
             die(f"{row_id} {context} projection type changed")
+        if (
+            context == "original source"
+            and evidence.get("artifact_digest")
+            != EXPECTED_DELAYED_RETRIGGER_ATTRIBUTION["candidate_artifact_digest"]
+        ):
+            die(f"{row_id} original-source artifact digest changed")
 
     if comparison.get("schema_version") != 1 or comparison.get("phase") != "6C":
         die(f"{row_id} comparison has unexpected schema_version/phase")
