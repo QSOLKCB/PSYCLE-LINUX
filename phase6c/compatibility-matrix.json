@@ -25,26 +25,11 @@
       "regression_scope": "merged Phase 2-5 preservation corpus"
     }
   },
-  "status_values": [
-    "PASS",
-    "DIFFERENT",
-    "MISSING",
-    "UNKNOWN"
-  ],
+  "status_values": ["PASS", "DIFFERENT", "MISSING", "UNKNOWN"],
   "evidence_rule": {
     "non_unknown_requires_original": true,
-    "required_original_fields": [
-      "reference_build",
-      "fixture",
-      "procedure",
-      "observation"
-    ],
-    "required_candidate_fields": [
-      "snapshot",
-      "fixture",
-      "procedure",
-      "observation"
-    ],
+    "required_original_fields": ["reference_build", "fixture", "procedure", "observation"],
+    "required_candidate_fields": ["snapshot", "fixture", "procedure", "observation"],
     "note": "PASS is scoped to the stated fixture/procedure and does not assert whole-subsystem equivalence. DIFFERENT records a reproducible difference. MISSING records an absent required candidate capability."
   },
   "contracts": [
@@ -65,10 +50,7 @@
         "procedure": "timeout 20s psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player --output-driver dummy --input-file <fixture> </dev/null > <log> 2>&1",
         "observation": "phase6c/evidence/project-io-psy2-parse/candidate-psy2.json"
       },
-      "cpsycle": {
-        "evidence": "scripts/phase4-historical-psy2-smoke.sh",
-        "reusable": true
-      },
+      "cpsycle": {"evidence": "scripts/phase4-historical-psy2-smoke.sh", "reusable": true},
       "notes": "PASS is scoped to parse/load acceptance of the project-authored PSY2SONG fixture with SHA-256 ebef8216fe6b2b6cbaf1f169ff234115d6cf06cfda480b4433f9c2fa3ab400ba under the versioned original/candidate procedures. Serialization, state equivalence, playback equivalence and broader PSY2 coverage remain separate contracts/evidence.",
       "comparison": "phase6c/evidence/project-io-psy2-parse/comparison.json"
     },
@@ -113,10 +95,7 @@
         "procedure": "Build a separate probe against the verified historical static core; in one fresh process per format version load the exact PSY3 fixture without playback using PSYCLE_THREADS=1 and call CoreSong::save(path, version) for versions 2, 3 and 4; record API returns, limited before/after state, reports, process result, logs and any new output bytes. No serializer is substituted.",
         "observation": "phase6c/evidence/project-io-serialization-roundtrip/candidate-serialization.json"
       },
-      "cpsycle": {
-        "evidence": "tests/phase4_core_workflow.c",
-        "reusable": true
-      },
+      "cpsycle": {"evidence": "tests/phase4_core_workflow.c", "reusable": true},
       "notes": "MISSING is scoped to serialization/save capability for the exact hash-bound PSY3 fixture: pinned original Psycle saved a fresh PSY3 output and accepted it in a fresh process, while the pinned candidate CoreSong::save requests for versions 2, 3 and 4 each returned false without output. Version 3 is the directly comparable PSY3 request. Byte identity is recorded separately and complete semantic round-trip preservation remains unmeasured.",
       "comparison": "phase6c/evidence/project-io-serialization-roundtrip/comparison.json"
     },
@@ -127,9 +106,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": "partial"
-      },
+      "cpsycle": {"reusable": "partial"},
       "notes": "Compare rejection, recovery and failure containment separately."
     },
     {
@@ -149,10 +126,7 @@
         "procedure": "generate the project-authored single-sequence PSY3 fixture with one legacy play-order list 0,2,1,2; build a separate probe against the verified historical static core; load the exact fixture without starting playback using PSYCLE_THREADS=1; enumerate every loaded SequenceLine entry in model order and record its position and Pattern ID",
         "observation": "phase6c/evidence/sequencer-pattern-order/candidate-sequence-order.json"
       },
-      "cpsycle": {
-        "evidence": "tests/phase6c_sequence_order_fixture.c",
-        "reusable": "fixture-construction-only"
-      },
+      "cpsycle": {"evidence": "tests/phase6c_sequence_order_fixture.c", "reusable": "fixture-construction-only"},
       "notes": "PASS is scoped to sequence/pattern order for the exact hash-bound legacy single-sequence PSY3 fixture with play order 0,2,1,2. Pinned original Psycle 1.12.0 exposes matching UI order labels and the frozen candidate exposes the same canonical musical play order. BPM/LPB/tick timing, playback, delayed/retrigger commands, multi-sequence behaviour and UI editing semantics remain separate UNKNOWN contracts/evidence.",
       "comparison": "phase6c/evidence/sequencer-pattern-order/comparison.json"
     },
@@ -163,9 +137,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": "partial"
-      },
+      "cpsycle": {"reusable": "partial"},
       "notes": "Do not assume C-Psycle event-sequencer timing is authoritative."
     },
     {
@@ -175,9 +147,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": "partial"
-      },
+      "cpsycle": {"reusable": "partial"},
       "notes": "Use minimal deterministic pattern fixtures."
     },
     {
@@ -187,9 +157,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": true
-      },
+      "cpsycle": {"reusable": true},
       "notes": "Compare pitch, envelopes, looping and tracker commands."
     },
     {
@@ -199,9 +167,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": "partial"
-      },
+      "cpsycle": {"reusable": "partial"},
       "notes": "Pin version/feature scope before classification."
     },
     {
@@ -211,9 +177,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": "partial"
-      },
+      "cpsycle": {"reusable": "partial"},
       "notes": "Include graph topology, gain/send and default-state semantics."
     },
     {
@@ -223,10 +187,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "evidence": "Phase 5 native-machine preservation corpus",
-        "reusable": true
-      },
+      "cpsycle": {"evidence": "Phase 5 native-machine preservation corpus", "reusable": true},
       "notes": "Map the candidate host ABI against original Psycle before claiming equivalence."
     },
     {
@@ -236,10 +197,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "evidence": "Phase 5 native-machine preservation corpus",
-        "reusable": true
-      },
+      "cpsycle": {"evidence": "Phase 5 native-machine preservation corpus", "reusable": true},
       "notes": "Source-derived plugin receipts are reusable only where the host contract overlaps."
     },
     {
@@ -249,9 +207,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": true
-      },
+      "cpsycle": {"reusable": true},
       "notes": "VST2 host restoration remains Phase 9 scope."
     },
     {
@@ -261,9 +217,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": "partial"
-      },
+      "cpsycle": {"reusable": "partial"},
       "notes": "Separate discovery/cache behaviour from later VST2 containment work."
     },
     {
@@ -273,9 +227,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": "partial"
-      },
+      "cpsycle": {"reusable": "partial"},
       "notes": "Separate engine routing from platform-driver input."
     },
     {
@@ -285,9 +237,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": "partial"
-      },
+      "cpsycle": {"reusable": "partial"},
       "notes": "Record exact command semantics and ordering."
     },
     {
@@ -297,9 +247,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": true
-      },
+      "cpsycle": {"reusable": true},
       "notes": "Start with a project-authored PCM fixture."
     },
     {
@@ -309,10 +257,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "evidence": "Phase 4 render/bounce regressions",
-        "reusable": true
-      },
+      "cpsycle": {"evidence": "Phase 4 render/bounce regressions", "reusable": true},
       "notes": "Use deterministic render hashes or tolerance-bounded sample comparisons where practical."
     },
     {
@@ -322,9 +267,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": "partial"
-      },
+      "cpsycle": {"reusable": "partial"},
       "notes": "Define the placeholder/recovery contract from original observations before implementation."
     },
     {
@@ -334,9 +277,7 @@
       "status": "UNKNOWN",
       "original": {},
       "candidate": {},
-      "cpsycle": {
-        "reusable": false
-      },
+      "cpsycle": {"reusable": false},
       "notes": "Use only redistributable, permissioned or project-authored fixtures."
     }
   ]
