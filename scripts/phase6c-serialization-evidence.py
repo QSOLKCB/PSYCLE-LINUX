@@ -21,6 +21,27 @@ SOURCE_PATHS = ['tests/phase6c_serialization.cpp', 'tests/phase6c_serialization.
     for p in ('song.cpp','songserializer.cpp','psy2filter.h','psy3filter.h')]
 
 
+# Exact diagnostics observed for the pinned probe with PSYCLE_THREADS=1.
+# Only timestamps, runtime thread IDs and the absolute artifact root may vary.
+# New wording, severity, thread roles or source locations require investigation.
+LOG_LINE = re.compile(r'log:\s+\d+us: ([A-Z]): (serialization-probe|thread-id-\d+): (.*)')
+EXPECTED_LOG_MESSAGES = (
+    ('T', r'thread-id-\d+', re.escape('# universalis # ../src/universalis/os/thread_name.cpp:56 # void universalis::os::thread_name::set_tls()')),
+    ('T', r'thread-id-\d+', r'setting name for thread: id: \d+, name: serialization-probe'),
+    ('T', 'serialization-probe', re.escape('# psycle-core # ../src/psycle/core/player.cpp:66 # void psycle::core::Player::start_threads()')),
+    ('T', 'serialization-probe', re.escape('psycle: core: player: starting scheduler threads')),
+    ('I', 'serialization-probe', re.escape('psycle: core: player: using 1 threads')),
+    ('T', 'serialization-probe', re.escape('psycle: core: psy3 loader: loading psycle song fileformat version 3: ')
+     + r'/(?:[^/\r\n]+/)*' + re.escape(FIXTURE)),
+    ('W', 'serialization-probe', re.escape(WARNING)),
+    ('I', 'serialization-probe', r'psycle: core: machine factory: create machine: loading with host: 0, plugin: <(sampler|master)>'),
+    ('T', r'thread-id-\d+', re.escape('# psycle-core # ../src/psycle/core/player.cpp:452 # void psycle::core::Player::stop_threads()')),
+    ('T', r'thread-id-\d+', re.escape('terminating and joining scheduler threads ...')),
+    ('T', r'thread-id-\d+', re.escape('# psycle-core # ../src/psycle/core/player.cpp:454 # void psycle::core::Player::stop_threads()')),
+    ('T', r'thread-id-\d+', re.escape('scheduler threads were not running')),
+)
+
+
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -90,11 +111,12 @@ def outcome(raw: bytes, log: bytes, code, version: int, output: dict | None, out
     for line in lines:
         if not line:
             continue
-        match=re.fullmatch(r'log:\s+\d+us: ([A-Z]): .*',line)
+        match=LOG_LINE.fullmatch(line)
         if match:
-            if match[1] in {'T','I'}:
-                continue
-            if match[1]=='W' and line.endswith(': '+WARNING):
+            level,thread,message=match.groups()
+            if any(level==expected_level and re.fullmatch(expected_thread,thread)
+                   and re.fullmatch(expected_message,message)
+                   for expected_level,expected_thread,expected_message in EXPECTED_LOG_MESSAGES):
                 continue
         if version==4 and line=="SongSerializer::saveSong(): Couldn't find appropriate filter for file format version 4":
             continue

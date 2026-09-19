@@ -15,11 +15,50 @@ m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 STATE={'name':'PSYCLE-LINUX Phase 4 synthetic fixture','author':'test','comment':'test','bpm':125,'tick_speed':4,'tracks':16,'machine_slots':[0,128]}
 RAW={'schema_version':1,'load_returned':True,'save_attempted':True,'format_version':3,'save_returned':False,'state_before':STATE.copy(),'state_after':STATE.copy(),'reports':['Load Warning: '+m.WARNING]}
 
+# Recorded clean probe transcript; synthetic root/thread IDs are not evidence.
+CLEAN_LOG = b"""log:       0us: T: thread-id-140586135613824: # universalis # ../src/universalis/os/thread_name.cpp:56 # void universalis::os::thread_name::set_tls()
+log:      23us: T: thread-id-140586135613824: setting name for thread: id: 140586135613824, name: serialization-probe
+log:      43us: T: serialization-probe: # psycle-core # ../src/psycle/core/player.cpp:66 # void psycle::core::Player::start_threads()
+log:      52us: T: serialization-probe: psycle: core: player: starting scheduler threads
+log:      74us: I: serialization-probe: psycle: core: player: using 1 threads
+log:     161us: T: serialization-probe: psycle: core: psy3 loader: loading psycle song fileformat version 3: /tmp/observation/cpsycle-psy3/phase4-first.psy
+log:     180us: W: serialization-probe: This file is from a newer version of Psycle! This process will try to load it anyway.
+log:     351us: I: serialization-probe: psycle: core: machine factory: create machine: loading with host: 0, plugin: <sampler>
+log:   23674us: I: serialization-probe: psycle: core: machine factory: create machine: loading with host: 0, plugin: <master>
+log:   23750us: T: thread-id-140586135613824: # psycle-core # ../src/psycle/core/player.cpp:452 # void psycle::core::Player::stop_threads()
+log:   23759us: T: thread-id-140586135613824: terminating and joining scheduler threads ...
+log:   23766us: T: thread-id-140586135613824: # psycle-core # ../src/psycle/core/player.cpp:454 # void psycle::core::Player::stop_threads()
+log:   23771us: T: thread-id-140586135613824: scheduler threads were not running
+"""
+
 class Candidate(unittest.TestCase):
     def result(self,raw=None,code=0,log=b'',output=None,version=3,output_bytes=None):
         return m.outcome(json.dumps(RAW if raw is None else raw).encode(),log,code,version,output,output_bytes)
     def test_refusal_is_observation_not_parity(self):
         self.assertEqual(self.result(),'save-returned-false-without-output')
+    def test_known_probe_diagnostics_are_accepted(self):
+        for version in (2,3,4):
+            raw=copy.deepcopy(RAW);raw['format_version']=version
+            self.assertEqual(self.result(raw,version=version,log=CLEAN_LOG),'save-returned-false-without-output')
+    def test_unknown_trace_and_info_contaminate_both_save_outcomes(self):
+        for level in ('T','I'):
+            for message in ('loader reports degraded state',
+                            'psycle: core: player: using 1 threads: degraded state',
+                            'psycle: core: psy3 loader: loading psycle song fileformat version 3: /tmp/observation/cpsycle-psy3/phase4-first.psy: degraded state'):
+                log=CLEAN_LOG+f'log: 999us: {level}: serialization-probe: {message}\n'.encode()
+                with self.subTest(level=level,message=message):
+                    self.assertEqual(self.result(log=log),'inconclusive')
+                    raw=copy.deepcopy(RAW);raw['save_returned']=True
+                    self.assertEqual(self.result(raw,log=log,output={'path':'output.psy'},output_bytes=b'PSY3SONG synthetic'),'inconclusive')
+    def test_known_messages_require_exact_context(self):
+        for old,new in ((b'I: serialization-probe: psycle: core: player: using 1 threads',b'T: serialization-probe: psycle: core: player: using 1 threads'),
+                        (b'I: serialization-probe:',b'I: thread-id-12345:'),
+                        (b'player.cpp:66',b'player.cpp:67'),
+                        (b'phase4-first.psy',b'other.psy'),
+                        (b'using 1 threads',b'using 2 threads'),
+                        (b'W: serialization-probe:',b'W: thread-id-12345:')):
+            with self.subTest(old=old,new=new):
+                self.assertEqual(self.result(log=CLEAN_LOG.replace(old,new)),'inconclusive')
     def test_timeout_signal_and_invalid_exit(self):
         for rc in (None,-11,70,124,139,False):
             with self.subTest(rc=rc):self.assertEqual(self.result(code=rc),'inconclusive')

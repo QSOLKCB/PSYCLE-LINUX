@@ -30,6 +30,9 @@ that return false; the PSY4 registration is commented out. That is a source
 finding, not a substitute for the runtime receipt. A recorded false return with
 no output is named `save-returned-false-without-output`, not a parity verdict.
 Crashes, timeouts, failed loads, or diagnostic contamination remain inconclusive.
+Every structured log line must match the pinned probe's exact severity, thread
+role and message allowlist, including trace and informational output. Only
+timestamps, runtime thread IDs and the artifact root are variable.
 
 `candidate-serialization.json` binds the exact fixture, core archive, probe
 executable, harness/build source, API records, logs, and outputs. Source hashes
