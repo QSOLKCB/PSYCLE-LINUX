@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -254,6 +255,98 @@ class OriginalProjection(unittest.TestCase):
             "opened": False, "outcome": "menu-item-missing", "diagnostics": ["missing"]
         }))
         with self.assertRaises(ValueError): self.validate()
+
+
+
+class MatrixTimingClassification(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        shutil.copytree(ROOT / "phase6c", self.root / "phase6c")
+        (self.root / "scripts").mkdir()
+        for name in ("phase6c-validate-matrix.py", "phase6c-candidate-parse.py"):
+            shutil.copyfile(ROOT / "scripts" / name, self.root / "scripts" / name)
+        self.evidence = (
+            self.root / "phase6c/evidence/sequencer-bpm-lpb-tick"
+        )
+
+    def check(self, success):
+        result = subprocess.run(
+            ["python3", "scripts/phase6c-validate-matrix.py"],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            result.returncode == 0,
+            success,
+            result.stdout + result.stderr,
+        )
+
+    def mutate(self, name, change):
+        path = self.evidence / name
+        data = json.loads(path.read_text())
+        change(data)
+        path.write_text(json.dumps(data))
+
+    def test_versioned_timing_difference_validates(self):
+        self.check(True)
+
+    def test_original_tpb_is_frozen(self):
+        self.mutate(
+            "original-bpm-lpb-tick.json",
+            lambda d: d["timing_ui"]["observed_values"].update(
+                ticks_per_beat=8
+            ),
+        )
+        self.check(False)
+
+    def test_comparison_must_preserve_tick_difference(self):
+        self.mutate(
+            "comparison.json",
+            lambda d: d.update(tick_semantics_match=True),
+        )
+        self.check(False)
+
+    def test_comparison_candidate_tick_cadence_is_frozen(self):
+        self.mutate(
+            "comparison.json",
+            lambda d: d.update(candidate_timing_ticks_per_beat=24),
+        )
+        self.check(False)
+
+    def test_comparison_exit_code_requires_integer_zero(self):
+        for value in (False, 0.0):
+            with self.subTest(value=value):
+                shutil.copyfile(
+                    ROOT / "phase6c/evidence/sequencer-bpm-lpb-tick/comparison.json",
+                    self.evidence / "comparison.json",
+                )
+                self.mutate(
+                    "comparison.json",
+                    lambda d, value=value: d.update(candidate_exit_code=value),
+                )
+                self.check(False)
+
+    def test_source_workflow_attribution_is_frozen(self):
+        self.mutate(
+            "comparison.json",
+            lambda d: d["source_evidence"].update(workflow_run_id=1),
+        )
+        self.check(False)
+
+    def test_difference_cannot_be_relabelled_pass(self):
+        matrix_path = self.root / "phase6c/compatibility-matrix.json"
+        matrix = json.loads(matrix_path.read_text())
+        next(
+            row
+            for row in matrix["contracts"]
+            if row["id"] == "sequencer-bpm-lpb-tick"
+        )["status"] = "PASS"
+        matrix_path.write_text(json.dumps(matrix))
+        self.mutate("comparison.json", lambda d: d.update(verdict="PASS"))
+        self.check(False)
 
 
 if __name__ == "__main__":
