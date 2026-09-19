@@ -455,6 +455,129 @@ EXPECTED_CANDIDATE_SOURCE_IDENTITIES[TIMING_CONTRACT_ID] = {
     "artifact_digest": "sha256:f1daf3100a8199335f4ba188519e17a0f6551ee3447f0d3dfee6bb11233f5eb8",
 }
 
+DELAYED_RETRIGGER_CONTRACT_ID = "sequencer-delayed-retrigger"
+EXPECTED_DELAYED_RETRIGGER_ATTRIBUTION = {
+    "workflow": "Phase 6C delayed retrigger observation",
+    "workflow_run_id": 35457374404,
+    "workflow_event": "push",
+    "workflow_head_sha": "9310b08bae744093c068a4f557bbd1b80bd499c8",
+    "merged_main_sha": "b431ada663745b08331bcf322a12280867714322",
+    "original_job_id": 105935226848,
+    "original_artifact_id": 10588199755,
+    "candidate_job_id": 105934968007,
+    "candidate_artifact_id": 10589050157,
+    "original_artifact_digest": (
+        "sha256:b35374b007697909ef74f3a2120174c3228def7c876d350d619405e50a589902"
+    ),
+    "candidate_artifact_digest": (
+        "sha256:f6601e7d37e1c3236c81765fc1aad042277d2d16aae704d0ecce62691f488dd5"
+    ),
+}
+EXPECTED_DELAYED_RETRIGGER_IDENTITIES = {
+    "fixture_sha256": "b77383ec1e9fa7551a1523809d5e3dcaa40879dc3be3dc11ecc9b89bc3f1677d",
+    "original_raw_receipt_sha256": (
+        "cb9a924857395b8c612d1c9146255372a0a400838475e9d7d4b4cf0530cbb326"
+    ),
+    "original_source_raw_receipt_sha256": (
+        "d398115ed459955c544cefa580d26e5b92da0a7b6629295d7d4bd5f5c8ed0718"
+    ),
+    "candidate_raw_receipt_sha256": (
+        "f9655225ebcd56ea1ec41df0894be9fe025728610b682c5bd1a7a76f4a9be176"
+    ),
+    "original_procedure_sha256": (
+        "36de40e602800604eeb1b485fa04c030c07eb4c4554d5cae8307482a1c392ecd"
+    ),
+    "candidate_procedure_sha256": (
+        "d086af93b703caf09902bc37721c84d0e8007c0d6b0d4be62a8ff445a72f09bf"
+    ),
+    "original_executable_sha256": (
+        "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6"
+    ),
+    "candidate_probe_sha256": (
+        "bc5367c82e333f7666a824582d64b53485dc452106ecda7b7a65a246d550cae7"
+    ),
+    "original_source_commit": "7ac6d2c3553e2ee8dda55814d8e689919c345478",
+    "player_blob": "b5c962cbcc15f267b9fa1ffe1c9ab21d881b8dbc",
+    "songstructs_blob": "3ad8cd1b1a0a41bc2225cfd3070bf205cbebec31",
+}
+EXPECTED_DELAYED_RETRIGGER_COMMAND_IDS = {
+    "note_delay": 0xFD,
+    "retrigger": 0xFB,
+    "retr_cont": 0xFA,
+    "extended": 0xFE,
+    "set_lpb_range": [0x00, 0x1F],
+}
+EXPECTED_DELAYED_RETRIGGER_SEMANTICS = {
+    "note_delay_counter": "((parameter+1)*SamplesPerRow())/256",
+    "retrigger_rate": "parameter+1",
+    "retr_cont_rate_override": "parameter high nibble when nonzero",
+    "extended_lpb": "FE00..FE1F calls SetBPM(-1, parameter)",
+}
+EXPECTED_DELAYED_RETRIGGER_LOADED_PARAMETERS = {
+    "extended_lpb": 4,
+    "note_delay": 15,
+    "retr_cont": 66,
+    "retrigger": 63,
+}
+EXPECTED_DELAYED_RETRIGGER_NOTE_DELAY_EVENTS = [
+    {"command": 0, "note": 48, "offset": 0.05859375, "parameter": 0, "track": 0},
+]
+EXPECTED_DELAYED_RETRIGGER_EVENTS = [
+    {"command": 0, "note": 50, "offset": 0.0, "parameter": 0, "track": 1},
+    {
+        "command": 0,
+        "note": 50,
+        "offset": 0.0312210875826865,
+        "parameter": 0,
+        "track": 1,
+    },
+    {
+        "command": 0,
+        "note": 50,
+        "offset": 0.0624421751653731,
+        "parameter": 0,
+        "track": 1,
+    },
+    {
+        "command": 0,
+        "note": 50,
+        "offset": 0.0936632627480596,
+        "parameter": 0,
+        "track": 1,
+    },
+    {
+        "command": 0,
+        "note": 50,
+        "offset": 0.124884350330746,
+        "parameter": 0,
+        "track": 1,
+    },
+]
+EXPECTED_DELAYED_RETRIGGER_CONT_EVENTS = [
+    {"command": 0, "note": 52, "offset": 0.0, "parameter": 0, "track": 2},
+    {
+        "command": 0,
+        "note": 52,
+        "offset": 0.0312210875826865,
+        "parameter": 0,
+        "track": 2,
+    },
+    {
+        "command": 0,
+        "note": 52,
+        "offset": 0.0663253950139659,
+        "parameter": 0,
+        "track": 2,
+    },
+    {
+        "command": 0,
+        "note": 52,
+        "offset": 0.105364698558486,
+        "parameter": 0,
+        "track": 2,
+    },
+]
+
 ALLOWED_STATUS = {"PASS", "DIFFERENT", "MISSING", "UNKNOWN"}
 CLASSIFIED_STATUS = ALLOWED_STATUS - {"UNKNOWN"}
 PARSE_CONTRACT_IDS = {
@@ -1336,6 +1459,346 @@ def validate_timing_classification_semantics(
 
 
 
+def validate_delayed_retrigger_deferred_comparison(
+    row: dict[str, object],
+) -> None:
+    """Validate the versioned PR #69 comparison without promoting parity."""
+
+    row_id = DELAYED_RETRIGGER_CONTRACT_ID
+    if row.get("status") != "UNKNOWN":
+        die(
+            f"{row_id} must remain UNKNOWN until original runtime command "
+            "execution is observed"
+        )
+
+    original = row.get("original")
+    candidate = row.get("candidate")
+    if not isinstance(original, dict) or not isinstance(candidate, dict):
+        die(f"{row_id} versioned deferred comparison lacks observation mappings")
+    require_nonempty_mapping_fields(
+        original, REQUIRED_ORIGINAL_FIELDS, f"{row_id}.original"
+    )
+    require_nonempty_mapping_fields(
+        candidate, REQUIRED_CANDIDATE_FIELDS, f"{row_id}.candidate"
+    )
+
+    expected_refs = {
+        "original": (
+            "phase6c/evidence/sequencer-delayed-retrigger/"
+            "original-delayed-retrigger.json"
+        ),
+        "original_source": (
+            "phase6c/evidence/sequencer-delayed-retrigger/"
+            "original-source-delayed-retrigger.json"
+        ),
+        "candidate": (
+            "phase6c/evidence/sequencer-delayed-retrigger/"
+            "candidate-delayed-retrigger.json"
+        ),
+        "comparison": (
+            "phase6c/evidence/sequencer-delayed-retrigger/comparison.json"
+        ),
+    }
+    if original.get("observation") != expected_refs["original"]:
+        die(f"{row_id} original receipt reference changed")
+    if original.get("source_semantics") != expected_refs["original_source"]:
+        die(f"{row_id} original source-semantics receipt reference changed")
+    if candidate.get("observation") != expected_refs["candidate"]:
+        die(f"{row_id} candidate receipt reference changed")
+    if row.get("comparison") != expected_refs["comparison"]:
+        die(f"{row_id} comparison receipt reference changed")
+
+    original_receipt = load_versioned_receipt(
+        expected_refs["original"], f"{row_id}.original.observation"
+    )
+    source_receipt = load_versioned_receipt(
+        expected_refs["original_source"], f"{row_id}.original.source_semantics"
+    )
+    candidate_receipt = load_versioned_receipt(
+        expected_refs["candidate"], f"{row_id}.candidate.observation"
+    )
+    comparison = load_versioned_receipt(
+        expected_refs["comparison"], f"{row_id}.comparison"
+    )
+
+    for receipt, scope, role, context in (
+        (original_receipt, "original-observation", "original", "original"),
+        (
+            source_receipt,
+            "original-source-observation",
+            "original-source",
+            "original source",
+        ),
+        (candidate_receipt, "candidate-observation", "candidate", "candidate"),
+    ):
+        if receipt.get("schema_version") != 1 or receipt.get("phase") != "6C":
+            die(f"{row_id} {context} receipt has unexpected schema_version/phase")
+        if receipt.get("scope") != scope or receipt.get("contract") != row_id:
+            die(f"{row_id} {context} receipt identity changed")
+        if receipt.get("evidence_role") != role:
+            die(f"{row_id} {context} receipt evidence role changed")
+        if receipt.get("parity_status") != "UNKNOWN":
+            die(f"{row_id} {context} receipt must retain UNKNOWN parity")
+
+    if original.get("reference_build") != "Psycle 1.12.0 x86":
+        die(f"{row_id} original mapping is bound to the wrong reference build")
+    if original_receipt.get("reference_build") != "Psycle 1.12.0 x86":
+        die(f"{row_id} original receipt reference build changed")
+    if original_receipt.get("reference_file") != EXPECTED_ORIGINAL_FILE:
+        die(f"{row_id} original receipt reference file changed")
+    if original_receipt.get("reference_installer_sha256") != EXPECTED_ORIGINAL_SHA256:
+        die(f"{row_id} original installer SHA-256 changed")
+    if original_receipt.get("reference_installer_size_bytes") != EXPECTED_ORIGINAL_SIZE:
+        die(f"{row_id} original installer size changed")
+    if (
+        original_receipt.get("reference_executable_sha256")
+        != EXPECTED_DELAYED_RETRIGGER_IDENTITIES["original_executable_sha256"]
+    ):
+        die(f"{row_id} original executable SHA-256 changed")
+    if original_receipt.get("fixture") != original.get("fixture"):
+        die(f"{row_id} original matrix/receipt fixture changed")
+    if original_receipt.get("procedure") != original.get("procedure"):
+        die(f"{row_id} original matrix/receipt procedure changed")
+    if (
+        hashlib.sha256(original_receipt["procedure"].encode("utf-8")).hexdigest()
+        != EXPECTED_DELAYED_RETRIGGER_IDENTITIES["original_procedure_sha256"]
+    ):
+        die(f"{row_id} original procedure differs from the final PR #69 artifact")
+    if original_receipt.get("load_result") != "accepted":
+        die(f"{row_id} original fixture load is not accepted")
+    if original_receipt.get("stable_marker_polls") != 38:
+        die(f"{row_id} original fixture marker stability changed")
+    if original_receipt.get("error_marker") is not None:
+        die(f"{row_id} original receipt contains an error marker")
+    if original_receipt.get("application_error_marker") is not None:
+        die(f"{row_id} original receipt contains an application error marker")
+    if original_receipt.get("error_marker_scope") != "none":
+        die(f"{row_id} original receipt contains a scoped error")
+    if original_receipt.get("ui_automation_diagnostics") != []:
+        die(f"{row_id} original UI observation is contaminated")
+    if original_receipt.get("runtime_identity_diagnostics") != []:
+        die(f"{row_id} original runtime identity is contaminated")
+    if original_receipt.get("original_psycle_observed") is not True:
+        die(f"{row_id} original fixture was not observed on original Psycle")
+    if original_receipt.get("runtime_execution_trace") != "not-observed":
+        die(
+            f"{row_id} original receipt must not invent a command execution trace"
+        )
+
+    fixture_hash = EXPECTED_DELAYED_RETRIGGER_IDENTITIES["fixture_sha256"]
+    if original_receipt.get("fixture_sha256") != fixture_hash:
+        die(f"{row_id} original fixture SHA-256 changed")
+    if candidate_receipt.get("fixture_sha256") != fixture_hash:
+        die(f"{row_id} candidate fixture SHA-256 changed")
+    if comparison.get("fixture_sha256") != fixture_hash:
+        die(f"{row_id} comparison fixture SHA-256 changed")
+
+    if source_receipt.get("source_repository") != "jpaquim/psycle":
+        die(f"{row_id} original source repository changed")
+    if (
+        source_receipt.get("source_commit")
+        != EXPECTED_DELAYED_RETRIGGER_IDENTITIES["original_source_commit"]
+    ):
+        die(f"{row_id} original source commit changed")
+    if source_receipt.get("files") != {
+        "psycle/src/psycle/host/Player.cpp": {
+            "git_blob": EXPECTED_DELAYED_RETRIGGER_IDENTITIES["player_blob"]
+        },
+        "psycle/src/psycle/host/SongStructs.hpp": {
+            "git_blob": EXPECTED_DELAYED_RETRIGGER_IDENTITIES["songstructs_blob"]
+        },
+    }:
+        die(f"{row_id} original source file identities changed")
+    if source_receipt.get("command_ids") != EXPECTED_DELAYED_RETRIGGER_COMMAND_IDS:
+        die(f"{row_id} original source command IDs changed")
+    if source_receipt.get("semantics") != EXPECTED_DELAYED_RETRIGGER_SEMANTICS:
+        die(f"{row_id} original source command semantics changed")
+    if source_receipt.get("original_psycle_executed") is not False:
+        die(f"{row_id} source inspection was mislabeled as original execution")
+
+    if candidate.get("snapshot") != EXPECTED_CANDIDATE_BASELINE:
+        die(f"{row_id} candidate mapping is bound to the wrong snapshot")
+    if candidate_receipt.get("snapshot") != EXPECTED_CANDIDATE_BASELINE:
+        die(f"{row_id} candidate receipt snapshot changed")
+    if candidate_receipt.get("fixture") != candidate.get("fixture"):
+        die(f"{row_id} candidate matrix/receipt fixture changed")
+    if candidate_receipt.get("procedure") != candidate.get("procedure"):
+        die(f"{row_id} candidate matrix/receipt procedure changed")
+    if (
+        hashlib.sha256(candidate_receipt["procedure"].encode("utf-8")).hexdigest()
+        != EXPECTED_DELAYED_RETRIGGER_IDENTITIES["candidate_procedure_sha256"]
+    ):
+        die(f"{row_id} candidate procedure differs from the final PR #69 artifact")
+    candidate_exit = candidate_receipt.get("exit_code")
+    if (
+        not isinstance(candidate_exit, int)
+        or isinstance(candidate_exit, bool)
+        or candidate_exit != 0
+    ):
+        die(f"{row_id} candidate command probe did not exit cleanly")
+    if candidate_receipt.get("observation") != "command-scheduling-observed":
+        die(f"{row_id} candidate command scheduling was not observed")
+    if candidate_receipt.get("original_psycle_observed") is not False:
+        die(f"{row_id} candidate receipt cannot claim original execution")
+    if (
+        candidate_receipt.get("probe_sha256")
+        != EXPECTED_DELAYED_RETRIGGER_IDENTITIES["candidate_probe_sha256"]
+    ):
+        die(f"{row_id} candidate probe identity changed")
+    if (
+        candidate_receipt.get("loaded_parameters")
+        != EXPECTED_DELAYED_RETRIGGER_LOADED_PARAMETERS
+    ):
+        die(f"{row_id} candidate loaded command parameters changed")
+    if candidate_receipt.get("marker_position_after_extended") != 0.25:
+        die(f"{row_id} candidate extended-command marker geometry changed")
+    if (
+        candidate_receipt.get("note_delay_events")
+        != EXPECTED_DELAYED_RETRIGGER_NOTE_DELAY_EVENTS
+    ):
+        die(f"{row_id} candidate note-delay schedule changed")
+    if candidate_receipt.get("retrigger_events") != EXPECTED_DELAYED_RETRIGGER_EVENTS:
+        die(f"{row_id} candidate retrigger schedule changed")
+    if (
+        candidate_receipt.get("retr_cont_events")
+        != EXPECTED_DELAYED_RETRIGGER_CONT_EVENTS
+    ):
+        die(f"{row_id} candidate retrigger-continue schedule changed")
+
+    expected_projection_receipts = {
+        "original": (
+            original_receipt,
+            "original-delayed-retrigger.json",
+            EXPECTED_DELAYED_RETRIGGER_IDENTITIES["original_raw_receipt_sha256"],
+        ),
+        "original source": (
+            source_receipt,
+            "original-source-delayed-retrigger.json",
+            EXPECTED_DELAYED_RETRIGGER_IDENTITIES[
+                "original_source_raw_receipt_sha256"
+            ],
+        ),
+        "candidate": (
+            candidate_receipt,
+            "candidate-delayed-retrigger.json",
+            EXPECTED_DELAYED_RETRIGGER_IDENTITIES["candidate_raw_receipt_sha256"],
+        ),
+    }
+    for context, (receipt, raw_name, raw_sha256) in expected_projection_receipts.items():
+        evidence = receipt.get("source_evidence")
+        if not isinstance(evidence, dict):
+            die(f"{row_id} {context} projection lacks source_evidence")
+        for field, expected in EXPECTED_DELAYED_RETRIGGER_ATTRIBUTION.items():
+            if evidence.get(field) != expected:
+                die(
+                    f"{row_id} {context} source_evidence.{field} "
+                    "does not match final PR #69"
+                )
+        if evidence.get("artifact_receipt") != raw_name:
+            die(f"{row_id} {context} raw artifact receipt name changed")
+        if evidence.get("artifact_receipt_sha256") != raw_sha256:
+            die(f"{row_id} {context} raw artifact receipt SHA-256 changed")
+        if evidence.get("projection_type") != "field-preserving-comparison-projection":
+            die(f"{row_id} {context} projection type changed")
+
+    if comparison.get("schema_version") != 1 or comparison.get("phase") != "6C":
+        die(f"{row_id} comparison has unexpected schema_version/phase")
+    if (
+        comparison.get("scope") != "compatibility-comparison"
+        or comparison.get("contract") != row_id
+    ):
+        die(f"{row_id} comparison identity changed")
+    if comparison.get("original_receipt") != expected_refs["original"]:
+        die(f"{row_id} comparison original receipt reference changed")
+    if comparison.get("original_source_receipt") != expected_refs["original_source"]:
+        die(f"{row_id} comparison original source receipt reference changed")
+    if comparison.get("candidate_receipt") != expected_refs["candidate"]:
+        die(f"{row_id} comparison candidate receipt reference changed")
+    if comparison.get("original_reference_build") != "Psycle 1.12.0 x86":
+        die(f"{row_id} comparison original build changed")
+    if comparison.get("original_installer_sha256") != EXPECTED_ORIGINAL_SHA256:
+        die(f"{row_id} comparison original installer SHA-256 changed")
+    if comparison.get("original_installer_size_bytes") != EXPECTED_ORIGINAL_SIZE:
+        die(f"{row_id} comparison original installer size changed")
+    if (
+        comparison.get("original_executable_sha256")
+        != EXPECTED_DELAYED_RETRIGGER_IDENTITIES["original_executable_sha256"]
+    ):
+        die(f"{row_id} comparison original executable changed")
+    if (
+        comparison.get("original_source_commit")
+        != EXPECTED_DELAYED_RETRIGGER_IDENTITIES["original_source_commit"]
+    ):
+        die(f"{row_id} comparison original source commit changed")
+    if comparison.get("candidate_snapshot") != EXPECTED_CANDIDATE_BASELINE:
+        die(f"{row_id} comparison candidate snapshot changed")
+    if (
+        comparison.get("candidate_probe_sha256")
+        != EXPECTED_DELAYED_RETRIGGER_IDENTITIES["candidate_probe_sha256"]
+    ):
+        die(f"{row_id} comparison candidate probe changed")
+
+    expected_comparison_bindings = {
+        "original_load_result": "accepted",
+        "original_runtime_execution_trace": "not-observed",
+        "original_source_semantics_available": True,
+        "candidate_observation": "command-scheduling-observed",
+        "candidate_exit_code": 0,
+        "candidate_loaded_parameters": EXPECTED_DELAYED_RETRIGGER_LOADED_PARAMETERS,
+        "candidate_marker_position_after_extended": 0.25,
+        "candidate_note_delay_events": EXPECTED_DELAYED_RETRIGGER_NOTE_DELAY_EVENTS,
+        "candidate_retrigger_events": EXPECTED_DELAYED_RETRIGGER_EVENTS,
+        "candidate_retr_cont_events": EXPECTED_DELAYED_RETRIGGER_CONT_EVENTS,
+        "evidence_symmetry": "source-plus-load-vs-candidate-runtime",
+        "classification_allowed": False,
+        "verdict": "UNKNOWN",
+        "decision": "deferred-until-original-runtime-command-execution-is-observed",
+    }
+    for field, expected in expected_comparison_bindings.items():
+        if comparison.get(field) != expected:
+            die(f"{row_id} deferred comparison field {field} changed")
+
+    comparison_exit = comparison.get("candidate_exit_code")
+    if (
+        not isinstance(comparison_exit, int)
+        or isinstance(comparison_exit, bool)
+        or comparison_exit != 0
+    ):
+        die(f"{row_id} comparison candidate_exit_code must be integer zero")
+
+    comparison_evidence = comparison.get("source_evidence")
+    if not isinstance(comparison_evidence, dict):
+        die(f"{row_id} comparison lacks source_evidence")
+    for field, expected in EXPECTED_DELAYED_RETRIGGER_ATTRIBUTION.items():
+        if comparison_evidence.get(field) != expected:
+            die(
+                f"{row_id} comparison source_evidence.{field} "
+                "does not match final PR #69"
+            )
+    comparison_receipt_bindings = {
+        "original_artifact_receipt": "original-delayed-retrigger.json",
+        "original_artifact_receipt_sha256": EXPECTED_DELAYED_RETRIGGER_IDENTITIES[
+            "original_raw_receipt_sha256"
+        ],
+        "candidate_artifact_receipt": "candidate-delayed-retrigger.json",
+        "candidate_artifact_receipt_sha256": EXPECTED_DELAYED_RETRIGGER_IDENTITIES[
+            "candidate_raw_receipt_sha256"
+        ],
+        "original_source_artifact_receipt": "original-source-delayed-retrigger.json",
+        "original_source_artifact_receipt_sha256": EXPECTED_DELAYED_RETRIGGER_IDENTITIES[
+            "original_source_raw_receipt_sha256"
+        ],
+    }
+    for field, expected in comparison_receipt_bindings.items():
+        if comparison_evidence.get(field) != expected:
+            die(f"{row_id} comparison raw receipt binding {field} changed")
+
+    for field in ("comparison_method", "rationale"):
+        value = comparison.get(field)
+        if not isinstance(value, str) or not value.strip():
+            die(f"{row_id} deferred comparison {field} must be non-empty")
+
+
 def validate_comparison_receipt(
     row: dict[str, object],
     row_id: str,
@@ -1611,6 +2074,9 @@ def main() -> int:
         status = row["status"]
         if status not in ALLOWED_STATUS:
             die(f"{row_id} has invalid status: {status!r}")
+
+        if row_id == DELAYED_RETRIGGER_CONTRACT_ID:
+            validate_delayed_retrigger_deferred_comparison(row)
 
         if status != "UNKNOWN":
             non_unknown += 1
