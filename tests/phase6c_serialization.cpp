@@ -52,7 +52,10 @@ int main(int argc, char** argv) {
     const int version = std::atoi(argv[2]);
     try {
         using namespace universalis::os::loggers;
-        multiplex_logger::singleton().add(stream_logger::default_logger());
+        // The historical default logger writes to stdout; keep the JSON API
+        // record separate and retain diagnostics through singleton teardown.
+        static stream_logger diagnostics(std::cerr);
+        multiplex_logger::singleton().add(diagnostics);
         universalis::os::thread_name thread_name("serialization-probe");
         psycle::core::Player& player = psycle::core::Player::singleton();
         psycle::core::MachineFactory& factory = psycle::core::MachineFactory::getInstance();
