@@ -67,6 +67,13 @@ class ParityReportSummary(unittest.TestCase):
         )
         self.check(False)
 
+    def test_sequence_order_contradictory_pass_and_unknown_is_rejected(self):
+        self.mutate_report(
+            "sequence/pattern order are scoped PASS results",
+            "sequence/pattern order are scoped PASS results but remain UNKNOWN",
+        )
+        self.check(False)
+
 
 if __name__ == "__main__":
     unittest.main()
