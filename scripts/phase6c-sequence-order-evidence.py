@@ -152,6 +152,7 @@ def parse_probe(raw: bytes, log: bytes, exit_code: object) -> dict:
     result = {
         "observation": "inconclusive",
         "sequence_lines": [],
+        "play_order": [],
         "reports": [],
     }
     if type(exit_code) is not int or exit_code != 0:
@@ -212,7 +213,35 @@ def parse_probe(raw: bytes, log: bytes, exit_code: object) -> dict:
 
     result["sequence_lines"] = normalized
     result["reports"] = value["reports"]
-    if diagnostics_clean(log):
+
+    # The legacy C++ model exposes its global Master pattern on a separate
+    # sequence line (pattern id -1). The contract under test is the ordinary
+    # song play-order line. Record it explicitly rather than making a later
+    # comparison infer which SequenceLine is musical.
+    musical_lines = [
+        line
+        for line in normalized
+        if line["entries"]
+        and all(entry["pattern_id"] >= 0 for entry in line["entries"])
+    ]
+    auxiliary_lines = [
+        line
+        for line in normalized
+        if line not in musical_lines
+    ]
+    if (
+        len(musical_lines) == 1
+        and all(
+            line["entries"]
+            and all(entry["pattern_id"] == -1 for entry in line["entries"])
+            for line in auxiliary_lines
+        )
+    ):
+        result["play_order"] = [
+            entry["pattern_id"] for entry in musical_lines[0]["entries"]
+        ]
+
+    if diagnostics_clean(log) and result["play_order"]:
         result["observation"] = "sequence-model-observed"
     return result
 
@@ -280,6 +309,7 @@ def collect(root: Path, probe: Path) -> None:
         "log": binding(root, log_path),
         "observation": parsed["observation"],
         "observed_sequence_lines": parsed["sequence_lines"],
+        "observed_play_order": parsed["play_order"],
         "reports": parsed["reports"],
         "original_psycle_observed": False,
         "parity_status": "UNKNOWN",
@@ -329,6 +359,8 @@ def validate_candidate(root: Path) -> dict:
         raise ValueError("candidate observation does not match raw probe evidence")
     if receipt.get("observed_sequence_lines") != parsed["sequence_lines"]:
         raise ValueError("candidate sequence model does not match raw probe evidence")
+    if receipt.get("observed_play_order") != parsed["play_order"]:
+        raise ValueError("candidate play order does not match raw probe evidence")
     if receipt.get("reports") != parsed["reports"]:
         raise ValueError("candidate reports do not match raw probe evidence")
     if not isinstance(receipt.get("probe_sha256"), str) or not re.fullmatch(
@@ -338,6 +370,7 @@ def validate_candidate(root: Path) -> dict:
     return {
         "observation": parsed["observation"],
         "sequence_lines": parsed["sequence_lines"],
+        "play_order": parsed["play_order"],
         "parity_status": "UNKNOWN",
     }
 
