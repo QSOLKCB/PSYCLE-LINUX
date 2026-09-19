@@ -36,7 +36,7 @@ def valid_value():
         "bpm": m.BPM,
         "tick_speed": 8,
         "is_ticks": True,
-        "marker_positions": m.POSITIONS,
+        "marker_positions": list(m.POSITIONS),
         "derived_lpb": float(m.LPB),
         "sample_rates": rates,
         "reports": ["Load Warning: " + m.WARNING],
