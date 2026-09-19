@@ -13,12 +13,21 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-& (Join-Path $PSScriptRoot "phase6c-original-windows-fixtures-v2.ps1") `
-    -CandidateArtifactRoot $CandidateArtifactRoot `
-    -Out $Out `
-    -ObserveSerialization:$ObserveSerialization `
-    -ObserveSequenceOrder:$ObserveSequenceOrder `
-    -ObserveBpmLpbTick:$ObserveBpmLpbTick
+$baseObserver = Join-Path $PSScriptRoot "phase6c-original-windows-fixtures-v2.ps1"
+if ($ObserveBpmLpbTick) {
+    & $baseObserver `
+        -CandidateArtifactRoot $CandidateArtifactRoot `
+        -Out $Out `
+        -ObserveSerialization:$ObserveSerialization `
+        -ObserveSequenceOrder:$ObserveSequenceOrder `
+        -ObserveBpmLpbTick
+} else {
+    & $baseObserver `
+        -CandidateArtifactRoot $CandidateArtifactRoot `
+        -Out $Out `
+        -ObserveSerialization:$ObserveSerialization `
+        -ObserveSequenceOrder:$ObserveSequenceOrder
+}
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
