@@ -137,29 +137,96 @@ def diagnostics_clean(log: bytes) -> bool:
         lines = log.decode("utf-8").splitlines()
     except UnicodeError:
         return False
-    saw_loader = saw_warning = saw_master = False
+
     loader_prefix = "psycle: core: psy3 loader: loading psycle song fileformat version 3: "
-    master_message = "psycle: core: machine factory: create machine: loading with host: 0, plugin: <master>"
+    actual = []
     for line in lines:
         match = LOG_LINE.fullmatch(line)
         if not match:
             return False
-        level, _thread, message = match.groups()
-        if level == "T" and message.startswith(loader_prefix) and message.endswith(FIXTURE):
-            if saw_loader:
-                return False
-            saw_loader = True
-        elif level == "W" and message == WARNING:
-            if saw_warning:
-                return False
-            saw_warning = True
-        elif level == "I" and message == master_message:
-            if saw_master:
-                return False
-            saw_master = True
-        else:
+        level, thread, message = match.groups()
+        if thread.startswith("thread-id-"):
+            thread = "<runtime-thread>"
+        elif thread != "bpm-lpb-tick-probe":
             return False
-    return saw_loader and saw_warning and saw_master
+
+        if re.fullmatch(
+            r"setting name for thread: id: [0-9]+, name: bpm-lpb-tick-probe",
+            message,
+        ):
+            message = "setting name for thread: id: <id>, name: bpm-lpb-tick-probe"
+        elif message.startswith(loader_prefix) and message.endswith(FIXTURE):
+            message = loader_prefix + "<fixture>"
+        actual.append((level, thread, message))
+
+    expected = [
+        (
+            "T",
+            "<runtime-thread>",
+            "# universalis # ../src/universalis/os/thread_name.cpp:56 # "
+            "void universalis::os::thread_name::set_tls()",
+        ),
+        (
+            "T",
+            "<runtime-thread>",
+            "setting name for thread: id: <id>, name: bpm-lpb-tick-probe",
+        ),
+        (
+            "T",
+            "bpm-lpb-tick-probe",
+            "# psycle-core # ../src/psycle/core/player.cpp:66 # "
+            "void psycle::core::Player::start_threads()",
+        ),
+        (
+            "T",
+            "bpm-lpb-tick-probe",
+            "psycle: core: player: starting scheduler threads",
+        ),
+        (
+            "I",
+            "bpm-lpb-tick-probe",
+            "psycle: core: player: using 1 threads",
+        ),
+        (
+            "T",
+            "bpm-lpb-tick-probe",
+            loader_prefix + "<fixture>",
+        ),
+        (
+            "W",
+            "bpm-lpb-tick-probe",
+            WARNING,
+        ),
+        (
+            "I",
+            "bpm-lpb-tick-probe",
+            "psycle: core: machine factory: create machine: loading with host: 0, "
+            "plugin: <master>",
+        ),
+        (
+            "T",
+            "<runtime-thread>",
+            "# psycle-core # ../src/psycle/core/player.cpp:452 # "
+            "void psycle::core::Player::stop_threads()",
+        ),
+        (
+            "T",
+            "<runtime-thread>",
+            "terminating and joining scheduler threads ...",
+        ),
+        (
+            "T",
+            "<runtime-thread>",
+            "# psycle-core # ../src/psycle/core/player.cpp:454 # "
+            "void psycle::core::Player::stop_threads()",
+        ),
+        (
+            "T",
+            "<runtime-thread>",
+            "scheduler threads were not running",
+        ),
+    ]
+    return actual == expected
 
 
 def parse_probe(raw: bytes, log: bytes, exit_code: object) -> dict:
