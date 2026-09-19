@@ -203,23 +203,31 @@ def main() -> int:
 
     sequence_match = sequence_occurrences[0]
     remainder = status_summary[sequence_match.end():]
-    clause_boundary = re.search(r"[,;.]|$", remainder)
-    assert clause_boundary is not None
-    sequence_clause = status_summary[
-        sequence_match.start(): sequence_match.end() + clause_boundary.start()
+    next_subject = re.search(
+        r"\b(?:serialization/save capability|\d+ contracts remain)\b",
+        remainder,
+        re.IGNORECASE,
+    )
+    sequence_context_end = (
+        sequence_match.end() + next_subject.start()
+        if next_subject is not None
+        else len(status_summary)
+    )
+    sequence_context = status_summary[
+        sequence_match.start():sequence_context_end
     ]
     sequence_statuses = [
         match.group(1).upper()
         for match in re.finditer(
             r"\b(PASS|DIFFERENT|MISSING|UNKNOWN)\b",
-            sequence_clause,
+            sequence_context,
             re.IGNORECASE,
         )
     ]
     expected_sequence_status = sequence_row.get("status")
     if sequence_statuses != [expected_sequence_status]:
         die(
-            "status summary sequence/pattern order claim is contradictory or "
+            "status summary sequence/pattern order context is contradictory or "
             f"does not match matrix status {expected_sequence_status!r}: "
             f"found {sequence_statuses}"
         )
