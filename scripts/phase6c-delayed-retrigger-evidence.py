@@ -220,7 +220,9 @@ def diagnostics_clean(log: bytes) -> bool:
     return saw_loader and saw_warning and saw_sampler and saw_master
 
 
-def normalize_captures(value: object, note: int, offsets: list[float]) -> list[dict]:
+def normalize_captures(
+    value: object, note: int, expected_track: int, offsets: list[float]
+) -> list[dict]:
     if not isinstance(value, list) or len(value) != len(offsets):
         raise ValueError("capture count mismatch")
     result = []
@@ -230,7 +232,7 @@ def normalize_captures(value: object, note: int, offsets: list[float]) -> list[d
         if not close(capture.get("offset"), expected_offset, 2e-9):
             raise ValueError("capture offset mismatch")
         track = capture.get("track")
-        if type(track) is not int or isinstance(track, bool):
+        if type(track) is not int or isinstance(track, bool) or track != expected_track:
             raise ValueError("capture track is invalid")
         if (
             capture.get("note") != note
@@ -288,14 +290,16 @@ def parse_probe(raw: bytes, log: bytes, exit_code: object) -> dict:
         ):
             return inconclusive
         note_delay = normalize_captures(
-            value.get("note_delay_events"), 48,
+            value.get("note_delay_events"),
+            48,
+            0,
             [LOADED_PARAMETERS["note_delay"] / 256.0],
         )
         retrigger = normalize_captures(
-            value.get("retrigger_events"), 50, expected_retrigger_offsets()
+            value.get("retrigger_events"), 50, 1, expected_retrigger_offsets()
         )
         retr_cont = normalize_captures(
-            value.get("retr_cont_events"), 52, expected_retr_cont_offsets()
+            value.get("retr_cont_events"), 52, 2, expected_retr_cont_offsets()
         )
     except (KeyError, TypeError, ValueError):
         return inconclusive
@@ -515,11 +519,9 @@ def collect_source(root: Path, player_path: Path, structs_path: Path) -> dict:
         "files": {
             "psycle/src/psycle/host/Player.cpp": {
                 "git_blob": PLAYER_BLOB,
-                "sha256": digest(canonical_text_bytes(player)),
             },
             "psycle/src/psycle/host/SongStructs.hpp": {
                 "git_blob": SONGSTRUCTS_BLOB,
-                "sha256": digest(canonical_text_bytes(structs)),
             },
         },
         **derived,
@@ -576,9 +578,8 @@ def validate_source(root: Path) -> dict:
         mapping = files.get(path)
         if (
             not isinstance(mapping, dict)
+            or set(mapping) != {"git_blob"}
             or mapping.get("git_blob") != expected_blob
-            or not isinstance(mapping.get("sha256"), str)
-            or re.fullmatch(r"[0-9a-f]{64}", mapping["sha256"]) is None
         ):
             raise ValueError("original-source file identity changed: " + path)
     return receipt
