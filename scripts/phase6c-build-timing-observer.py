@@ -31,12 +31,18 @@ def main() -> None:
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
     data = args.source.read_bytes()
-    actual = git_blob(data)
+    # Git stores this script with LF endings, while a Windows checkout may
+    # materialize CRLF. Canonicalize only that working-tree transformation
+    # before applying the pinned Git-blob and exact-anchor checks.
+    normalized = data.replace(b"\r\n", b"\n")
+    if b"\r" in normalized:
+        raise SystemExit("timing observer base contains unsupported carriage returns")
+    actual = git_blob(normalized)
     if actual != EXPECTED_BLOB:
         raise SystemExit(
             f"timing observer base blob changed: expected={EXPECTED_BLOB} actual={actual}"
         )
-    text = data.decode("utf-8")
+    text = normalized.decode("utf-8")
 
     text = replace_once(
         text,
