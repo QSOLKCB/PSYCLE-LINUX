@@ -300,7 +300,9 @@ Audit at minimum:
   - [x] Add a project-authored single-sequence PSY3 fixture with non-monotonic order `0,2,1,2`, a candidate model probe, and a guarded original UI Automation order-list observer. See `phase6c/SEQUENCE_ORDER.md`.
   - [x] Record paired runtime observations in final PR #65 Phase 6C run `35443357239` at head `0a9eebcba7028bd808bfa32c3e654828db51d7fa`: original Psycle exposes stable labels `00:00,01:02,02:01,03:02` and the candidate extracts play order `0,2,1,2` from the canonical musical sequence line.
   - [x] Commit a versioned comparison and classify `sequencer-pattern-order` as scoped `PASS` for that exact single-sequence fixture. See `phase6c/evidence/sequencer-pattern-order/comparison.json`.
-- [ ] BPM/LPB/tick behaviour;
+- [x] BPM/LPB/tick behaviour;
+  - [x] Establish the paired observation lane with a project-authored BPM 137 / LPB 8 / TPB 24 / extra-tick 0 fixture and clean Linux-candidate + pinned-Windows-original receipts in final PR #67 run `35453296036`.
+  - [x] Version the exact paired receipts and classify `sequencer-bpm-lpb-tick` as scoped `DIFFERENT`: BPM and LPB agree, but original TPB 24 is not equivalent to the candidate's `tick_speed=8`, `is_ticks=true` beat/8 cadence. Delayed/retrigger commands and broader playback timing remain separate.
 - [ ] tracker commands and delayed/retrigger events;
 - [ ] Sampler PS1 behaviour;
 - [ ] XMSampler behaviour;
@@ -315,18 +317,18 @@ Audit at minimum:
 
 Do **not** assume C-Psycle's event sequencer is authoritative when it differs from original Psycle. The point of this phase is to discover and document differences.
 
-**Phase 6C status: active.** PSY2 and PSY3 parse/load acceptance plus sequence/pattern order are scoped `PASS` results for exact project-authored fixtures, and the serialization/save-capability contract is a scoped `MISSING` result; 16 contracts remain `UNKNOWN`. The sequence-order verdict is limited to the exact legacy single-sequence play-order fixture and does not classify timing, playback, multi-sequence behaviour or UI editing. The save verdict remains limited to the required ability to emit a PSY3 output for the tested operation: byte identity is recorded separately and complete semantic round-trip state remains unmeasured. The confirmed `MISSING` result continues to justify the Phase 7 serializer backlog item. The next Phase 6C evidence slice is BPM/LPB/tick behaviour.
+**Phase 6C status: active.** PSY2 and PSY3 parse/load acceptance plus sequence/pattern order are scoped `PASS` results for exact project-authored fixtures, serialization/save capability is scoped `MISSING`, and BPM/LPB/tick timing is scoped `DIFFERENT`; 15 contracts remain `UNKNOWN`. The timing verdict is limited to the exact BPM 137 / LPB 8 / TPB 24 fixture: original Psycle preserves TPB 24 while the candidate feeds LPB 8 into its legacy tick-speed path with `is_ticks=true`. It does not classify delayed/retrigger commands, sampler tick processing, playback duration, tempo changes, multi-sequence behaviour or UI editing. The confirmed `MISSING` serializer gap and `DIFFERENT` tick-semantics gap now both justify narrow Phase 7 convergence backlog items. The next Phase 6C evidence slice is delayed/retrigger/extended tracker-command behaviour.
 
 ### 6D — parity report
 
 - [x] Produce `PSYCLE_CORE_PARITY.md` with PASS / DIFFERENT / MISSING / UNKNOWN for each subsystem.
-- [x] Mechanically require the original-Psycle version/build and versioned evidence receipts for every non-`UNKNOWN` row; the classified rows are scoped PSY2, PSY3 and sequence/pattern-order `PASS` results plus the scoped serialization/save-capability `MISSING` result.
+- [x] Mechanically require the original-Psycle version/build and versioned evidence receipts for every non-`UNKNOWN` row; the classified rows are scoped PSY2, PSY3 and sequence/pattern-order `PASS` results, scoped serialization/save-capability `MISSING`, and scoped BPM/LPB/tick `DIFFERENT`.
 - [x] Separate engine gaps from UI-only gaps.
 - [x] Identify which existing C-Psycle tests are portable shared contracts, which need original-Psycle confirmation, and which remain C-Psycle-only historical evidence.
 - [x] Add `scripts/phase6d-validate-parity-report.py` plus a maintained Phase 6D workflow so the human-readable 20-row report cannot drift from the canonical matrix status inventory.
 - [x] Freeze the first Phase 7 implementation backlog from confirmed `DIFFERENT` / `MISSING` evidence rather than intuition. The first item is the scoped PSY3 save-capability gap classified in Phase 6C.
 
-**Phase 6D status: first implementation backlog frozen.** The human report now projects three scoped `PASS` results (PSY2 parse/load, PSY3 parse/load and sequence/pattern order) plus one scoped serialization/save `MISSING` result. Phase 7 may implement that confirmed serializer capability gap while Phase 6C continues collecting evidence for the remaining 16 contracts.
+**Phase 6D status: evidence-backed implementation backlog frozen and growing.** The human report projects three scoped `PASS` results (PSY2 parse/load, PSY3 parse/load and sequence/pattern order), one scoped serialization/save `MISSING` result, and one scoped BPM/LPB/tick `DIFFERENT` result. Phase 7 may implement the confirmed serializer capability gap and the narrowly defined TPB/LPB timing gap while Phase 6C continues collecting evidence for the remaining 15 contracts.
 
 ### 6E — active-track CI foundation
 
@@ -351,6 +353,8 @@ As soon as the provenance-safe C++ family is imported, the new implementation pa
 
 - [ ] Close song-format compatibility gaps found in Phase 6.
 - [ ] Close timing/sequencer/tracker-command gaps.
+  - [ ] Separate legacy ticks-per-beat / extra-tick timing from LPB in the C++ candidate so the classified BPM 137 / LPB 8 / TPB 24 fixture no longer drives a beat/8 tick cadence.
+  - [ ] Do not generalize that fix to delayed/retrigger/extended commands until their separate Phase 6C contract is classified.
 - [ ] Bring Sampler/XMSampler behaviour to the required compatibility level.
 - [ ] Restore mixer/master/routing semantics required by real songs.
 - [ ] Preserve native-machine and plugin state contracts.
