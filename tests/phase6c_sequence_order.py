@@ -6,6 +6,8 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import types
 import unittest
@@ -292,6 +294,112 @@ class OriginalSequenceOrder(unittest.TestCase):
         ]
         with self.assertRaises(ValueError):
             self.run_validation()
+
+
+class MatrixSequenceOrder(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        shutil.copytree(ROOT / "phase6c", self.root / "phase6c")
+        (self.root / "scripts").mkdir()
+        for name in ("phase6c-validate-matrix.py", "phase6c-candidate-parse.py"):
+            shutil.copyfile(ROOT / "scripts" / name, self.root / "scripts" / name)
+        self.evidence = self.root / "phase6c/evidence/sequencer-pattern-order"
+
+    def check(self, success):
+        result = subprocess.run(
+            ["python3", "scripts/phase6c-validate-matrix.py"],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            result.returncode == 0,
+            success,
+            result.stdout + result.stderr,
+        )
+
+    def mutate(self, name, change):
+        path = self.evidence / name
+        data = json.loads(path.read_text())
+        change(data)
+        path.write_text(json.dumps(data))
+
+    def test_versioned_sequence_order_pass_validates(self):
+        self.check(True)
+
+    def test_original_observed_order_is_frozen(self):
+        self.mutate(
+            "original-sequence-order.json",
+            lambda d: d["sequence_order_ui"].update(
+                observed_labels=["00: 00", "01: 01", "02: 02", "03: 01"]
+            ),
+        )
+        self.check(False)
+
+    def test_original_order_requires_stability(self):
+        self.mutate(
+            "original-sequence-order.json",
+            lambda d: d["sequence_order_ui"].update(stable_polls=3),
+        )
+        self.check(False)
+
+    def test_candidate_play_order_is_frozen(self):
+        self.mutate(
+            "candidate-sequence-order.json",
+            lambda d: d.update(observed_play_order=[0, 1, 2, 1]),
+        )
+        self.check(False)
+
+    def test_candidate_master_line_is_frozen(self):
+        self.mutate(
+            "candidate-sequence-order.json",
+            lambda d: d["observed_sequence_lines"][0]["entries"][0].update(
+                pattern_id=0
+            ),
+        )
+        self.check(False)
+
+    def test_comparison_must_bind_both_orders(self):
+        self.mutate(
+            "comparison.json",
+            lambda d: d.update(candidate_observed_play_order=[0, 1, 2, 1]),
+        )
+        self.check(False)
+
+    def test_comparison_exit_code_requires_integer_zero(self):
+        for value in (False, 0.0):
+            with self.subTest(value=value):
+                with self.subTest():
+                    self.mutate(
+                        "comparison.json",
+                        lambda d, value=value: d.update(candidate_exit_code=value),
+                    )
+                    self.check(False)
+                shutil.copyfile(
+                    ROOT / "phase6c/evidence/sequencer-pattern-order/comparison.json",
+                    self.evidence / "comparison.json",
+                )
+
+    def test_source_workflow_attribution_is_frozen(self):
+        self.mutate(
+            "comparison.json",
+            lambda d: d["source_evidence"].update(workflow_run_id=1),
+        )
+        self.check(False)
+
+    def test_pass_cannot_be_relabelled_different(self):
+        matrix_path = self.root / "phase6c/compatibility-matrix.json"
+        matrix = json.loads(matrix_path.read_text())
+        next(
+            row
+            for row in matrix["contracts"]
+            if row["id"] == "sequencer-pattern-order"
+        )["status"] = "DIFFERENT"
+        matrix_path.write_text(json.dumps(matrix))
+        self.mutate("comparison.json", lambda d: d.update(verdict="DIFFERENT"))
+        self.check(False)
 
 
 if __name__ == "__main__":

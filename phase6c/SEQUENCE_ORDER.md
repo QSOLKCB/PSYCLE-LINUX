@@ -3,8 +3,11 @@
 This slice measures the canonical matrix row `sequencer-pattern-order` without
 assuming that C-Psycle's later sequencer architecture is authoritative.
 
-The compatibility status remains **UNKNOWN** until a versioned original/candidate
-comparison is committed. This document defines the observation lane only.
+The versioned comparison committed after PR #65 now classifies
+`sequencer-pattern-order` as a scoped **PASS** for the exact project-authored
+single-sequence PSY3 fixture. The original and candidate runtime receipts remain
+observation-only `parity_status: UNKNOWN` records by design; the committed
+comparison is the object that establishes the matrix verdict.
 
 ## Fixture scope
 
@@ -55,7 +58,9 @@ validator requires:
   construction markers;
 - a clean process exit.
 
-Candidate evidence remains `parity_status: UNKNOWN`.
+Candidate runtime evidence remains `parity_status: UNKNOWN`; the versioned
+comparison binds that observation to the original reference before the matrix
+can classify it.
 
 ## Original Psycle observation
 
@@ -73,7 +78,8 @@ The existing PSY3 Load Warning is still verified and dismissed through the
 already bounded process-owned UI Automation path. UI automation, runtime
 identity, load or liveness contamination keeps the observation inconclusive.
 
-Original evidence remains `parity_status: UNKNOWN`.
+Original runtime evidence remains `parity_status: UNKNOWN`; it does not
+self-promote the compatibility row.
 
 ## Maintained execution
 
@@ -89,13 +95,34 @@ The Phase 6C workflow runs this lane after the existing candidate build and
 before artifact upload, then runs the original observer and both validators on
 Windows.
 
-## Classification boundary
+## Versioned classification
 
-A later comparison may classify `PASS` only if both pinned implementations
-conclusively expose the same order for the exact fixture and all receipt
-identities/procedures are versioned. A stable differing order may support a
-scoped `DIFFERENT` result. Missing, partial, ambiguous or contaminated evidence
-must stay `UNKNOWN`.
+Final PR #65 Phase 6C run `35443357239` at head
+`0a9eebcba7028bd808bfa32c3e654828db51d7fa` produced clean paired evidence
+for the identical fixture SHA-256
+`6a0c5073fb54b7bb7496a6dda85ece80abefe8ba6098491b1a06972fe619d5c0`.
 
-This slice does not measure BPM/LPB/tick timing, delayed/retrigger commands,
-audio playback, multi-sequence behaviour, or UI editing semantics.
+The pinned original Psycle 1.12.0 x86 observation exposed these stable order
+labels for 38 polls:
+
+```text
+00: 00
+01: 02
+02: 01
+03: 02
+```
+
+The frozen candidate probe exited 0 and extracted the canonical musical
+`SequenceLine` play order:
+
+```text
+0, 2, 1, 2
+```
+
+The versioned receipts and comparison are committed under
+`phase6c/evidence/sequencer-pattern-order/`. The matrix therefore records
+a scoped **PASS**.
+
+This PASS does not measure BPM/LPB/tick timing, delayed/retrigger commands,
+audio playback, multi-sequence behaviour, or UI editing semantics. Those remain
+separate compatibility contracts and evidence tasks.

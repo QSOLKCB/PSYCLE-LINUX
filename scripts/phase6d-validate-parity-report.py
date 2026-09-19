@@ -157,6 +157,81 @@ def main() -> int:
             if not isinstance(comparison, str) or not comparison.strip():
                 die(f"{row_id} classified row lacks comparison receipt reference")
 
+    # Keep the prose status summary synchronized with the matrix inventory, not
+    # only the table cells. This prevents a newly classified row from leaving a
+    # stale UNKNOWN count or omitting the classification from the overview.
+    try:
+        status_section = report.split("## Status", 1)[1].split("## Evidence rule", 1)[0]
+    except IndexError:
+        die("missing status/evidence-rule section boundaries")
+    unknown_count = len(contracts) - classified
+    unknown_matches = [
+        int(match.group(1))
+        for match in re.finditer(
+            r"(?<!\d)(\d+)(?!\d)\s+contracts\s+remain\s+UNKNOWN\b",
+            status_section,
+            re.IGNORECASE,
+        )
+    ]
+    if unknown_matches != [unknown_count]:
+        die(
+            "status summary UNKNOWN count does not match matrix inventory: "
+            f"expected exactly {unknown_count}, found {unknown_matches}"
+        )
+
+    # Validate the sequence-order claim as a whole clause, not by finding one
+    # favorable token. A summary such as "sequence/pattern order are scoped PASS
+    # results but remain UNKNOWN" is contradictory and must fail closed.
+    status_summary_lines = [
+        line.strip() for line in status_section.splitlines() if line.strip()
+    ]
+    if not status_summary_lines:
+        die("status summary is empty")
+    status_summary = status_summary_lines[0].strip("*").strip()
+
+    sequence_row = next(
+        row for row in contracts if row.get("id") == "sequencer-pattern-order"
+    )
+    sequence_occurrences = list(
+        re.finditer(r"sequence/pattern order\b", status_summary, re.IGNORECASE)
+    )
+    if len(sequence_occurrences) != 1:
+        die(
+            "status summary must contain exactly one sequence/pattern order "
+            f"claim, found {len(sequence_occurrences)}"
+        )
+
+    sequence_match = sequence_occurrences[0]
+    remainder = status_summary[sequence_match.end():]
+    next_subject = re.search(
+        r"\b(?:serialization/save capability|\d+ contracts remain)\b",
+        remainder,
+        re.IGNORECASE,
+    )
+    sequence_context_end = (
+        sequence_match.end() + next_subject.start()
+        if next_subject is not None
+        else len(status_summary)
+    )
+    sequence_context = status_summary[
+        sequence_match.start():sequence_context_end
+    ]
+    sequence_statuses = [
+        match.group(1).upper()
+        for match in re.finditer(
+            r"\b(PASS|DIFFERENT|MISSING|UNKNOWN)\b",
+            sequence_context,
+            re.IGNORECASE,
+        )
+    ]
+    expected_sequence_status = sequence_row.get("status")
+    if sequence_statuses != [expected_sequence_status]:
+        die(
+            "status summary sequence/pattern order context is contradictory or "
+            f"does not match matrix status {expected_sequence_status!r}: "
+            f"found {sequence_statuses}"
+        )
+
     # Phase 6D must remain evidence-driven even while every compatibility row is UNKNOWN.
     backlog_section = report.split("## Current implementation backlog", 1)[1]
     required_backlog_language = (
