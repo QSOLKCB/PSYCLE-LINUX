@@ -218,7 +218,7 @@ def validate_original(candidate_root: Path, root: Path) -> dict:
         inventory=read(child(root,initial_receipt['environment']['loaded_vc90_runtime']['path']))
         if type(save.get('process_id')) is not int or save['process_id']!=inventory['process_id']:
             raise ValueError('save action is not bound to the observed reference process')
-        for field in ('command_verified','command_dispatched','dialog_verified','path_set','save_invoked','dialog_closed'):
+        for field in ('command_verified','command_dispatched','dialog_verified','path_set','native_path_verified','save_invoked','dialog_closed'):
             if save.get(field) is not True:
                 raise ValueError('incomplete Save As evidence: '+field)
         polls=save.get('stable_output_polls')

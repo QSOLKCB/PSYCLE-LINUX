@@ -69,7 +69,7 @@ class Original(unittest.TestCase):
         self.output=self.root/'serialization/original-saved.psy';self.output.write_bytes(b'PSY3SONG synthetic control')
         self.hash=m.digest(self.output.read_bytes())
         self.save={'process_id':42,'schema_version':1,'outcome':'saved','diagnostics':[],'stable_output_polls':4,'stable_path_polls':4,
-                   **{k:True for k in ('command_verified','command_dispatched','dialog_verified','path_set','save_invoked','dialog_closed')},
+                   **{k:True for k in ('command_verified','command_dispatched','dialog_verified','path_set','native_path_verified','save_invoked','dialog_closed')},
                    'menu_inventory':[{'menu':'File','label':'Save &As...','enabled':True}],
                    'dialog_inventory':[{'type':'ControlType.Edit','id':'1001','enabled':True},
                                        {'type':'ControlType.Button','name':'Save','enabled':True}]}
@@ -101,7 +101,7 @@ class Original(unittest.TestCase):
         self.save['menu_inventory'][0]['label']='Save &as...'
         self.assertEqual(self.run_validation()['save'],'saved')
     def test_missing_action_or_stable_output_blocks_saved(self):
-        for key in ('command_verified','path_set','save_invoked','dialog_closed'):
+        for key in ('command_verified','path_set','native_path_verified','save_invoked','dialog_closed'):
             self.save[key]=False
             with self.assertRaises(ValueError):self.run_validation()
             self.save[key]=True

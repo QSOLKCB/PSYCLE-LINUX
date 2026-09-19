@@ -17,6 +17,47 @@ public static class Phase6cSaveMenu {
     [DllImport("user32.dll")] private static extern uint GetMenuState(IntPtr menu, uint position, uint flags);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] private static extern int GetMenuString(IntPtr menu, uint position, StringBuilder text, int count, uint flags);
     [DllImport("user32.dll", SetLastError=true)] private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern IntPtr GetParent(IntPtr window);
+    [DllImport("user32.dll")] private static extern int GetDlgCtrlID(IntPtr window);
+    [DllImport("user32.dll")] private static extern bool IsWindowEnabled(IntPtr window);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] private static extern int GetClassName(IntPtr window, StringBuilder text, int count);
+    [DllImport("user32.dll", EntryPoint="SendMessageTimeoutW", CharSet=CharSet.Unicode, SetLastError=true)]
+    private static extern IntPtr SendText(IntPtr window, uint message, IntPtr wParam, string text, uint flags, uint timeout, out IntPtr result);
+    [DllImport("user32.dll", EntryPoint="SendMessageTimeoutW", CharSet=CharSet.Unicode, SetLastError=true)]
+    private static extern IntPtr ReadText(IntPtr window, uint message, IntPtr wParam, StringBuilder text, uint flags, uint timeout, out IntPtr result);
+    [DllImport("user32.dll", EntryPoint="SendMessageTimeoutW", SetLastError=true)]
+    private static extern IntPtr SendValue(IntPtr window, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
+    static string Class(IntPtr window) {
+        var text=new StringBuilder(256); GetClassName(window,text,text.Capacity); return text.ToString();
+    }
+    static bool Owned(IntPtr window, uint process) {
+        uint owner; return window!=IntPtr.Zero && GetWindowThreadProcessId(window,out owner)!=0 && owner==process;
+    }
+    public static bool SetFileName(uint process, IntPtr dialog, IntPtr edit, string path) {
+        var title=new StringBuilder(256); GetWindowText(dialog,title,title.Capacity);
+        if(!Owned(dialog,process) || Class(dialog)!="#32770" || title.ToString()!="Save As" ||
+           !Owned(edit,process) || Class(edit)!="Edit" || !IsWindowEnabled(edit) || !IsWindowVisible(edit)) return false;
+        int id=GetDlgCtrlID(edit);
+        if(id!=1001 && id!=1148) return false;
+        var parent=GetParent(edit);
+        var ancestor=parent;
+        while(ancestor!=IntPtr.Zero && ancestor!=dialog) ancestor=GetParent(ancestor);
+        if(ancestor!=dialog || !Owned(parent,process)) return false;
+        IntPtr result;
+        if(SendText(edit,0x000c,IntPtr.Zero,path,2,1000,out result)==IntPtr.Zero || result==IntPtr.Zero) return false;
+        // Notify the verified edit/combobox owners. UIA ValuePattern alone can
+        // update displayed text without committing the shell's filename state.
+        if(SendValue(parent,0x0111,new IntPtr((0x0300<<16)|(id&0xffff)),edit,2,1000,out result)==IntPtr.Zero) return false;
+        if(Class(parent)=="ComboBox") {
+            var owner=GetParent(parent);
+            if(!Owned(owner,process)) return false;
+            int comboId=GetDlgCtrlID(parent);
+            if(comboId<0 || SendValue(owner,0x0111,new IntPtr((5<<16)|(comboId&0xffff)),parent,2,1000,out result)==IntPtr.Zero) return false;
+        }
+        var actual=new StringBuilder(path.Length+2);
+        return ReadText(edit,0x000d,new IntPtr(actual.Capacity),actual,2,1000,out result)!=IntPtr.Zero && actual.ToString()==path;
+    }
     public class Command {
         public long Window;
         public uint Process;
@@ -82,6 +123,7 @@ function Invoke-Phase6cSaveAs(
         command_dispatched = $false
         dialog_verified = $false
         path_set = $false
+        native_path_verified = $false
         stable_path_polls = 0
         save_invoked = $false
         dialog_closed = $false
@@ -167,6 +209,12 @@ function Invoke-Phase6cSaveAs(
         Start-Sleep -Milliseconds 500
         $edits[0].SetFocus()
         $value.SetValue($OutputPath)
+        if (-not [Phase6cSaveMenu]::SetFileName([uint32]$Process.Id,
+            [IntPtr]$dialog.Current.NativeWindowHandle,
+            [IntPtr]$edits[0].Current.NativeWindowHandle, $OutputPath)) {
+            throw "native Save As filename identity/update/readback failed"
+        }
+        $result.native_path_verified = $true
         $buttons[0].SetFocus()
         for ($poll=0; $poll -lt 4; $poll++) {
             Start-Sleep -Milliseconds 200

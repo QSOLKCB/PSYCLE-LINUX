@@ -50,7 +50,12 @@ On a clean, stable PSY3 load, it:
    `35435580682`); this exact signature is accepted alongside the standard spelling.
 2. Requires one process-owned Save As dialog, one enabled filename edit with its
    known common-dialog identifier, and one enabled Save button.
-3. Focuses the filename edit, sets a fresh native output path, moves focus to
+3. Focuses the filename edit and sets a fresh native output path. A bounded
+   native text update/readback and edit/combobox change notifications commit the
+   shell filename state, guarded by exact PID, Save As/#32770 dialog, Edit
+   class/control identity, enabled/visible state, and descendant ownership.
+   This addresses run `35436612997`, where UIA readback retained the new path
+   but Save still proposed overwriting the old filename. The observer moves focus to
    Save, and requires four unchanged path polls before invocation. Any overwrite
    confirmation is left untouched and makes the observation inconclusive.
    Invokes Save and records dialog
