@@ -242,6 +242,97 @@ EXPECTED_CANDIDATE_SOURCE_IDENTITIES[SERIALIZATION_CONTRACT_ID] = {
     "artifact_digest": "sha256:441854e0595636b5cb12b45bf8711a07f27d4fdacbca2c2b0468be89282427f8",
 }
 
+SEQUENCE_ORDER_CONTRACT_ID = "sequencer-pattern-order"
+EXPECTED_SEQUENCE_ORDER = [0, 2, 1, 2]
+EXPECTED_SEQUENCE_ORDER_UI_LABELS = [
+    "00: 00",
+    "01: 02",
+    "02: 01",
+    "03: 02",
+]
+EXPECTED_ORIGINAL_SOURCE_IDENTITIES[SEQUENCE_ORDER_CONTRACT_ID] = {
+    "receipt_sha256": "eee554db9791168be25699601dd7ca138af2e0c34811283c25d24a27753b40e4",
+    "procedure_sha256": "62b13673a816ec585981724b3c0d3451329b53d353a782431c44324be3bdf7f1",
+    "executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+    "artifact_digest": "sha256:19c9e4c0e9f4523d1caf2de1b8602399a8ef277914148a0a386bd0007becb0b2",
+}
+EXPECTED_WORKFLOW_ATTRIBUTION[SEQUENCE_ORDER_CONTRACT_ID] = {
+    "workflow": "Phase 6C compatibility matrix",
+    "run_id": 35443357239,
+    "event": "pull_request",
+    "head_sha": "0a9eebcba7028bd808bfa32c3e654828db51d7fa",
+    "merged_main_sha": "875e9dd04a249b2e2da76ae3efce57283b24e4eb",
+    "original_job_id": 105898341707,
+    "original_artifact_id": 10585305304,
+    "candidate_job_id": 105898011777,
+    "candidate_artifact_id": 10585125236,
+}
+EXPECTED_ORIGINAL_CLASSIFICATION_FIELDS[SEQUENCE_ORDER_CONTRACT_ID] = {
+    "reference_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+    "fixture": "fixtures/sequence-order/phase6c-sequence-order.psy",
+    "observation": "stable-native-window-evidence-identifies-loaded-fixture-without-error",
+    "load_result": "accepted",
+    "load_evidence_marker": "phase6c-sequence-order.psy",
+    "stable_marker_polls": 38,
+    "error_marker": None,
+    "application_error_marker": None,
+    "error_marker_scope": "none",
+    "ui_automation_diagnostics": [],
+    "startup_bootstrap": {
+        "settings_dialog_seen": False,
+        "signature_verified": False,
+        "attempted": False,
+        "action": None,
+        "dismissed": False,
+        "outcome": "not-seen",
+        "diagnostics": [],
+    },
+    "environment_bootstrap": {
+        "directsound": {
+            "dialog_seen": True,
+            "signature_verified": True,
+            "attempted": True,
+            "action": "invoke-ok-win32-bm-click",
+            "dismissed": True,
+            "outcome": "dismissed",
+            "diagnostics": [],
+        }
+    },
+    "fixture_bootstrap": {
+        "load_warning": {
+            "required": True,
+            "expected_title": "Load Warning",
+            "expected_message": "This file is from a newer version of Psycle! This process will try to load it anyway.",
+            "dialog_seen": True,
+            "signature_verified": True,
+            "attempted": True,
+            "action": "invoke-ok",
+            "dismissed": True,
+            "outcome": "dismissed",
+            "diagnostics": [],
+        }
+    },
+    "sequence_order_ui": {
+        "expected_labels": EXPECTED_SEQUENCE_ORDER_UI_LABELS,
+        "observed_labels": EXPECTED_SEQUENCE_ORDER_UI_LABELS,
+        "stable_polls": 38,
+        "result": "observed",
+        "matches_fixture_expected": True,
+    },
+    "runtime_identity_diagnostics": [],
+    "main_window_seen": True,
+    "exit_code_before_termination": None,
+    "process_running_before_termination": True,
+    "termination": "killed-without-closeable-main-window",
+    "original_psycle_observed": True,
+    "parity_status": "UNKNOWN",
+}
+EXPECTED_CANDIDATE_SOURCE_IDENTITIES[SEQUENCE_ORDER_CONTRACT_ID] = {
+    "receipt_sha256": "20b3f69e455935c21e0a1988f09615e859f8bea82ece3ecbe4408b141f4a5f86",
+    "executable_sha256": "6e276ee6f4861129cc54934386b0363d4ee985356c28613f788a9372001dc21f",
+    "artifact_digest": "sha256:fda24b038aeb448256aac63ecaa5da376e58f967d65f951544f63e09c3f0f1af",
+}
+
 ALLOWED_STATUS = {"PASS", "DIFFERENT", "MISSING", "UNKNOWN"}
 CLASSIFIED_STATUS = ALLOWED_STATUS - {"UNKNOWN"}
 PARSE_CONTRACT_IDS = {
@@ -464,7 +555,7 @@ def validate_classification_receipt(
             die(f"{context}.observation receipt lacks a pinned candidate source identity")
         executable_field = (
             "probe_sha256"
-            if row_id == SERIALIZATION_CONTRACT_ID
+            if row_id in {SERIALIZATION_CONTRACT_ID, SEQUENCE_ORDER_CONTRACT_ID}
             else "executable_sha256"
         )
         executable_sha256 = require_sha256(
@@ -895,6 +986,100 @@ def validate_serialization_classification_semantics(
             )
 
 
+def validate_sequence_order_classification_semantics(
+    status: str,
+    original_receipt: dict[str, object],
+    candidate_receipt: dict[str, object],
+    comparison: dict[str, object],
+) -> None:
+    """Require an exact scoped order match for the frozen single-sequence fixture."""
+    if status != "PASS":
+        die(
+            f"{SEQUENCE_ORDER_CONTRACT_ID} currently supports only the "
+            "evidence-backed PASS verdict"
+        )
+
+    if original_receipt.get("original_psycle_observed") is not True:
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} original Psycle was not observed")
+    if original_receipt.get("load_result") != "accepted":
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} original fixture load was not accepted")
+    if original_receipt.get("ui_automation_diagnostics") != []:
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} original UI observation is contaminated")
+    if original_receipt.get("runtime_identity_diagnostics") != []:
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} original runtime identity is contaminated")
+
+    sequence_ui = original_receipt.get("sequence_order_ui")
+    if not isinstance(sequence_ui, dict):
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} original receipt lacks sequence_order_ui")
+    stable_polls = sequence_ui.get("stable_polls")
+    if (
+        not isinstance(stable_polls, int)
+        or isinstance(stable_polls, bool)
+        or stable_polls < 4
+    ):
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} original order observation is not stable")
+    if sequence_ui.get("result") != "observed":
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} original order was not observed")
+    if sequence_ui.get("expected_labels") != EXPECTED_SEQUENCE_ORDER_UI_LABELS:
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} original expected labels changed")
+    if sequence_ui.get("observed_labels") != EXPECTED_SEQUENCE_ORDER_UI_LABELS:
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} original observed order changed")
+    if sequence_ui.get("matches_fixture_expected") is not True:
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} original order does not match the fixture")
+
+    if candidate_receipt.get("exit_code") != 0:
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} candidate probe did not exit cleanly")
+    if candidate_receipt.get("observation") != "sequence-model-observed":
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} candidate model order was not observed")
+    if candidate_receipt.get("fixture_expected_order") != EXPECTED_SEQUENCE_ORDER:
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} candidate expected order changed")
+    if (
+        candidate_receipt.get("fixture_expected_ui_labels")
+        != EXPECTED_SEQUENCE_ORDER_UI_LABELS
+    ):
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} candidate expected UI labels changed")
+    if candidate_receipt.get("observed_play_order") != EXPECTED_SEQUENCE_ORDER:
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} candidate observed order changed")
+
+    sequence_lines = candidate_receipt.get("observed_sequence_lines")
+    if not isinstance(sequence_lines, list) or len(sequence_lines) != 2:
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} candidate sequence model is not canonical")
+    master, musical = sequence_lines
+    if (
+        not isinstance(master, dict)
+        or master.get("line_index") != 0
+        or master.get("entries")
+        != [{"position": 0.0, "pattern_id": -1, "pattern_name": "master"}]
+    ):
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} candidate Master line changed")
+    if not isinstance(musical, dict) or musical.get("line_index") != 1:
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} candidate musical line changed")
+    musical_entries = musical.get("entries")
+    if not isinstance(musical_entries, list):
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} candidate musical entries are missing")
+    if [entry.get("pattern_id") for entry in musical_entries if isinstance(entry, dict)] != EXPECTED_SEQUENCE_ORDER:
+        die(f"{SEQUENCE_ORDER_CONTRACT_ID} candidate musical entry order changed")
+
+    expected_bindings = {
+        "original_load_result": "accepted",
+        "original_sequence_order_result": "observed",
+        "original_observed_labels": EXPECTED_SEQUENCE_ORDER_UI_LABELS,
+        "original_matches_fixture_expected": True,
+        "candidate_observation": "sequence-model-observed",
+        "candidate_exit_code": 0,
+        "candidate_observed_play_order": EXPECTED_SEQUENCE_ORDER,
+        "expected_play_order": EXPECTED_SEQUENCE_ORDER,
+        "expected_ui_labels": EXPECTED_SEQUENCE_ORDER_UI_LABELS,
+        "order_mapping_matches": True,
+    }
+    for field, expected in expected_bindings.items():
+        if comparison.get(field) != expected:
+            die(
+                f"{SEQUENCE_ORDER_CONTRACT_ID}.comparison receipt {field} "
+                "does not bind the underlying order observations"
+            )
+
+
 def validate_comparison_receipt(
     row: dict[str, object],
     row_id: str,
@@ -1027,7 +1212,7 @@ def validate_comparison_receipt(
         )
     candidate_executable_field = (
         "probe_sha256"
-        if row_id == SERIALIZATION_CONTRACT_ID
+        if row_id in {SERIALIZATION_CONTRACT_ID, SEQUENCE_ORDER_CONTRACT_ID}
         else "executable_sha256"
     )
     candidate_executable_sha256 = require_sha256(
@@ -1077,6 +1262,13 @@ def validate_comparison_receipt(
         )
     elif row_id == SERIALIZATION_CONTRACT_ID:
         validate_serialization_classification_semantics(
+            status,
+            original_receipt,
+            candidate_receipt,
+            comparison,
+        )
+    elif row_id == SEQUENCE_ORDER_CONTRACT_ID:
+        validate_sequence_order_classification_semantics(
             status,
             original_receipt,
             candidate_receipt,
