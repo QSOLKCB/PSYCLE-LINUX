@@ -88,10 +88,16 @@ function Invoke-Phase6cSaveAs(
         menu_inventory = @()
         dialog_inventory = @()
         waiting_ui = @()
+        after_save_ui = @()
+        requested_output = $null
         diagnostics = @()
     }
     $diagnostics = [System.Collections.Generic.List[string]]::new()
     try {
+        # Artifact-relative paths use '/', but the native file dialog requires
+        # a Windows filename. Canonicalize separators before assigning it.
+        $OutputPath = [System.IO.Path]::GetFullPath($OutputPath)
+        $result.requested_output = $OutputPath
         if (Test-Path -LiteralPath $OutputPath) { throw "serialization output already exists" }
         New-Item -ItemType Directory -Path ([System.IO.Path]::GetDirectoryName($OutputPath)) -Force | Out-Null
         $Process.Refresh()
@@ -165,6 +171,7 @@ function Invoke-Phase6cSaveAs(
             $Process.Refresh()
             if ($Process.HasExited) { throw "reference exited during save" }
             $scan = Get-UiObservation $Process
+            $result.after_save_ui = @($scan.values)
             if ($scan.diagnostics.Count -gt 0) { throw ($scan.diagnostics -join "; ") }
             $result.dialog_closed = -not (@($scan.values | Where-Object { $_ -ceq "Save As" }).Count)
             $assessment = Get-FixtureUiAssessment $scan.values @([System.IO.Path]::GetFileName($OutputPath))
