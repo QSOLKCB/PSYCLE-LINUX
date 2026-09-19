@@ -35,8 +35,10 @@ def write(path: Path, value) -> None:
 
 
 def child(root: Path, name: str) -> Path:
+    if not isinstance(name,str):
+        raise ValueError('unsafe artifact path')
     p=PurePosixPath(name)
-    if not isinstance(name,str) or p.is_absolute() or '..' in p.parts or '\\' in name:
+    if p.is_absolute() or '..' in p.parts or '\\' in name:
         raise ValueError('unsafe artifact path')
     result=(root/name).resolve()
     result.relative_to(root.resolve())
@@ -61,7 +63,7 @@ def load_module(filename: str):
     return module
 
 
-def outcome(raw: bytes, log: bytes, code, version: int, output: dict | None) -> str:
+def outcome(raw: bytes, log: bytes, code, version: int, output: dict | None, output_bytes: bytes | None = None) -> str:
     # Only completed API calls with clean fixture loading establish save refusal.
     if type(code) is not int or code != 0:
         return 'inconclusive'
@@ -70,7 +72,9 @@ def outcome(raw: bytes, log: bytes, code, version: int, output: dict | None) -> 
         lines=log.decode('utf-8').splitlines()
     except (ValueError, UnicodeError):
         return 'inconclusive'
-    if value.get('schema_version')!=1 or type(value.get('format_version')) is not int or value['format_version']!=version:
+    if not isinstance(value,dict):
+        return 'inconclusive'
+    if type(value.get('schema_version')) is not int or value.get('schema_version')!=1 or type(value.get('format_version')) is not int or value['format_version']!=version:
         return 'inconclusive'
     if value.get('load_returned') is not True or value.get('save_attempted') is not True:
         return 'inconclusive'
@@ -98,8 +102,19 @@ def outcome(raw: bytes, log: bytes, code, version: int, output: dict | None) -> 
     if value.get('save_returned') is False and output is None:
         return 'save-returned-false-without-output'
     if value.get('save_returned') is True and output is not None:
-        return 'saved-output-not-yet-reloaded'
+        # PSY4 is unregistered in this baseline. Unexpected successful PSY4
+        # output needs a separate container validator before interpretation.
+        header={2:b'PSY2SONG',3:b'PSY3SONG'}.get(version)
+        if header and output_bytes and len(output_bytes)>len(header) and output_bytes.startswith(header):
+            return 'saved-output-not-yet-reloaded'
     return 'inconclusive'
+
+
+def source_hashes() -> dict:
+    # Windows checkouts may use CRLF. Bind immutable Git blob bytes, matching
+    # the Linux build inputs, rather than platform checkout line endings.
+    return {p:digest(subprocess.check_output(['git','show','HEAD:'+p],cwd=ROOT))
+            for p in SOURCE_PATHS}
 
 
 def collect(root: Path, probe: Path) -> None:
@@ -107,6 +122,8 @@ def collect(root: Path, probe: Path) -> None:
     load_module('phase6c-candidate-parse.py').validate(root)
     if not probe.is_file() or not os.access(probe,os.X_OK):
         raise ValueError('missing built observation executable')
+    if source_hashes()!={p:digest((ROOT/p).read_bytes()) for p in SOURCE_PATHS}:
+        raise ValueError('Linux probe inputs differ from committed source bytes')
     output_dir=root/'serialization'
     output_dir.mkdir() # Refuse stale output/results.
     receipt={
@@ -114,7 +131,7 @@ def collect(root: Path, probe: Path) -> None:
         'contract':CONTRACT,'evidence_role':'candidate','snapshot':BASELINE,
         'fixture':FIXTURE,'fixture_sha256':FIXTURE_HASH,
         'probe_sha256':digest(probe.read_bytes()),
-        'probe_sources':{p:digest((ROOT/p).read_bytes()) for p in SOURCE_PATHS},
+        'probe_sources':source_hashes(),
         'core_archive_sha256':digest((ROOT/'psycle-cpp-r12005-sanitized/psycle-core/++qmake/libpsycle-core.a').read_bytes()),
         'procedure':'Build a separate probe against the verified historical static core; in one fresh process per format version load the exact PSY3 fixture without playback using PSYCLE_THREADS=1 and call CoreSong::save(path, version) for versions 2, 3 and 4; record API returns, limited before/after state, reports, process result, logs and any new output bytes. No serializer is substituted.',
         'state_scope':'Metadata, timing scalars and occupied machine slots only; not full semantic song state or a round-trip equivalence claim.',
@@ -125,7 +142,10 @@ def collect(root: Path, probe: Path) -> None:
         raw_path=output_dir/f'candidate-v{version}.json'
         log_path=output_dir/f'candidate-v{version}.log'
         env=os.environ.copy();env['PSYCLE_THREADS']='1'
+        env.pop('TERM',None) # Keep the preserved logger's optional ANSI colours disabled.
         try:
+            # No shell is involved: the local build's probe and each argument
+            # are passed separately. Shell quoting would change the filenames.
             run=subprocess.run([str(probe),str(root/FIXTURE),str(version),str(path)],
                                input=b'',capture_output=True,timeout=20,env=env)
             code,raw,log=run.returncode,run.stdout,run.stderr
@@ -134,7 +154,7 @@ def collect(root: Path, probe: Path) -> None:
         raw_path.write_bytes(raw);log_path.write_bytes(log)
         output=binding(root,path) if path.is_file() else None
         receipt['attempts'].append({'format_version':version,'exit_code':code,
-            'observation':outcome(raw,log,code,version,output),
+            'observation':outcome(raw,log,code,version,output,path.read_bytes() if output else None),
             'probe_result':binding(root,raw_path),'log':binding(root,log_path),'output':output})
     write(root/'candidate-serialization.json',receipt)
 
@@ -154,7 +174,7 @@ def validate_candidate(root: Path) -> dict:
     for key in ('probe_sha256','core_archive_sha256'):
         if not re.fullmatch('[0-9a-f]{64}',receipt.get(key,'')):
             raise ValueError('missing executable/core identity')
-    if receipt.get('probe_sources')!={p:digest((ROOT/p).read_bytes()) for p in SOURCE_PATHS}:
+    if receipt.get('probe_sources')!=source_hashes():
         raise ValueError('observation harness/source identity mismatch')
     attempts=receipt.get('attempts')
     if not isinstance(attempts,list) or len(attempts)!=3:
@@ -167,12 +187,14 @@ def validate_candidate(root: Path) -> dict:
                 raise ValueError('format attempt is bound to wrong evidence')
         output=attempt.get('output')
         output_path=root/f'serialization/candidate-v{version}.psy'
+        output_bytes=None
         if output is not None:
-            if output['path']!=output_path.relative_to(root).as_posix() or not bound_bytes(root,output):
+            output_bytes=bound_bytes(root,output)
+            if output['path']!=output_path.relative_to(root).as_posix():
                 raise ValueError('invalid output identity')
         elif output_path.exists():
             raise ValueError('unreported serialization output')
-        expected_result=outcome(bound_bytes(root,attempt['probe_result']),bound_bytes(root,attempt['log']),attempt.get('exit_code'),version,output)
+        expected_result=outcome(bound_bytes(root,attempt['probe_result']),bound_bytes(root,attempt['log']),attempt.get('exit_code'),version,output,output_bytes)
         if attempt.get('observation')!=expected_result:
             raise ValueError('serialization observation does not follow recorded API/process evidence')
     return receipt
@@ -202,7 +224,7 @@ def validate_original(candidate_root: Path, root: Path) -> dict:
         polls=save.get('stable_output_polls')
         if type(polls) is not int or polls<4:
             raise ValueError('save output was not stable')
-        commands=[c for c in save.get('menu_inventory',[]) if c.get('label','').split('\t')[0].replace('&','').strip() in ('Save As...','Save As','Save As…')]
+        commands=[c for c in save.get('menu_inventory',[]) if c.get('label','').split('\t')[0].replace('&','').strip() in ('Save As...','Save As','Save As…','Save as...')]
         if len(commands)!=1 or commands[0].get('enabled') is not True or commands[0].get('menu')!='File':
             raise ValueError('save menu evidence missing or ambiguous')
         controls=save.get('dialog_inventory',[])

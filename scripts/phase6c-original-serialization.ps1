@@ -58,7 +58,7 @@ public static class Phase6cSaveMenu {
         var matches=new List<Command>();
         foreach(var item in Inspect(process,title)) {
             string label=Plain(item.Label);
-            if (label=="Save As..." || label=="Save As" || label=="Save As\u2026") matches.Add(item);
+            if (label=="Save as..." || label=="Save As..." || label=="Save As" || label=="Save As\u2026") matches.Add(item);
         }
         if(matches.Count!=1) return false;
         var command=matches[0];
@@ -101,7 +101,7 @@ function Invoke-Phase6cSaveAs(
             [ordered]@{ title=$_.WindowTitle; menu=$_.Menu; label=$_.Label; id=$_.Id; enabled=$_.Enabled }
         })
         $matches = @($commands | Where-Object {
-            ($_.Label.Split("`t")[0].Replace("&", "").Trim()) -cin @("Save As...", "Save As", "Save As…")
+            ($_.Label.Split("`t")[0].Replace("&", "").Trim()) -cin @("Save As...", "Save As", "Save As…", "Save as...")
         })
         if ($matches.Count -ne 1 -or -not $matches[0].Enabled) { throw "Save As menu signature missing, disabled or ambiguous" }
         $result.command_verified = $true

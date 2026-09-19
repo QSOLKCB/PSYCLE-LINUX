@@ -16,8 +16,8 @@ STATE={'name':'PSYCLE-LINUX Phase 4 synthetic fixture','author':'test','comment'
 RAW={'schema_version':1,'load_returned':True,'save_attempted':True,'format_version':3,'save_returned':False,'state_before':STATE.copy(),'state_after':STATE.copy(),'reports':['Load Warning: '+m.WARNING]}
 
 class Candidate(unittest.TestCase):
-    def result(self,raw=None,code=0,log=b'',output=None,version=3):
-        return m.outcome(json.dumps(RAW if raw is None else raw).encode(),log,code,version,output)
+    def result(self,raw=None,code=0,log=b'',output=None,version=3,output_bytes=None):
+        return m.outcome(json.dumps(RAW if raw is None else raw).encode(),log,code,version,output,output_bytes)
     def test_refusal_is_observation_not_parity(self):
         self.assertEqual(self.result(),'save-returned-false-without-output')
     def test_timeout_signal_and_invalid_exit(self):
@@ -32,7 +32,11 @@ class Candidate(unittest.TestCase):
         self.assertEqual(self.result(output={'path':'output.psy'}),'inconclusive')
         data=copy.deepcopy(RAW);data['save_returned']=True
         self.assertEqual(self.result(data),'inconclusive')
-        self.assertEqual(self.result(data,output={'path':'output.psy'}),'saved-output-not-yet-reloaded')
+        self.assertEqual(self.result(data,output={'path':'output.psy'},output_bytes=b'PSY3SONG synthetic'),'saved-output-not-yet-reloaded')
+    def test_invalid_saved_bytes_remain_inconclusive(self):
+        data=copy.deepcopy(RAW);data['save_returned']=True
+        for content in (None,b'',b'PSY3SONG',b'unrelated file',b'PSY2SONG wrong format'):
+            self.assertEqual(self.result(data,output={'path':'output.psy'},output_bytes=content),'inconclusive')
     def test_reports_and_state_changes_block_refusal(self):
         data=copy.deepcopy(RAW);data['reports'].append('Song Load Error: missing chunks')
         self.assertEqual(self.result(data),'inconclusive')
@@ -89,6 +93,9 @@ class Original(unittest.TestCase):
         self.assertEqual(result['parity_status'],'UNKNOWN')
         self.assertEqual(result['semantic_roundtrip'],'not-measured')
         self.assertFalse(result['byte_identity'])
+    def test_observed_original_menu_spelling(self):
+        self.save['menu_inventory'][0]['label']='Save &as...'
+        self.assertEqual(self.run_validation()['save'],'saved')
     def test_missing_action_or_stable_output_blocks_saved(self):
         for key in ('command_verified','path_set','save_invoked','dialog_closed'):
             self.save[key]=False

@@ -32,7 +32,9 @@ no output is named `save-returned-false-without-output`, not a parity verdict.
 Crashes, timeouts, failed loads, or diagnostic contamination remain inconclusive.
 
 `candidate-serialization.json` binds the exact fixture, core archive, probe
-executable, harness/build source, API records, logs, and outputs. The executable
+executable, harness/build source, API records, logs, and outputs. Source hashes
+use committed Git blob bytes so Windows checkout line endings cannot change
+the identity; collection also checks the Linux build inputs against those bytes. The executable
 and generated build staging are removed after collection.
 
 ## Original observation
@@ -44,6 +46,8 @@ On a clean, stable PSY3 load, it:
 
 1. Enumerates the exact PID/title-owned native File menu and requires exactly one
    enabled Save As command; re-enumerates immediately before dispatch.
+   The pinned 1.12.0 menu spells this `Save &as...` (observed in run
+   `35435580682`); this exact signature is accepted alongside the standard spelling.
 2. Requires one process-owned Save As dialog, one enabled filename edit with its
    known common-dialog identifier, and one enabled Save button.
 3. Sets and verifies a fresh output path, invokes Save, and records dialog
