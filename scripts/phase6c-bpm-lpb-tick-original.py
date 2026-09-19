@@ -56,6 +56,10 @@ def main() -> int:
         else load(ROOT / "scripts" / name, name)
     )
     result = evidence.validate_original(Path(sys.argv[1]), Path(sys.argv[2]))
+    if result.get("timing_result") != "observed":
+        raise ValueError(
+            "timing observation workflow requires an observed original timing result"
+        )
     print(json.dumps(result, sort_keys=True))
     return 0
 
