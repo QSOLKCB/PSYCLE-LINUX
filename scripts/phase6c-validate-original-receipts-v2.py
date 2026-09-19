@@ -523,7 +523,7 @@ def validate_pair(
         die(f"original-{name}.procedure must be non-empty")
     if EXPECTED_VC90_REDISTRIBUTABLE_SHA256 not in procedure:
         die(f"original-{name}.procedure does not bind the pinned VC90 runtime")
-    if name == "psy3":
+    if name in {"psy3", "sequence-order"}:
         if LOAD_WARNING_PROCEDURE_MARKER not in procedure:
             die(f"original-{name}.procedure does not describe the PSY3 load-warning bootstrap")
         if EXPECTED_LOAD_WARNING_MESSAGE not in procedure:
@@ -887,7 +887,7 @@ def validate_pair(
         if result != "inconclusive":
             die(f"original-{name} failed DirectSound bootstrap must force an inconclusive result")
 
-    expected_warning_required = name == "psy3"
+    expected_warning_required = name in {"psy3", "sequence-order"}
     load_warning = None
     if fixture_bootstrap is None:
         if expected_warning_required:
