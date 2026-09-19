@@ -553,6 +553,29 @@ def validate_source(root: Path) -> dict:
         "set_lpb_range": [0x00, 0x1F],
     }:
         raise ValueError("original-source command IDs changed")
+    if receipt.get("semantics") != {
+        "note_delay_counter": "((parameter+1)*SamplesPerRow())/256",
+        "retrigger_rate": "parameter+1",
+        "retr_cont_rate_override": "parameter high nibble when nonzero",
+        "extended_lpb": "FE00..FE1F calls SetBPM(-1, parameter)",
+    }:
+        raise ValueError("original-source command semantics changed")
+    files = receipt.get("files")
+    expected_blobs = {
+        "psycle/src/psycle/host/Player.cpp": PLAYER_BLOB,
+        "psycle/src/psycle/host/SongStructs.hpp": SONGSTRUCTS_BLOB,
+    }
+    if not isinstance(files, dict) or set(files) != set(expected_blobs):
+        raise ValueError("original-source file inventory changed")
+    for path, expected_blob in expected_blobs.items():
+        mapping = files.get(path)
+        if (
+            not isinstance(mapping, dict)
+            or mapping.get("git_blob") != expected_blob
+            or not isinstance(mapping.get("sha256"), str)
+            or re.fullmatch(r"[0-9a-f]{64}", mapping["sha256"]) is None
+        ):
+            raise ValueError("original-source file identity changed: " + path)
     return receipt
 
 
