@@ -105,6 +105,17 @@ class CandidateParser(unittest.TestCase):
         value["retrigger_events"].pop()
         self.assertEqual(self.parse(value)["observation"], "inconclusive")
 
+    def test_scheduled_tracks_are_bound_to_fixture_lanes(self):
+        for field, expected_track in (
+            ("note_delay_events", 0),
+            ("retrigger_events", 1),
+            ("retr_cont_events", 2),
+        ):
+            with self.subTest(field=field):
+                value = valid_value()
+                value[field][0]["track"] = expected_track + 99
+                self.assertEqual(self.parse(value)["observation"], "inconclusive")
+
     def test_retr_cont_series_is_rederived(self):
         value = valid_value()
         value["retr_cont_events"][1]["offset"] += 0.001
@@ -169,11 +180,9 @@ class OriginalSourceContract(unittest.TestCase):
                 "files": {
                     "psycle/src/psycle/host/Player.cpp": {
                         "git_blob": m.PLAYER_BLOB,
-                        "sha256": "0" * 64,
                     },
                     "psycle/src/psycle/host/SongStructs.hpp": {
                         "git_blob": m.SONGSTRUCTS_BLOB,
-                        "sha256": "1" * 64,
                     },
                 },
                 "original_psycle_executed": False,
@@ -185,6 +194,13 @@ class OriginalSourceContract(unittest.TestCase):
             self.assertEqual(
                 m.validate_source(root)["source_commit"], m.SOURCE_COMMIT
             )
+            receipt["files"]["psycle/src/psycle/host/Player.cpp"]["git_blob"] = "0" * 40
+            (root / "original-source-delayed-retrigger.json").write_text(
+                json.dumps(receipt)
+            )
+            with self.assertRaises(ValueError):
+                m.validate_source(root)
+            receipt["files"]["psycle/src/psycle/host/Player.cpp"]["git_blob"] = m.PLAYER_BLOB
             receipt["command_ids"]["note_delay"] = 0
             (root / "original-source-delayed-retrigger.json").write_text(
                 json.dumps(receipt)
