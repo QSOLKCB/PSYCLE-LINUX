@@ -4,6 +4,8 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import types
 import unittest
@@ -193,5 +195,64 @@ class Original(unittest.TestCase):
         self.assertIsNone(self.run_validation()['reopen'])
         self.save['diagnostics']=[]
         with self.assertRaises(ValueError):self.run_validation()
+
+
+class MatrixSerialization(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.root=Path(self.temp.name)
+        shutil.copytree(ROOT/'phase6c',self.root/'phase6c')
+        (self.root/'scripts').mkdir()
+        for name in ('phase6c-validate-matrix.py','phase6c-candidate-parse.py'):
+            shutil.copyfile(ROOT/'scripts'/name,self.root/'scripts'/name)
+        self.evidence=self.root/'phase6c/evidence/project-io-serialization-roundtrip'
+
+    def check(self,success):
+        result=subprocess.run(
+            ['python3','scripts/phase6c-validate-matrix.py'],
+            cwd=self.root,capture_output=True,text=True
+        )
+        self.assertEqual(result.returncode==0,success,result.stdout+result.stderr)
+
+    def mutate(self,name,change):
+        path=self.evidence/name
+        data=json.loads(path.read_text())
+        change(data)
+        path.write_text(json.dumps(data))
+
+    def test_versioned_missing_classification_validates(self):
+        self.check(True)
+
+    def test_comparison_must_bind_clean_refusals(self):
+        self.mutate('comparison.json',lambda d:d['candidate_attempts'][1].update(exit_code=1))
+        self.check(False)
+
+    def test_original_reopen_acceptance_is_required(self):
+        self.mutate('serialization-save.json',lambda d:d.update(reopen_result='inconclusive'))
+        self.check(False)
+
+    def test_component_receipt_bindings_are_frozen(self):
+        self.mutate(
+            'serialization-save.json',
+            lambda d:d['source_evidence']['component_receipts']['reopen'].update(sha256='0'*64)
+        )
+        self.check(False)
+
+    def test_missing_flag_cannot_be_dropped(self):
+        self.mutate('comparison.json',lambda d:d.update(candidate_missing_capability=False))
+        self.check(False)
+
+    def test_semantic_roundtrip_cannot_be_promoted_by_classification(self):
+        self.mutate('serialization-save.json',lambda d:d.update(semantic_roundtrip='measured'))
+        self.mutate('comparison.json',lambda d:d.update(semantic_roundtrip='measured'))
+        self.check(False)
+
+    def test_save_capability_gap_cannot_be_relabelled_different(self):
+        matrix_path=self.root/'phase6c/compatibility-matrix.json'
+        matrix=json.loads(matrix_path.read_text())
+        next(r for r in matrix['contracts'] if r['id']==m.CONTRACT)['status']='DIFFERENT'
+        matrix_path.write_text(json.dumps(matrix))
+        self.mutate('comparison.json',lambda d:d.update(verdict='DIFFERENT'))
+        self.check(False)
 
 if __name__=='__main__':unittest.main()

@@ -2,7 +2,7 @@
 
 ## Status
 
-**Phase 6C active — PSY2 and PSY3 parse/load acceptance are PASS for their exact hash-bound fixtures/procedures; 18 contracts remain UNKNOWN.**
+**Phase 6C active — PSY2 and PSY3 parse/load acceptance are PASS and serialization/save capability is MISSING for the exact hash-bound PSY3 operation; 17 contracts remain UNKNOWN.**
 
 This document is the human-readable view of the machine-readable contract in [`phase6c/compatibility-matrix.json`](phase6c/compatibility-matrix.json). The matrix compares three separately identified evidence sources:
 
@@ -12,7 +12,7 @@ This document is the human-readable view of the machine-readable contract in [`p
 
 Phase 6B is complete. The sanitized C++ source is committed under `psycle-cpp-r12005-sanitized/`, the historical qmake path builds `psycle-player` on Ubuntu 24.04, the missing historical support inputs are staged with pinned identities, and the final Phase 6B historical-player CI run completed successfully.
 
-Phase 6C has now crossed from evidence collection into evidence-backed classification. Versioned original/candidate comparisons classify PSY2 and PSY3 parse/load acceptance for one fixture each; broader Project I/O semantics remain open.
+Phase 6C has crossed from evidence collection into evidence-backed classification. Versioned original/candidate comparisons classify PSY2 and PSY3 parse/load acceptance for one fixture each and classify the tested PSY3 serialization/save capability as MISSING. Byte identity and complete semantic round-trip state are explicitly outside that save-capability verdict.
 
 ## Evidence rule
 
@@ -39,7 +39,7 @@ Candidate-only or C-Psycle-only observations may be useful and may expose implem
 
 | Role | Identity | Status |
 | --- | --- | --- |
-| Original Psycle | `Psycle 1.12.0 x86 / PsycleInstallerx86-1.12.0.exe` — 9,322,919 bytes — SHA-256 `f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769` | **PINNED**; executable is not redistributed; PSY2/PSY3 parse/load acceptance is versioned and classified, broader behavioural observations remain open |
+| Original Psycle | `Psycle 1.12.0 x86 / PsycleInstallerx86-1.12.0.exe` — 9,322,919 bytes — SHA-256 `f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769` | **PINNED**; executable is not redistributed; PSY2/PSY3 parse/load acceptance and the scoped Save As/fresh-reopen capability are versioned, broader behavioural observations remain open |
 | Candidate C++ | SourceForge SVN r12005 sanitized Phase 6B baseline `00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a` | **IMPORTED / BUILDABLE** |
 | Historical player build | Ubuntu 24.04 qmake build; Phase 6B run `35196962690` | **PASS** as a build/runtime smoke, not an original-Psycle parity claim |
 | C-Psycle oracle | repository baseline `cpsycle-r12005-baseline` plus merged Phase 2–5 regressions | **AVAILABLE** |
@@ -87,7 +87,7 @@ playback, serialized state, clean termination, or general PSY3 support.
 | --- | --- | --- | --- | --- | --- |
 | PSY2 parsing | [`original-psy2.json`](phase6c/evidence/project-io-psy2-parse/original-psy2.json): pinned 1.12.0 accepted the exact fixture with stable marker evidence and no harness/runtime diagnostic | [`candidate-psy2.json`](phase6c/evidence/project-io-psy2-parse/candidate-psy2.json): pinned r12005 player loaded the same fixture and exited 0 | yes; project fixture exists | PASS | expand separately to serialization, state/playback semantics and additional PSY2 fixtures; see [`comparison.json`](phase6c/evidence/project-io-psy2-parse/comparison.json) |
 | PSY3 parsing | [`original-psy3.json`](phase6c/evidence/project-io-psy3-parse/original-psy3.json): pinned 1.12.0 accepted the exact fixture after verified `Load Warning` dismissal, with 40 stable marker polls | [`candidate-psy3-parse.json`](phase6c/evidence/project-io-psy3-parse/candidate-psy3-parse.json): ordered load markers and scoped diagnostics establish parse acceptance; raw process evidence remains `timeout` / exit `124` | yes; project fixture exists | PASS | serialization/state/playback remain separate; see [`comparison.json`](phase6c/evidence/project-io-psy3-parse/comparison.json) |
-| Serialization / round-trip | guarded Save As and fresh-process reopen observation lane added; result requires recorded evidence | separate probe invokes public save API for formats 2/3/4; source shows legacy save stubs and unregistered PSY4 writer | yes | UNKNOWN | validate/version observed capability and state evidence separately from byte identity; see [serialization contract](phase6c/SERIALIZATION.md) |
+| Serialization / round-trip | [`serialization-save.json`](phase6c/evidence/project-io-serialization-roundtrip/serialization-save.json): pinned 1.12.0 saved the exact PSY3 input to a fresh PSY3 output and a fresh process accepted it | [`candidate-serialization.json`](phase6c/evidence/project-io-serialization-roundtrip/candidate-serialization.json): `CoreSong::save` versions 2, 3 and 4 each returned false, emitted no output and exited 0 | yes | MISSING | implement the evidenced save capability in Phase 7, then measure semantic round-trip state separately; see [`comparison.json`](phase6c/evidence/project-io-serialization-roundtrip/comparison.json) |
 | Malformed-file behaviour | pending | pending | partial | UNKNOWN | define rejection/recovery fixtures and original behaviour |
 | Sequence / pattern order | pending | pending | partial | UNKNOWN | original sequence semantics are authoritative |
 | BPM / LPB / tick timing | pending | pending | partial | UNKNOWN | capture deterministic timing receipts from original |
@@ -154,10 +154,14 @@ Phase 6 separates engine gaps from UI gaps. The absence of a full tracker UI in 
 Phase 6C now justifies this evidence backlog:
 
 1. keep the machine-readable matrix and validation gate green;
-2. preserve the first classified PSY2 parse receipt/verdict and keep its scoped PASS mechanically validated;
-3. preserve the classified PSY3 parse comparison from run `35364406445`, including its separate timeout evidence; next collect original save/reopen and candidate round-trip observations for serialization, with semantic state and bytes recorded separately;
-4. classify only additional rows for which versioned original + candidate receipts and a comparison verdict are sufficient;
-5. expand to timing, tracker commands, routing, sampler, native-state, WAV and render fixtures in that order as evidence becomes reproducible;
-6. generate the first Phase 7 behavioural backlog only from confirmed `DIFFERENT` / `MISSING` results.
+2. preserve the scoped PSY2 and PSY3 parse/load PASS comparisons, including the PSY3 timeout as a separate process-lifetime result;
+3. preserve the scoped serialization/save MISSING comparison from final PR #63 run `35439069516`; byte identity and complete semantic round-trip state remain separate;
+4. move the next Phase 6C observation slice to sequence/pattern order, followed by timing, tracker commands, routing, sampler, native-state, WAV and render contracts as evidence becomes reproducible;
+5. classify only additional rows for which versioned original + candidate receipts and a comparison verdict are sufficient;
+6. extend Phase 7 only from confirmed `DIFFERENT` / `MISSING` results.
+
+### First Phase 7 implementation backlog
+
+The first evidence-backed engine item is now frozen: add the missing candidate PSY3 serialization/save capability required to perform the tested original Save As operation and produce an output that can be reopened. Byte-for-byte identity is not required by this backlog item, and complete semantic state preservation must be measured separately after the candidate can actually serialize.
 
 No Phase 7 engine change is justified merely because C-Psycle and the C++ candidate differ. Original Psycle remains the compatibility target.

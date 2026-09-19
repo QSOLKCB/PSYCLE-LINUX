@@ -1,9 +1,11 @@
 # Phase 6C serialization observation contract
 
-The next evidence slice after PR #62 measures the pinned candidate's public save
-API and original Psycle 1.12.0's Save As/fresh-reopen operation. The matrix row
-`project-io-serialization-roundtrip` remains **UNKNOWN** until a versioned
-comparison establishes a specific compatibility result.
+The evidence slice after PR #62 measures the pinned candidate's public save
+API and original Psycle 1.12.0's Save As/fresh-reopen operation. The versioned
+comparison committed after PR #63 now classifies the required save capability
+for `project-io-serialization-roundtrip` as **MISSING** for the exact tested
+PSY3 fixture. Byte identity and complete semantic round-trip state remain
+separate from that verdict.
 
 ## Candidate observation
 
@@ -99,9 +101,10 @@ python3 scripts/phase6c-serialization-evidence.py original candidate-artifact or
 python3 tests/phase6c_serialization.py
 ```
 
-The next classification must distinguish an absent serialization capability
-from differences in serialized bytes and from semantic state preservation.
-Neither a successful save nor an accepted reopen by itself proves the latter.
+The classification distinguishes an absent serialization capability from
+differences in serialized bytes and from semantic state preservation. Neither a
+successful save nor an accepted reopen by itself proves complete semantic
+round-trip equivalence.
 
 ## First paired runtime observation
 
@@ -136,6 +139,27 @@ role, contract, path, SHA-256 and PSY3 header. The unchanged archived pair passe
 the updated artifact validator and full save/reopen validation. The native
 observer and raw receipts were not changed to obtain this validation result.
 
-The next slice is a versioned comparison of the now-observed save capability gap,
-with the contract distinguished from byte equality and complete semantic state.
-No serializer implementation or Phase 7 convergence change is included here.
+## Versioned capability comparison
+
+Final PR #63 run `35439069516` at head
+`b6c3a7d4f026200477929c96d641592ef52384c2` reproduced the paired observation
+under the hardened diagnostic allowlist:
+
+- candidate artifact `10582559462`, job `105886634634`, digest
+  `sha256:441854e0595636b5cb12b45bf8711a07f27d4fdacbca2c2b0468be89282427f8`;
+- original artifact `10582734339`, job `105886881848`, digest
+  `sha256:d29a7be85441a4c73df80861d0a4686b73b1d76613f2ddfead5690ac3e9daba5`.
+
+The committed comparison in
+`phase6c/evidence/project-io-serialization-roundtrip/comparison.json` binds
+those artifacts and classifies **MISSING** because original Psycle saved the
+exact PSY3 input and accepted the saved PSY3 in a fresh process, while the
+candidate's directly comparable version-3 `CoreSong::save` request returned
+false and produced no output. Versions 2 and 4 independently recorded the same
+clean refusal.
+
+The original saved bytes differ from the input. That fact is recorded but is
+not part of the MISSING criterion. Complete semantic round-trip state remains
+`not-measured`; it must be tested after Phase 7 supplies the missing save
+capability. The comparison freezes the first evidence-backed Phase 7 backlog
+item; it does not itself modify the serializer.
