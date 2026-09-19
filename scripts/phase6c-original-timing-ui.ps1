@@ -23,6 +23,141 @@ function Get-Phase6cTimingInteger([object]$Element) {
     return $null
 }
 
+function Find-Phase6cSongInformationDialogs(
+    [System.Diagnostics.Process]$Process,
+    [System.Windows.Automation.AutomationElement]$Desktop
+) {
+    $diagnostics = [System.Collections.Generic.List[string]]::new()
+    $matches = [System.Collections.Generic.List[object]]::new()
+    $requiredLabels = @(
+        "Tempo",
+        "Lines per beat",
+        "Ticks per beat",
+        "Extra tick per line",
+        "Real tempo",
+        "Real ticks per beat"
+    )
+
+    try {
+        $processCondition = [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+            $Process.Id
+        )
+        $windows = $Desktop.FindAll(
+            [System.Windows.Automation.TreeScope]::Children,
+            $processCondition
+        )
+        $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+
+        foreach ($window in $windows) {
+            $nodes = [System.Collections.Generic.List[object]]::new()
+            $nodes.Add($window)
+            try {
+                foreach ($node in $window.FindAll(
+                    [System.Windows.Automation.TreeScope]::Descendants,
+                    [System.Windows.Automation.Condition]::TrueCondition
+                )) {
+                    $nodes.Add($node)
+                }
+            }
+            catch {
+                $diagnostics.Add(
+                    "timing dialog finder traversal failed: $($_.Exception.Message)"
+                )
+                continue
+            }
+
+            foreach ($node in $nodes) {
+                $name = ""
+                try { $name = [string]$node.Current.Name }
+                catch {
+                    $diagnostics.Add(
+                        "timing dialog finder element read failed: $($_.Exception.Message)"
+                    )
+                    continue
+                }
+                if ($name -cne "Song Information") {
+                    continue
+                }
+
+                $scope = $node
+                for ($depth = 0; $depth -lt 8 -and $null -ne $scope; $depth += 1) {
+                    $names = [System.Collections.Generic.HashSet[string]]::new(
+                        [System.StringComparer]::Ordinal
+                    )
+                    try {
+                        $scopeName = [string]$scope.Current.Name
+                        if (-not [string]::IsNullOrWhiteSpace($scopeName)) {
+                            [void]$names.Add($scopeName)
+                        }
+                        foreach ($descendant in $scope.FindAll(
+                            [System.Windows.Automation.TreeScope]::Descendants,
+                            [System.Windows.Automation.Condition]::TrueCondition
+                        )) {
+                            try {
+                                $descendantName = [string]$descendant.Current.Name
+                                if (-not [string]::IsNullOrWhiteSpace($descendantName)) {
+                                    [void]$names.Add($descendantName)
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    catch {
+                        break
+                    }
+
+                    $hasAllLabels = $true
+                    foreach ($label in $requiredLabels) {
+                        if (-not $names.Contains($label)) {
+                            $hasAllLabels = $false
+                            break
+                        }
+                    }
+                    if ($hasAllLabels) {
+                        $duplicate = $false
+                        foreach ($existing in $matches) {
+                            if ([System.Windows.Automation.Automation]::Compare(
+                                    $existing, $scope)) {
+                                $duplicate = $true
+                                break
+                            }
+                        }
+                        if (-not $duplicate) {
+                            $matches.Add($scope)
+                        }
+                        break
+                    }
+
+                    $parent = $null
+                    try { $parent = $walker.GetParent($scope) }
+                    catch { break }
+                    if ($null -eq $parent) {
+                        break
+                    }
+                    try {
+                        if ([int]$parent.Current.ProcessId -ne $Process.Id) {
+                            break
+                        }
+                    }
+                    catch { break }
+                    $scope = $parent
+                }
+            }
+        }
+    }
+    catch {
+        $diagnostics.Add(
+            "timing dialog finder UI Automation failed: $($_.Exception.Message)"
+        )
+    }
+
+    return [ordered]@{
+        matches = $matches.ToArray()
+        diagnostics = @($diagnostics | Select-Object -Unique)
+    }
+}
+
 function Open-Phase6cSongInformationDialog([System.Diagnostics.Process]$Process) {
     $diagnostics = [System.Collections.Generic.List[string]]::new()
     $result = [ordered]@{
@@ -55,24 +190,13 @@ function Open-Phase6cSongInformationDialog([System.Diagnostics.Process]$Process)
         )
 
         $findDialogs = {
-            $found = [System.Collections.Generic.List[object]]::new()
-            $windows = $desktop.FindAll(
-                [System.Windows.Automation.TreeScope]::Children,
-                $processCondition
-            )
-            foreach ($window in $windows) {
-                try {
-                    if ([string]$window.Current.Name -ceq "Song Information") {
-                        $found.Add($window)
-                    }
-                }
-                catch {
-                    $diagnostics.Add(
-                        "timing dialog bootstrap top-level window read failed: $($_.Exception.Message)"
-                    )
+            $found = Find-Phase6cSongInformationDialogs $Process $desktop
+            foreach ($diagnostic in @($found.diagnostics)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
+                    $diagnostics.Add([string]$diagnostic)
                 }
             }
-            return $found.ToArray()
+            return @($found.matches)
         }
 
         $findMenuItems = {
@@ -292,31 +416,23 @@ function Get-Phase6cTimingUiObservation([System.Diagnostics.Process]$Process) {
             $result.diagnostics = $diagnostics.ToArray()
             return $result
         }
-        $processCondition = [System.Windows.Automation.PropertyCondition]::new(
-            [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
-            $Process.Id
-        )
-        $windows = $desktop.FindAll(
-            [System.Windows.Automation.TreeScope]::Children,
-            $processCondition
-        )
-        $matches = [System.Collections.Generic.List[object]]::new()
-        foreach ($window in $windows) {
-            try {
-                if ([string]$window.Current.Name -ceq 'Song Information') {
-                    $matches.Add($window)
-                }
+        $dialogSearch = Find-Phase6cSongInformationDialogs $Process $desktop
+        foreach ($diagnostic in @($dialogSearch.diagnostics)) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic)) {
+                $diagnostics.Add([string]$diagnostic)
             }
-            catch {
-                $diagnostics.Add("timing observer top-level window read failed: $($_.Exception.Message)")
-            }
+        }
+        $matches = @($dialogSearch.matches)
+        if ($diagnostics.Count -gt 0) {
+            $result.diagnostics = @($diagnostics | Select-Object -Unique)
+            return $result
         }
         if ($matches.Count -eq 0) {
             return $result
         }
         $result.window_seen = $true
         if ($matches.Count -ne 1) {
-            $diagnostics.Add("timing observer expected exactly one Song Information window: count=$($matches.Count)")
+            $diagnostics.Add("timing observer expected exactly one Song Information scope: count=$($matches.Count)")
             $result.diagnostics = $diagnostics.ToArray()
             return $result
         }
