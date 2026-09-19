@@ -128,6 +128,45 @@ class CandidateProbe(unittest.TestCase):
         self.assertEqual(result["observation"], "inconclusive")
         self.assertEqual(result["play_order"], [])
 
+    def test_missing_master_line_is_inconclusive(self):
+        bad = copy.deepcopy(RAW)
+        bad["sequence_lines"] = [bad["sequence_lines"][1]]
+        bad["sequence_lines"][0]["line_index"] = 0
+        result = self.derive(bad)
+        self.assertEqual(result["observation"], "inconclusive")
+        self.assertEqual(result["play_order"], [])
+
+    def test_duplicate_master_lines_are_inconclusive(self):
+        bad = copy.deepcopy(RAW)
+        duplicate = copy.deepcopy(bad["sequence_lines"][0])
+        duplicate["line_index"] = 1
+        bad["sequence_lines"].insert(1, duplicate)
+        bad["sequence_lines"][2]["line_index"] = 2
+        result = self.derive(bad)
+        self.assertEqual(result["observation"], "inconclusive")
+        self.assertEqual(result["play_order"], [])
+
+    def test_master_entry_must_be_exactly_canonical(self):
+        mutations = (
+            ("position", 1.0),
+            ("pattern_name", "Master"),
+        )
+        for field, value in mutations:
+            bad = copy.deepcopy(RAW)
+            bad["sequence_lines"][0]["entries"][0][field] = value
+            with self.subTest(field=field):
+                result = self.derive(bad)
+                self.assertEqual(result["observation"], "inconclusive")
+                self.assertEqual(result["play_order"], [])
+
+        bad = copy.deepcopy(RAW)
+        bad["sequence_lines"][0]["entries"].append(
+            {"position": 1.0, "pattern_id": -1, "pattern_name": "master"}
+        )
+        result = self.derive(bad)
+        self.assertEqual(result["observation"], "inconclusive")
+        self.assertEqual(result["play_order"], [])
+
     def test_wrong_song_or_reports_are_inconclusive(self):
         for field, value in (
             ("song_name", "other"),
@@ -201,6 +240,11 @@ class OriginalSequenceOrder(unittest.TestCase):
         self.assertEqual(result["observed_labels"], labels)
         self.assertFalse(result["matches_fixture_expected"])
         self.assertEqual(result["parity_status"], "UNKNOWN")
+
+    def test_observed_order_requires_clean_accepted_load(self):
+        for load_result in ("inconclusive", "rejected"):
+            with self.subTest(load_result=load_result), self.assertRaises(ValueError):
+                self.run_validation(load_result)
 
     def test_unstable_or_partial_order_cannot_be_conclusive(self):
         for labels, polls in (
