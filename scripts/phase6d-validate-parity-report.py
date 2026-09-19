@@ -179,18 +179,50 @@ def main() -> int:
             f"expected exactly {unknown_count}, found {unknown_matches}"
         )
 
+    # Validate the sequence-order claim as a whole clause, not by finding one
+    # favorable token. A summary such as "sequence/pattern order are scoped PASS
+    # results but remain UNKNOWN" is contradictory and must fail closed.
+    status_summary_lines = [
+        line.strip() for line in status_section.splitlines() if line.strip()
+    ]
+    if not status_summary_lines:
+        die("status summary is empty")
+    status_summary = status_summary_lines[0].strip("*").strip()
+
     sequence_row = next(
         row for row in contracts if row.get("id") == "sequencer-pattern-order"
     )
-    sequence_pass_claim = re.search(
-        r"sequence/pattern order"
-        r"(?:\s+(?:is|are))?\s*(?:(?::|-)\s*)?"
-        r"(?:an?\s+)?(?:scoped\s+)?PASS\b",
-        status_section,
-        re.IGNORECASE,
+    sequence_occurrences = list(
+        re.finditer(r"sequence/pattern order\b", status_summary, re.IGNORECASE)
     )
-    if sequence_row.get("status") == "PASS" and sequence_pass_claim is None:
-        die("status summary does not explicitly classify sequence/pattern order as PASS")
+    if len(sequence_occurrences) != 1:
+        die(
+            "status summary must contain exactly one sequence/pattern order "
+            f"claim, found {len(sequence_occurrences)}"
+        )
+
+    sequence_match = sequence_occurrences[0]
+    remainder = status_summary[sequence_match.end():]
+    clause_boundary = re.search(r"[,;.]|$", remainder)
+    assert clause_boundary is not None
+    sequence_clause = status_summary[
+        sequence_match.start(): sequence_match.end() + clause_boundary.start()
+    ]
+    sequence_statuses = [
+        match.group(1).upper()
+        for match in re.finditer(
+            r"\b(PASS|DIFFERENT|MISSING|UNKNOWN)\b",
+            sequence_clause,
+            re.IGNORECASE,
+        )
+    ]
+    expected_sequence_status = sequence_row.get("status")
+    if sequence_statuses != [expected_sequence_status]:
+        die(
+            "status summary sequence/pattern order claim is contradictory or "
+            f"does not match matrix status {expected_sequence_status!r}: "
+            f"found {sequence_statuses}"
+        )
 
     # Phase 6D must remain evidence-driven even while every compatibility row is UNKNOWN.
     backlog_section = report.split("## Current implementation backlog", 1)[1]
