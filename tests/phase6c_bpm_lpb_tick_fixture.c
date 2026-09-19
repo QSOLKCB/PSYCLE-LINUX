@@ -6,6 +6,7 @@
 ** both the song timing metadata and the 1/LPB event spacing.
 */
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
