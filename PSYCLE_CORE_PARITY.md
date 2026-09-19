@@ -2,7 +2,7 @@
 
 ## Status
 
-**Phase 6C active — PSY2 and PSY3 parse/load acceptance are PASS and serialization/save capability is MISSING for the exact hash-bound PSY3 operation; 17 contracts remain UNKNOWN.**
+**Phase 6C active — PSY2 and PSY3 parse/load acceptance plus sequence/pattern order are scoped PASS results, serialization/save capability is MISSING for the exact hash-bound PSY3 operation, and 16 contracts remain UNKNOWN.**
 
 This document is the human-readable view of the machine-readable contract in [`phase6c/compatibility-matrix.json`](phase6c/compatibility-matrix.json). The matrix compares three separately identified evidence sources:
 
@@ -12,7 +12,7 @@ This document is the human-readable view of the machine-readable contract in [`p
 
 Phase 6B is complete. The sanitized C++ source is committed under `psycle-cpp-r12005-sanitized/`, the historical qmake path builds `psycle-player` on Ubuntu 24.04, the missing historical support inputs are staged with pinned identities, and the final Phase 6B historical-player CI run completed successfully.
 
-Phase 6C has crossed from evidence collection into evidence-backed classification. Versioned original/candidate comparisons classify PSY2 and PSY3 parse/load acceptance for one fixture each and classify the tested PSY3 serialization/save capability as MISSING. Byte identity and complete semantic round-trip state are explicitly outside that save-capability verdict.
+Phase 6C has crossed from evidence collection into evidence-backed classification. Versioned original/candidate comparisons classify PSY2 and PSY3 parse/load acceptance for one fixture each, classify sequence/pattern order as PASS for the exact legacy single-sequence `0,2,1,2` fixture, and classify the tested PSY3 serialization/save capability as MISSING. Sequence timing, playback, multi-sequence behaviour and editing semantics remain separate; byte identity and complete semantic round-trip state are explicitly outside the save-capability verdict.
 
 ## Evidence rule
 
