@@ -23,6 +23,32 @@ function Get-Phase6cTimingInteger([object]$Element) {
     return $null
 }
 
+function Test-Phase6cSameVisualElement([object]$Left, [object]$Right) {
+    try {
+        if ([System.Windows.Automation.Automation]::Compare($Left, $Right)) {
+            return $true
+        }
+    }
+    catch { }
+
+    try {
+        $leftBounds = $Left.Current.BoundingRectangle
+        $rightBounds = $Right.Current.BoundingRectangle
+        if ($leftBounds.IsEmpty -or $rightBounds.IsEmpty) {
+            return $false
+        }
+        return (
+            [Math]::Abs($leftBounds.X - $rightBounds.X) -lt 0.5 -and
+            [Math]::Abs($leftBounds.Y - $rightBounds.Y) -lt 0.5 -and
+            [Math]::Abs($leftBounds.Width - $rightBounds.Width) -lt 0.5 -and
+            [Math]::Abs($leftBounds.Height - $rightBounds.Height) -lt 0.5
+        )
+    }
+    catch {
+        return $false
+    }
+}
+
 function Find-Phase6cSongInformationDialogs(
     [System.Diagnostics.Process]$Process,
     [System.Windows.Automation.AutomationElement]$Desktop
@@ -447,7 +473,16 @@ function Get-Phase6cTimingUiObservation([System.Diagnostics.Process]$Process) {
             foreach ($node in $nodes) {
                 try {
                     if ([string]$node.Current.Name -ceq [string]$labels[$key]) {
-                        $found.Add($node)
+                        $duplicateVisual = $false
+                        foreach ($existingLabel in $found) {
+                            if (Test-Phase6cSameVisualElement $existingLabel $node) {
+                                $duplicateVisual = $true
+                                break
+                            }
+                        }
+                        if (-not $duplicateVisual) {
+                            $found.Add($node)
+                        }
                     }
                 }
                 catch {
@@ -477,7 +512,7 @@ function Get-Phase6cTimingUiObservation([System.Diagnostics.Process]$Process) {
                 }
                 $alreadyUsed = $false
                 foreach ($usedNode in $used) {
-                    if ([System.Windows.Automation.Automation]::Compare($usedNode, $node)) {
+                    if (Test-Phase6cSameVisualElement $usedNode $node) {
                         $alreadyUsed = $true
                         break
                     }
@@ -509,13 +544,25 @@ function Get-Phase6cTimingUiObservation([System.Diagnostics.Process]$Process) {
                         [Math]::Max(35.0, ($labelBounds.Width + $bounds.Width) / 2.0)
                 )
                 if ($boundByLabel -or $columnMatch) {
-                    $candidates.Add([ordered]@{
-                        element = $node
-                        value = $value
-                        rank = if ($boundByLabel) { -100000.0 } else {
-                            [Math]::Abs($verticalGap) + [Math]::Abs($valueCenter - $labelCenter)
+                    $duplicateCandidate = $false
+                    foreach ($existingCandidate in $candidates) {
+                        if (
+                            [int]$existingCandidate.value -eq [int]$value -and
+                            (Test-Phase6cSameVisualElement $existingCandidate.element $node)
+                        ) {
+                            $duplicateCandidate = $true
+                            break
                         }
-                    })
+                    }
+                    if (-not $duplicateCandidate) {
+                        $candidates.Add([ordered]@{
+                            element = $node
+                            value = $value
+                            rank = if ($boundByLabel) { -100000.0 } else {
+                                [Math]::Abs($verticalGap) + [Math]::Abs($valueCenter - $labelCenter)
+                            }
+                        })
+                    }
                 }
             }
             $orderedCandidates = @($candidates | Sort-Object rank)
