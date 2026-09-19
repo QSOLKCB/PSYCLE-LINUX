@@ -122,6 +122,7 @@ def diagnostics_clean(log: bytes) -> bool:
         lines = log.decode("utf-8").splitlines()
     except UnicodeError:
         return False
+    matched_indices: set[int] = set()
     for line in lines:
         if not line:
             continue
@@ -129,15 +130,22 @@ def diagnostics_clean(log: bytes) -> bool:
         if not match:
             return False
         level, thread, message = match.groups()
-        if not any(
-            level == expected_level
+        matched = [
+            index
+            for index, (expected_level, expected_thread, expected_message)
+            in enumerate(EXPECTED_LOG_MESSAGES)
+            if level == expected_level
             and re.fullmatch(expected_thread, thread)
             and re.fullmatch(expected_message, message)
-            for expected_level, expected_thread, expected_message
-            in EXPECTED_LOG_MESSAGES
-        ):
+        ]
+        if not matched:
             return False
-    return True
+        matched_indices.update(matched)
+
+    # A quiet/empty transcript is not positive evidence. Require the pinned
+    # loader, exact warning and Master construction markers at minimum.
+    required = {5, 6, 7}
+    return required.issubset(matched_indices)
 
 
 def parse_probe(raw: bytes, log: bytes, exit_code: object) -> dict:
@@ -253,6 +261,7 @@ def collect(root: Path, probe: Path) -> None:
         "fixture_sha256": digest(fixture.read_bytes()),
         "fixture_expected_order": EXPECTED_ORDER,
         "fixture_expected_ui_labels": EXPECTED_UI_LABELS,
+        "fixture_generator_log": binding(root, out_dir / "fixture-generator.log"),
         "procedure": (
             "generate the project-authored single-sequence PSY3 fixture with one "
             "legacy play-order list 0,2,1,2; build a separate probe against the "
@@ -303,6 +312,9 @@ def validate_candidate(root: Path) -> dict:
         raise ValueError("candidate fixture hash mismatch")
     if not fixture.read_bytes().startswith(b"PSY3SONG"):
         raise ValueError("candidate fixture is not PSY3")
+    generator_log = bound_bytes(root, receipt.get("fixture_generator_log"))
+    if b"phase6c-sequence-order-fixture: PASS order=0,2,1,2" not in generator_log:
+        raise ValueError("fixture generator did not record the expected structural PASS")
 
     if receipt.get("source_sha256") != source_hashes():
         raise ValueError("candidate receipt source hashes do not match committed source")
