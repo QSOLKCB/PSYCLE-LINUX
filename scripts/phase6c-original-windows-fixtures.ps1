@@ -2,14 +2,17 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$CandidateArtifactRoot,
 
-    [string]$Out = "phase6c-original-evidence"
+    [string]$Out = "phase6c-original-evidence",
+
+    [switch]$ObserveSerialization
 )
 
 $ErrorActionPreference = "Stop"
 
 & (Join-Path $PSScriptRoot "phase6c-original-windows-fixtures-v2.ps1") `
     -CandidateArtifactRoot $CandidateArtifactRoot `
-    -Out $Out
+    -Out $Out `
+    -ObserveSerialization:$ObserveSerialization
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
@@ -37,7 +40,11 @@ if (-not (Test-Path -LiteralPath $runtimeReceipt -PathType Leaf)) {
 }
 Copy-Item -LiteralPath $runtimeReceipt -Destination (Join-Path $outRoot "vc90-runtime.txt")
 
-foreach ($name in @("psy2", "psy3")) {
+$receiptNames = @("psy2", "psy3")
+if ($ObserveSerialization -and (Test-Path -LiteralPath (Join-Path $outRoot "original-psy3-reopen.json"))) {
+    $receiptNames += "psy3-reopen"
+}
+foreach ($name in $receiptNames) {
     $receiptPath = Join-Path $outRoot ("original-{0}.json" -f $name)
     $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
     $receipt.procedure = "$($receipt.procedure); before launch install pinned Microsoft Visual C++ 2008 SP1 x86 redistributable version $redistributableVersion from $runtimeUrl with SHA-256 $runtimeSha; loaded VC90 module identity is recorded separately from the live Psycle process"

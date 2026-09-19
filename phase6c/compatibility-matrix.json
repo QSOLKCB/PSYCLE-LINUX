@@ -83,10 +83,10 @@
       "subsystem": "Project I/O",
       "contract": "Serialization and round-trip preservation",
       "status": "UNKNOWN",
-      "original": {},
-      "candidate": {},
+      "original": {"planned_receipt": "phase6c-original-evidence/serialization-save.json", "planned_reopen_receipt": "phase6c-original-evidence/original-psy3-reopen.json"},
+      "candidate": {"planned_receipt": "phase6c-evidence/candidate-serialization.json"},
       "cpsycle": {"evidence": "tests/phase4_core_workflow.c", "reusable": true},
-      "notes": "Distinguish structural/semantic round-trip from byte identity."
+      "notes": "Observation lane established in phase6c/SERIALIZATION.md. Distinguish absent save capability, save/reopen acceptance, semantic state and byte identity. Candidate-only observations cannot classify parity."
     },
     {
       "id": "project-io-malformed-files",

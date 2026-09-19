@@ -455,15 +455,24 @@ def validate_pair(
     contract: str,
     candidate_root: pathlib.Path,
     original_root: pathlib.Path,
+    *,
+    saved_fixture: bool = False,
 ) -> str:
-    candidate = load_json(candidate_root / f"candidate-{name}.json")
+    # A saved original output is an explicitly separate input role, never Linux
+    # candidate evidence. This reuses all original observation integrity checks.
+    if saved_fixture and (name != "psy3-reopen" or contract != "project-io-serialization-roundtrip"):
+        die("saved-fixture mode is restricted to the original PSY3 reopen observation")
+    source_path = candidate_root / ("serialization/saved-fixture.json" if saved_fixture else f"candidate-{name}.json")
+    candidate = load_json(source_path)
     original = load_json(original_root / f"original-{name}.json")
 
     if candidate.get("schema_version") != 1 or candidate.get("phase") != "6C":
         die(f"candidate-{name} has unexpected schema_version/phase")
-    if candidate.get("contract") != contract or candidate.get("evidence_role") != "candidate":
+    if candidate.get("contract") != contract or candidate.get("evidence_role") != ("original-saved-fixture" if saved_fixture else "candidate"):
         die(f"candidate-{name} is bound to the wrong contract/role")
 
+    if saved_fixture and original.get("source_fixture_role") != "original-saved-fixture":
+        die("original reopen observation must identify its original-saved-fixture input role")
     if original.get("schema_version") != 1 or original.get("phase") != "6C":
         die(f"original-{name} has unexpected schema_version/phase")
     if original.get("scope") != "original-observation":
@@ -1119,17 +1128,7 @@ def validate_pair(
     return result
 
 
-def main() -> int:
-    if len(sys.argv) != 3:
-        die("usage: phase6c-validate-original-receipts.py CANDIDATE_ARTIFACT ORIGINAL_ARTIFACT")
-
-    candidate_root = pathlib.Path(sys.argv[1]).resolve()
-    original_root = pathlib.Path(sys.argv[2]).resolve()
-    if not candidate_root.is_dir():
-        die(f"candidate artifact root is missing: {candidate_root}")
-    if not original_root.is_dir():
-        die(f"original artifact root is missing: {original_root}")
-
+def validate_artifact_inventory(original_root: pathlib.Path) -> None:
     for path in original_root.rglob("*"):
         if not path.is_file():
             continue
@@ -1142,7 +1141,34 @@ def main() -> int:
         if suffix == ".psy":
             relative = path.relative_to(original_root)
             if not relative.parts or relative.parts[0] != "fixtures":
-                die(f".psy evidence input is outside fixtures/: {relative}")
+                if relative.as_posix() != "serialization/original-saved.psy":
+                    die(f"unexpected .psy evidence output location: {relative}")
+                saved = load_json(original_root / "serialization/saved-fixture.json")
+                expected = {"schema_version": 1, "phase": "6C",
+                            "contract": "project-io-serialization-roundtrip",
+                            "evidence_role": "original-saved-fixture",
+                            "fixture": relative.as_posix()}
+                if any(type(saved.get(k)) is not type(v) or saved[k] != v
+                       for k, v in expected.items()):
+                    die("serialization output lacks its explicit saved-fixture identity")
+                expected_hash = require_hash(saved.get("fixture_sha256"), "saved-fixture hash")
+                data = path.read_bytes()
+                if sha256(path) != expected_hash or len(data) <= 8 or data[:8] != b"PSY3SONG":
+                    die("serialization output hash/header does not match its saved-fixture identity")
+
+
+def main() -> int:
+    if len(sys.argv) != 3:
+        die("usage: phase6c-validate-original-receipts.py CANDIDATE_ARTIFACT ORIGINAL_ARTIFACT")
+
+    candidate_root = pathlib.Path(sys.argv[1]).resolve()
+    original_root = pathlib.Path(sys.argv[2]).resolve()
+    if not candidate_root.is_dir():
+        die(f"candidate artifact root is missing: {candidate_root}")
+    if not original_root.is_dir():
+        die(f"original artifact root is missing: {original_root}")
+
+    validate_artifact_inventory(original_root)
 
     results = {
         name: validate_pair(name, contract, candidate_root, original_root)

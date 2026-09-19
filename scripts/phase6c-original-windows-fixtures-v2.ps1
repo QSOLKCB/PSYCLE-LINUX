@@ -2,7 +2,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$CandidateArtifactRoot,
 
-    [string]$Out = "phase6c-original-evidence"
+    [string]$Out = "phase6c-original-evidence",
+
+    [switch]$ObserveSerialization
 )
 
 $ErrorActionPreference = "Stop"
@@ -1843,6 +1845,11 @@ try {
         }
     }
 
+    $serializationSave = $null
+    $serializationPath = Join-Path $outRoot "serialization/original-saved.psy"
+    if ($ObserveSerialization) {
+        . (Join-Path $PSScriptRoot "phase6c-original-serialization.ps1")
+    }
     $fixtureSpecs = @(
         [ordered]@{
             name = "psy2"
@@ -1862,7 +1869,23 @@ try {
         }
     )
 
+    if ($ObserveSerialization) {
+        $fixtureSpecs += [ordered]@{
+            name = "psy3-reopen"
+            candidate_receipt = "serialization/saved-fixture.json"
+            expected_contract = "project-io-serialization-roundtrip"
+            expected_song_title = "PSYCLE-LINUX Phase 4 synthetic fixture"
+            load_warning_required = $false
+            expected_load_warning_message = $null
+        }
+    }
+
     foreach ($spec in $fixtureSpecs) {
+        if ($spec.name -eq "psy3-reopen" -and
+            ($null -eq $serializationSave -or $serializationSave.outcome -ne "saved")) {
+            continue
+        }
+
         if (Test-Path -LiteralPath "HKCU:\Software\Psycle") {
             Remove-Item -LiteralPath "HKCU:\Software\Psycle" -Recurse -Force
         }
@@ -1872,19 +1895,21 @@ try {
                 Fail "could not restore post-install Psycle registry baseline for $($spec.name)"
             }
         }
-        $candidateReceiptPath = Join-Path $candidateRoot $spec.candidate_receipt
+        $sourceRoot = if ($spec.name -eq "psy3-reopen") { $outRoot } else { $candidateRoot }
+        $sourceRole = if ($spec.name -eq "psy3-reopen") { "original-saved-fixture" } else { "candidate" }
+        $candidateReceiptPath = Join-Path $sourceRoot $spec.candidate_receipt
         if (-not (Test-Path -LiteralPath $candidateReceiptPath -PathType Leaf)) {
             Fail "missing candidate receipt: $candidateReceiptPath"
         }
         $candidate = Get-Content -LiteralPath $candidateReceiptPath -Raw | ConvertFrom-Json
-        if ($candidate.contract -ne $spec.expected_contract -or $candidate.evidence_role -ne "candidate") {
+        if ($candidate.contract -ne $spec.expected_contract -or $candidate.evidence_role -ne $sourceRole) {
             Fail "candidate receipt identity mismatch for $($spec.name)"
         }
         if ([string]::IsNullOrWhiteSpace([string]$candidate.fixture)) {
             Fail "candidate receipt has no fixture path for $($spec.name)"
         }
 
-        $candidateFixturePath = Resolve-ChildPath $candidateRoot ([string]$candidate.fixture)
+        $candidateFixturePath = Resolve-ChildPath $sourceRoot ([string]$candidate.fixture)
         if (-not (Test-Path -LiteralPath $candidateFixturePath -PathType Leaf)) {
             Fail "candidate fixture is missing: $candidateFixturePath"
         }
@@ -2245,6 +2270,24 @@ try {
             }
         }
 
+        if ($ObserveSerialization -and $spec.name -eq "psy3") {
+            $serializationSave = [ordered]@{ schema_version=1; outcome="inconclusive"; diagnostics=@("initial load was not conclusively accepted") }
+            if ($processRunningBeforeTermination -and $stableMarkerPolls -ge 4 -and
+                $matchedMarker -and $uiDiagnostics.Count -eq 0 -and
+                $runtimeIdentityDiagnostics.Count -eq 0 -and -not $applicationErrorMarker -and
+                -not $fixtureLoadErrorMarker -and $loadWarningBootstrap.dismissed) {
+                $serializationSave = Invoke-Phase6cSaveAs $process $windowTitle $serializationPath
+            }
+            Write-JsonUtf8 (Join-Path $outRoot "serialization-save.json") $serializationSave
+            if ($serializationSave.outcome -eq "saved") {
+                Write-JsonUtf8 (Join-Path $outRoot "serialization/saved-fixture.json") ([ordered]@{
+                    schema_version=1; phase="6C"; contract="project-io-serialization-roundtrip"
+                    evidence_role="original-saved-fixture"; fixture="serialization/original-saved.psy"
+                    fixture_sha256=(Get-Sha256 $serializationPath)
+                })
+            }
+        }
+
         $termination = "already-exited"
         if ($processRunningBeforeTermination) {
             try {
@@ -2332,7 +2375,10 @@ try {
             candidate_fixture = [string]$candidate.fixture
             fixture = $fixtureReceiptPath
             fixture_sha256 = $fixtureSha
-            procedure = $Procedure
+            procedure = if ($ObserveSerialization -and $spec.name -eq "psy3") {
+                "$Procedure; after completing the load observation, attempt separately recorded verified File/Save As to a new output path before harness termination"
+            } else { $Procedure }
+            source_fixture_role = $sourceRole
             observation = $observation
             load_result = $loadResult
             load_evidence_marker = $matchedMarker
