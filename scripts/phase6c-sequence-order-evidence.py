@@ -160,7 +160,11 @@ def parse_probe(raw: bytes, log: bytes, exit_code: object) -> dict:
         value = json.loads(raw)
     except (UnicodeError, ValueError):
         return result
-    if not isinstance(value, dict) or value.get("schema_version") != 1:
+    if (
+        not isinstance(value, dict)
+        or type(value.get("schema_version")) is not int
+        or value.get("schema_version") != 1
+    ):
         return result
     if value.get("load_returned") is not True or value.get("song_name") != TITLE:
         return result
