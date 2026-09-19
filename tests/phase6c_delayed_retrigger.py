@@ -291,6 +291,27 @@ class MatrixDelayedRetriggerComparison(unittest.TestCase):
         )
         self.check(False)
 
+    def test_original_liveness_projection_is_frozen(self):
+        self.mutate(
+            "original-delayed-retrigger.json",
+            lambda d: d.update(process_running_before_termination=False),
+        )
+        self.check(False)
+
+    def test_candidate_timing_context_is_frozen(self):
+        self.mutate(
+            "candidate-delayed-retrigger.json",
+            lambda d: d.update(tick_speed=24),
+        )
+        self.check(False)
+
+    def test_original_source_artifact_digest_is_frozen(self):
+        self.mutate(
+            "original-source-delayed-retrigger.json",
+            lambda d: d["source_evidence"].update(artifact_digest="sha256:" + "0" * 64),
+        )
+        self.check(False)
+
     def test_deferred_verdict_cannot_be_relabelled_pass(self):
         self.mutate(
             "comparison.json",
