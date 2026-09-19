@@ -34,29 +34,29 @@ public static class Phase6cSaveMenu {
     static bool Owned(IntPtr window, uint process) {
         uint owner; return window!=IntPtr.Zero && GetWindowThreadProcessId(window,out owner)!=0 && owner==process;
     }
-    public static bool SetFileName(uint process, IntPtr dialog, IntPtr edit, string path) {
+    public static string SetFileName(uint process, IntPtr dialog, IntPtr edit, string path) {
         var title=new StringBuilder(256); GetWindowText(dialog,title,title.Capacity);
         if(!Owned(dialog,process) || Class(dialog)!="#32770" || title.ToString()!="Save As" ||
-           !Owned(edit,process) || Class(edit)!="Edit" || !IsWindowEnabled(edit) || !IsWindowVisible(edit)) return false;
+           !Owned(edit,process) || Class(edit)!="Edit" || !IsWindowEnabled(edit) || !IsWindowVisible(edit)) return "native dialog/edit PID, class, visibility or enabled identity mismatch";
         int id=GetDlgCtrlID(edit);
-        if(id!=1001 && id!=1148) return false;
+        if(id!=1001 && id!=1148) return "native filename control ID mismatch";
         var parent=GetParent(edit);
         var ancestor=parent;
         while(ancestor!=IntPtr.Zero && ancestor!=dialog) ancestor=GetParent(ancestor);
-        if(ancestor!=dialog || !Owned(parent,process)) return false;
+        if(ancestor!=dialog || !Owned(parent,process)) return "native filename ancestry mismatch";
         IntPtr result;
-        if(SendText(edit,0x000c,IntPtr.Zero,path,2,1000,out result)==IntPtr.Zero || result==IntPtr.Zero) return false;
+        if(SendText(edit,0x000c,IntPtr.Zero,path,2,1000,out result)==IntPtr.Zero || result==IntPtr.Zero) return "native filename WM_SETTEXT failed";
         // Notify the verified edit/combobox owners. UIA ValuePattern alone can
         // update displayed text without committing the shell's filename state.
-        if(SendValue(parent,0x0111,new IntPtr((0x0300<<16)|(id&0xffff)),edit,2,1000,out result)==IntPtr.Zero) return false;
+        if(SendValue(parent,0x0111,new IntPtr((0x0300<<16)|(id&0xffff)),edit,2,1000,out result)==IntPtr.Zero) return "native edit change notification failed";
         if(Class(parent)=="ComboBox") {
             var owner=GetParent(parent);
-            if(!Owned(owner,process)) return false;
+            if(!Owned(owner,process)) return "native combobox owner PID mismatch";
             int comboId=GetDlgCtrlID(parent);
-            if(comboId<0 || SendValue(owner,0x0111,new IntPtr((5<<16)|(comboId&0xffff)),parent,2,1000,out result)==IntPtr.Zero) return false;
+            if(comboId<0 || SendValue(owner,0x0111,new IntPtr((5<<16)|(comboId&0xffff)),parent,2,1000,out result)==IntPtr.Zero) return "native combobox change notification failed";
         }
         var actual=new StringBuilder(path.Length+2);
-        return ReadText(edit,0x000d,new IntPtr(actual.Capacity),actual,2,1000,out result)!=IntPtr.Zero && actual.ToString()==path;
+        return ReadText(edit,0x000d,new IntPtr(actual.Capacity),actual,2,1000,out result)!=IntPtr.Zero && actual.ToString()==path ? null : "native filename text readback mismatch";
     }
     public class Command {
         public long Window;
@@ -209,10 +209,11 @@ function Invoke-Phase6cSaveAs(
         Start-Sleep -Milliseconds 500
         $edits[0].SetFocus()
         $value.SetValue($OutputPath)
-        if (-not [Phase6cSaveMenu]::SetFileName([uint32]$Process.Id,
+        $nativePathError = [Phase6cSaveMenu]::SetFileName([uint32]$Process.Id,
             [IntPtr]$dialog.Current.NativeWindowHandle,
-            [IntPtr]$edits[0].Current.NativeWindowHandle, $OutputPath)) {
-            throw "native Save As filename identity/update/readback failed"
+            [IntPtr]$edits[0].Current.NativeWindowHandle, $OutputPath)
+        if ($null -ne $nativePathError) {
+            throw $nativePathError
         }
         $result.native_path_verified = $true
         $buttons[0].SetFocus()
