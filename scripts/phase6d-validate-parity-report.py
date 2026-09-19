@@ -165,19 +165,32 @@ def main() -> int:
     except IndexError:
         die("missing status/evidence-rule section boundaries")
     unknown_count = len(contracts) - classified
-    if f"{unknown_count} contracts remain UNKNOWN" not in status_section:
+    unknown_matches = [
+        int(match.group(1))
+        for match in re.finditer(
+            r"(?<!\\d)(\\d+)(?!\\d)\\s+contracts\\s+remain\\s+UNKNOWN\\b",
+            status_section,
+            re.IGNORECASE,
+        )
+    ]
+    if unknown_matches != [unknown_count]:
         die(
             "status summary UNKNOWN count does not match matrix inventory: "
-            f"expected {unknown_count}"
+            f"expected exactly {unknown_count}, found {unknown_matches}"
         )
+
     sequence_row = next(
         row for row in contracts if row.get("id") == "sequencer-pattern-order"
     )
-    if (
-        sequence_row.get("status") == "PASS"
-        and "sequence/pattern order" not in status_section.lower()
-    ):
-        die("status summary omits classified sequence/pattern order PASS")
+    sequence_pass_claim = re.search(
+        r"sequence/pattern order"
+        r"(?:\\s+(?:is|are))?\\s*(?::|-)??\\s*"
+        r"(?:an?\\s+)?(?:scoped\\s+)?PASS\\b",
+        status_section,
+        re.IGNORECASE,
+    )
+    if sequence_row.get("status") == "PASS" and sequence_pass_claim is None:
+        die("status summary does not explicitly classify sequence/pattern order as PASS")
 
     # Phase 6D must remain evidence-driven even while every compatibility row is UNKNOWN.
     backlog_section = report.split("## Current implementation backlog", 1)[1]
