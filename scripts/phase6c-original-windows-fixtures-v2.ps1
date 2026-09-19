@@ -4,7 +4,9 @@ param(
 
     [string]$Out = "phase6c-original-evidence",
 
-    [switch]$ObserveSerialization
+    [switch]$ObserveSerialization,
+
+    [switch]$ObserveSequenceOrder
 )
 
 $ErrorActionPreference = "Stop"
@@ -1880,6 +1882,23 @@ try {
         }
     }
 
+    if ($ObserveSequenceOrder) {
+        $fixtureSpecs += [ordered]@{
+            name = "sequence-order"
+            candidate_receipt = "candidate-sequence-order.json"
+            expected_contract = "sequencer-pattern-order"
+            expected_song_title = "PSYCLE-LINUX Phase 6C order fixture"
+            load_warning_required = $true
+            expected_load_warning_message = "This file is from a newer version of Psycle! This process will try to load it anyway."
+            expected_sequence_order_labels = @(
+                "00: 00",
+                "01: 02",
+                "02: 01",
+                "03: 02"
+            )
+        }
+    }
+
     foreach ($spec in $fixtureSpecs) {
         if ($spec.name -eq "psy3-reopen" -and
             ($null -eq $serializationSave -or $serializationSave.outcome -ne "saved")) {
@@ -2002,6 +2021,13 @@ try {
             outcome = if ([bool]$spec.load_warning_required) { "not-seen" } else { "not-required" }
             diagnostics = @()
         }
+        $sequenceOrderExpected = @()
+        if ($null -ne $spec.expected_sequence_order_labels) {
+            $sequenceOrderExpected = @($spec.expected_sequence_order_labels)
+        }
+        $sequenceOrderLabels = @()
+        $sequenceOrderFingerprint = $null
+        $sequenceOrderStablePolls = 0
 
         while ((Get-Date) -lt $deadline) {
             Start-Sleep -Milliseconds 500
@@ -2072,6 +2098,33 @@ try {
                 }
             }
             $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
+            if ($sequenceOrderExpected.Count -gt 0) {
+                if ($uiDiagnostics.Count -eq 0) {
+                    $currentSequenceOrderLabels = @(
+                        $uiValues | Where-Object {
+                            [string]$_ -cmatch '^[0-9]{2}: [0-9]{2}$'
+                        }
+                    )
+                    $sequenceOrderLabels = @($currentSequenceOrderLabels)
+                    if ($currentSequenceOrderLabels.Count -eq $sequenceOrderExpected.Count) {
+                        $fingerprint = $currentSequenceOrderLabels -join '|'
+                        if ($null -ne $sequenceOrderFingerprint -and
+                            $fingerprint -ceq $sequenceOrderFingerprint) {
+                            $sequenceOrderStablePolls += 1
+                        } else {
+                            $sequenceOrderFingerprint = $fingerprint
+                            $sequenceOrderStablePolls = 1
+                        }
+                    } else {
+                        $sequenceOrderFingerprint = $null
+                        $sequenceOrderStablePolls = 0
+                    }
+                } else {
+                    $sequenceOrderLabels = @()
+                    $sequenceOrderFingerprint = $null
+                    $sequenceOrderStablePolls = 0
+                }
+            }
             $combined = @($windowTitle) + $uiValues
             $assessment = Get-FixtureUiAssessment -Texts $combined -Markers $markers
 
@@ -2097,11 +2150,23 @@ try {
                 }
             }
 
+            if ($sequenceOrderExpected.Count -gt 0 -and $uiDiagnostics.Count -gt 0) {
+                $sequenceOrderLabels = @()
+                $sequenceOrderFingerprint = $null
+                $sequenceOrderStablePolls = 0
+            }
+
             if ($null -eq $applicationErrorMarker -and $assessment.application_error_marker) {
                 $applicationErrorMarker = [string]$assessment.application_error_marker
             }
             if ($assessment.fixture_load_error_marker) {
                 $fixtureLoadErrorMarker = [string]$assessment.fixture_load_error_marker
+            }
+            if ($sequenceOrderExpected.Count -gt 0 -and
+                ($applicationErrorMarker -or $fixtureLoadErrorMarker)) {
+                $sequenceOrderLabels = @()
+                $sequenceOrderFingerprint = $null
+                $sequenceOrderStablePolls = 0
             }
 
             $pollMarker = $assessment.fixture_marker
@@ -2163,6 +2228,33 @@ try {
                 }
             }
             $uiDiagnostics = @($uiDiagnosticSet | Sort-Object)
+            if ($sequenceOrderExpected.Count -gt 0) {
+                if ($uiDiagnostics.Count -eq 0 -and $runtimeIdentityDiagnostics.Count -eq 0) {
+                    $currentSequenceOrderLabels = @(
+                        $uiValues | Where-Object {
+                            [string]$_ -cmatch '^[0-9]{2}: [0-9]{2}$'
+                        }
+                    )
+                    $sequenceOrderLabels = @($currentSequenceOrderLabels)
+                    if ($currentSequenceOrderLabels.Count -eq $sequenceOrderExpected.Count) {
+                        $fingerprint = $currentSequenceOrderLabels -join '|'
+                        if ($null -ne $sequenceOrderFingerprint -and
+                            $fingerprint -ceq $sequenceOrderFingerprint) {
+                            $sequenceOrderStablePolls += 1
+                        } else {
+                            $sequenceOrderFingerprint = $fingerprint
+                            $sequenceOrderStablePolls = 1
+                        }
+                    } else {
+                        $sequenceOrderFingerprint = $null
+                        $sequenceOrderStablePolls = 0
+                    }
+                } else {
+                    $sequenceOrderLabels = @()
+                    $sequenceOrderFingerprint = $null
+                    $sequenceOrderStablePolls = 0
+                }
+            }
             $finalCombined = @($windowTitle) + $uiValues
             $finalAssessment = Get-FixtureUiAssessment -Texts $finalCombined -Markers $markers
             if (-not $directSoundBootstrapTerminal -and
@@ -2186,11 +2278,23 @@ try {
                     $finalAssessment.application_error_marker = $null
                 }
             }
+            if ($sequenceOrderExpected.Count -gt 0 -and
+                ($uiDiagnostics.Count -gt 0 -or $runtimeIdentityDiagnostics.Count -gt 0)) {
+                $sequenceOrderLabels = @()
+                $sequenceOrderFingerprint = $null
+                $sequenceOrderStablePolls = 0
+            }
             if ($null -eq $applicationErrorMarker -and $finalAssessment.application_error_marker) {
                 $applicationErrorMarker = [string]$finalAssessment.application_error_marker
             }
             if ($finalAssessment.fixture_load_error_marker) {
                 $fixtureLoadErrorMarker = [string]$finalAssessment.fixture_load_error_marker
+            }
+            if ($sequenceOrderExpected.Count -gt 0 -and
+                ($applicationErrorMarker -or $fixtureLoadErrorMarker)) {
+                $sequenceOrderLabels = @()
+                $sequenceOrderFingerprint = $null
+                $sequenceOrderStablePolls = 0
             }
 
             $finalMarker = $finalAssessment.fixture_marker
@@ -2213,6 +2317,41 @@ try {
             $exitCode = $process.ExitCode
         }
         $processRunningBeforeTermination = -not $exitedBeforeHarnessTermination
+        $cleanAcceptedLoadEvidence = (
+            $processRunningBeforeTermination -and
+            $stableMarkerPolls -ge 4 -and
+            $matchedMarker -and
+            $uiDiagnostics.Count -eq 0 -and
+            $runtimeIdentityDiagnostics.Count -eq 0 -and
+            -not $applicationErrorMarker -and
+            -not $fixtureLoadErrorMarker
+        )
+
+        $sequenceOrderUi = $null
+        if ($sequenceOrderExpected.Count -gt 0) {
+            $sequenceOrderMatch = $null
+            $sequenceOrderResult = "inconclusive"
+            if ($cleanAcceptedLoadEvidence -and
+                $sequenceOrderStablePolls -ge 4 -and
+                $sequenceOrderLabels.Count -eq $sequenceOrderExpected.Count) {
+                $sequenceOrderResult = "observed"
+                $sequenceOrderMatch = $true
+                for ($orderIndex = 0; $orderIndex -lt $sequenceOrderExpected.Count; $orderIndex += 1) {
+                    if ([string]$sequenceOrderLabels[$orderIndex] -cne
+                        [string]$sequenceOrderExpected[$orderIndex]) {
+                        $sequenceOrderMatch = $false
+                        break
+                    }
+                }
+            }
+            $sequenceOrderUi = [ordered]@{
+                expected_labels = @($sequenceOrderExpected)
+                observed_labels = @($sequenceOrderLabels)
+                stable_polls = $sequenceOrderStablePolls
+                result = $sequenceOrderResult
+                matches_fixture_expected = $sequenceOrderMatch
+            }
+        }
 
         $evidenceLines = [System.Collections.Generic.List[string]]::new()
         $evidenceLines.Add("reference_build=$ReferenceBuild")
@@ -2347,7 +2486,7 @@ try {
         } elseif ($exitedBeforeHarnessTermination) {
             $loadResult = "inconclusive"
             $observation = "reference-process-exited-before-harness-termination"
-        } elseif ($stableMarkerPolls -ge 4 -and $matchedMarker) {
+        } elseif ($cleanAcceptedLoadEvidence) {
             $loadResult = "accepted"
             $observation = "stable-native-window-evidence-identifies-loaded-fixture-without-error"
         } elseif ($mainWindowSeen) {
@@ -2375,7 +2514,9 @@ try {
             candidate_fixture = [string]$candidate.fixture
             fixture = $fixtureReceiptPath
             fixture_sha256 = $fixtureSha
-            procedure = if ($ObserveSerialization -and $spec.name -eq "psy3") {
+            procedure = if ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {
+                "$Procedure; for the sequencer-pattern-order contract enumerate the complete visible UI Automation order-label set matching NN: NN on every poll and require a stable complete set plus the same clean accepted-load/liveness gate before interpreting order"
+            } elseif ($ObserveSerialization -and $spec.name -eq "psy3") {
                 "$Procedure; after completing the load observation, attempt separately recorded verified File/Save As to a new output path before harness termination"
             } else { $Procedure }
             source_fixture_role = $sourceRole
@@ -2400,6 +2541,7 @@ try {
             fixture_bootstrap = [ordered]@{
                 load_warning = $loadWarningBootstrap
             }
+            sequence_order_ui = $sequenceOrderUi
             runtime_identity_diagnostics = @($runtimeIdentityDiagnostics)
             main_window_seen = $mainWindowSeen
             main_window_title = $windowTitle
@@ -2448,6 +2590,7 @@ try {
 - Loaded VC90 runtime identity: each fixture records a hash-bound inventory of the VC90 CRT/MFC/ATL modules actually loaded by the live Psycle process, including absolute module path, size, SHA-256, and file/product version. Windows SxS servicing revisions are recorded as observed and may differ between CRT/MFC components; missing identity or a module outside the VC90 9.0 family prevents behavioural classification.
 - Configuration isolation: the post-install HKCU\Software\Psycle baseline is restored before each fixture so PSY2 cannot influence PSY3.
 - Machine/plugin environment: the full installed payload, runtime Psycle registry state, configured plugin/machine roots, and conventional external VST/Psycle plugin roots are recorded in a fixture-specific SHA-256-bound machine-plugin inventory during each observation.
+- Sequence/order observation: when enabled, the project-authored single-sequence fixture is inspected without UI input by collecting the complete visible order-label set matching NN: NN on every poll. A sequence observation is conclusive only after the same complete four-label set is stable for at least four polls and the same clean accepted-load/liveness predicate is satisfied; diagnostics or load/application errors reset sequence stability.
 - Classification policy: these observations do not change compatibility status by themselves; rows remain UNKNOWN until versioned original + candidate receipts and a comparison verdict are committed.
 "@
     [System.IO.File]::WriteAllText(

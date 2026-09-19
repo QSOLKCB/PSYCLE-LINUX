@@ -114,10 +114,10 @@
       "subsystem": "Sequencer",
       "contract": "Sequence and pattern order",
       "status": "UNKNOWN",
-      "original": {},
-      "candidate": {},
-      "cpsycle": {"reusable": "partial"},
-      "notes": "Original pattern/sequence semantics are authoritative."
+      "original": {"planned_receipt": "phase6c-original-evidence/original-sequence-order.json"},
+      "candidate": {"planned_receipt": "phase6c-evidence/candidate-sequence-order.json"},
+      "cpsycle": {"evidence": "tests/phase6c_sequence_order_fixture.c", "reusable": "fixture-construction-only"},
+      "notes": "Observation lane established in phase6c/SEQUENCE_ORDER.md using one ordinary legacy single-sequence PSY3 order list 0,2,1,2. Original Psycle remains authoritative; candidate and C-Psycle observations cannot classify parity without a versioned comparison."
     },
     {
       "id": "sequencer-bpm-lpb-tick",
