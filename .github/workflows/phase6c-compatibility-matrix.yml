@@ -22,6 +22,7 @@ on:
       - 'tests/phase4_core_workflow.c'
       - 'tests/phase6c_candidate_parse.py'
       - 'tests/phase6c_serialization*'
+      - 'tests/phase6c_sequence_order*'
       - '.github/workflows/phase6c-compatibility-matrix.yml'
   pull_request:
     paths:
@@ -41,6 +42,7 @@ on:
       - 'tests/phase4_core_workflow.c'
       - 'tests/phase6c_candidate_parse.py'
       - 'tests/phase6c_serialization*'
+      - 'tests/phase6c_sequence_order*'
       - '.github/workflows/phase6c-compatibility-matrix.yml'
   workflow_dispatch:
 
@@ -97,6 +99,7 @@ jobs:
         run: |
           python3 tests/phase6c_candidate_parse.py
           python3 tests/phase6c_serialization.py
+          python3 tests/phase6c_sequence_order.py
 
       - name: Verify frozen Phase 6B source identities
         shell: bash
@@ -196,6 +199,10 @@ jobs:
         shell: bash
         run: bash scripts/phase6c-serialization-candidate.sh phase6c-evidence
 
+      - name: Observe candidate sequence and pattern order
+        shell: bash
+        run: bash scripts/phase6c-sequence-order-candidate.sh phase6c-evidence
+
       - name: Upload Phase 6C candidate evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -282,7 +289,8 @@ jobs:
           ./scripts/phase6c-original-windows-fixtures.ps1 `
             -CandidateArtifactRoot 'phase6c-candidate-artifact' `
             -Out 'phase6c-original-evidence' `
-            -ObserveSerialization
+            -ObserveSerialization `
+            -ObserveSequenceOrder
 
       - name: Validate original-reference evidence integrity
         shell: pwsh
@@ -300,6 +308,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "candidate serialization validation failed" }
           python scripts/phase6c-serialization-evidence.py original phase6c-candidate-artifact phase6c-original-evidence
           if ($LASTEXITCODE -ne 0) { throw "original serialization validation failed" }
+
+      - name: Validate sequence and pattern order observations
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python scripts/phase6c-sequence-order-evidence.py candidate phase6c-candidate-artifact
+          if ($LASTEXITCODE -ne 0) { throw "candidate sequence-order validation failed" }
+          python scripts/phase6c-sequence-order-evidence.py original phase6c-candidate-artifact phase6c-original-evidence
+          if ($LASTEXITCODE -ne 0) { throw "original sequence-order validation failed" }
 
       - name: Upload Phase 6C original-reference evidence
         if: always()
