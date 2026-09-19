@@ -22,12 +22,12 @@ SPEC.loader.exec_module(m)
 def valid_value():
     rates = []
     for rate in m.RATES:
-        beat = rate * 60.0 / m.BPM
+        beat, tick, line = m.expected_sample_timing(rate, 8, True)
         rates.append({
             "sample_rate": rate,
             "samples_per_beat": beat,
-            "samples_per_tick": beat / 8,
-            "samples_per_fixture_line": beat / m.LPB,
+            "samples_per_tick": tick,
+            "samples_per_fixture_line": line,
         })
     return {
         "schema_version": 1,
@@ -60,6 +60,11 @@ class CandidateParser(unittest.TestCase):
     def test_valid_observation(self):
         self.assertEqual(self.parse()["observation"], "timing-model-observed")
 
+    def test_player_time_info_float_precision_is_accepted(self):
+        probe = valid_value()
+        self.assertEqual(probe["sample_rates"][0]["samples_per_beat"], 19313.869140625)
+        self.assertEqual(self.parse(probe)["observation"], "timing-model-observed")
+
     def test_exit_code_requires_integer_zero(self):
         for value in (False, 0.0, 1):
             with self.subTest(value=value):
@@ -84,8 +89,12 @@ class CandidateParser(unittest.TestCase):
         self.assertEqual(self.parse(probe)["observation"], "inconclusive")
 
     def test_unknown_diagnostic_is_rejected(self):
-        log = clean_log() + b"log: 4us: E: bpm-lpb-tick-probe: contaminated\n"
-        self.assertEqual(self.parse(log=log)["observation"], "inconclusive")
+        for level in ("T", "I", "W", "E"):
+            with self.subTest(level=level):
+                log = clean_log() + (
+                    f"log: 4us: {level}: bpm-lpb-tick-probe: contaminated\n"
+                ).encode()
+                self.assertEqual(self.parse(log=log)["observation"], "inconclusive")
 
 
 class OriginalProjection(unittest.TestCase):
