@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import types
@@ -95,6 +97,38 @@ class CandidateParser(unittest.TestCase):
                     f"log: 4us: {level}: bpm-lpb-tick-probe: contaminated\n"
                 ).encode()
                 self.assertEqual(self.parse(log=log)["observation"], "inconclusive")
+
+
+class GeneratedObserver(unittest.TestCase):
+    def test_dialog_is_opened_before_timing_poll(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "generated.ps1"
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/phase6c-build-timing-observer.py"),
+                    str(ROOT / "scripts/phase6c-original-windows-fixtures-v2.ps1"),
+                    str(output),
+                ],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(process.returncode, 0, process.stderr)
+            generated = output.read_text(encoding="utf-8")
+            open_call = generated.index(
+                "$timingDialogBootstrap = Open-Phase6cSongInformationDialog $process"
+            )
+            poll_call = generated.index(
+                "$timingObservation = Get-Phase6cTimingUiObservation $process"
+            )
+            self.assertLess(open_call, poll_call)
+            self.assertIn(
+                "dialog_bootstrap = $timingDialogBootstrap",
+                generated,
+            )
 
 
 class OriginalProjection(unittest.TestCase):
