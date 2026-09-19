@@ -368,6 +368,20 @@ class MatrixSequenceOrder(unittest.TestCase):
         )
         self.check(False)
 
+    def test_comparison_exit_code_requires_integer_zero(self):
+        for value in (False, 0.0):
+            with self.subTest(value=value):
+                with self.subTest():
+                    self.mutate(
+                        "comparison.json",
+                        lambda d, value=value: d.update(candidate_exit_code=value),
+                    )
+                    self.check(False)
+                shutil.copyfile(
+                    ROOT / "phase6c/evidence/sequencer-pattern-order/comparison.json",
+                    self.evidence / "comparison.json",
+                )
+
     def test_source_workflow_attribution_is_frozen(self):
         self.mutate(
             "comparison.json",
