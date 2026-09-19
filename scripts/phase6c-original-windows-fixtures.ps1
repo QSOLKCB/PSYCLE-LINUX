@@ -4,7 +4,9 @@ param(
 
     [string]$Out = "phase6c-original-evidence",
 
-    [switch]$ObserveSerialization
+    [switch]$ObserveSerialization,
+
+    [switch]$ObserveSequenceOrder
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,7 +14,8 @@ $ErrorActionPreference = "Stop"
 & (Join-Path $PSScriptRoot "phase6c-original-windows-fixtures-v2.ps1") `
     -CandidateArtifactRoot $CandidateArtifactRoot `
     -Out $Out `
-    -ObserveSerialization:$ObserveSerialization
+    -ObserveSerialization:$ObserveSerialization `
+    -ObserveSequenceOrder:$ObserveSequenceOrder
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
@@ -43,6 +46,9 @@ Copy-Item -LiteralPath $runtimeReceipt -Destination (Join-Path $outRoot "vc90-ru
 $receiptNames = @("psy2", "psy3")
 if ($ObserveSerialization -and (Test-Path -LiteralPath (Join-Path $outRoot "original-psy3-reopen.json"))) {
     $receiptNames += "psy3-reopen"
+}
+if ($ObserveSequenceOrder -and (Test-Path -LiteralPath (Join-Path $outRoot "original-sequence-order.json"))) {
+    $receiptNames += "sequence-order"
 }
 foreach ($name in $receiptNames) {
     $receiptPath = Join-Path $outRoot ("original-{0}.json" -f $name)
