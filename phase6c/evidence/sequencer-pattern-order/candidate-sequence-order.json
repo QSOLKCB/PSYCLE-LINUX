@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "scope": "candidate-observation",
+  "contract": "sequencer-pattern-order",
+  "evidence_role": "candidate",
+  "snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+  "fixture": "sequence-order/phase6c-sequence-order.psy",
+  "fixture_sha256": "6a0c5073fb54b7bb7496a6dda85ece80abefe8ba6098491b1a06972fe619d5c0",
+  "fixture_expected_order": [
+    0,
+    2,
+    1,
+    2
+  ],
+  "fixture_expected_ui_labels": [
+    "00: 00",
+    "01: 02",
+    "02: 01",
+    "03: 02"
+  ],
+  "fixture_generator_log": {
+    "path": "sequence-order/fixture-generator.log",
+    "sha256": "0e181ad6379cc51cc03d391e50ef8f9b4d35a12bd5fdb671b629f8bcac08e5aa"
+  },
+  "procedure": "generate the project-authored single-sequence PSY3 fixture with one legacy play-order list 0,2,1,2; build a separate probe against the verified historical static core; load the exact fixture without starting playback using PSYCLE_THREADS=1; enumerate every loaded SequenceLine entry in model order and record its position and Pattern ID",
+  "probe_sha256": "6e276ee6f4861129cc54934386b0363d4ee985356c28613f788a9372001dc21f",
+  "source_sha256": {
+    "tests/phase6c_sequence_order_fixture.c": "86aef809c1e3196265910e93457608b83f5ec95004184c31a9e6fa23f34644b2",
+    "tests/phase6c_sequence_order.cpp": "3b189b37db8da00c58dde078ef1c80973b953fc51cfb58b33cd056df7b049f32",
+    "tests/phase6c_sequence_order.pro": "01cd17ef0e0fda023b4315556a16aa9cd42da4ed995f04558a49bbd4dc1b5acc",
+    "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sequence.h": "896c09feacb8040f4909f6e4272cd31d0be1b17dec087869df81a2d80c24f01c",
+    "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.cpp": "450ff82d77bc03f08ab8810a28453e830a86d695665ed44ac1c93a6fb1fc1814"
+  },
+  "exit_code": 0,
+  "raw_probe": {
+    "path": "sequence-order/candidate-probe.json",
+    "sha256": "2b236207a645219ee1d7a5e8ada990def34c022f07a4c9acf5b8016aeaaedb43"
+  },
+  "log": {
+    "path": "sequence-order/candidate-probe.log",
+    "sha256": "d68fbbfb8fe482d7a9979780dfe87392873d7a2a01fd56d575066576f025ef05"
+  },
+  "observation": "sequence-model-observed",
+  "observed_sequence_lines": [
+    {
+      "line_index": 0,
+      "entries": [
+        {
+          "position": 0.0,
+          "pattern_id": -1,
+          "pattern_name": "master"
+        }
+      ]
+    },
+    {
+      "line_index": 1,
+      "entries": [
+        {
+          "position": 0.0,
+          "pattern_id": 0,
+          "pattern_name": "Order Alpha0"
+        },
+        {
+          "position": 1.0,
+          "pattern_id": 2,
+          "pattern_name": "Order Gamma2"
+        },
+        {
+          "position": 4.0,
+          "pattern_id": 1,
+          "pattern_name": "Order Beta1"
+        },
+        {
+          "position": 6.0,
+          "pattern_id": 2,
+          "pattern_name": "Order Gamma2"
+        }
+      ]
+    }
+  ],
+  "observed_play_order": [
+    0,
+    2,
+    1,
+    2
+  ],
+  "reports": [
+    "Load Warning: This file is from a newer version of Psycle! This process will try to load it anyway."
+  ],
+  "original_psycle_observed": false,
+  "parity_status": "UNKNOWN",
+  "parity_note": "Candidate execution evidence alone cannot classify compatibility with the pinned original Psycle reference."
+}
