@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "scope": "original-observation",
+  "contract": "project-io-serialization-roundtrip",
+  "evidence_role": "original",
+  "reference_build": "Psycle 1.12.0 x86",
+  "reference_file": "PsycleInstallerx86-1.12.0.exe",
+  "reference_installer_sha256": "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769",
+  "reference_installer_size_bytes": 9322919,
+  "reference_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+  "fixture": "fixtures/psy3/phase4-first.psy",
+  "fixture_sha256": "db18fbf83afd13c28ff7cf01a20ebd2e97018b4ecf77496afe936c5c20050065",
+  "procedure": "With pinned Psycle 1.12.0 x86 after accepted load of the exact PSY3 fixture, invoke only the verified process-owned File/Save As command to a fresh path; require the verified Save As dialog, four stable filename polls, successful dismissal, and a stable non-empty PSY3 output; leave the input bytes unchanged; terminate the initial process, restore the post-install registry baseline, launch the saved output in a fresh process, and require accepted load evidence with no UI-automation or runtime-identity diagnostics.",
+  "observation": "save-succeeded-and-fresh-reopen-accepted",
+  "save_result": "saved",
+  "stable_path_polls": 4,
+  "stable_output_polls": 40,
+  "save_diagnostics": [],
+  "saved_fixture_sha256": "d043bb6bb8d7a01c4c248f8eaee363409698186c6f21324ae2316f60a05f0e7b",
+  "reopen_result": "accepted",
+  "reopen_stable_marker_polls": 43,
+  "reopen_ui_automation_diagnostics": [],
+  "reopen_runtime_identity_diagnostics": [],
+  "byte_identity": false,
+  "semantic_roundtrip": "not-measured",
+  "original_psycle_observed": true,
+  "parity_status": "UNKNOWN",
+  "source_evidence": {
+    "workflow": "Phase 6C compatibility matrix",
+    "run_id": 35439069516,
+    "event": "pull_request",
+    "head_sha": "b6c3a7d4f026200477929c96d641592ef52384c2",
+    "merged_main_sha": "9cf2405d5d7bbd6ca5c95fcd90497363dbf29320",
+    "job_id": 105886881848,
+    "artifact_id": 10582734339,
+    "artifact_digest": "sha256:d29a7be85441a4c73df80861d0a4686b73b1d76613f2ddfead5690ac3e9daba5",
+    "artifact_receipt": "serialization-save.json",
+    "artifact_receipt_sha256": "d9d57bf7ff17a7b3ac937ac569d97e7d72e67c583c5b63fa57e2acb051b27097",
+    "projection_type": "field-preserving-classification-projection",
+    "projection_note": "This committed receipt projects the validated original Save As and fresh-process reopen observations from the final PR #63 workflow artifact. It preserves the classification-relevant input identity and save/reopen results while binding the raw save, saved-fixture, initial-load and reopen receipts by SHA-256; complete semantic song-state preservation remains unmeasured.",
+    "component_receipts": {
+      "initial_load": {
+        "artifact_receipt": "original-psy3.json",
+        "sha256": "a08ee6d7c040eb749956abefc6a0d499a41a6ba83592c592ccbcd495f653fc8a"
+      },
+      "save": {
+        "artifact_receipt": "serialization-save.json",
+        "sha256": "d9d57bf7ff17a7b3ac937ac569d97e7d72e67c583c5b63fa57e2acb051b27097"
+      },
+      "saved_fixture": {
+        "artifact_receipt": "serialization/saved-fixture.json",
+        "sha256": "41a32e57dd1a1347321da2f837fec01aaac15463ad3bacf886ebd3bdaf45c2ea"
+      },
+      "reopen": {
+        "artifact_receipt": "original-psy3-reopen.json",
+        "sha256": "b2e340df80c15c6b93796414282bd3a0f837c6aca8389f4fc75a1bef08199111"
+      }
+    }
+  }
+}
