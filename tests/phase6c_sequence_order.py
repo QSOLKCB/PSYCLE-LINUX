@@ -27,12 +27,18 @@ RAW = {
         {
             "line_index": 0,
             "entries": [
+                {"position": 0.0, "pattern_id": -1, "pattern_name": "master"},
+            ],
+        },
+        {
+            "line_index": 1,
+            "entries": [
                 {"position": 0.0, "pattern_id": 0, "pattern_name": "Order Alpha0"},
                 {"position": 1.0, "pattern_id": 2, "pattern_name": "Order Gamma2"},
                 {"position": 4.0, "pattern_id": 1, "pattern_name": "Order Beta1"},
                 {"position": 6.0, "pattern_id": 2, "pattern_name": "Order Gamma2"},
             ],
-        }
+        },
     ],
     "reports": ["Load Warning: " + m.WARNING],
 }
@@ -60,8 +66,9 @@ class CandidateProbe(unittest.TestCase):
     def test_clean_model_observation(self):
         result = self.derive()
         self.assertEqual(result["observation"], "sequence-model-observed")
+        self.assertEqual(result["play_order"], m.EXPECTED_ORDER)
         self.assertEqual(
-            [entry["pattern_id"] for entry in result["sequence_lines"][0]["entries"]],
+            [entry["pattern_id"] for entry in result["sequence_lines"][1]["entries"]],
             m.EXPECTED_ORDER,
         )
 
@@ -103,7 +110,7 @@ class CandidateProbe(unittest.TestCase):
 
     def test_structure_must_be_well_formed_and_ordered(self):
         bad = copy.deepcopy(RAW)
-        bad["sequence_lines"][0]["entries"][2]["position"] = 0.5
+        bad["sequence_lines"][1]["entries"][2]["position"] = 0.5
         self.assertEqual(self.derive(bad)["observation"], "inconclusive")
 
         bad = copy.deepcopy(RAW)
@@ -111,8 +118,15 @@ class CandidateProbe(unittest.TestCase):
         self.assertEqual(self.derive(bad)["observation"], "inconclusive")
 
         bad = copy.deepcopy(RAW)
-        bad["sequence_lines"][0]["entries"][1]["pattern_id"] = True
+        bad["sequence_lines"][1]["entries"][1]["pattern_id"] = True
         self.assertEqual(self.derive(bad)["observation"], "inconclusive")
+
+    def test_master_line_is_separate_from_canonical_play_order(self):
+        bad = copy.deepcopy(RAW)
+        bad["sequence_lines"][0]["entries"][0]["pattern_id"] = 99
+        result = self.derive(bad)
+        self.assertEqual(result["observation"], "inconclusive")
+        self.assertEqual(result["play_order"], [])
 
     def test_wrong_song_or_reports_are_inconclusive(self):
         for field, value in (
