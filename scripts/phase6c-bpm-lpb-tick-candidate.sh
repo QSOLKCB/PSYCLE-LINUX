@@ -12,6 +12,19 @@ STAGING="$ROOT/psycle-cpp-r12005-sanitized/psycle-player/phase6c-bpm-lpb-tick-pr
 mkdir "$OUT" "$STAGING"
 trap 'rm -rf -- "$BUILD" "$STAGING"' EXIT
 
+run_logged() {
+    local log="$1"
+    shift
+    set +e
+    "$@" >"$log" 2>&1
+    local status=$?
+    set -e
+    if (( status != 0 )); then
+        cat "$log" >&2
+        return "$status"
+    fi
+}
+
 CPSYCLE="$ROOT/cpsycle"
 make -C "$CPSYCLE/container/src"
 make -C "$CPSYCLE/thread/src"
@@ -37,25 +50,36 @@ LUA_CFLAGS=($(pkg-config --cflags lua))
 # shellcheck disable=SC2207
 LUA_LIBS=($(pkg-config --libs lua))
 
-gcc "${COMMON_CFLAGS[@]}" "${LUA_CFLAGS[@]}" \
+run_logged "$OUT/fixture-build.log" \
+    gcc "${COMMON_CFLAGS[@]}" "${LUA_CFLAGS[@]}" \
     "$ROOT/tests/phase6c_bpm_lpb_tick_fixture.c" \
     -o "$BUILD/phase6c-bpm-lpb-tick-fixture" \
     "${COMMON_LDFLAGS[@]}" "${LUA_LIBS[@]}"
 
-"$BUILD/phase6c-bpm-lpb-tick-fixture" "$OUT" >"$OUT/fixture-generator.log" 2>&1
+run_logged "$OUT/fixture-generator.log" \
+    "$BUILD/phase6c-bpm-lpb-tick-fixture" "$OUT"
 FIXTURE="$OUT/phase6c-bpm-lpb-tick.psy"
 [[ -s "$FIXTURE" ]] || { echo 'timing fixture was not generated' >&2; exit 2; }
 [[ "$(head -c 8 "$FIXTURE")" == "PSY3SONG" ]] || { echo 'timing fixture is not PSY3' >&2; exit 2; }
 
 cp "$ROOT/tests/phase6c_bpm_lpb_tick.pro" "$STAGING/probe.pro"
+set +e
 (
     cd "$STAGING"
     qmake CONFIG-=shared CONFIG+=release \
         "PROBE_BUILD_DIR=$BUILD" "REPO_ROOT=$ROOT" \
         -o "$BUILD/Makefile" "$STAGING/probe.pro"
-)
-make -C "$BUILD" -j2
+) >"$OUT/probe-qmake.log" 2>&1
+qmake_status=$?
+set -e
+if (( qmake_status != 0 )); then
+    cat "$OUT/probe-qmake.log" >&2
+    exit "$qmake_status"
+fi
 
-python3 "$ROOT/scripts/phase6c-bpm-lpb-tick-evidence.py" collect \
+run_logged "$OUT/probe-build.log" make -C "$BUILD" -j2
+run_logged "$OUT/candidate-collect.log" \
+    python3 "$ROOT/scripts/phase6c-bpm-lpb-tick-evidence.py" collect \
     "$ARTIFACT" "$BUILD/phase6c-bpm-lpb-tick-probe"
-python3 "$ROOT/scripts/phase6c-bpm-lpb-tick-evidence.py" candidate "$ARTIFACT"
+run_logged "$OUT/candidate-validation.log" \
+    python3 "$ROOT/scripts/phase6c-bpm-lpb-tick-evidence.py" candidate "$ARTIFACT"
