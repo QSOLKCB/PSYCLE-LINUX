@@ -194,6 +194,13 @@ class OriginalSourceContract(unittest.TestCase):
             self.assertEqual(
                 m.validate_source(root)["source_commit"], m.SOURCE_COMMIT
             )
+            receipt["files"]["psycle/src/psycle/host/Player.cpp"]["sha256"] = "0" * 64
+            (root / "original-source-delayed-retrigger.json").write_text(
+                json.dumps(receipt)
+            )
+            with self.assertRaises(ValueError):
+                m.validate_source(root)
+            receipt["files"]["psycle/src/psycle/host/Player.cpp"].pop("sha256")
             receipt["files"]["psycle/src/psycle/host/Player.cpp"]["git_blob"] = "0" * 40
             (root / "original-source-delayed-retrigger.json").write_text(
                 json.dumps(receipt)
