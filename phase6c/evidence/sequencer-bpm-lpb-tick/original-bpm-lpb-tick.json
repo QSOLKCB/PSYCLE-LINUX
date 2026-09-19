@@ -78,17 +78,17 @@
       "opened": true,
       "dialog_seen_before": true,
       "file_menu_invoked": false,
-      "menu_item_seeen": false,
       "attempted": false,
       "outcome": "already-open",
-      "diagnostics": []
+      "diagnostics": [],
+      "menu_item_seen": false
     }
   },
   "runtime_identity_diagnostics": [],
   "main_window_seen": true,
   "exit_code_before_termination": null,
   "process_running_before_termination": true,
-  "termination": "killed-without--closeable-main-window",
+  "termination": "killed-without-closeable-main-window",
   "original_psycle_observed": true,
   "parity_status": "UNKNOWN",
   "source_evidence": {
