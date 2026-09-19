@@ -87,6 +87,7 @@ function Invoke-Phase6cSaveAs(
         stable_output_polls = 0
         menu_inventory = @()
         dialog_inventory = @()
+        waiting_ui = @()
         diagnostics = @()
     }
     $diagnostics = [System.Collections.Generic.List[string]]::new()
@@ -117,13 +118,24 @@ function Invoke-Phase6cSaveAs(
             if ($Process.HasExited) { throw "reference exited waiting for Save As" }
             $windows = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
                 [System.Windows.Automation.TreeScope]::Children, $condition)
-            $dialogs = @($windows | Where-Object { $_.Current.Name -ceq "Save As" })
-            $result.dialog_inventory = @($windows | ForEach-Object { $_.Current.Name })
+            # UIA may nest an owned common dialog under the application's
+            # top-level window rather than expose it as a desktop child.
+            $ownedWindows = @($windows)
+            foreach ($window in $windows) {
+                $ownedWindows += @($window.FindAll(
+                    [System.Windows.Automation.TreeScope]::Descendants, $condition) |
+                    Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window })
+            }
+            $dialogs = @($ownedWindows | Where-Object { $_.Current.Name -ceq "Save As" })
+            $result.dialog_inventory = @($ownedWindows | ForEach-Object { $_.Current.Name })
             if ($dialogs.Count -gt 1) { throw "ambiguous process-owned Save As dialogs" }
             if ($dialogs.Count -eq 1) { $dialog=$dialogs[0]; break }
             Start-Sleep -Milliseconds 200
         }
-        if ($null -eq $dialog) { throw "Save As dialog not observed" }
+        if ($null -eq $dialog) {
+            $result.waiting_ui = @((Get-UiObservation $Process).values)
+            throw "Save As dialog not observed"
+        }
         $nodes = $dialog.FindAll([System.Windows.Automation.TreeScope]::Descendants,
             [System.Windows.Automation.Condition]::TrueCondition)
         $result.dialog_inventory = @($nodes | ForEach-Object {
