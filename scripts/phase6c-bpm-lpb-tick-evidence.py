@@ -273,14 +273,29 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
     matches = timing.get("matches_fixture_expected")
     if result not in {"observed", "inconclusive"} or type(polls) is not int or polls < 0:
         raise ValueError("original timing observation shape is invalid")
+    dialog_bootstrap = timing.get("dialog_bootstrap")
     if result == "observed":
-        if load_result != "accepted" or polls < 4 or observed != expected or matches is not True:
+        if load_result != "accepted" or polls < 4:
             raise ValueError("conclusive original timing observation is not clean/stable")
+        if not isinstance(observed, dict) or set(observed) != set(expected):
+            raise ValueError("conclusive original timing observation has incomplete values")
+        if any(type(observed[key]) is not int for key in expected):
+            raise ValueError("conclusive original timing observation has non-integer values")
+        if type(matches) is not bool or matches is not (observed == expected):
+            raise ValueError("original timing match flag does not describe observed values")
+        if (
+            not isinstance(dialog_bootstrap, dict)
+            or dialog_bootstrap.get("opened") is not True
+            or dialog_bootstrap.get("outcome") not in {"already-open", "opened"}
+            or dialog_bootstrap.get("diagnostics") != []
+        ):
+            raise ValueError("conclusive original timing observation lacks verified dialog bootstrap")
     elif observed not in ({}, None) or matches is not None:
         raise ValueError("inconclusive original timing observation claims values")
     return {"load_result": load_result, "timing_result": result,
             "observed_values": observed, "stable_polls": polls,
-            "matches_fixture_expected": matches, "parity_status": "UNKNOWN"}
+            "matches_fixture_expected": matches, "dialog_bootstrap": dialog_bootstrap,
+            "parity_status": "UNKNOWN"}
 
 
 def main() -> None:
