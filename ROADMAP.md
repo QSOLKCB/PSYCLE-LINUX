@@ -317,7 +317,7 @@ Do **not** assume C-Psycle's event sequencer is authoritative when it differs fr
 ### 6D — parity report
 
 - [x] Produce `PSYCLE_CORE_PARITY.md` with PASS / DIFFERENT / MISSING / UNKNOWN for each subsystem.
-- [x] Mechanically require the original-Psycle version/build and versioned evidence receipts for every non-`UNKNOWN` row; the classified rows are scoped PSY2 and PSY3 parse/load acceptance `PASS` results.
+- [x] Mechanically require the original-Psycle version/build and versioned evidence receipts for every non-`UNKNOWN` row; the classified rows are scoped PSY2 and PSY3 parse/load `PASS` results plus the scoped serialization/save-capability `MISSING` result.
 - [x] Separate engine gaps from UI-only gaps.
 - [x] Identify which existing C-Psycle tests are portable shared contracts, which need original-Psycle confirmation, and which remain C-Psycle-only historical evidence.
 - [x] Add `scripts/phase6d-validate-parity-report.py` plus a maintained Phase 6D workflow so the human-readable 20-row report cannot drift from the canonical matrix status inventory.
