@@ -178,6 +178,70 @@ EXPECTED_CANDIDATE_SOURCE_IDENTITIES["project-io-psy3-parse"] = {
     "artifact_digest": "sha256:6b9e3dae1fd9d5137f172692ed49bad5a24ad000cd7cb9d658b9077def9aca1e"
 }
 
+SERIALIZATION_CONTRACT_ID = "project-io-serialization-roundtrip"
+EXPECTED_SERIALIZATION_COMPONENT_RECEIPTS = {
+    "initial_load": {
+        "artifact_receipt": "original-psy3.json",
+        "sha256": "a08ee6d7c040eb749956abefc6a0d499a41a6ba83592c592ccbcd495f653fc8a",
+    },
+    "save": {
+        "artifact_receipt": "serialization-save.json",
+        "sha256": "d9d57bf7ff17a7b3ac937ac569d97e7d72e67c583c5b63fa57e2acb051b27097",
+    },
+    "saved_fixture": {
+        "artifact_receipt": "serialization/saved-fixture.json",
+        "sha256": "41a32e57dd1a1347321da2f837fec01aaac15463ad3bacf886ebd3bdaf45c2ea",
+    },
+    "reopen": {
+        "artifact_receipt": "original-psy3-reopen.json",
+        "sha256": "b2e340df80c15c6b93796414282bd3a0f837c6aca8389f4fc75a1bef08199111",
+    },
+}
+EXPECTED_ORIGINAL_SOURCE_IDENTITIES[SERIALIZATION_CONTRACT_ID] = {
+    "receipt_sha256": "d9d57bf7ff17a7b3ac937ac569d97e7d72e67c583c5b63fa57e2acb051b27097",
+    "procedure_sha256": "a1b04111b3f206238ec82f80c1f86d7403757c0c8b30c886d2fca03ebe5aea73",
+    "executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+    "artifact_digest": "sha256:d29a7be85441a4c73df80861d0a4686b73b1d76613f2ddfead5690ac3e9daba5",
+}
+EXPECTED_WORKFLOW_ATTRIBUTION[SERIALIZATION_CONTRACT_ID] = {
+    "workflow": "Phase 6C compatibility matrix",
+    "run_id": 35439069516,
+    "event": "pull_request",
+    "head_sha": "b6c3a7d4f026200477929c96d641592ef52384c2",
+    "merged_main_sha": "9cf2405d5d7bbd6ca5c95fcd90497363dbf29320",
+    "original_job_id": 105886881848,
+    "original_artifact_id": 10582734339,
+    "candidate_job_id": 105886634634,
+    "candidate_artifact_id": 10582559462,
+}
+EXPECTED_ORIGINAL_CLASSIFICATION_FIELDS[SERIALIZATION_CONTRACT_ID] = {
+    "reference_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+    "fixture": "fixtures/psy3/phase4-first.psy",
+    "observation": "save-succeeded-and-fresh-reopen-accepted",
+    "initial_load_result": "accepted",
+    "initial_stable_marker_polls": 38,
+    "initial_ui_automation_diagnostics": [],
+    "initial_runtime_identity_diagnostics": [],
+    "save_result": "saved",
+    "stable_path_polls": 4,
+    "stable_output_polls": 40,
+    "save_diagnostics": [],
+    "saved_fixture_sha256": "d043bb6bb8d7a01c4c248f8eaee363409698186c6f21324ae2316f60a05f0e7b",
+    "reopen_result": "accepted",
+    "reopen_stable_marker_polls": 43,
+    "reopen_ui_automation_diagnostics": [],
+    "reopen_runtime_identity_diagnostics": [],
+    "byte_identity": False,
+    "semantic_roundtrip": "not-measured",
+    "original_psycle_observed": True,
+    "parity_status": "UNKNOWN",
+}
+EXPECTED_CANDIDATE_SOURCE_IDENTITIES[SERIALIZATION_CONTRACT_ID] = {
+    "receipt_sha256": "780837c0c3dfe715416725248cdc678b4a80f96e2e2f7b34e3c62c070607c8e3",
+    "executable_sha256": "2e272e7ad6fedd88262e993b0e6ef27e3d5b632e671bdd1976eb1d5c95be669e",
+    "artifact_digest": "sha256:441854e0595636b5cb12b45bf8711a07f27d4fdacbca2c2b0468be89282427f8",
+}
+
 ALLOWED_STATUS = {"PASS", "DIFFERENT", "MISSING", "UNKNOWN"}
 CLASSIFIED_STATUS = ALLOWED_STATUS - {"UNKNOWN"}
 PARSE_CONTRACT_IDS = {
@@ -298,7 +362,13 @@ def validate_classification_receipt(
     if receipt.get("schema_version") != 1 or receipt.get("phase") != "6C":
         die(f"{context}.observation receipt has unexpected schema_version/phase")
     expected_scope = (
-        "original-observation" if role == "original" else "candidate-observation"
+        "original-observation"
+        if role == "original"
+        else (
+            "candidate-serialization-observation"
+            if row_id == SERIALIZATION_CONTRACT_ID
+            else "candidate-observation"
+        )
     )
     if receipt.get("scope") != expected_scope:
         die(
@@ -392,9 +462,14 @@ def validate_classification_receipt(
         expected_source = EXPECTED_CANDIDATE_SOURCE_IDENTITIES.get(row_id)
         if not isinstance(expected_source, dict):
             die(f"{context}.observation receipt lacks a pinned candidate source identity")
+        executable_field = (
+            "probe_sha256"
+            if row_id == SERIALIZATION_CONTRACT_ID
+            else "executable_sha256"
+        )
         executable_sha256 = require_sha256(
-            receipt.get("executable_sha256"),
-            f"{context}.observation receipt executable_sha256",
+            receipt.get(executable_field),
+            f"{context}.observation receipt {executable_field}",
         )
         if executable_sha256 != expected_source["executable_sha256"]:
             die(f"{context}.observation receipt executable SHA-256 is not pinned")
@@ -408,9 +483,10 @@ def validate_classification_receipt(
             die(f"{context}.observation receipt must remain candidate-only")
         if receipt.get("parity_status") != "UNKNOWN":
             die(f"{context}.observation receipt candidate parity_status must remain UNKNOWN")
-        exit_code = receipt.get("exit_code")
-        if not isinstance(exit_code, int) or isinstance(exit_code, bool):
-            die(f"{context}.observation receipt exit_code must be an integer")
+        if row_id != SERIALIZATION_CONTRACT_ID:
+            exit_code = receipt.get("exit_code")
+            if not isinstance(exit_code, int) or isinstance(exit_code, bool):
+                die(f"{context}.observation receipt exit_code must be an integer")
     else:
         die(f"{context} has unsupported evidence role: {role}")
 
@@ -423,12 +499,13 @@ def validate_classification_receipt(
         receipt.get("fixture_sha256"),
         f"{context}.observation receipt fixture_sha256",
     )
-    receipt_observation = receipt.get("observation")
-    if not isinstance(receipt_observation, str) or not receipt_observation.strip():
-        die(f"{context}.observation receipt must contain a concrete observation")
-    require_concrete_evidence_value(
-        receipt_observation, f"{context}.observation receipt observation"
-    )
+    if not (role == "candidate" and row_id == SERIALIZATION_CONTRACT_ID):
+        receipt_observation = receipt.get("observation")
+        if not isinstance(receipt_observation, str) or not receipt_observation.strip():
+            die(f"{context}.observation receipt must contain a concrete observation")
+        require_concrete_evidence_value(
+            receipt_observation, f"{context}.observation receipt observation"
+        )
     return observation_ref, fixture_sha256, receipt
 
 
@@ -725,6 +802,99 @@ def validate_parse_classification_semantics(
     die(f"{row_id} unsupported classified parse status: {status!r}")
 
 
+def validate_serialization_classification_semantics(
+    status: str,
+    original_receipt: dict[str, object],
+    candidate_receipt: dict[str, object],
+    comparison: dict[str, object],
+) -> None:
+    """Require a real original save and a clean candidate save-capability absence."""
+    if status != "MISSING":
+        die(
+            f"{SERIALIZATION_CONTRACT_ID} currently supports only the evidence-backed "
+            "MISSING save-capability verdict"
+        )
+
+    if original_receipt.get("original_psycle_observed") is not True:
+        die(f"{SERIALIZATION_CONTRACT_ID} original Psycle was not observed")
+    if original_receipt.get("initial_load_result") != "accepted":
+        die(f"{SERIALIZATION_CONTRACT_ID} original input load was not accepted")
+    for field in ("initial_stable_marker_polls", "stable_path_polls", "stable_output_polls", "reopen_stable_marker_polls"):
+        value = original_receipt.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 4:
+            die(f"{SERIALIZATION_CONTRACT_ID} original receipt has invalid {field}")
+    for field in (
+        "initial_ui_automation_diagnostics",
+        "initial_runtime_identity_diagnostics",
+        "save_diagnostics",
+        "reopen_ui_automation_diagnostics",
+        "reopen_runtime_identity_diagnostics",
+    ):
+        if original_receipt.get(field) != []:
+            die(f"{SERIALIZATION_CONTRACT_ID} original receipt contains {field}")
+    if original_receipt.get("save_result") != "saved":
+        die(f"{SERIALIZATION_CONTRACT_ID} original save did not succeed")
+    if original_receipt.get("reopen_result") != "accepted":
+        die(f"{SERIALIZATION_CONTRACT_ID} original saved output was not accepted on reopen")
+    saved_sha = require_sha256(
+        original_receipt.get("saved_fixture_sha256"),
+        f"{SERIALIZATION_CONTRACT_ID} saved fixture SHA-256",
+    )
+    if saved_sha == original_receipt.get("fixture_sha256"):
+        die(f"{SERIALIZATION_CONTRACT_ID} expected recorded non-byte-identical save")
+    if original_receipt.get("byte_identity") is not False:
+        die(f"{SERIALIZATION_CONTRACT_ID} byte identity must remain recorded separately")
+    if original_receipt.get("semantic_roundtrip") != "not-measured":
+        die(f"{SERIALIZATION_CONTRACT_ID} semantic round-trip must remain unmeasured")
+
+    source_evidence = original_receipt.get("source_evidence")
+    if not isinstance(source_evidence, dict):
+        die(f"{SERIALIZATION_CONTRACT_ID} original receipt lacks source_evidence")
+    if source_evidence.get("component_receipts") != EXPECTED_SERIALIZATION_COMPONENT_RECEIPTS:
+        die(f"{SERIALIZATION_CONTRACT_ID} original component receipt bindings changed")
+
+    attempts = candidate_receipt.get("attempts")
+    if not isinstance(attempts, list) or len(attempts) != 3:
+        die(f"{SERIALIZATION_CONTRACT_ID} candidate must contain exactly three save attempts")
+    expected_attempts: list[dict[str, object]] = []
+    for expected_version, attempt in zip((2, 3, 4), attempts):
+        if not isinstance(attempt, dict):
+            die(f"{SERIALIZATION_CONTRACT_ID} candidate attempt must be an object")
+        if attempt.get("format_version") != expected_version:
+            die(f"{SERIALIZATION_CONTRACT_ID} candidate save versions changed")
+        exit_code = attempt.get("exit_code")
+        if not isinstance(exit_code, int) or isinstance(exit_code, bool) or exit_code != 0:
+            die(f"{SERIALIZATION_CONTRACT_ID} candidate save attempt did not exit cleanly")
+        if attempt.get("observation") != "save-returned-false-without-output":
+            die(f"{SERIALIZATION_CONTRACT_ID} candidate save attempt is not a clean refusal")
+        if attempt.get("output") is not None:
+            die(f"{SERIALIZATION_CONTRACT_ID} candidate unexpectedly records save output")
+        expected_attempts.append(
+            {
+                "format_version": expected_version,
+                "exit_code": 0,
+                "observation": "save-returned-false-without-output",
+            }
+        )
+
+    expected_bindings = {
+        "original_observation": original_receipt.get("observation"),
+        "original_save_result": original_receipt.get("save_result"),
+        "original_reopen_result": original_receipt.get("reopen_result"),
+        "original_saved_fixture_sha256": saved_sha,
+        "candidate_attempts": expected_attempts,
+        "candidate_missing_capability": True,
+        "byte_identity": original_receipt.get("byte_identity"),
+        "semantic_roundtrip": original_receipt.get("semantic_roundtrip"),
+    }
+    for field, expected in expected_bindings.items():
+        if comparison.get(field) != expected:
+            die(
+                f"{SERIALIZATION_CONTRACT_ID}.comparison receipt {field} "
+                "does not bind the underlying save observations"
+            )
+
+
 def validate_comparison_receipt(
     row: dict[str, object],
     row_id: str,
@@ -855,8 +1025,13 @@ def validate_comparison_receipt(
             f"{row_id}.comparison receipt does not bind the candidate source "
             "receipt SHA-256"
         )
+    candidate_executable_field = (
+        "probe_sha256"
+        if row_id == SERIALIZATION_CONTRACT_ID
+        else "executable_sha256"
+    )
     candidate_executable_sha256 = require_sha256(
-        candidate_receipt.get("executable_sha256"),
+        candidate_receipt.get(candidate_executable_field),
         f"{row_id} candidate executable SHA-256",
     )
     if (
@@ -895,6 +1070,13 @@ def validate_comparison_receipt(
     if row_id in PARSE_CONTRACT_IDS:
         validate_parse_classification_semantics(
             row_id,
+            status,
+            original_receipt,
+            candidate_receipt,
+            comparison,
+        )
+    elif row_id == SERIALIZATION_CONTRACT_ID:
+        validate_serialization_classification_semantics(
             status,
             original_receipt,
             candidate_receipt,
