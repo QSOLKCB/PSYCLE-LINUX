@@ -101,6 +101,23 @@ jobs:
           python3 tests/phase6c_serialization.py
           python3 tests/phase6c_sequence_order.py
 
+      - name: Parse original Windows observer
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/phase6c-original-windows-fixtures-v2.ps1').Path,
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object {
+              Write-Error ("PowerShell parse error: " + $_.Message)
+            }
+            exit 1
+          }
+
       - name: Verify frozen Phase 6B source identities
         shell: bash
         run: |
