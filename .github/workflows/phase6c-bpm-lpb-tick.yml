@@ -1,0 +1,114 @@
+name: Phase 6C BPM LPB tick observation
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-6c/**'
+    paths:
+      - 'tests/phase6c_bpm_lpb_tick*'
+      - 'scripts/phase6c-bpm-lpb-tick-*'
+      - 'psycle-cpp-r12005-sanitized/**'
+      - 'cpsycle/**'
+      - '.github/workflows/phase6c-bpm-lpb-tick.yml'
+  pull_request:
+    paths:
+      - 'tests/phase6c_bpm_lpb_tick*'
+      - 'scripts/phase6c-bpm-lpb-tick-*'
+      - 'psycle-cpp-r12005-sanitized/**'
+      - 'cpsycle/**'
+      - '.github/workflows/phase6c-bpm-lpb-tick.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6c-bpm-lpb-tick-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  candidate-timing-observation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates curl subversion file build-essential pkg-config \
+            qt5-qmake qtbase5-dev libboost-thread-dev libboost-filesystem-dev \
+            libboost-system-dev libboost-chrono-dev libboost-date-time-dev \
+            libxml++2.6-dev zlib1g-dev libsoxr-dev libasound2-dev \
+            libjack-jackd2-dev liblilv-dev liblua5.4-dev
+
+      - name: Check timing evidence negative controls
+        run: python3 tests/phase6c_bpm_lpb_tick.py
+
+      - name: Verify frozen Phase 6B source identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/phase6-upstream-audit.sh phase6-upstream-audit
+          bash scripts/phase6b-sanitized-manifest.sh \
+            phase6-upstream-audit phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-committed-source.sh \
+            psycle-cpp-r12005-sanitized phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-qmake-support.sh \
+            psycle-cpp-r12005-sanitized/build-systems/qmake
+
+      - name: Stage pinned historical plugin interface
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/psycle-plugins/src/psycle/plugin_interface.hpp'
+          ARCHIVE_COMMIT='1863c4177d38d37e8eba9e4eb8857e5023debe6d'
+          EXPECTED_BLOB='2cf4d8f756fa58098fd84b7b44d0ebe1350594c5'
+          test ! -e "$DEST"
+          mkdir -p "$(dirname "$DEST")"
+          curl -fsSL --retry 3 \
+            "https://raw.githubusercontent.com/QSOLKCB/PSYCLE-LINUX/${ARCHIVE_COMMIT}/cpsycle/plugins/psycle/plugin_interface.hpp" \
+            -o "$DEST"
+          [[ "$(git hash-object "$DEST")" == "$EXPECTED_BLOB" ]]
+
+      - name: Stage pinned historical diversalis dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/diversalis'
+          test ! -e "$DEST"
+          for attempt in 1 2 3 4; do
+            rm -rf -- "$DEST"
+            if svn export --quiet --force -r 12005 \
+              'https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005' "$DEST"; then
+              exit 0
+            fi
+            sleep "$((attempt * 2))"
+          done
+          exit 2
+
+      - name: Build pinned historical player support
+        shell: bash
+        working-directory: psycle-cpp-r12005-sanitized/psycle-player
+        run: |
+          set -euo pipefail
+          qmake CONFIG-=shared CONFIG+=release psycle-player.pro
+          make -j2
+
+      - name: Collect candidate BPM LPB tick evidence
+        shell: bash
+        run: bash scripts/phase6c-bpm-lpb-tick-candidate.sh phase6c-timing-evidence
+
+      - name: Upload candidate timing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-bpm-lpb-tick-evidence
+          path: phase6c-timing-evidence/
+          if-no-files-found: warn
