@@ -1,3 +1,168 @@
+Add-Type -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class Phase6cTimingNative
+{
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder text, int maxCount);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr GetDlgItem(IntPtr hDlg, int nIDDlgItem);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool IsWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport(
+        "user32.dll",
+        CharSet = CharSet.Unicode,
+        SetLastError = true,
+        EntryPoint = "SendMessageTimeoutW"
+    )]
+    private static extern IntPtr SendMessageTimeoutText(
+        IntPtr hWnd,
+        uint msg,
+        IntPtr wParam,
+        StringBuilder lParam,
+        uint flags,
+        uint timeout,
+        out IntPtr result
+    );
+
+    private const uint WM_GETTEXT = 0x000D;
+    private const uint SMTO_ABORTIFHUNG = 0x0002;
+
+    public static IntPtr[] FindSongInformationDialogs(uint processId)
+    {
+        var matches = new List<IntPtr>();
+        EnumWindows(
+            delegate (IntPtr hWnd, IntPtr lParam)
+            {
+                uint ownerProcessId;
+                GetWindowThreadProcessId(hWnd, out ownerProcessId);
+                if (ownerProcessId != processId)
+                {
+                    return true;
+                }
+
+                var title = new StringBuilder(256);
+                GetWindowText(hWnd, title, title.Capacity);
+                if (!string.Equals(
+                    title.ToString(),
+                    "Song Information",
+                    StringComparison.Ordinal
+                ))
+                {
+                    return true;
+                }
+
+                var className = new StringBuilder(64);
+                GetClassName(hWnd, className, className.Capacity);
+                if (!string.Equals(
+                    className.ToString(),
+                    "#32770",
+                    StringComparison.Ordinal
+                ))
+                {
+                    return true;
+                }
+
+                if (IsWindow(hWnd) && IsWindowVisible(hWnd))
+                {
+                    matches.Add(hWnd);
+                }
+                return true;
+            },
+            IntPtr.Zero
+        );
+        return matches.ToArray();
+    }
+
+    public static string ReadEditText(
+        uint processId,
+        IntPtr dialog,
+        int controlId,
+        uint timeout
+    )
+    {
+        if (!IsWindow(dialog) || !IsWindowVisible(dialog))
+        {
+            throw new InvalidOperationException("Song Information dialog HWND is not live/visible");
+        }
+
+        uint dialogProcessId;
+        GetWindowThreadProcessId(dialog, out dialogProcessId);
+        if (dialogProcessId != processId)
+        {
+            throw new InvalidOperationException("Song Information dialog PID mismatch");
+        }
+
+        IntPtr edit = GetDlgItem(dialog, controlId);
+        if (edit == IntPtr.Zero || !IsWindow(edit) || !IsWindowVisible(edit))
+        {
+            throw new InvalidOperationException(
+                "timing edit control missing/not live/not visible: id=" + controlId
+            );
+        }
+
+        uint editProcessId;
+        GetWindowThreadProcessId(edit, out editProcessId);
+        if (editProcessId != processId)
+        {
+            throw new InvalidOperationException(
+                "timing edit control PID mismatch: id=" + controlId
+            );
+        }
+
+        var className = new StringBuilder(64);
+        GetClassName(edit, className, className.Capacity);
+        if (!string.Equals(className.ToString(), "Edit", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "timing control class mismatch: id=" + controlId +
+                " class=" + className.ToString()
+            );
+        }
+
+        var text = new StringBuilder(64);
+        IntPtr messageResult;
+        IntPtr sendResult = SendMessageTimeoutText(
+            edit,
+            WM_GETTEXT,
+            new IntPtr(text.Capacity),
+            text,
+            SMTO_ABORTIFHUNG,
+            timeout,
+            out messageResult
+        );
+        if (sendResult == IntPtr.Zero)
+        {
+            throw new InvalidOperationException(
+                "timing control WM_GETTEXT failed/timed out: id=" + controlId +
+                " win32_error=" + Marshal.GetLastWin32Error()
+            );
+        }
+        return text.ToString();
+    }
+}
+"@
+
 function Get-Phase6cTimingInteger([object]$Element) {
     try {
         $patternObject = $null
@@ -423,16 +588,16 @@ function Get-Phase6cTimingUiObservation([System.Diagnostics.Process]$Process) {
         control_ids = [ordered]@{}
         diagnostics = @()
     }
-    # Psycle 1.12 CSongpDlg binds these fields to fixed Win32 resource IDs
-    # in SongpDlg.cpp / resources.hpp. Win32 UI Automation exposes those native
-    # control IDs as AutomationId, which is stronger than duplicated label text.
+    # Psycle 1.12 CSongpDlg binds these values to fixed native Edit IDs
+    # (SongpDlg.cpp / resources.hpp). Read those controls from the uniquely
+    # verified process-owned #32770 dialog instead of accessibility label text.
     $controlIds = [ordered]@{
-        tempo = '2146'                # IDC_EDIT_TEMPO
-        lines_per_beat = '2148'       # IDC_EDIT_LPB
-        ticks_per_beat = '2150'       # IDC_EDIT_TPB
-        extra_tick_per_line = '2151'  # IDC_EDIT_EXTRATICK
-        real_ticks_per_beat = '2153'  # IDC_EDIT_REALTPB
-        real_tempo = '2154'           # IDC_EDIT_REALTEMPO
+        tempo = 2146                # IDC_EDIT_TEMPO
+        lines_per_beat = 2148       # IDC_EDIT_LPB
+        ticks_per_beat = 2150       # IDC_EDIT_TPB
+        extra_tick_per_line = 2151  # IDC_EDIT_EXTRATICK
+        real_ticks_per_beat = 2153  # IDC_EDIT_REALTPB
+        real_tempo = 2154           # IDC_EDIT_REALTEMPO
     }
     $result.control_ids = $controlIds
 
@@ -468,55 +633,36 @@ function Get-Phase6cTimingUiObservation([System.Diagnostics.Process]$Process) {
             return $result
         }
 
-        $nodes = $matches[0].FindAll(
-            [System.Windows.Automation.TreeScope]::Descendants,
-            [System.Windows.Automation.Condition]::TrueCondition
+        $nativeDialogs = @(
+            [Phase6cTimingNative]::FindSongInformationDialogs([uint32]$Process.Id)
         )
-        foreach ($key in $controlIds.Keys) {
-            $matchesById = [System.Collections.Generic.List[object]]::new()
-            foreach ($node in $nodes) {
+        if ($nativeDialogs.Count -ne 1) {
+            $diagnostics.Add(
+                "timing observer expected exactly one native process-owned " +
+                "Song Information #32770 dialog: count=$($nativeDialogs.Count)"
+            )
+        } else {
+            $dialogHandle = [IntPtr]$nativeDialogs[0]
+            foreach ($key in $controlIds.Keys) {
                 try {
-                    if (
-                        [string]$node.Current.AutomationId -ceq [string]$controlIds[$key] -and
-                        $node.Current.ControlType -eq
-                            [System.Windows.Automation.ControlType]::Edit
-                    ) {
-                        $duplicateVisual = $false
-                        foreach ($existing in $matchesById) {
-                            if (Test-Phase6cSameVisualElement $existing $node) {
-                                $duplicateVisual = $true
-                                break
-                            }
-                        }
-                        if (-not $duplicateVisual) {
-                            $matchesById.Add($node)
-                        }
+                    $raw = [Phase6cTimingNative]::ReadEditText(
+                        [uint32]$Process.Id,
+                        $dialogHandle,
+                        [int]$controlIds[$key],
+                        [uint32]500
+                    ).Trim()
+                    if ($raw -cnotmatch '^[0-9]+$') {
+                        throw "non-integer value '$raw'"
                     }
+                    $result.values[$key] = [int]$raw
                 }
                 catch {
                     $diagnostics.Add(
-                        "timing observer control-id '$($controlIds[$key])' read failed: $($_.Exception.Message)"
+                        "timing observer native control '$key' " +
+                        "id=$($controlIds[$key]) read failed: $($_.Exception.Message)"
                     )
                 }
             }
-
-            if ($matchesById.Count -ne 1) {
-                $diagnostics.Add(
-                    "timing observer expected exactly one Edit control for '$key' " +
-                    "AutomationId=$($controlIds[$key]): count=$($matchesById.Count)"
-                )
-                continue
-            }
-
-            $value = Get-Phase6cTimingInteger $matchesById[0]
-            if ($null -eq $value) {
-                $diagnostics.Add(
-                    "timing observer control '$key' AutomationId=$($controlIds[$key]) " +
-                    "does not expose an integer value"
-                )
-                continue
-            }
-            $result.values[$key] = [int]$value
         }
         if ($diagnostics.Count -eq 0 -and $result.values.Count -eq $controlIds.Count) {
             $result.complete = $true
