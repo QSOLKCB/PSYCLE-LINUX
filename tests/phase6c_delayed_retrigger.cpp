@@ -2,7 +2,6 @@
 // Project-authored observation harness for delayed/retrigger command scheduling.
 #include <psycle/core/detail/project.private.hpp>
 #include <psycle/core/song.h>
-#include <psycle/core/player.h>
 #include <psycle/core/machinefactory.h>
 #include <psycle/core/playertimeinfo.h>
 #include <psycle/core/sampler.h>
@@ -15,6 +14,7 @@
 #define private public
 #include <psycle/core/sequencer.h>
 #undef private
+#include <psycle/core/player.h>
 
 #include <iomanip>
 #include <iostream>
