@@ -2,13 +2,20 @@
 
 ## Status
 
-**Paired observation lane; compatibility remains `UNKNOWN`.**
+**Versioned deferred comparison; compatibility remains `UNKNOWN`.**
 
 This slice follows the classified BPM/LPB/tick result and measures the next
-independent matrix contract, `sequencer-delayed-retrigger`. It does not change
-that matrix row. A later classification PR must bind a clean paired run and say
-exactly which command semantics are sufficiently observed before any
-`PASS` / `DIFFERENT` / `MISSING` verdict is allowed.
+independent matrix contract, `sequencer-delayed-retrigger`. The final PR #69
+push run `35457374404` at head
+`9310b08bae744093c068a4f557bbd1b80bd499c8` is now versioned under
+`phase6c/evidence/sequencer-delayed-retrigger/`.
+
+The comparison has been performed, but it deliberately does **not** promote the
+matrix row. The candidate has runtime scheduling evidence; the original side
+has native fixture-acceptance evidence plus separately pinned source semantics.
+Those are not like-for-like execution observations, so `PASS`, `DIFFERENT`
+and `MISSING` remain unsupported until a stronger original runtime execution
+observer exists.
 
 ## Project-authored fixture
 
@@ -90,21 +97,48 @@ including:
 The upstream source bytes are transient CI inputs and are not vendored by this
 lane.
 
+## Versioned comparison decision
+
+The final clean PR #69 evidence is committed as four field-preserving
+projections:
+
+- `candidate-delayed-retrigger.json` — frozen-candidate runtime scheduling;
+- `original-source-delayed-retrigger.json` — pinned original source semantics;
+- `original-delayed-retrigger.json` — pinned native-Windows fixture acceptance;
+- `comparison.json` — the evidence-role comparison and decision.
+
+Each projection binds the final Actions run, job/artifact identities, artifact
+digest and raw receipt SHA-256. The matrix validator independently freezes the
+fixture identity, candidate schedules, original source commit/blob identities,
+accepted native load and the absence of an original command-execution trace.
+
+The comparison result is:
+
+- candidate command execution: **observed**;
+- original fixture acceptance: **observed**;
+- original source command semantics: **observed from pinned source**;
+- original runtime command scheduling/callback timing: **not observed**;
+- evidence symmetry: **source-plus-load vs candidate-runtime**;
+- compatibility verdict: **`UNKNOWN`**;
+- classification allowed: **false**.
+
+This is a completed comparison decision, not an unperformed comparison. The
+remaining tracker-command rung is to obtain a stronger original-Psycle execution
+observation—such as runtime scheduling/callback evidence or another
+deterministic execution output that can be compared like-for-like—before any
+`PASS`, `DIFFERENT` or `MISSING` claim is permitted.
+
 ## Epistemic boundary
 
-The three receipts remain separate:
+The three evidence roles remain separate:
 
 1. candidate execution scheduling;
 2. pinned original-source command semantics;
 3. pinned original native-Windows fixture acceptance.
 
-All retain `parity_status: UNKNOWN`.
-
-The original-source formulas plus load acceptance are strong evidence, but they
-are not mislabeled as a native runtime callback trace. A later classification
-PR may classify only a scope for which these receipts provide a defensible
-like-for-like comparison, or may first add a stronger original execution
-observer if needed.
+All retain `parity_status: UNKNOWN`. Source formulas plus load acceptance are
+useful evidence, but they are not a native runtime command trace and are not
+treated as one by the matrix gate.
 
 This slice does not classify sampler audio output, envelopes, note lifetime,
 tempo changes, pattern loops/delays, row extra ticks, mixer effects, or general
