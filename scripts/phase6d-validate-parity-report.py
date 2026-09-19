@@ -184,7 +184,7 @@ def main() -> int:
     )
     sequence_pass_claim = re.search(
         r"sequence/pattern order"
-        r"(?:\\s+(?:is|are))?\\s*(?::|-)??\\s*"
+        r"(?:\\s+(?:is|are))?\\s*(?:(?::|-)\\s*)?"
         r"(?:an?\\s+)?(?:scoped\\s+)?PASS\\b",
         status_section,
         re.IGNORECASE,
