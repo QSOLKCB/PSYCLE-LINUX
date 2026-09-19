@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "scope": "candidate-observation",
+  "contract": "sequencer-delayed-retrigger",
+  "evidence_role": "candidate",
+  "snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+  "fixture": "delayed-retrigger/phase6c-delayed-retrigger.psy",
+  "fixture_sha256": "b77383ec1e9fa7551a1523809d5e3dcaa40879dc3be3dc11ecc9b89bc3f1677d",
+  "procedure": "generate the project-authored PSY3 command fixture with FD 7F, FB 3F, FA 42 and FE 04 on separate tracks; build a separate probe against the frozen Phase 6B core; preserve and execute the exact probe bytes with PSYCLE_THREADS=1; load without playback; replace the loaded Sampler only inside the test harness with a recording Sampler subclass and invoke the frozen Sequencer command-scheduling path to record normalized beat offsets",
+  "observation": "command-scheduling-observed",
+  "exit_code": 0,
+  "original_psycle_observed": false,
+  "parity_status": "UNKNOWN",
+  "fixture_commands": {
+    "extended_lpb": 4,
+    "note_delay": 127,
+    "retr_cont": 66,
+    "retrigger": 63
+  },
+  "loaded_parameters": {
+    "extended_lpb": 4,
+    "note_delay": 15,
+    "retr_cont": 66,
+    "retrigger": 63
+  },
+  "marker_position_after_extended": 0.25,
+  "note_delay_events": [
+    {
+      "command": 0,
+      "note": 48,
+      "offset": 0.05859375,
+      "parameter": 0,
+      "track": 0
+    }
+  ],
+  "retrigger_events": [
+    {
+      "command": 0,
+      "note": 50,
+      "offset": 0,
+      "parameter": 0,
+      "track": 1
+    },
+    {
+      "command": 0,
+      "note": 50,
+      "offset": 0.0312210875826865,
+      "parameter": 0,
+      "track": 1
+    },
+    {
+      "command": 0,
+      "note": 50,
+      "offset": 0.0624421751653731,
+      "parameter": 0,
+      "track": 1
+    },
+    {
+      "command": 0,
+      "note": 50,
+      "offset": 0.0936632627480596,
+      "parameter": 0,
+      "track": 1
+    },
+    {
+      "command": 0,
+      "note": 50,
+      "offset": 0.124884350330746,
+      "parameter": 0,
+      "track": 1
+    }
+  ],
+  "retr_cont_events": [
+    {
+      "command": 0,
+      "note": 52,
+      "offset": 0,
+      "parameter": 0,
+      "track": 2
+    },
+    {
+      "command": 0,
+      "note": 52,
+      "offset": 0.0312210875826865,
+      "parameter": 0,
+      "track": 2
+    },
+    {
+      "command": 0,
+      "note": 52,
+      "offset": 0.0663253950139659,
+      "parameter": 0,
+      "track": 2
+    },
+    {
+      "command": 0,
+      "note": 52,
+      "offset": 0.105364698558486,
+      "parameter": 0,
+      "track": 2
+    }
+  ],
+  "bpm": 137,
+  "tick_speed": 8,
+  "is_ticks": true,
+  "sample_rate": 44100,
+  "samples_per_beat": 19313.869140625,
+  "samples_per_tick": 2414.233642578125,
+  "probe_sha256": "bc5367c82e333f7666a824582d64b53485dc452106ecda7b7a65a246d550cae7",
+  "source_evidence": {
+    "workflow": "Phase 6C delayed retrigger observation",
+    "workflow_run_id": 35457374404,
+    "workflow_event": "push",
+    "workflow_head_sha": "9310b08bae744093c068a4f557bbd1b80bd499c8",
+    "merged_main_sha": "b431ada663745b08331bcf322a12280867714322",
+    "original_job_id": 105935226848,
+    "original_artifact_id": 10588199755,
+    "candidate_job_id": 105934968007,
+    "candidate_artifact_id": 10589050157,
+    "original_artifact_digest": "sha256:b35374b007697909ef74f3a2120174c3228def7c876d350d619405e50a589902",
+    "candidate_artifact_digest": "sha256:f6601e7d37e1c3236c81765fc1aad042277d2d16aae704d0ecce62691f488dd5",
+    "artifact_receipt": "candidate-delayed-retrigger.json",
+    "artifact_receipt_sha256": "f9655225ebcd56ea1ec41df0894be9fe025728610b682c5bd1a7a76f4a9be176",
+    "procedure_sha256": "d086af93b703caf09902bc37721c84d0e8007c0d6b0d4be62a8ff445a72f09bf",
+    "projection_type": "field-preserving-comparison-projection",
+    "projection_note": "Projects the command-scheduling fields from the final PR #69 candidate artifact and binds the raw receipt/artifact identities without changing the observed offsets, loaded parameters, fixture identity, or UNKNOWN parity status."
+  }
+}
