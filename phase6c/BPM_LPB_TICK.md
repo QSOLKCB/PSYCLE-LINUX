@@ -1,10 +1,12 @@
-# Phase 6C BPM / LPB / Tick Observation Lane
+# Phase 6C BPM / LPB / Tick Timing
 
 ## Status
 
-**Observation lane under construction; compatibility remains `UNKNOWN`.**
+**Scoped classification: `DIFFERENT`.**
 
-This lane follows the scoped sequence/pattern-order classification without extending that verdict into timing. It measures one project-authored PSY3 fixture on the frozen Phase 6B C++ candidate and defines the corresponding pinned-original observation contract. Candidate or C-Psycle evidence cannot classify parity by itself.
+PR #67 established the paired observation lane for one project-authored PSY3 timing fixture. The final clean workflow run `35453296036` observed both the frozen Phase 6B C++ candidate and pinned Psycle 1.12.0 x86 against the exact same fixture bytes. This follow-on classification versions those receipts and the comparison under `phase6c/evidence/sequencer-bpm-lpb-tick/`.
+
+The verdict is intentionally narrow: BPM and LPB agree, but the loaded tick cadence does not.
 
 ## Fixture
 
@@ -16,50 +18,72 @@ Its frozen timing inputs are:
 - lines per beat: `8`;
 - ticks per beat: `24`;
 - extra ticks: `0`;
-- four simple note markers at beat positions `0`, `0.125`, `0.25`, and `0.375`.
+- four note markers at beat positions `0`, `0.125`, `0.25`, and `0.375`.
 
-The note markers make LPB observable from persisted pattern spacing instead of trusting metadata alone. C-Psycle generates and reloads the fixture only as construction evidence; its event-sequencer timing is not treated as original-Psycle authority.
+The marker spacing independently exposes LPB `8`; C-Psycle is used only to construct/reload the fixture and is not treated as original-Psycle timing authority.
 
-## Candidate observation
+## Pinned original observation
 
-`scripts/phase6c-bpm-lpb-tick-candidate.sh` builds a separate probe against the unchanged frozen C++ core. The probe loads the exact fixture without starting playback and records:
+The native-Windows lane targets pinned Psycle 1.12.0 x86. It verifies the process-owned **Song Information** dialog and reads Psycle's source-defined native edit controls without modifying them.
 
-- loaded BPM;
-- the candidate's loaded `tick_speed` and `is_ticks` mode;
-- marker positions and LPB derived from their spacing;
-- `samples_per_beat`, `samples_per_tick`, and fixture-line sample intervals at 44.1 and 48 kHz;
-- loader reports and complete diagnostics.
+Final run `35453296036` recorded four identical clean polls:
 
-`scripts/phase6c-bpm-lpb-tick-evidence.py` rederives the receipt from the raw probe bytes and log. Wrong numeric types, altered positions, incorrect timing formulae, unknown diagnostics, nonzero process results, unsafe paths, or changed source hashes force an inconclusive observation.
+- Tempo: `137`;
+- Lines per beat: `8`;
+- Ticks per beat: `24`;
+- Extra tick per line: `0`;
+- Real tempo: `137`;
+- Real ticks per beat: `24`.
 
-The receipt always retains `parity_status: UNKNOWN`.
+The load was accepted, the fixture marker remained stable for 45 polls, runtime/UI diagnostics were empty, and the receipt remained `parity_status: UNKNOWN` until this separate comparison.
 
-## Original-reference contract
+Versioned projection: `phase6c/evidence/sequencer-bpm-lpb-tick/original-bpm-lpb-tick.json`.
 
-The matching original observation targets pinned Psycle 1.12.0 x86 and the same fixture bytes. A conclusive observation must identify the process-owned **Song Information** window and stably bind these controls:
+## Frozen candidate observation
 
-- Tempo;
-- Lines per beat;
-- Ticks per beat;
-- Extra tick per line;
-- Real tempo;
-- Real ticks per beat.
+The candidate probe is linked against the unchanged Phase 6B C++ core and executes the exact preserved/hash-bound probe binary from the evidence artifact.
 
-The fixture-derived expected values are `137`, `8`, `24`, `0`, `137`, and `24`. The Windows harness must first identify exactly one process-owned **Song Information** window or open it through the unique process-owned **File > Song Properties** menu item, then verify that exactly one such dialog exists before polling. At least four identical complete polls plus the existing clean accepted-load, runtime-identity and liveness gates are required. Missing, ambiguous, contradictory, unstable, or automation-derived values remain inconclusive.
+For the same fixture it records:
 
-A clean stable original observation is retained even when one or more values differ from the fixture-derived expectations. In that case `matches_fixture_expected` is `false`; the observed values remain authoritative original-reference evidence and `parity_status` remains `UNKNOWN` until a separately versioned comparison classifies the scoped contract. The dedicated observation workflow requires an actual `observed` result and cannot pass merely because an inconclusive receipt was well-formed.
+- BPM: `137.0`;
+- marker-derived LPB: `8.0`;
+- `tick_speed = 8`;
+- `is_ticks = true`;
+- at 44.1 kHz: `samples_per_beat = 19313.869140625`, `samples_per_tick = 2414.23364257812`;
+- at 48 kHz: `samples_per_beat = 21021.8984375`, `samples_per_tick = 2627.7373046875`.
 
-The original receipt shape is validated now, but no original value is committed or treated as observed until a clean native-Windows artifact is produced.
+The frozen source explains the result: `Psy3Filter::LoadSNGIv0` reads the PSY3 **lines-per-beat** value into `CoreSong::tick_speed()`. `PlayerTimeInfo::setTicksSpeed(song.tick_speed(), song.is_ticks())` then receives `8` with `is_ticks=true`, so `PlayerTimeInfo::recalcSPT()` computes one tick as `samples_per_beat / 8`.
+
+Versioned receipt: `phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json`.
+
+## Classification
+
+The versioned comparison records:
+
+- BPM match: **yes** — `137`;
+- LPB match: **yes** — `8`;
+- original ticks per beat: `24`;
+- original extra tick per line: `0`;
+- candidate timing tick cadence: `8` per beat because `is_ticks=true`;
+- tick-semantics match: **no**.
+
+Therefore `sequencer-bpm-lpb-tick` is **`DIFFERENT`** for this exact fixture and procedure.
+
+This is not a claim that all sequencer timing is wrong. It identifies a concrete compatibility gap: the frozen candidate conflates the persisted LPB value with the legacy tick-cadence field used by `PlayerTimeInfo`, whereas original Psycle keeps LPB `8` and TPB `24` distinct.
+
+Comparison receipt: `phase6c/evidence/sequencer-bpm-lpb-tick/comparison.json`.
 
 ## Classification boundary
 
-This lane does not classify:
+This verdict does **not** classify:
 
+- delayed-note or retrigger commands;
+- extended tracker commands;
+- tempo changes inside patterns;
 - playback/render duration;
-- tempo changes inside a pattern;
-- note delay, retrigger or extended commands;
+- Sampler PS1 or XMSampler tick processing;
 - multi-sequence timing;
 - UI editing semantics;
-- sample-accurate equivalence outside the two recorded sample rates.
+- sample-accurate equivalence beyond the two recorded sample rates.
 
-A later classification PR must version the exact original and candidate receipts, pin their workflow/artifact identities, add a comparison receipt, and then determine whether the scoped contract is `PASS`, `DIFFERENT`, or `MISSING`.
+Those remain independent contracts. The next Phase 6C evidence slice is the delayed/retrigger/extended-command contract.
