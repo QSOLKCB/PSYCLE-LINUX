@@ -98,6 +98,39 @@ class CandidateParser(unittest.TestCase):
                 ).encode()
                 self.assertEqual(self.parse(log=log)["observation"], "inconclusive")
 
+    def test_workflow_gate_requires_observed_candidate(self):
+        observed = self.parse()
+        self.assertIs(m.require_candidate_observed(observed), observed)
+        with self.assertRaises(ValueError):
+            m.require_candidate_observed(self.parse(exit_code=1))
+
+    def test_source_identity_normalizes_only_crlf(self):
+        self.assertEqual(
+            m.canonical_text_bytes(b"one\r\ntwo\r\n"),
+            b"one\ntwo\n",
+        )
+        with self.assertRaises(ValueError):
+            m.canonical_text_bytes(b"one\rtwo\n")
+
+    def test_probe_identity_is_bound_to_preserved_binary(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            probe = root / m.PROBE_ARTIFACT
+            probe.parent.mkdir(parents=True)
+            probe.write_bytes(b"candidate-probe-bytes")
+            sha = m.digest(probe.read_bytes())
+            receipt = {
+                "probe": {"path": m.PROBE_ARTIFACT, "sha256": sha},
+                "probe_sha256": sha,
+            }
+            self.assertEqual(
+                m.validate_probe_identity(root, receipt),
+                b"candidate-probe-bytes",
+            )
+            receipt["probe_sha256"] = "0" * 64
+            with self.assertRaises(ValueError):
+                m.validate_probe_identity(root, receipt)
+
 
 class GeneratedObserver(unittest.TestCase):
     def generate(self, source: Path, output: Path):
