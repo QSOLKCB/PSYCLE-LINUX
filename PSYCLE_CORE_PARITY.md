@@ -91,7 +91,7 @@ playback, serialized state, clean termination, or general PSY3 support.
 | Malformed-file behaviour | pending | pending | partial | UNKNOWN | define rejection/recovery fixtures and original behaviour |
 | Sequence / pattern order | [`original-sequence-order.json`](phase6c/evidence/sequencer-pattern-order/original-sequence-order.json): pinned 1.12.0 accepted the exact fixture and exposed stable labels `00: 00, 01: 02, 02: 01, 03: 02` for 38 polls | [`candidate-sequence-order.json`](phase6c/evidence/sequencer-pattern-order/candidate-sequence-order.json): clean probe exit with canonical Master line and musical play order `0,2,1,2` | fixture construction only | PASS | exact legacy single-sequence order only; timing, playback, multi-sequence and editing remain separate; see [`comparison.json`](phase6c/evidence/sequencer-pattern-order/comparison.json) |
 | BPM / LPB / tick timing | [`original-bpm-lpb-tick.json`](phase6c/evidence/sequencer-bpm-lpb-tick/original-bpm-lpb-tick.json): pinned 1.12.0 accepted the exact fixture and stably exposed BPM 137 / LPB 8 / TPB 24 / extra tick 0 | [`candidate-bpm-lpb-tick.json`](phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json): clean probe observes BPM 137 / derived LPB 8 but `tick_speed=8`, `is_ticks=true`, so `PlayerTimeInfo` uses beat/8 tick cadence | fixture construction only | DIFFERENT | restore distinct legacy TPB/extra-tick semantics without conflating LPB; delayed/retrigger commands remain a separate contract; see [`comparison.json`](phase6c/evidence/sequencer-bpm-lpb-tick/comparison.json) |
-| Delayed / retrigger / extended commands | pending | pending | partial | UNKNOWN | use minimal deterministic patterns |
+| Delayed / retrigger / extended commands | Unversioned Phase 6C observation lane: pinned Psycle 1.12.0 x86 accepts the exact FD/FB/FA/FE04 fixture under the guarded native-Windows load observer; pinned original source commit `7ac6d2c3553e2ee8dda55814d8e689919c345478` separately binds the command IDs/formulas, but no original runtime callback trace is claimed | Unversioned frozen-core scheduling probe executes the exact fixture and observes the FD note-delay offset, complete FB/FA retrigger series, and FE04 marker geometry with hash-bound probe/log evidence | fixture construction only | UNKNOWN | version a clean paired run and classify only the like-for-like command scope supported by the evidence; native original execution semantics remain UNKNOWN unless a stronger observer is added |
 | Sampler PS1 | pending | pending | yes | UNKNOWN | compare pitch, envelopes, looping and commands |
 | XMSampler / Sampulse-related playback | pending | pending | partial | UNKNOWN | pin exact feature/version scope |
 | Mixer / Master / routing / mute / bypass | pending | pending | partial | UNKNOWN | compare graph defaults, gain and send semantics |
@@ -158,9 +158,10 @@ Phase 6C now justifies this evidence backlog:
 3. preserve the scoped serialization/save MISSING comparison from final PR #63 run `35439069516`; byte identity and complete semantic round-trip state remain separate;
 4. preserve the scoped sequence/pattern-order PASS from final PR #65 run `35443357239`, including its exact single-sequence fixture boundary;
 5. preserve the scoped BPM/LPB/tick DIFFERENT result from final PR #67 run `35453296036`: BPM 137 and LPB 8 match, while original TPB 24 differs from the candidate beat/8 tick cadence;
-6. move the next Phase 6C evidence slice to delayed/retrigger/extended tracker commands, then continue to routing, sampler, native-state, WAV and render contracts as evidence becomes reproducible;
-7. classify only additional rows for which versioned original + candidate receipts and a comparison verdict are sufficient;
-8. extend Phase 7 only from confirmed `DIFFERENT` / `MISSING` results.
+6. preserve the unversioned delayed/retrigger/extended-command observation lane from PR #69: frozen-candidate scheduling, pinned original-source semantics, and guarded native-Windows fixture acceptance remain separate receipts with compatibility `UNKNOWN`;
+7. version a clean paired run and classify only the like-for-like delayed/retrigger command scope the evidence actually supports, then continue to routing, sampler, native-state, WAV and render contracts as evidence becomes reproducible;
+8. classify only additional rows for which versioned original + candidate receipts and a comparison verdict are sufficient;
+9. extend Phase 7 only from confirmed `DIFFERENT` / `MISSING` results.
 
 ### First Phase 7 implementation backlog
 
