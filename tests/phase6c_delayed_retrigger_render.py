@@ -444,6 +444,35 @@ with tempfile.TemporaryDirectory() as temporary:
     else:
         raise AssertionError("expected startup stable-output binding failure")
 
+valid_completed_attempt = {
+    "outcome": "rendered",
+    "process_exited": False,
+    "process_exit_code": None,
+    "dialog_closed": True,
+    "stable_output_polls": 4,
+    "diagnostics": [],
+}
+startup.validate_completed_render_attempt(
+    valid_completed_attempt, "note-sample-default-inst"
+)
+
+invalid_completed_attempt = dict(valid_completed_attempt)
+invalid_completed_attempt.update(
+    {
+        "dialog_closed": False,
+        "stable_output_polls": 0,
+        "diagnostics": ["completion was never observed"],
+    }
+)
+try:
+    startup.validate_completed_render_attempt(
+        invalid_completed_attempt, "note-sample-default-inst"
+    )
+except ValueError as exc:
+    assert "terminal completion evidence" in str(exc)
+else:
+    raise AssertionError("expected incomplete rendered-attempt rejection")
+
 with tempfile.TemporaryDirectory() as candidate_temp, tempfile.TemporaryDirectory() as original_temp:
     candidate_root = Path(candidate_temp)
     original_root = Path(original_temp)
