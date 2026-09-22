@@ -561,6 +561,23 @@ def validate_projection(
     return str(PROJECTION.relative_to(ROOT))
 
 
+def projection_for_run(
+    candidate_root: Path,
+    original_root: Path,
+    summary: dict,
+    replay_historical_projection: bool,
+) -> tuple[str, str]:
+    if replay_historical_projection:
+        return (
+            validate_projection(candidate_root, original_root, summary),
+            "historical-byte-replay",
+        )
+    return (
+        str(PROJECTION.relative_to(ROOT)),
+        "fresh-rerun-semantic-only",
+    )
+
+
 def validate_original(
     candidate_root: Path,
     original_root: Path,
@@ -747,14 +764,15 @@ def validate_original(
         ),
         "parity_status": "UNKNOWN",
     }
-    if replay_historical_projection:
-        summary["projection"] = validate_projection(
-            candidate_root, original_root, summary
-        )
-        summary["projection_validation"] = "historical-byte-replay"
-    else:
-        summary["projection"] = str(PROJECTION.relative_to(ROOT))
-        summary["projection_validation"] = "fresh-rerun-semantic-only"
+    (
+        summary["projection"],
+        summary["projection_validation"],
+    ) = projection_for_run(
+        candidate_root,
+        original_root,
+        summary,
+        replay_historical_projection,
+    )
     write_new(
         original_root / "original-sampler-work-boundary-isolation.json",
         summary,
