@@ -4,6 +4,8 @@
 #include <psycle/core/song.h>
 #include <psycle/core/machinefactory.h>
 #include <psycle/core/player.h>
+#include <psycle/core/sequencer.h>
+#include <psycle/core/internal_machines.h>
 #include <psycle/core/xminstrument.h>
 #include <psycle/audiodrivers/audiodriver.h>
 #include <universalis/os/loggers.hpp>
@@ -12,6 +14,7 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <vector>
 
 int main(int argc, char** argv) {
     if (argc != 3) {
@@ -75,23 +78,29 @@ int main(int argc, char** argv) {
                     const double beat_frames = 44100.0 * 60.0 / 137.0;
                     const int target_frames =
                         static_cast<int>(std::ceil(4.25 * beat_frames));
-                    // The frozen r12005 Sequencer::Work() keeps its global-event
-                    // last_pos only within one callback. The first callback therefore
-                    // spans every command event through beat 3.125; the remainder is
-                    // event-free. This is a harness scheduling constraint, not an
-                    // engine modification.
-                    const int event_spanning_frames = 62000;
-                    const int first =
-                        target_frames < event_spanning_frames
-                            ? target_frames
-                            : event_spanning_frames;
-                    player.Work(first);
-                    int rendered = first;
-                    if (rendered < target_frames) {
-                        player.Work(target_frames - rendered);
-                        rendered = target_frames;
-                    }
 
+                    // The frozen r12005 Sequencer::Work() keeps global-event
+                    // last_pos only within one callback, so this observation must
+                    // span the complete command-bearing window in one Sequencer call.
+                    // Do not route that large count through Player::Work(): the
+                    // historical Player callback buffer is sized for driver-era
+                    // callbacks while Master writes two interleaved floats per frame.
+                    // Give Master an explicitly sized harness buffer instead, then
+                    // use the frozen Sequencer and Player::process() path unchanged.
+                    std::vector<float> master_output(
+                        static_cast<std::size_t>(target_frames) * 2u, 0.0f);
+                    psycle::core::Master& master =
+                        static_cast<psycle::core::Master&>(
+                            *song.machine(MASTER_INDEX));
+                    master._pMasterSamples = master_output.data();
+
+                    psycle::core::Sequencer sequencer;
+                    sequencer.set_song(song);
+                    sequencer.set_time_info(player.timeInfo());
+                    sequencer.set_player(player);
+                    sequencer.Work(target_frames);
+
+                    const int rendered = target_frames;
                     const double final_beat = player.playPos();
                     player.stop();
                     player.stopRecording();
