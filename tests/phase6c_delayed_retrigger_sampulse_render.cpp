@@ -4,6 +4,7 @@
 #include <psycle/core/song.h>
 #include <psycle/core/machinefactory.h>
 #include <psycle/core/player.h>
+#include <psycle/core/xminstrument.h>
 #include <psycle/audiodrivers/audiodriver.h>
 #include <universalis/os/loggers.hpp>
 #include <universalis/os/thread_name.hpp>
@@ -32,10 +33,28 @@ int main(int argc, char** argv) {
         int result = 0;
         {
             psycle::core::CoreSong song;
+
+            // The retained r12005 Psy3Filter::LoadEINSv1() loads historical
+            // Sampulse state into existing slots via rInstrument()/SampleData()
+            // but CoreSong leaves those vectors empty. Preallocate empty slot 0
+            // in the project-owned harness only; the EINS bytes must overwrite
+            // both placeholders before playback.
+            psycle::core::XMInstrument preload_instrument;
+            psycle::core::XMInstrument::WaveData preload_sample;
+            song.m_Instruments.SetInst(preload_instrument, 0);
+            song.m_rWaveLayers.SetSample(preload_sample, 0);
+
             player.song(song);
             if (!song.load(argv[1])) {
                 std::cerr << "shared Sampulse witness load failed\n";
                 result = 65;
+            } else if (
+                !song.rInstrument(0).IsEnabled()
+                || song.SampleData(0).WaveLength() != 512
+                || song.rInstrument(0).NoteToSample(60).second != 0
+            ) {
+                std::cerr << "historical EINS state did not overwrite preload slots\n";
+                result = 68;
             } else {
                 psycle::audiodrivers::AudioDriverSettings settings(
                     player.driver().playbackSettings());
