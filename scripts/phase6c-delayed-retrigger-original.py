@@ -33,7 +33,11 @@ def delayed_validator():
         '"delayed-retrigger-isolation-fd", '
         '"delayed-retrigger-isolation-fb", '
         '"delayed-retrigger-isolation-fa", '
-        '"delayed-retrigger-isolation-fe"'
+        '"delayed-retrigger-isolation-fe", '
+        '"delayed-retrigger-substrate-master-only", '
+        '"delayed-retrigger-substrate-sampler-empty", '
+        '"delayed-retrigger-substrate-sample-state", '
+        '"delayed-retrigger-substrate-ordinary-note"'
     )
     source = source.replace(
         old,
