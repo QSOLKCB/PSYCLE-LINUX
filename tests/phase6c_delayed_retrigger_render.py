@@ -41,6 +41,14 @@ assert startup_spec is not None and startup_spec.loader is not None
 startup = importlib.util.module_from_spec(startup_spec)
 startup_spec.loader.exec_module(startup)
 
+WORK_BOUNDARY_SCRIPT = ROOT / "scripts" / "phase6c-sampler-work-boundary.py"
+work_boundary_spec = importlib.util.spec_from_file_location(
+    "phase6c_sampler_work_boundary", WORK_BOUNDARY_SCRIPT
+)
+assert work_boundary_spec is not None and work_boundary_spec.loader is not None
+work_boundary = importlib.util.module_from_spec(work_boundary_spec)
+work_boundary_spec.loader.exec_module(work_boundary)
+
 
 def wave_pcm16(frames: list[int], channels: int = 1, rate: int = 44100) -> bytes:
     if channels == 1:
@@ -536,5 +544,94 @@ with tempfile.TemporaryDirectory() as candidate_temp, tempfile.TemporaryDirector
         assert "canonical source semantics" in str(exc)
     else:
         raise AssertionError("expected corrupted source receipt rejection")
+
+assert work_boundary.diagnose({
+    "release-no-active-voice": "reference-process-exited-during-render",
+    "delayed-note-short": "reference-process-exited-during-render",
+    "delayed-note-long": "reference-process-exited-during-render",
+    "ordinary-note-short": "reference-process-exited-during-render",
+}) == "post-sample-gate-pre-voice-tick-associated-exit"
+
+assert work_boundary.diagnose({
+    "release-no-active-voice": "stable-finalized-output-process-alive",
+    "delayed-note-short": "reference-process-exited-during-render",
+    "delayed-note-long": "reference-process-exited-during-render",
+    "ordinary-note-short": "reference-process-exited-during-render",
+}) == "voice-tick-initialization-associated-exit"
+
+assert work_boundary.diagnose({
+    "release-no-active-voice": "stable-finalized-output-process-alive",
+    "delayed-note-short": "stable-finalized-output-process-alive",
+    "delayed-note-long": "reference-process-exited-during-render",
+    "ordinary-note-short": "reference-process-exited-during-render",
+}) == "controller-work-associated-exit"
+
+assert work_boundary.diagnose({
+    "release-no-active-voice": "stable-finalized-output-process-alive",
+    "delayed-note-short": "stable-finalized-output-process-alive",
+    "delayed-note-long": "stable-finalized-output-process-alive",
+    "ordinary-note-short": "reference-process-exited-during-render",
+}) == "immediate-undelayed-work-associated-exit"
+
+assert work_boundary.diagnose({
+    "release-no-active-voice": "stable-finalized-output-process-alive",
+    "delayed-note-short": "stable-finalized-output-process-alive",
+    "delayed-note-long": "reference-process-exited-during-render",
+    "ordinary-note-short": "stable-finalized-output-process-alive",
+}) == "delayed-work-transition-associated-exit"
+
+assert work_boundary.diagnose({
+    "release-no-active-voice": "stable-finalized-output-process-alive",
+    "delayed-note-short": "stable-finalized-output-process-alive",
+    "delayed-note-long": "stable-finalized-output-process-alive",
+    "ordinary-note-short": "stable-finalized-output-process-alive",
+}) == "known-enabled-sample-crash-not-reproduced"
+
+with tempfile.TemporaryDirectory() as candidate_temp, tempfile.TemporaryDirectory() as original_temp:
+    candidate_root = Path(candidate_temp)
+    original_root = Path(original_temp)
+    source_receipt = work_boundary.expected_source_receipt()
+    source_path = candidate_root / work_boundary.SOURCE_RECEIPT
+    source_path.write_text(
+        json.dumps(source_receipt, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    relative = work_boundary.materialize_source_receipt(
+        candidate_root, original_root
+    )
+    assert relative == work_boundary.SOURCE_RECEIPT
+    assert work_boundary.validate_source(original_root) == source_receipt
+
+    corrupted = work_boundary.expected_source_receipt()
+    corrupted["files"]["Sampler.cpp"]["markers"] = []
+    corrupted["source_boundary"] = [
+        "Voice::Work always reaches controller.Work before delay checks"
+    ]
+    (original_root / work_boundary.SOURCE_RECEIPT).write_text(
+        json.dumps(corrupted, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    try:
+        work_boundary.validate_source(original_root)
+    except ValueError as exc:
+        assert "canonical semantics" in str(exc)
+    else:
+        raise AssertionError("expected work-boundary source semantic rejection")
+
+bad_work_exit_receipt = {"exit_code_before_termination": 1}
+bad_work_exit_attempt = {
+    "process_exit_code": 1,
+    "diagnostics": ["reference exited during offline render"],
+}
+try:
+    work_boundary.validate_expected_access_violation(
+        bad_work_exit_receipt,
+        bad_work_exit_attempt,
+        "ordinary-note-short",
+    )
+except ValueError as exc:
+    assert "0xC0000005" in str(exc)
+else:
+    raise AssertionError("expected unrelated work-boundary exit rejection")
 
 print("phase6c-delayed-retrigger-render: PASS")
