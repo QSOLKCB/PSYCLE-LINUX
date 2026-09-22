@@ -756,6 +756,20 @@ assert work_boundary.diagnose({
     "ordinary-note-short": "stable-finalized-output-process-alive",
 }) == "known-enabled-sample-crash-not-reproduced"
 
+fresh_all_live_outcomes = {
+    "release-no-active-voice": "stable-finalized-output-process-alive",
+    "delayed-note-short": "stable-finalized-output-process-alive",
+    "delayed-note-long": "stable-finalized-output-process-alive",
+    "ordinary-note-short": "stable-finalized-output-process-alive",
+}
+fresh_all_live_diagnosis = work_boundary.diagnose(fresh_all_live_outcomes)
+fresh_all_live_interpretation = work_boundary.interpretation_for_outcomes(
+    fresh_all_live_outcomes, fresh_all_live_diagnosis
+)
+assert "known-enabled-sample-crash-not-reproduced" in fresh_all_live_interpretation
+assert "current work-boundary receipt set" in fresh_all_live_interpretation
+assert "pinned original access violation is associated" not in fresh_all_live_interpretation
+
 with tempfile.TemporaryDirectory() as candidate_temp, tempfile.TemporaryDirectory() as original_temp:
     candidate_root = Path(candidate_temp)
     original_root = Path(original_temp)
