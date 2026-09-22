@@ -21,6 +21,13 @@ ORIGINAL_RECEIPT = "original-delayed-retrigger-sampulse-runtime.json"
 ORIGINAL_ANALYSIS = "original-delayed-retrigger-sampulse-runtime-analysis.json"
 COMPARISON = "delayed-retrigger-sampulse-runtime-comparison.json"
 REFERENCE_BUILD = "Psycle 1.12.0 x86"
+ORIGINAL_RENDER_SETTINGS = {
+    "sample_rate": 44100,
+    "bits_per_sample": 16,
+    "channels": "mono-mix",
+    "dither": False,
+    "range": "entire-song",
+}
 CANDIDATE_RENDER_PROCEDURE = {
     "engine": "frozen SourceForge SVN r12005 C++ candidate",
     "sample_rate": 44100,
@@ -240,6 +247,32 @@ def validate_candidate(root: Path) -> dict:
     return receipt
 
 
+def validate_original_runtime_procedure(runtime: object) -> list[dict]:
+    if not isinstance(runtime, dict):
+        raise ValueError("same-witness original runtime receipt is missing")
+    attempts = runtime.get("attempts")
+    pre = runtime.get("pre_render_load")
+    if (
+        runtime.get("schema_version") != 1
+        or runtime.get("outcome") != "rendered-twice"
+        or runtime.get("deterministic") is not True
+        or runtime.get("settings") != ORIGINAL_RENDER_SETTINGS
+        or not isinstance(attempts, list)
+        or len(attempts) != 2
+        or not isinstance(pre, dict)
+        or pre.get("schema_version") != 1
+        or pre.get("clean_accepted_load") is not True
+        or pre.get("load_warning_dismissed") is not True
+        or pre.get("process_running_before_render") is not True
+        or pre.get("matched_marker") != Path(FIXTURE).name
+        or not isinstance(pre.get("stable_marker_polls"), int)
+        or isinstance(pre.get("stable_marker_polls"), bool)
+        or pre["stable_marker_polls"] < 4
+    ):
+        raise ValueError("same-witness original render procedure mismatch")
+    return attempts
+
+
 def validate_original_attempt(
     original_root: Path, attempt: object, index: int
 ) -> tuple[dict, bytes]:
@@ -318,21 +351,15 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         raise ValueError("same-witness original receipt identity mismatch")
 
     runtime = receipt.get("runtime_execution")
-    attempts = runtime.get("attempts") if isinstance(runtime, dict) else None
-    if (
-        not isinstance(runtime, dict)
-        or runtime.get("schema_version") != 1
-        or runtime.get("outcome") != "rendered-twice"
-        or runtime.get("deterministic") is not True
-        or not isinstance(attempts, list)
-        or len(attempts) != 2
-    ):
-        raise ValueError("same-witness original runtime did not render twice")
+    attempts = validate_original_runtime_procedure(runtime)
 
     first_binding, first = validate_original_attempt(original_root, attempts[0], 1)
     second_binding, second = validate_original_attempt(original_root, attempts[1], 2)
     if first != second or first_binding["sha256"] != second_binding["sha256"]:
         raise ValueError("same-witness original renders are not byte-identical")
+    expected_runtime_renders = [first_binding, second_binding]
+    if runtime.get("renders") != expected_runtime_renders:
+        raise ValueError("same-witness original runtime render bindings mismatch")
     analysis = base.analyze_wave(first)
     if analysis != base.analyze_wave(second):
         raise ValueError("same-witness original onset analyses differ")
