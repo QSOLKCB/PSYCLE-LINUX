@@ -141,6 +141,13 @@ with tempfile.TemporaryDirectory() as temporary:
         "dialog_verified": True,
         "controls_configured": True,
         "save_invoked": True,
+        "render_dialog_open_event_armed": True,
+        "render_dialog_dispatch_boundary_set": True,
+        "render_dialog_post_dispatch_event_count": 1,
+        "dialog_discovery": "window-opened-event-after-successful-command-dispatch",
+        "preexisting_render_dialog_count": 1,
+        "selected_render_dialog_native_handle": 12345,
+        "selected_render_dialog_runtime_id": [1, 2, 3],
         "outcome": "rendered",
         "process_exited": False,
         "process_exit_code": None,
@@ -166,6 +173,36 @@ with tempfile.TemporaryDirectory() as temporary:
     expect_value_error(
         lambda: m.validate_original_attempt(root, incomplete_attempt, 1),
         "did not complete cleanly",
+    )
+
+    unarmed_attempt = dict(completed_attempt)
+    unarmed_attempt["render_dialog_open_event_armed"] = False
+    expect_value_error(
+        lambda: m.validate_original_attempt(root, unarmed_attempt, 1),
+        "post-dispatch dialog evidence",
+    )
+
+    stale_discovery_attempt = dict(completed_attempt)
+    stale_discovery_attempt["dialog_discovery"] = (
+        "new-after-command-excluding-live-preexisting-elements"
+    )
+    expect_value_error(
+        lambda: m.validate_original_attempt(root, stale_discovery_attempt, 1),
+        "post-dispatch dialog evidence",
+    )
+
+    ambiguous_event_attempt = dict(completed_attempt)
+    ambiguous_event_attempt["render_dialog_post_dispatch_event_count"] = 2
+    expect_value_error(
+        lambda: m.validate_original_attempt(root, ambiguous_event_attempt, 1),
+        "post-dispatch dialog evidence",
+    )
+
+    missing_boundary_attempt = dict(completed_attempt)
+    missing_boundary_attempt["render_dialog_dispatch_boundary_set"] = False
+    expect_value_error(
+        lambda: m.validate_original_attempt(root, missing_boundary_attempt, 1),
+        "post-dispatch dialog evidence",
     )
 
 valid_original_runtime = {
