@@ -144,8 +144,10 @@ def main() -> int:
             )
 
         if row_id == "sequencer-delayed-retrigger":
-            matrix_notes = normalize_cell(str(row.get("notes", ""))).lower()
-            report_next_evidence = report_rows[label][5].lower()
+            matrix_notes = (
+                normalize_cell(str(row.get("notes", ""))).lower().replace("-", " ")
+            )
+            report_next_evidence = report_rows[label][5].lower().replace("-", " ")
             required_delayed_summary = (
                 "no previous instrument",
                 "missing sample",
