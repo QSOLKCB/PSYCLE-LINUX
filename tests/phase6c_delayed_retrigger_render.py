@@ -16,6 +16,14 @@ assert spec is not None and spec.loader is not None
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
+ISOLATION_SCRIPT = ROOT / "scripts" / "phase6c-delayed-retrigger-render-isolation.py"
+isolation_spec = importlib.util.spec_from_file_location(
+    "phase6c_render_isolation", ISOLATION_SCRIPT
+)
+assert isolation_spec is not None and isolation_spec.loader is not None
+isolation = importlib.util.module_from_spec(isolation_spec)
+isolation_spec.loader.exec_module(isolation)
+
 
 def wave_pcm16(frames: list[int], channels: int = 1, rate: int = 44100) -> bytes:
     if channels == 1:
@@ -191,5 +199,48 @@ with tempfile.TemporaryDirectory() as temporary:
         assert "partial-render shape" in str(exc)
     else:
         raise AssertionError("expected second-render exit shape failure")
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    missing_attempt = {"observed_output": None}
+    missing = isolation.validate_failed_observed_output(
+        root,
+        "control",
+        missing_attempt,
+        "original-delayed-retrigger-isolation-control-1.wav",
+    )
+    assert missing is None
+
+    output_dir = root / "delayed-retrigger-isolation-control"
+    output_dir.mkdir()
+    output = output_dir / "original-delayed-retrigger-isolation-control-1.wav"
+    output.write_bytes(b"")
+    try:
+        isolation.validate_failed_observed_output(
+            root,
+            "control",
+            missing_attempt,
+            output.name,
+        )
+    except ValueError as exc:
+        assert "unbound output file" in str(exc)
+    else:
+        raise AssertionError("expected unbound failed-render output rejection")
+
+    bound_attempt = {
+        "observed_output": {
+            "path": output.name,
+            "size_bytes": 0,
+            "sha256": hashlib.sha256(b"").hexdigest(),
+        }
+    }
+    bound = isolation.validate_failed_observed_output(
+        root,
+        "control",
+        bound_attempt,
+        output.name,
+    )
+    assert bound["size_bytes"] == 0
+    assert bound["path"].endswith(output.name)
 
 print("phase6c-delayed-retrigger-render: PASS")

@@ -189,6 +189,54 @@ already-frozen PR #69 one-beat callback schedule remains preservation evidence;
 it is not a like-for-like comparison partner for this separate four-beat
 sampled witness.
 
+## Original render-failure isolation
+
+The first full sampled-witness render ends in a pinned-reference access
+violation after verified Save Wave dispatch. That failure is not enough to say
+whether the trigger is the shared sampled fixture/render path, one command
+family, or an interaction that exists only when the commands are combined.
+
+The next additive diagnostic lane therefore keeps the PR #71 full witness and
+all frozen PR #69/#70 evidence unchanged and generates five separate PSY3
+fixtures with the same BPM/LPB/TPB, built-in Sampler, 512-frame sample,
+frame-256 impulse and Sampler-to-Master routing:
+
+- `control`: ordinary notes only;
+- `fd`: only `FD 7F` differs from the control;
+- `fb`: only `FB 3F` differs from the control;
+- `fa`: only `FA 42` differs from the control;
+- `fe`: only `FE 04` plus its post-command marker differs from the control.
+
+Each fixture is loaded and rendered in a **fresh Psycle process** under the
+same installer, VC90, registry, machine/plugin, Load Warning and UI-identity
+gates used by the full witness. The diagnostic render is attempted once. A
+successful path must retain a hash-bound mono 44.1 kHz / 16-bit PCM output; a
+reference-process exit must retain its non-zero exit code and hash/size binding
+for any created output.
+
+`scripts/phase6c-delayed-retrigger-render-isolation.py` derives only a failure
+localization result. In particular:
+
+- a control crash keeps the cause at the shared sampled-fixture/render layer;
+- a clean control plus one-command crashes isolates a command-associated
+  failure for follow-up;
+- clean individual variants do not prove the full witness and instead leave a
+  combined-command interaction or other full-witness difference open.
+
+None of these diagnostic outcomes can change `sequencer-delayed-retrigger`
+from `UNKNOWN`, and none is a substitute for the required same-witness,
+comparable-procedure original/candidate execution pair.
+
+The first complete diagnostic run, workflow `35723698458` at head
+`1a513153f8caf994114a14a510ca9efc683541ba`, passed the candidate and original
+evidence validators and produced `shared-sampled-fixture-or-render-path-failure`.
+The ordinary-note control and all four single-command variants reached their
+clean pre-render load gates, verified Save Wave dispatch, then exited with
+Windows status `0xC0000005` (`-1073741819`) and retained zero-byte outputs.
+Because the control fails identically, this evidence does **not** attribute the
+crash to `FD`, `FB`, `FA` or `FE`; the next investigation boundary is the
+shared sampled-fixture/original-render path itself.
+
 ## Epistemic boundary
 
 The three evidence roles remain separate:

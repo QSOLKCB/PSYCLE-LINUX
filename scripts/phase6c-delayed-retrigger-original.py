@@ -28,8 +28,17 @@ def delayed_validator():
         raise ValueError(
             "generic original validator PSY3 warning-scope anchor changed"
         )
+    isolation_names = (
+        '"delayed-retrigger-isolation-control", '
+        '"delayed-retrigger-isolation-fd", '
+        '"delayed-retrigger-isolation-fb", '
+        '"delayed-retrigger-isolation-fa", '
+        '"delayed-retrigger-isolation-fe"'
+    )
     source = source.replace(
-        old, '{"psy3", "sequence-order", "delayed-retrigger", "delayed-retrigger-execution"}'
+        old,
+        '{"psy3", "sequence-order", "delayed-retrigger", '
+        '"delayed-retrigger-execution", ' + isolation_names + '}',
     )
     module = types.ModuleType("phase6c_original_receipts_delayed")
     module.__file__ = str(VALIDATOR_PATH)

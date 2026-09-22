@@ -101,6 +101,36 @@ run_logged "$OUT/execution-candidate-validation.log" \
     python3 "$ROOT/scripts/phase6c-delayed-retrigger-render-evidence.py" candidate-check \
     "$ARTIFACT"
 
+ISOLATION_OUT="$ARTIFACT/delayed-retrigger-isolation"
+mkdir "$ISOLATION_OUT"
+run_logged "$OUT/render-isolation-fixture-build.log" \
+    gcc "${COMMON_CFLAGS[@]}" "${LUA_CFLAGS[@]}" \
+    "$ROOT/tests/phase6c_delayed_retrigger_render_isolation.c" \
+    -o "$BUILD/phase6c-delayed-retrigger-render-isolation" \
+    "${COMMON_LDFLAGS[@]}" "${LUA_LIBS[@]}"
+
+run_logged "$OUT/render-isolation-fixture-generator.log" \
+    "$BUILD/phase6c-delayed-retrigger-render-isolation" "$ISOLATION_OUT"
+
+for variant in control fd fb fa fe; do
+    fixture="$ISOLATION_OUT/phase6c-delayed-retrigger-isolation-${variant}.psy"
+    [[ -s "$fixture" ]] || {
+        echo "render-isolation fixture was not generated: $variant" >&2
+        exit 2
+    }
+    [[ "$(head -c 8 "$fixture")" == "PSY3SONG" ]] || {
+        echo "render-isolation fixture is not PSY3: $variant" >&2
+        exit 2
+    }
+done
+
+run_logged "$OUT/render-isolation-candidate-receipts.log" \
+    python3 "$ROOT/scripts/phase6c-delayed-retrigger-render-isolation.py" candidate \
+    "$ARTIFACT"
+run_logged "$OUT/render-isolation-candidate-validation.log" \
+    python3 "$ROOT/scripts/phase6c-delayed-retrigger-render-isolation.py" candidate-check \
+    "$ARTIFACT"
+
 cp "$ROOT/tests/phase6c_delayed_retrigger.pro" "$STAGING/probe.pro"
 set +e
 (
