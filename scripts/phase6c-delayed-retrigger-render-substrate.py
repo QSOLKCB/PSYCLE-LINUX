@@ -275,32 +275,74 @@ def validate_failed_observed_output(
     }
 
 
+def validate_stable_alive_output(
+    original_root: Path,
+    name: str,
+    attempt: dict,
+    expected_filename: str,
+    render_module,
+) -> dict:
+    if (
+        attempt.get("process_exited") is not False
+        or attempt.get("process_exit_code") is not None
+        or attempt.get("dialog_closed") is not False
+        or not isinstance(attempt.get("stable_output_polls"), int)
+        or isinstance(attempt.get("stable_output_polls"), bool)
+        or attempt["stable_output_polls"] < 4
+    ):
+        raise ValueError(f"{name}: stable-alive render evidence is inconsistent")
+    observed = validate_failed_observed_output(
+        original_root, name, attempt, expected_filename
+    )
+    if observed is None or observed["size_bytes"] <= 44:
+        raise ValueError(f"{name}: stable-alive render lacks non-empty output")
+    data = child(original_root, observed["path"]).read_bytes()
+    if (
+        len(data) < 12
+        or data[:4] != b"RIFF"
+        or data[8:12] != b"WAVE"
+        or int.from_bytes(data[4:8], "little") + 8 != len(data)
+    ):
+        raise ValueError(f"{name}: stable-alive output is not a finalized RIFF/WAVE")
+    parsed = render_module.parse_pcm16_wave(data)
+    return {
+        "observed_output": observed,
+        "frame_count": len(parsed["frames"]),
+        "nonzero_frame_count": sum(1 for value in parsed["frames"] if value != 0),
+    }
+
+
 def diagnose(outcomes: dict[str, str]) -> str:
-    allowed = {"rendered-once", "reference-process-exited-during-render"}
+    control_like = {
+        "rendered-once",
+        "stable-finalized-output-process-alive",
+    }
+    crash = "reference-process-exited-during-render"
+    allowed = control_like | {crash}
     if any(value not in allowed for value in outcomes.values()):
         return "inconclusive"
 
     ordered = ["master-only", "sampler-empty", "sample-state", "ordinary-note"]
-    rendered = [outcomes[name] == "rendered-once" for name in ordered]
+    survived = [outcomes[name] in control_like for name in ordered]
 
-    # The ladder is cumulative. A later success after an earlier crash means the
-    # simple first-failing-layer model is not supported by the observations.
+    # The ladder is cumulative. A later non-crashing output after an earlier
+    # process exit defeats a simple first-failing-layer interpretation.
     seen_failure = False
-    for success in rendered:
+    for success in survived:
         if seen_failure and success:
             return "nonmonotonic-substrate-result"
         if not success:
             seen_failure = True
 
-    if not rendered[0]:
-        return "original-render-path-failure-before-sampler"
-    if not rendered[1]:
-        return "sampler-machine-render-failure"
-    if not rendered[2]:
-        return "sample-instrument-state-render-failure"
-    if not rendered[3]:
-        return "ordinary-note-playback-render-failure"
-    return "all-substrate-rungs-rendered-full-witness-detail-remains"
+    if not survived[0]:
+        return "master-only-associated-reference-exit"
+    if not survived[1]:
+        return "sampler-presence-associated-reference-exit"
+    if not survived[2]:
+        return "sample-state-associated-reference-exit"
+    if not survived[3]:
+        return "ordinary-note-associated-reference-exit-after-stable-output-controls"
+    return "all-substrate-controls-survive-full-witness-detail-remains"
 
 
 def validate_original(candidate_root: Path, original_root: Path) -> dict:
@@ -445,12 +487,39 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         elif outcome == "inconclusive":
             if renders != []:
                 raise ValueError(f"{name}: inconclusive render retained completed output")
-            results[name] = {
-                "outcome": "inconclusive",
-                "load_result": load_result,
-                "process_exit_code": attempt.get("process_exit_code"),
-                "diagnostics": attempt.get("diagnostics"),
-            }
+            stable_alive = None
+            if (
+                attempt.get("process_exited") is False
+                and attempt.get("process_exit_code") is None
+                and isinstance(attempt.get("stable_output_polls"), int)
+                and not isinstance(attempt.get("stable_output_polls"), bool)
+                and attempt["stable_output_polls"] >= 4
+                and attempt.get("observed_output") is not None
+            ):
+                stable_alive = validate_stable_alive_output(
+                    original_root,
+                    name,
+                    attempt,
+                    expected_filename,
+                    render,
+                )
+            if stable_alive is not None:
+                results[name] = {
+                    "outcome": "stable-finalized-output-process-alive",
+                    "runtime_outcome": "inconclusive",
+                    "load_result": load_result,
+                    "process_exit_code": None,
+                    "dialog_closed": False,
+                    "stable_output_polls": attempt["stable_output_polls"],
+                    **stable_alive,
+                }
+            else:
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "load_result": load_result,
+                    "process_exit_code": attempt.get("process_exit_code"),
+                    "diagnostics": attempt.get("diagnostics"),
+                }
         else:
             raise ValueError(
                 f"{name}: unexpected render-substrate outcome: {outcome!r}"
@@ -476,9 +545,12 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         "diagnosis": diagnosis,
         "observed_exit_codes": exit_codes,
         "interpretation_boundary": (
-            "the cumulative Master/Sampler/sample-state/note ladder localizes "
-            "the PR #72 shared original offline-render failure only; it does "
-            "not establish delayed/retrigger execution or classify parity"
+            "the cumulative Master/Sampler/sample-state/note ladder distinguishes "
+            "stable finalized PCM output with the reference process still alive from "
+            "a verified process exit during offline render; a stable output does not "
+            "by itself prove the original Render dialog reached its normal terminal "
+            "state, and this diagnostic evidence does not establish delayed/retrigger "
+            "execution or classify parity"
         ),
         "parity_status": "UNKNOWN",
     }
