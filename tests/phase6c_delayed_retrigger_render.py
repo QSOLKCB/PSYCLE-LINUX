@@ -256,39 +256,39 @@ assert substrate.diagnose({
     "sampler-empty": "reference-process-exited-during-render",
     "sample-state": "reference-process-exited-during-render",
     "ordinary-note": "reference-process-exited-during-render",
-}) == "original-render-path-failure-before-sampler"
+}) == "master-only-associated-reference-exit"
 
 assert substrate.diagnose({
-    "master-only": "rendered-once",
+    "master-only": "stable-finalized-output-process-alive",
     "sampler-empty": "reference-process-exited-during-render",
     "sample-state": "reference-process-exited-during-render",
     "ordinary-note": "reference-process-exited-during-render",
-}) == "sampler-machine-render-failure"
+}) == "sampler-presence-associated-reference-exit"
 
 assert substrate.diagnose({
-    "master-only": "rendered-once",
-    "sampler-empty": "rendered-once",
+    "master-only": "stable-finalized-output-process-alive",
+    "sampler-empty": "stable-finalized-output-process-alive",
     "sample-state": "reference-process-exited-during-render",
     "ordinary-note": "reference-process-exited-during-render",
-}) == "sample-instrument-state-render-failure"
+}) == "sample-state-associated-reference-exit"
 
 assert substrate.diagnose({
-    "master-only": "rendered-once",
-    "sampler-empty": "rendered-once",
-    "sample-state": "rendered-once",
+    "master-only": "stable-finalized-output-process-alive",
+    "sampler-empty": "stable-finalized-output-process-alive",
+    "sample-state": "stable-finalized-output-process-alive",
     "ordinary-note": "reference-process-exited-during-render",
-}) == "ordinary-note-playback-render-failure"
+}) == "ordinary-note-associated-reference-exit-after-stable-output-controls"
 
 assert substrate.diagnose({
-    "master-only": "rendered-once",
-    "sampler-empty": "rendered-once",
-    "sample-state": "rendered-once",
-    "ordinary-note": "rendered-once",
-}) == "all-substrate-rungs-rendered-full-witness-detail-remains"
+    "master-only": "stable-finalized-output-process-alive",
+    "sampler-empty": "stable-finalized-output-process-alive",
+    "sample-state": "stable-finalized-output-process-alive",
+    "ordinary-note": "stable-finalized-output-process-alive",
+}) == "all-substrate-controls-survive-full-witness-detail-remains"
 
 assert substrate.diagnose({
     "master-only": "reference-process-exited-during-render",
-    "sampler-empty": "rendered-once",
+    "sampler-empty": "stable-finalized-output-process-alive",
     "sample-state": "reference-process-exited-during-render",
     "ordinary-note": "reference-process-exited-during-render",
 }) == "nonmonotonic-substrate-result"
@@ -323,5 +323,35 @@ with tempfile.TemporaryDirectory() as temporary:
         root, "master-only", attempt, filename
     )
     assert bound["size_bytes"] == 0
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    output_dir = root / "delayed-retrigger-substrate-master-only"
+    output_dir.mkdir()
+    filename = "original-delayed-retrigger-substrate-master-only-1.wav"
+    output = output_dir / filename
+    data = wave_pcm16([0] * 64)
+    output.write_bytes(data)
+    attempt = {
+        "process_exited": False,
+        "process_exit_code": None,
+        "dialog_closed": False,
+        "stable_output_polls": 4,
+        "observed_output": {
+            "path": filename,
+            "size_bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        },
+    }
+    stable = substrate.validate_stable_alive_output(
+        root,
+        "master-only",
+        attempt,
+        filename,
+        module,
+    )
+    assert stable["frame_count"] == 64
+    assert stable["nonzero_frame_count"] == 0
+    assert stable["observed_output"]["sha256"] == hashlib.sha256(data).hexdigest()
 
 print("phase6c-delayed-retrigger-render: PASS")
