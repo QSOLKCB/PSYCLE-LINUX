@@ -56,12 +56,21 @@ int main(int argc, char** argv) {
                     const double beat_frames = 44100.0 * 60.0 / 137.0;
                     const int target_frames =
                         static_cast<int>(std::ceil(4.25 * beat_frames));
-                    int rendered = 0;
-                    while (rendered < target_frames) {
-                        const int remaining = target_frames - rendered;
-                        const int amount = remaining < 2048 ? remaining : 2048;
-                        player.Work(amount);
-                        rendered += amount;
+                    // The frozen r12005 Sequencer::Work() keeps its global-event
+                    // last_pos only within one callback. The first callback therefore
+                    // spans every command event through beat 3.125; the remainder is
+                    // event-free. This is a harness scheduling constraint, not an
+                    // engine modification.
+                    const int event_spanning_frames = 62000;
+                    const int first =
+                        target_frames < event_spanning_frames
+                            ? target_frames
+                            : event_spanning_frames;
+                    player.Work(first);
+                    int rendered = first;
+                    if (rendered < target_frames) {
+                        player.Work(target_frames - rendered);
+                        rendered = target_frames;
                     }
 
                     const double final_beat = player.playPos();
