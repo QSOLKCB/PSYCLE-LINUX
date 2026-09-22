@@ -548,7 +548,12 @@ def validate_projection(
     return str(PROJECTION.relative_to(ROOT))
 
 
-def validate_original(candidate_root: Path, original_root: Path) -> dict:
+def validate_original(
+    candidate_root: Path,
+    original_root: Path,
+    *,
+    replay_historical_projection: bool = True,
+) -> dict:
     candidate_root = candidate_root.resolve()
     original_root = original_root.resolve()
     validate_candidate(candidate_root)
@@ -729,9 +734,14 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         ),
         "parity_status": "UNKNOWN",
     }
-    summary["projection"] = validate_projection(
-        candidate_root, original_root, summary
-    )
+    if replay_historical_projection:
+        summary["projection"] = validate_projection(
+            candidate_root, original_root, summary
+        )
+        summary["projection_validation"] = "historical-byte-replay"
+    else:
+        summary["projection"] = str(PROJECTION.relative_to(ROOT))
+        summary["projection_validation"] = "fresh-rerun-semantic-only"
     write_new(
         original_root / "original-sampler-work-boundary-isolation.json",
         summary,
@@ -757,6 +767,10 @@ def main() -> int:
     original.add_argument("candidate_root", type=Path)
     original.add_argument("original_root", type=Path)
 
+    rerun = sub.add_parser("original-rerun")
+    rerun.add_argument("candidate_root", type=Path)
+    rerun.add_argument("original_root", type=Path)
+
     args = parser.parse_args()
     if args.command == "candidate":
         result = collect_candidate(args.root)
@@ -768,8 +782,18 @@ def main() -> int:
         )
     elif args.command == "source-check":
         result = validate_source(args.root)
+    elif args.command == "original-rerun":
+        result = validate_original(
+            args.candidate_root,
+            args.original_root,
+            replay_historical_projection=False,
+        )
     else:
-        result = validate_original(args.candidate_root, args.original_root)
+        result = validate_original(
+            args.candidate_root,
+            args.original_root,
+            replay_historical_projection=True,
+        )
 
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
