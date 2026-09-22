@@ -293,6 +293,16 @@ run_logged "$OUT/sampulse-render-build.log" \
 
 SAMPULSE_RUNTIME_OUT="$ARTIFACT/delayed-retrigger-sampulse-runtime"
 mkdir "$SAMPULSE_RUNTIME_OUT"
+cp "$BUILD/phase6c-delayed-retrigger-sampulse-render" \
+    "$SAMPULSE_RUNTIME_OUT/phase6c-delayed-retrigger-sampulse-render"
+cp "$ROOT/tests/phase6c_delayed_retrigger_sampulse_render.cpp" \
+    "$SAMPULSE_RUNTIME_OUT/render-probe.cpp"
+cp "$ROOT/tests/phase6c_delayed_retrigger_sampulse_render.pro" \
+    "$SAMPULSE_RUNTIME_OUT/render-probe.pro"
+cp "$ROOT/tests/phase6c_delayed_retrigger_sampulse_execution_fixture.c" \
+    "$SAMPULSE_RUNTIME_OUT/fixture-generator.c"
+cp "$ROOT/scripts/phase6c-sampulse-eins-compat.py" \
+    "$SAMPULSE_RUNTIME_OUT/eins-compat.py"
 for attempt in 1 2; do
     run_logged "$OUT/sampulse-candidate-render-${attempt}.log" \
         env PSYCLE_THREADS=1 \
