@@ -126,7 +126,8 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
         early,
         r"\b(?:survive|survives|survived|retain|retains|retained)\b",
         r"\b(?:(?:do|does|did)\s+not|never|cannot|can't|could\s+not|"
-        r"would\s+not|should\s+not|must\s+not|fail(?:s|ed)?\s+to)\s+"
+        r"would\s+not|should\s+not|must\s+not|fail(?:s|ed)?\s+to|"
+        r"(?:(?:am|is|are|was|were)\s+)?unable\s+to)\s+"
         r"(?:survive|retain)\b|\bnot\s+(?:survive|retain)\b",
         context + " early controls",
     )
@@ -140,7 +141,8 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
         enabled,
         r"\bexit(?:s|ed)?\b",
         r"\b(?:(?:do|does|did)\s+not|never|cannot|can't|could\s+not|"
-        r"would\s+not|should\s+not|must\s+not|fail(?:s|ed)?\s+to)\s+"
+        r"would\s+not|should\s+not|must\s+not|fail(?:s|ed)?\s+to|"
+        r"(?:(?:am|is|are|was|were)\s+)?unable\s+to)\s+"
         r"exit\b|\bnot\s+exit\b",
         context + " enabled-sample variants",
     )
