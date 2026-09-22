@@ -279,6 +279,8 @@ assert "SetWinEventHook" in render_helper_source
 assert "EVENT_OBJECT_SHOW" in render_helper_source
 assert "WINEVENT_OUTOFCONTEXT" in render_helper_source
 assert "GetMessage(" in render_helper_source
+assert "PeekMessage(" in render_helper_source
+assert "PM_NOREMOVE" in render_helper_source
 assert "DispatchMessage(" in render_helper_source
 assert "PostThreadMessage(" in render_helper_source
 assert "Phase6cRenderWinEventPump" in render_helper_source
@@ -317,6 +319,7 @@ pump_end = render_helper_source.index(
     "private static bool TickStrictlyAfter", pump_start
 )
 pump_source = render_helper_source[pump_start:pump_end]
+assert "PeekMessage(" in pump_source
 assert "SetWinEventHook(" in pump_source
 assert "GetMessage(" in pump_source
 assert "DispatchMessage(" in pump_source
