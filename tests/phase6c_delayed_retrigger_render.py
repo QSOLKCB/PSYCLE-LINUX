@@ -42,6 +42,7 @@ startup = importlib.util.module_from_spec(startup_spec)
 startup_spec.loader.exec_module(startup)
 
 WORK_BOUNDARY_SCRIPT = ROOT / "scripts" / "phase6c-sampler-work-boundary.py"
+ORIGINAL_AUDIO_RENDER_SCRIPT = ROOT / "scripts" / "phase6c-original-audio-render.ps1"
 work_boundary_spec = importlib.util.spec_from_file_location(
     "phase6c_sampler_work_boundary", WORK_BOUNDARY_SCRIPT
 )
@@ -267,6 +268,15 @@ with tempfile.TemporaryDirectory() as temporary:
     )
     assert bound["size_bytes"] == 0
     assert bound["path"].endswith(output.name)
+
+render_helper_source = ORIGINAL_AUDIO_RENDER_SCRIPT.read_text(encoding="utf-8")
+assert "$preexistingRenderDialogs" in render_helper_source
+assert "$preexistingRenderDialogHandles" not in render_helper_source
+assert "[System.Windows.Automation.Automation]::Compare" in render_helper_source
+assert "catch [System.Windows.Automation.ElementNotAvailableException]" in render_helper_source
+assert "selected_render_dialog_native_handle" in render_helper_source
+assert "selected_render_dialog_runtime_id" in render_helper_source
+assert "new-after-command-excluding-live-preexisting-elements" in render_helper_source
 
 assert substrate.diagnose({
     "master-only": "reference-process-exited-during-render",
