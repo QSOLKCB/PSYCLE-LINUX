@@ -143,6 +143,28 @@ def main() -> int:
                 f"matrix status {status!r}"
             )
 
+        if row_id == "sequencer-delayed-retrigger":
+            matrix_notes = normalize_cell(str(row.get("notes", ""))).lower()
+            report_next_evidence = report_rows[label][5].lower()
+            required_delayed_summary = (
+                "no previous instrument",
+                "missing sample",
+                "enabled sample",
+                "voice::tick",
+                "voice::work",
+            )
+            for phrase in required_delayed_summary:
+                if phrase not in matrix_notes:
+                    die(
+                        "sequencer-delayed-retrigger matrix notes lost current "
+                        f"voice-startup evidence phrase: {phrase}"
+                    )
+                if phrase not in report_next_evidence:
+                    die(
+                        "sequencer-delayed-retrigger human projection is stale; "
+                        f"missing current evidence phrase: {phrase}"
+                    )
+
         if status != "UNKNOWN":
             classified += 1
             original = row.get("original")
