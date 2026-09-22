@@ -104,7 +104,7 @@ def collect_candidate(root: Path) -> dict:
         "phase": "6C",
         "scope": "candidate-runtime-execution-observation",
         "contract": CONTRACT,
-        "evidence_role": "candidate-runtime",
+        "evidence_role": "candidate",
         "fixture": FIXTURE,
         "fixture_sha256": digest(raw),
         "song_title": TITLE,
@@ -140,7 +140,7 @@ def validate_candidate(root: Path) -> dict:
         receipt.get("schema_version") != 1
         or receipt.get("phase") != "6C"
         or receipt.get("contract") != CONTRACT
-        or receipt.get("evidence_role") != "candidate-runtime"
+        or receipt.get("evidence_role") != "candidate"
         or receipt.get("fixture") != FIXTURE
         or receipt.get("fixture_sha256") != digest(fixture.read_bytes())
         or receipt.get("song_title") != TITLE
