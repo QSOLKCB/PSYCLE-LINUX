@@ -17,6 +17,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ($CollectSamplerFaultLocation -and -not $ObserveDelayedRetrigger) {
+    throw "phase6c-original-windows-fixtures: Sampler fault-location collection requires ObserveDelayedRetrigger"
+}
+
 $baseObserver = Join-Path $PSScriptRoot "phase6c-original-windows-fixtures-v2.ps1"
 if ($ObserveDelayedRetrigger) {
     & $baseObserver `
