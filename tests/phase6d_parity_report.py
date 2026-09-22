@@ -179,6 +179,13 @@ class ParityReportSummary(unittest.TestCase):
         )
         self.check(False)
 
+    def test_delayed_work_boundary_short_fixture_survival_is_rejected(self):
+        self.mutate_report(
+            "the enabled-sample release/no-active-voice control survives with a finalized silent WAV, while one-row `E-DF`, four-beat `E-DF`, and one-row ordinary-note fixtures all exit with `0xC0000005` and zero-byte output",
+            "one-row Sampler-local `E-DF` remains running, the enabled-sample release/no-active-voice control survives, and four-beat `E-DF` and one-row ordinary-note fixtures exit with `0xC0000005` and zero-byte output",
+        )
+        self.check(False)
+
 
 if __name__ == "__main__":
     unittest.main()
