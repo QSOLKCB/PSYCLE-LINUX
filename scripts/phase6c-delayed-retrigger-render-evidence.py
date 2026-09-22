@@ -225,6 +225,47 @@ def analyze_wave(data: bytes) -> dict:
     }
 
 
+def validate_render_attempt(attempt: object, expected_outcome: str) -> dict:
+    if not isinstance(attempt, dict):
+        raise ValueError("original render attempt must be an object")
+    required_flags = {
+        "command_verified": True,
+        "command_dispatched": True,
+        "dialog_verified": True,
+        "controls_configured": True,
+        "save_invoked": True,
+    }
+    for key, value in required_flags.items():
+        if attempt.get(key) is not value:
+            raise ValueError("original render attempt did not reach verified Save Wave: " + key)
+    if attempt.get("outcome") != expected_outcome:
+        raise ValueError("unexpected original render attempt outcome")
+    return attempt
+
+
+def validate_observed_output(original_root: Path, value: object) -> dict:
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"path", "size_bytes", "sha256"}
+        or not isinstance(value.get("path"), str)
+        or not isinstance(value.get("size_bytes"), int)
+        or isinstance(value.get("size_bytes"), bool)
+        or value["size_bytes"] < 0
+        or not isinstance(value.get("sha256"), str)
+        or len(value["sha256"]) != 64
+    ):
+        raise ValueError("invalid observed render output")
+    relative = "delayed-retrigger-execution/" + value["path"]
+    data = child(original_root, relative).read_bytes()
+    if len(data) != value["size_bytes"] or digest(data) != value["sha256"]:
+        raise ValueError("observed render output binding mismatch")
+    return {
+        "path": relative,
+        "size_bytes": value["size_bytes"],
+        "sha256": value["sha256"],
+    }
+
+
 def validate_original(candidate_root: Path, original_root: Path) -> dict:
     candidate_root = candidate_root.resolve()
     original_root = original_root.resolve()
@@ -239,7 +280,6 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         "reference_build": REFERENCE_BUILD,
         "candidate_fixture": FIXTURE,
         "fixture_sha256": candidate["fixture_sha256"],
-        "load_result": "accepted",
         "original_psycle_observed": True,
         "parity_status": "UNKNOWN",
     }
@@ -248,54 +288,140 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             raise ValueError("original execution witness identity mismatch: " + key)
 
     runtime = receipt.get("runtime_execution")
+    expected_settings = {
+        "sample_rate": 44100,
+        "bits_per_sample": 16,
+        "channels": "mono-mix",
+        "dither": False,
+        "range": "entire-song",
+    }
     if (
         not isinstance(runtime, dict)
         or runtime.get("schema_version") != 1
-        or runtime.get("outcome") != "rendered-twice"
-        or runtime.get("deterministic") is not True
-        or runtime.get("settings") != {
-            "sample_rate": 44100,
-            "bits_per_sample": 16,
-            "channels": "mono-mix",
-            "dither": False,
-            "range": "entire-song",
-        }
+        or runtime.get("settings") != expected_settings
     ):
-        raise ValueError("original runtime execution receipt is incomplete or inconclusive")
-    renders = runtime.get("renders")
-    if not isinstance(renders, list) or len(renders) != 2:
-        raise ValueError("expected exactly two original offline renders")
-    first = bound_bytes(original_root, renders[0])
-    second = bound_bytes(original_root, renders[1])
-    if first != second or digest(first) != digest(second):
-        raise ValueError("repeated original offline renders are not byte-identical")
+        raise ValueError("original runtime execution receipt identity mismatch")
 
-    first_analysis = analyze_wave(first)
-    second_analysis = analyze_wave(second)
-    if first_analysis != second_analysis:
-        raise ValueError("repeated original offline render traces differ")
+    pre_render = runtime.get("pre_render_load")
+    if (
+        not isinstance(pre_render, dict)
+        or pre_render.get("schema_version") != 1
+        or pre_render.get("clean_accepted_load") is not True
+        or pre_render.get("load_warning_dismissed") is not True
+        or pre_render.get("process_running_before_render") is not True
+        or pre_render.get("matched_marker") != Path(FIXTURE).name
+        or not isinstance(pre_render.get("stable_marker_polls"), int)
+        or isinstance(pre_render.get("stable_marker_polls"), bool)
+        or pre_render["stable_marker_polls"] < 4
+    ):
+        raise ValueError("original pre-render clean-load evidence is incomplete")
 
-    result = {
-        "schema_version": 1,
-        "phase": "6C",
-        "scope": "original-runtime-execution-observation",
-        "contract": CONTRACT,
-        "evidence_role": "original-runtime",
-        "reference_build": REFERENCE_BUILD,
-        "fixture": receipt["fixture"],
-        "fixture_sha256": receipt["fixture_sha256"],
-        "runtime_execution_trace": "deterministic-offline-waveform",
-        "offline_renderer": "Psycle 1.12.0 Render as Wav File",
-        "repeat_count": 2,
-        "render_sha256": digest(first),
-        "analysis": first_analysis,
-        "interpretation_boundary": (
-            "multiple impulses are required in both FB and FA witness windows, "
-            "establishing command-bearing runtime execution; exact timing parity "
-            "against the frozen candidate remains deliberately unclassified"
-        ),
-        "parity_status": "UNKNOWN",
-    }
+    attempts = runtime.get("attempts")
+    if not isinstance(attempts, list) or not attempts:
+        raise ValueError("original runtime execution attempt is missing")
+
+    outcome = runtime.get("outcome")
+    if outcome == "rendered-twice":
+        if receipt.get("load_result") != "accepted":
+            raise ValueError("successful render witness requires accepted final load result")
+        if runtime.get("deterministic") is not True:
+            raise ValueError("successful render witness is not deterministic")
+        renders = runtime.get("renders")
+        if not isinstance(renders, list) or len(renders) != 2 or len(attempts) != 2:
+            raise ValueError("expected exactly two successful original offline renders")
+        for attempt in attempts:
+            validated = validate_render_attempt(attempt, "rendered")
+            if validated.get("process_exited") is not False:
+                raise ValueError("reference exited during a supposedly successful render")
+            if validated.get("process_exit_code") is not None:
+                raise ValueError("successful render unexpectedly recorded a process exit code")
+
+        first = bound_bytes(original_root, renders[0])
+        second = bound_bytes(original_root, renders[1])
+        if first != second or digest(first) != digest(second):
+            raise ValueError("repeated original offline renders are not byte-identical")
+
+        first_analysis = analyze_wave(first)
+        second_analysis = analyze_wave(second)
+        if first_analysis != second_analysis:
+            raise ValueError("repeated original offline render traces differ")
+
+        result = {
+            "schema_version": 1,
+            "phase": "6C",
+            "scope": "original-runtime-execution-observation",
+            "contract": CONTRACT,
+            "evidence_role": "original-runtime",
+            "reference_build": REFERENCE_BUILD,
+            "fixture": receipt["fixture"],
+            "fixture_sha256": receipt["fixture_sha256"],
+            "runtime_execution_trace": "deterministic-offline-waveform",
+            "runtime_command_execution_observed": True,
+            "offline_renderer": "Psycle 1.12.0 Render as Wav File",
+            "repeat_count": 2,
+            "render_sha256": digest(first),
+            "analysis": first_analysis,
+            "interpretation_boundary": (
+                "multiple impulses are required in both FB and FA witness windows, "
+                "establishing command-bearing runtime execution; exact timing parity "
+                "against the frozen candidate remains deliberately unclassified"
+            ),
+            "parity_status": "UNKNOWN",
+        }
+    elif outcome == "reference-process-exited-during-render":
+        if (
+            receipt.get("load_result") != "inconclusive"
+            or receipt.get("observation")
+            != "reference-process-exited-before-harness-termination"
+            or runtime.get("deterministic") is not False
+            or runtime.get("renders") != []
+            or len(attempts) != 1
+        ):
+            raise ValueError("original render process-exit observation is inconsistent")
+        attempt = validate_render_attempt(attempts[0], "inconclusive")
+        if attempt.get("process_exited") is not True:
+            raise ValueError("render process-exit outcome lacks process-exit evidence")
+        exit_code = attempt.get("process_exit_code")
+        if (
+            not isinstance(exit_code, int)
+            or isinstance(exit_code, bool)
+            or exit_code == 0
+            or receipt.get("exit_code_before_termination") != exit_code
+        ):
+            raise ValueError("render process-exit code is missing or inconsistent")
+        diagnostics = attempt.get("diagnostics")
+        if diagnostics != ["reference exited during offline render"]:
+            raise ValueError("render process-exit diagnostic is unexpected")
+        observed_output = validate_observed_output(
+            original_root, attempt.get("observed_output")
+        )
+        result = {
+            "schema_version": 1,
+            "phase": "6C",
+            "scope": "original-runtime-execution-observation",
+            "contract": CONTRACT,
+            "evidence_role": "original-runtime",
+            "reference_build": REFERENCE_BUILD,
+            "fixture": receipt["fixture"],
+            "fixture_sha256": receipt["fixture_sha256"],
+            "runtime_execution_trace": "reference-process-exit-during-render",
+            "runtime_command_execution_observed": False,
+            "offline_renderer": "Psycle 1.12.0 Render as Wav File",
+            "render_attempt_verified": True,
+            "process_exit_code": exit_code,
+            "observed_output": observed_output,
+            "interpretation_boundary": (
+                "the exact fixture reached the clean accepted-load gate and the "
+                "source-pinned Render as Wav UI reached verified Save Wave dispatch, "
+                "but the pinned reference process exited before a valid waveform was "
+                "produced; this is retained as original-runtime failure evidence and "
+                "does not establish delayed/retrigger command execution or parity"
+            ),
+            "parity_status": "UNKNOWN",
+        }
+    else:
+        raise ValueError("original runtime execution observation remains inconclusive")
+
     target = original_root / RUNTIME_RECEIPT
     if target.exists():
         raise ValueError("refusing stale runtime execution receipt")
