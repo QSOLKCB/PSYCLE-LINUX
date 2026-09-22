@@ -168,4 +168,49 @@ with tempfile.TemporaryDirectory() as temporary:
         "did not complete cleanly",
     )
 
+valid_original_runtime = {
+    "schema_version": 1,
+    "outcome": "rendered-twice",
+    "deterministic": True,
+    "settings": dict(m.ORIGINAL_RENDER_SETTINGS),
+    "pre_render_load": {
+        "schema_version": 1,
+        "clean_accepted_load": True,
+        "stable_marker_polls": 4,
+        "matched_marker": Path(m.FIXTURE).name,
+        "load_warning_dismissed": True,
+        "process_running_before_render": True,
+    },
+    "renders": [],
+    "attempts": [{}, {}],
+}
+assert len(m.validate_original_runtime_procedure(valid_original_runtime)) == 2
+
+missing_pre_render_load = dict(valid_original_runtime)
+missing_pre_render_load.pop("pre_render_load")
+expect_value_error(
+    lambda: m.validate_original_runtime_procedure(missing_pre_render_load),
+    "render procedure mismatch",
+)
+
+wrong_dither_runtime = dict(valid_original_runtime)
+wrong_dither_runtime["settings"] = {
+    **m.ORIGINAL_RENDER_SETTINGS,
+    "dither": True,
+}
+expect_value_error(
+    lambda: m.validate_original_runtime_procedure(wrong_dither_runtime),
+    "render procedure mismatch",
+)
+
+wrong_range_runtime = dict(valid_original_runtime)
+wrong_range_runtime["settings"] = {
+    **m.ORIGINAL_RENDER_SETTINGS,
+    "range": "selection",
+}
+expect_value_error(
+    lambda: m.validate_original_runtime_procedure(wrong_range_runtime),
+    "render procedure mismatch",
+)
+
 print("phase6c-delayed-retrigger-same-witness: PASS")
