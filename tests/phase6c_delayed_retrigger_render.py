@@ -313,6 +313,7 @@ count_index = observer_source.index("postDispatchObservedWindowEventCount += 1;"
 liveness_index = observer_source.index("GetWindowThreadProcessId(window, out owner)")
 assert count_index < liveness_index
 assert "unresolvedPostDispatchEventCount += 1;" in observer_source
+assert "postDispatchObservedWindowEventCount > 1" in render_helper_source
 
 pump_start = render_helper_source.index("private void Pump()")
 pump_end = render_helper_source.index(
