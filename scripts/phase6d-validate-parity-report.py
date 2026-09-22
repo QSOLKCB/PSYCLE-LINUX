@@ -97,7 +97,14 @@ def assert_positive_predicate(
     negative_pattern: str,
     context: str,
 ) -> None:
-    if re.search(negative_pattern, sentence, re.IGNORECASE):
+    subject_negation = re.search(
+        r"\b(?:neither|none|no)\b",
+        sentence,
+        re.IGNORECASE,
+    )
+    if subject_negation is not None or re.search(
+        negative_pattern, sentence, re.IGNORECASE
+    ):
         die(f"{context} reverses the canonical result polarity: {sentence}")
     if re.search(positive_pattern, sentence, re.IGNORECASE) is None:
         die(f"{context} lacks the required positive result predicate: {sentence}")
@@ -129,7 +136,18 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
         r"exit\b|\bnot\s+exit\b",
         context + " enabled-sample variants",
     )
-    if "0xc0000005" not in enabled or "zero byte" not in enabled:
+    if re.search(
+        r"\b(?:non\s+zero|nonzero|not\s+zero|zero\s+or\s+more)\s+byte",
+        enabled,
+        re.IGNORECASE,
+    ):
+        die(
+            f"{context} reverses the canonical zero-byte output result: "
+            f"{enabled}"
+        )
+    if "0xc0000005" not in enabled or re.search(
+        r"\bzero\s+byte\b", enabled, re.IGNORECASE
+    ) is None:
         die(
             f"{context} enabled-sample result must bind the exit to "
             "0xC0000005 and zero-byte output"
