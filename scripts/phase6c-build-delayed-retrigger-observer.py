@@ -180,6 +180,69 @@ def main() -> None:
             }
         }
 
+        if ($ObserveDelayedRetrigger -and
+            [string]$spec.name -like "delayed-retrigger-isolation-*") {
+            $renderDirectory = Join-Path $outRoot ([string]$spec.name)
+            if (-not (Test-Path -LiteralPath $renderDirectory)) {
+                New-Item -ItemType Directory -Path $renderDirectory | Out-Null
+            }
+            $preRenderLoad = [ordered]@{
+                schema_version = 1
+                clean_accepted_load = [bool]$cleanAcceptedLoadEvidence
+                stable_marker_polls = $stableMarkerPolls
+                matched_marker = $matchedMarker
+                load_warning_dismissed = [bool]$loadWarningBootstrap.dismissed
+                process_running_before_render = [bool]$processRunningBeforeTermination
+            }
+            $renderSettings = [ordered]@{
+                sample_rate = 44100
+                bits_per_sample = 16
+                channels = "mono-mix"
+                dither = $false
+                range = "entire-song"
+            }
+            if ($cleanAcceptedLoadEvidence -and [bool]$loadWarningBootstrap.dismissed) {
+                $renderName = "original-$($spec.name)-1.wav"
+                $renderPath = Join-Path $renderDirectory $renderName
+                $renderOne = Invoke-Phase6cAudioRender $process $windowTitle $renderPath
+                $attempts = @($renderOne)
+                $renderBindings = @()
+                if ($renderOne.outcome -eq "rendered" -and $null -ne $renderOne.output) {
+                    $renderBindings += [ordered]@{
+                        path = "$($spec.name)/$($renderOne.output.path)"
+                        sha256 = [string]$renderOne.output.sha256
+                    }
+                }
+                $runtimeOutcome = if ($renderBindings.Count -eq 1) {
+                    "rendered-once"
+                } elseif ([bool]$renderOne.save_invoked -and [bool]$renderOne.process_exited) {
+                    "reference-process-exited-during-render"
+                } else {
+                    "inconclusive"
+                }
+                $runtimeExecution = [ordered]@{
+                    schema_version = 1
+                    outcome = $runtimeOutcome
+                    deterministic = $false
+                    pre_render_load = $preRenderLoad
+                    settings = $renderSettings
+                    renders = @($renderBindings)
+                    attempts = @($attempts)
+                }
+            } else {
+                $runtimeExecution = [ordered]@{
+                    schema_version = 1
+                    outcome = "inconclusive"
+                    deterministic = $false
+                    pre_render_load = $preRenderLoad
+                    settings = $renderSettings
+                    renders = @()
+                    attempts = @()
+                    diagnostics = @("clean accepted load and dismissed Load Warning are required before render isolation")
+                }
+            }
+        }
+
 '''
     text = replace_once(
         text,
