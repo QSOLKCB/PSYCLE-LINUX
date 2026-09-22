@@ -447,19 +447,7 @@ with tempfile.TemporaryDirectory() as temporary:
 with tempfile.TemporaryDirectory() as candidate_temp, tempfile.TemporaryDirectory() as original_temp:
     candidate_root = Path(candidate_temp)
     original_root = Path(original_temp)
-    source_receipt = {
-        "schema_version": 1,
-        "phase": "6C",
-        "scope": "pinned-original-source",
-        "contract": startup.CONTRACT,
-        "reference_build": startup.REFERENCE_BUILD,
-        "source_commit": startup.SOURCE_COMMIT,
-        "files": {
-            "Sampler.cpp": {"git_blob": startup.SAMPLER_BLOB},
-            "Song.cpp": {"git_blob": startup.SONG_BLOB},
-        },
-        "parity_status": "UNKNOWN",
-    }
+    source_receipt = startup.expected_source_receipt()
     source_path = candidate_root / startup.SOURCE_RECEIPT
     source_path.write_text(
         json.dumps(source_receipt, sort_keys=True) + "\n",
@@ -473,5 +461,22 @@ with tempfile.TemporaryDirectory() as candidate_temp, tempfile.TemporaryDirector
     assert original_source.is_file()
     assert original_source.read_bytes() == source_path.read_bytes()
     assert startup.validate_source(original_root) == source_receipt
+
+    corrupted = startup.expected_source_receipt()
+    corrupted["files"]["Sampler.cpp"]["markers"] = []
+    corrupted["files"]["Song.cpp"]["markers"] = []
+    corrupted["source_boundary"] = [
+        "enabled samples return before voice selection"
+    ]
+    original_source.write_text(
+        json.dumps(corrupted, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    try:
+        startup.validate_source(original_root)
+    except ValueError as exc:
+        assert "canonical source semantics" in str(exc)
+    else:
+        raise AssertionError("expected corrupted source receipt rejection")
 
 print("phase6c-delayed-retrigger-render: PASS")
