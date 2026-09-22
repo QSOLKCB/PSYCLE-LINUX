@@ -129,10 +129,8 @@ static int install_click_sample(psy_audio_Song* song)
     for (frame = 0; frame < CLICK_FRAMES; ++frame)
         sample->channels.samples[0][frame] = 0.0f;
     /*
-    ** Keep the impulse after the retained Sampler's default ~5 ms attack.
-    ** The legacy instrument conversion serializes that attack at roughly
-    ** 221 frames at 44.1 kHz, so a frame-0 click can be attenuated below the
-    ** execution analyzer threshold in original Psycle.
+    ** Keep the impulse away from frame zero so startup interpolation/envelope
+    ** transients cannot hide the command-bearing onset in either runtime.
     */
     sample->channels.samples[0][CLICK_IMPULSE_FRAME + 0] = 16000.0f;
     sample->channels.samples[0][CLICK_IMPULSE_FRAME + 1] = -16000.0f;
@@ -182,7 +180,7 @@ static int verify_song(psy_audio_Song* song)
     if (!sample || psy_audio_sample_num_frames(sample) != CLICK_FRAMES)
         return fail("deterministic click sample missing");
     instrument = psy_audio_instruments_at(
-        psy_audio_song_instruments(song), psy_audio_instrumentindex_make(0, 0));
+        psy_audio_song_instruments(song), psy_audio_instrumentindex_make(1, 0));
     if (!instrument || !psy_audio_instrument_entries(instrument))
         return fail("click instrument missing");
 
