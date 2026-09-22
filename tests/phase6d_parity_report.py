@@ -123,6 +123,13 @@ class ParityReportSummary(unittest.TestCase):
         )
         self.check(False)
 
+    def test_delayed_enabled_sample_no_variants_exit_is_rejected(self):
+        self.mutate_report(
+            "both enabled-sample variants (constructor-default original Instrument and serialized instrument state) exit",
+            "no enabled-sample variants (constructor-default original Instrument and serialized instrument state) exit",
+        )
+        self.check(False)
+
 
 if __name__ == "__main__":
     unittest.main()
