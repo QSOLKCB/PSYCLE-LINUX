@@ -456,6 +456,35 @@ startup.validate_completed_render_attempt(
     valid_completed_attempt, "note-sample-default-inst"
 )
 
+valid_exit_receipt = {
+    "exit_code_before_termination": startup.EXPECTED_ACCESS_VIOLATION_EXIT_CODE,
+}
+valid_exit_attempt = {
+    "process_exit_code": startup.EXPECTED_ACCESS_VIOLATION_EXIT_CODE,
+    "diagnostics": ["reference exited during offline render"],
+}
+assert startup.validate_expected_access_violation(
+    valid_exit_receipt,
+    valid_exit_attempt,
+    "note-sample-default-inst",
+) == startup.EXPECTED_ACCESS_VIOLATION_EXIT_CODE
+
+bad_exit_receipt = {"exit_code_before_termination": 1}
+bad_exit_attempt = {
+    "process_exit_code": 1,
+    "diagnostics": ["reference exited during offline render"],
+}
+try:
+    startup.validate_expected_access_violation(
+        bad_exit_receipt,
+        bad_exit_attempt,
+        "note-sample-default-inst",
+    )
+except ValueError as exc:
+    assert "0xC0000005" in str(exc)
+else:
+    raise AssertionError("expected unrelated nonzero exit-code rejection")
+
 invalid_completed_attempt = dict(valid_completed_attempt)
 invalid_completed_attempt.update(
     {
