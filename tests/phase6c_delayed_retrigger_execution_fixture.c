@@ -39,7 +39,8 @@
 #define RETR_CONT_PARAM 0x42
 #define EXTENDED_LPB_PARAM 0x04
 #define PATTERN_BEATS 4.0
-#define CLICK_FRAMES 64
+#define CLICK_FRAMES 512
+#define CLICK_IMPULSE_FRAME 256
 
 static int fail(const char* message)
 {
@@ -127,10 +128,16 @@ static int install_click_sample(psy_audio_Song* song)
     }
     for (frame = 0; frame < CLICK_FRAMES; ++frame)
         sample->channels.samples[0][frame] = 0.0f;
-    sample->channels.samples[0][0] = 16000.0f;
-    sample->channels.samples[0][1] = -16000.0f;
-    sample->channels.samples[0][2] = 8000.0f;
-    sample->channels.samples[0][3] = -8000.0f;
+    /*
+    ** Keep the impulse after the retained Sampler's default ~5 ms attack.
+    ** The legacy instrument conversion serializes that attack at roughly
+    ** 221 frames at 44.1 kHz, so a frame-0 click can be attenuated below the
+    ** execution analyzer threshold in original Psycle.
+    */
+    sample->channels.samples[0][CLICK_IMPULSE_FRAME + 0] = 16000.0f;
+    sample->channels.samples[0][CLICK_IMPULSE_FRAME + 1] = -16000.0f;
+    sample->channels.samples[0][CLICK_IMPULSE_FRAME + 2] = 8000.0f;
+    sample->channels.samples[0][CLICK_IMPULSE_FRAME + 3] = -8000.0f;
     psy_audio_samples_insert(psy_audio_song_samples(song), sample, sample_index);
 
     instrument = psy_audio_instrument_allocinit();
