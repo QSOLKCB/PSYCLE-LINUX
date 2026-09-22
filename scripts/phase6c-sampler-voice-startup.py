@@ -282,6 +282,30 @@ def validate_source(root: Path) -> dict:
     return receipt
 
 
+def materialize_source_receipt(
+    candidate_root: Path, original_root: Path
+) -> str:
+    candidate_root = candidate_root.resolve()
+    original_root = original_root.resolve()
+    candidate_receipt = validate_source(candidate_root)
+    source_path = child(candidate_root, SOURCE_RECEIPT)
+    destination = child(original_root, SOURCE_RECEIPT)
+    source_bytes = source_path.read_bytes()
+
+    if destination.exists():
+        if destination.read_bytes() != source_bytes:
+            raise ValueError(
+                "original artifact source receipt conflicts with candidate receipt"
+            )
+    else:
+        destination.write_bytes(source_bytes)
+
+    original_receipt = validate_source(original_root)
+    if original_receipt != candidate_receipt:
+        raise ValueError("original artifact source receipt changed during materialization")
+    return SOURCE_RECEIPT
+
+
 def require_attempt_prefix(attempt: object, name: str) -> dict:
     if not isinstance(attempt, dict):
         raise ValueError(f"{name}: render attempt must be an object")
@@ -406,7 +430,9 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
     candidate_root = candidate_root.resolve()
     original_root = original_root.resolve()
     validate_candidate(candidate_root)
-    validate_source(candidate_root)
+    source_receipt = materialize_source_receipt(
+        candidate_root, original_root
+    )
 
     delayed = load_module(
         ROOT / "scripts" / "phase6c-delayed-retrigger-original.py",
@@ -571,7 +597,7 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         "scope": "original-sampler-voice-startup-isolation",
         "contract": CONTRACT,
         "reference_build": REFERENCE_BUILD,
-        "source_receipt": SOURCE_RECEIPT,
+        "source_receipt": source_receipt,
         "results": results,
         "diagnosis": diagnose(outcomes),
         "observed_exit_codes": sorted(
