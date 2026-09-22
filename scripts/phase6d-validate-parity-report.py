@@ -97,9 +97,15 @@ def assert_positive_predicate(
     negative_pattern: str,
     context: str,
 ) -> None:
-    subject_negation = re.search(
-        r"\b(?:neither|none)\b",
+    subject_scan = re.sub(
+        r"\bno\s+previous\s+instrument\b",
+        "previous instrument",
         sentence,
+        flags=re.IGNORECASE,
+    )
+    subject_negation = re.search(
+        r"\b(?:neither|none|no)\b",
+        subject_scan,
         re.IGNORECASE,
     )
     if subject_negation is not None or re.search(
