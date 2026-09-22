@@ -128,4 +128,44 @@ with tempfile.TemporaryDirectory() as temporary:
         "not byte-identical",
     )
 
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    render_dir = root / m.NAME
+    render_dir.mkdir(parents=True)
+    original_path = render_dir / "original-delayed-retrigger-sampulse-runtime-1.wav"
+    original_path.write_bytes(valid_wave)
+
+    completed_attempt = {
+        "command_verified": True,
+        "command_dispatched": True,
+        "dialog_verified": True,
+        "controls_configured": True,
+        "save_invoked": True,
+        "outcome": "rendered",
+        "process_exited": False,
+        "process_exit_code": None,
+        "dialog_closed": False,
+        "close_control_seen": True,
+        "close_uia_invoked": True,
+        "stable_output_polls": 4,
+        "diagnostics": [
+            "render output finalized and Close control was verified, "
+            "but dialog teardown did not complete"
+        ],
+        "output": {
+            "path": original_path.name,
+            "sha256": m.digest(valid_wave),
+        },
+    }
+    binding, data = m.validate_original_attempt(root, completed_attempt, 1)
+    assert data == valid_wave
+    assert binding["sha256"] == m.digest(valid_wave)
+
+    incomplete_attempt = dict(completed_attempt)
+    incomplete_attempt["stable_output_polls"] = 3
+    expect_value_error(
+        lambda: m.validate_original_attempt(root, incomplete_attempt, 1),
+        "did not complete cleanly",
+    )
+
 print("phase6c-delayed-retrigger-same-witness: PASS")
