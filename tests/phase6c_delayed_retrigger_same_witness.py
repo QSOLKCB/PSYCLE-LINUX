@@ -141,10 +141,11 @@ with tempfile.TemporaryDirectory() as temporary:
         "dialog_verified": True,
         "controls_configured": True,
         "save_invoked": True,
-        "render_dialog_open_event_armed": True,
+        "render_dialog_native_event_hook_armed": True,
         "render_dialog_dispatch_boundary_set": True,
+        "render_dialog_dispatch_boundary_tick": 123456,
         "render_dialog_post_dispatch_event_count": 1,
-        "dialog_discovery": "window-opened-event-after-successful-command-dispatch",
+        "dialog_discovery": "win-event-object-show-after-dispatch-tick-boundary",
         "preexisting_render_dialog_count": 1,
         "selected_render_dialog_native_handle": 12345,
         "selected_render_dialog_runtime_id": [1, 2, 3],
@@ -176,7 +177,7 @@ with tempfile.TemporaryDirectory() as temporary:
     )
 
     unarmed_attempt = dict(completed_attempt)
-    unarmed_attempt["render_dialog_open_event_armed"] = False
+    unarmed_attempt["render_dialog_native_event_hook_armed"] = False
     expect_value_error(
         lambda: m.validate_original_attempt(root, unarmed_attempt, 1),
         "post-dispatch dialog evidence",
@@ -184,7 +185,7 @@ with tempfile.TemporaryDirectory() as temporary:
 
     stale_discovery_attempt = dict(completed_attempt)
     stale_discovery_attempt["dialog_discovery"] = (
-        "new-after-command-excluding-live-preexisting-elements"
+        "window-opened-event-after-successful-command-dispatch"
     )
     expect_value_error(
         lambda: m.validate_original_attempt(root, stale_discovery_attempt, 1),
@@ -202,6 +203,20 @@ with tempfile.TemporaryDirectory() as temporary:
     missing_boundary_attempt["render_dialog_dispatch_boundary_set"] = False
     expect_value_error(
         lambda: m.validate_original_attempt(root, missing_boundary_attempt, 1),
+        "post-dispatch dialog evidence",
+    )
+
+    invalid_tick_attempt = dict(completed_attempt)
+    invalid_tick_attempt["render_dialog_dispatch_boundary_tick"] = -1
+    expect_value_error(
+        lambda: m.validate_original_attempt(root, invalid_tick_attempt, 1),
+        "post-dispatch dialog evidence",
+    )
+
+    missing_tick_attempt = dict(completed_attempt)
+    missing_tick_attempt.pop("render_dialog_dispatch_boundary_tick")
+    expect_value_error(
+        lambda: m.validate_original_attempt(root, missing_tick_attempt, 1),
         "post-dispatch dialog evidence",
     )
 
