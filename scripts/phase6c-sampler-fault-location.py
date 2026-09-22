@@ -116,7 +116,7 @@ def validate_candidate(root: Path) -> dict:
     return actual
 
 
-def validate_binding(root: Path, binding: dict, label: str) -> None:
+def validate_binding(root: Path, binding: dict, label: str) -> Path:
     if (
         not isinstance(binding, dict)
         or not isinstance(binding.get("path"), str)
@@ -129,6 +129,16 @@ def validate_binding(root: Path, binding: dict, label: str) -> None:
         raise ValueError(f"{label}: bound artifact missing")
     if digest(path.read_bytes()) != binding["sha256"]:
         raise ValueError(f"{label}: bound artifact hash mismatch")
+    return path
+
+
+def parse_hex(value: str, label: str) -> int:
+    if not isinstance(value, str) or not value.lower().startswith("0x"):
+        raise ValueError(f"{label}: malformed hexadecimal value")
+    try:
+        return int(value[2:], 16)
+    except ValueError as exc:
+        raise ValueError(f"{label}: malformed hexadecimal value") from exc
 
 
 def validate_uninstrumented_control(candidate: dict, receipt: dict) -> dict:
@@ -157,6 +167,7 @@ def validate_uninstrumented_control(candidate: dict, receipt: dict) -> dict:
 
 ALLOWED_FAULT_OUTCOMES = {
     "captured-module-offset",
+    "inconclusive-clean-load-required",
     "inconclusive-tool-unavailable",
     "inconclusive-module-snapshot-failed",
     "inconclusive-debugger-start-failed",
@@ -200,10 +211,16 @@ def validate_fault_location(
         raise ValueError("fault-location observation envelope mismatch")
 
     outcome = fault["outcome"]
+    module_snapshot_path = None
+    debugger_log_path = None
     if fault.get("module_snapshot") is not None:
-        validate_binding(original_root, fault["module_snapshot"], "module snapshot")
+        module_snapshot_path = validate_binding(
+            original_root, fault["module_snapshot"], "module snapshot"
+        )
     if fault.get("debugger_log") is not None:
-        validate_binding(original_root, fault["debugger_log"], "debugger log")
+        debugger_log_path = validate_binding(
+            original_root, fault["debugger_log"], "debugger log"
+        )
 
     if outcome == "captured-module-offset":
         debugger = fault.get("debugger")
@@ -211,7 +228,9 @@ def validate_fault_location(
         module = exception.get("module") if isinstance(exception, dict) else None
         attempt = fault.get("render_attempt")
         if (
-            not isinstance(debugger, dict)
+            module_snapshot_path is None
+            or debugger_log_path is None
+            or not isinstance(debugger, dict)
             or debugger.get("name") != "cdb.exe"
             or debugger.get("architecture") != "x86"
             or not isinstance(debugger.get("sha256"), str)
@@ -232,6 +251,29 @@ def validate_fault_location(
             != "not-required-for-module-offset"
         ):
             raise ValueError("captured module-offset witness is incomplete")
+
+        snapshot = read_json(module_snapshot_path)
+        modules = snapshot.get("modules")
+        if not isinstance(modules, list):
+            raise ValueError("captured module snapshot has no module list")
+        matching = [
+            item
+            for item in modules
+            if isinstance(item, dict)
+            and item.get("name") == module.get("name")
+            and item.get("base_address_hex") == module.get("base_address_hex")
+            and item.get("size_bytes") == module.get("size_bytes")
+            and item.get("sha256") == module.get("sha256")
+        ]
+        if len(matching) != 1:
+            raise ValueError(
+                "captured exception module is not uniquely bound to module snapshot"
+            )
+        address = parse_hex(exception["address_hex"], "exception address")
+        base = parse_hex(module["base_address_hex"], "module base")
+        offset = parse_hex(module["offset_hex"], "module offset")
+        if address - base != offset or offset >= int(module["size_bytes"]):
+            raise ValueError("captured exception module offset is inconsistent")
     return fault
 
 
