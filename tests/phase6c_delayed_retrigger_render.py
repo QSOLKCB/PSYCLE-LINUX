@@ -2,9 +2,11 @@
 """Negative controls for the Phase 6C offline-render execution analyzer."""
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 from pathlib import Path
 import struct
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "phase6c-delayed-retrigger-render-evidence.py"
@@ -82,5 +84,38 @@ expect_failure(
     ),
     "must be mono",
 )
+
+verified_exit_attempt = {
+    "outcome": "inconclusive",
+    "command_verified": True,
+    "command_dispatched": True,
+    "dialog_verified": True,
+    "controls_configured": True,
+    "save_invoked": True,
+}
+module.validate_render_attempt(verified_exit_attempt, "inconclusive")
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    output_dir = root / "delayed-retrigger-execution"
+    output_dir.mkdir()
+    output = output_dir / "original-delayed-retrigger-execution-1.wav"
+    output.write_bytes(b"")
+    observed = {
+        "path": output.name,
+        "size_bytes": 0,
+        "sha256": hashlib.sha256(b"").hexdigest(),
+    }
+    validated = module.validate_observed_output(root, observed)
+    assert validated["size_bytes"] == 0
+
+    bad = dict(observed)
+    bad["size_bytes"] = 1
+    try:
+        module.validate_observed_output(root, bad)
+    except ValueError as exc:
+        assert "binding mismatch" in str(exc)
+    else:
+        raise AssertionError("expected observed-output binding failure")
 
 print("phase6c-delayed-retrigger-render: PASS")
