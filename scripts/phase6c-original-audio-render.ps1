@@ -708,6 +708,7 @@ function Invoke-Phase6cAudioRender(
         if ($null -ne $channelsError) { throw $channelsError }
         Disable-Phase6cRenderDither $dialog
         $result.controls_configured = $true
+        $dialogObserver.ThrowIfAmbiguous()
 
         $invoke = [System.Windows.Automation.InvokePattern](
             $save.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
