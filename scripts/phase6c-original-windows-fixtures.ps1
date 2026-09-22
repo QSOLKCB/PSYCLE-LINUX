@@ -10,7 +10,9 @@ param(
 
     [switch]$ObserveBpmLpbTick,
 
-    [switch]$ObserveDelayedRetrigger
+    [switch]$ObserveDelayedRetrigger,
+
+    [switch]$CollectSamplerFaultLocation
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,7 +24,8 @@ if ($ObserveDelayedRetrigger) {
         -Out $Out `
         -ObserveSerialization:$ObserveSerialization `
         -ObserveSequenceOrder:$ObserveSequenceOrder `
-        -ObserveDelayedRetrigger
+        -ObserveDelayedRetrigger `
+        -CollectSamplerFaultLocation:$CollectSamplerFaultLocation
 } elseif ($ObserveBpmLpbTick) {
     & $baseObserver `
         -CandidateArtifactRoot $CandidateArtifactRoot `
@@ -121,6 +124,10 @@ if ($ObserveDelayedRetrigger) {
             $receiptNames += $name
         }
     }
+}
+if ($CollectSamplerFaultLocation -and
+    (Test-Path -LiteralPath (Join-Path $outRoot "original-sampler-fault-location.json"))) {
+    $receiptNames += "sampler-fault-location"
 }
 foreach ($name in $receiptNames) {
     $receiptPath = Join-Path $outRoot ("original-{0}.json" -f $name)
