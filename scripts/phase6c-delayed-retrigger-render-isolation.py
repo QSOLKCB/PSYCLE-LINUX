@@ -357,13 +357,26 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                 != ["reference exited during offline render"]
             ):
                 raise ValueError(f"{name}: process-exit code/diagnostic mismatch")
-            observed = validate_observed_output(
-                original_root, name, attempt.get("observed_output"), expected_filename
+            observed_value = attempt.get("observed_output")
+            expected_relative = (
+                f"delayed-retrigger-isolation-{name}/" + expected_filename
             )
+            expected_path = child(original_root, expected_relative)
+            if observed_value is None:
+                if expected_path.exists():
+                    raise ValueError(
+                        f"{name}: failed render created an unbound output file"
+                    )
+                observed = None
+            else:
+                observed = validate_observed_output(
+                    original_root, name, observed_value, expected_filename
+                )
             result = {
                 "outcome": "reference-process-exited-during-render",
                 "load_result": load_result,
                 "process_exit_code": exit_code,
+                "output_created": observed is not None,
                 "observed_output": observed,
             }
         elif outcome == "inconclusive":
