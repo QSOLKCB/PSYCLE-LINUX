@@ -22,6 +22,7 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
     private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
     private const uint WM_QUIT = 0x0012;
     private const uint WM_APP_FLUSH = 0x8031;
+    private const uint PM_NOREMOVE = 0x0000;
     private const uint GA_ROOT = 2;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -73,6 +74,15 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
         IntPtr window,
         uint minFilter,
         uint maxFilter
+    );
+
+    [DllImport("user32.dll", SetLastError=true)]
+    private static extern bool PeekMessage(
+        out MSG message,
+        IntPtr window,
+        uint minFilter,
+        uint maxFilter,
+        uint removeMessage
     );
 
     [DllImport("user32.dll")]
@@ -155,6 +165,18 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
     private void Pump()
     {
         pumpThreadId = GetCurrentThreadId();
+
+        // PostThreadMessage fails until the target thread owns a message queue.
+        // Force queue creation before publishing readiness to the pwsh thread.
+        MSG bootstrapMessage;
+        PeekMessage(
+            out bootstrapMessage,
+            IntPtr.Zero,
+            0,
+            0,
+            PM_NOREMOVE
+        );
+
         handler = new WinEventDelegate(OnWinEvent);
         hook = SetWinEventHook(
             EVENT_OBJECT_SHOW,
