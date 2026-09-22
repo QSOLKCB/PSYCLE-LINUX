@@ -451,6 +451,10 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
                 throw new InvalidOperationException(
                     "unresolved post-dispatch Psycle window-show event observed"
                 );
+            if (postDispatchObservedWindowEventCount > 1)
+                throw new InvalidOperationException(
+                    "multiple post-dispatch Psycle window-show events observed"
+                );
             if (postDispatchEventCount > 1)
                 throw new InvalidOperationException(
                     "multiple post-dispatch Render as Wav File windows observed"
