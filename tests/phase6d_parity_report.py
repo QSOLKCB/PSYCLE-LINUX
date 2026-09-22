@@ -137,6 +137,13 @@ class ParityReportSummary(unittest.TestCase):
         )
         self.check(False)
 
+    def test_delayed_early_controls_unable_to_survive_is_rejected(self):
+        self.mutate_report(
+            "no-previous-instrument and missing-sample controls survive",
+            "no-previous-instrument and missing-sample controls are unable to survive",
+        )
+        self.check(False)
+
 
 if __name__ == "__main__":
     unittest.main()
