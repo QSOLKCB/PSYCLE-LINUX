@@ -557,7 +557,17 @@ assert work_boundary.diagnose({
     "delayed-note-short": "reference-process-exited-during-render",
     "delayed-note-long": "reference-process-exited-during-render",
     "ordinary-note-short": "reference-process-exited-during-render",
-}) == "voice-tick-initialization-associated-exit"
+}) == "enabled-note-startup-pre-controller-work-associated-exit"
+
+assert work_boundary.HISTORICAL_DIAGNOSIS == "voice-tick-initialization-associated-exit"
+assert work_boundary.QUALIFIED_DIAGNOSIS == (
+    "enabled-note-startup-pre-controller-work-associated-exit"
+)
+projection = json.loads(work_boundary.PROJECTION.read_text(encoding="utf-8"))
+assert projection["historical_diagnosis"] == work_boundary.HISTORICAL_DIAGNOSIS
+assert projection["qualified_diagnosis"] == work_boundary.QUALIFIED_DIAGNOSIS
+assert projection["qualified_interpretation"]["voice_work_entry"] == "unresolved"
+assert projection["qualified_interpretation"]["voice_tick_fault_location"] == "unresolved"
 
 assert work_boundary.diagnose({
     "release-no-active-voice": "stable-finalized-output-process-alive",
