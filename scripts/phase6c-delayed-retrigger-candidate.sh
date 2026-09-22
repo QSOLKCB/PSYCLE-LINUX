@@ -131,6 +131,36 @@ run_logged "$OUT/render-isolation-candidate-validation.log" \
     python3 "$ROOT/scripts/phase6c-delayed-retrigger-render-isolation.py" candidate-check \
     "$ARTIFACT"
 
+SUBSTRATE_OUT="$ARTIFACT/delayed-retrigger-substrate"
+mkdir "$SUBSTRATE_OUT"
+run_logged "$OUT/render-substrate-fixture-build.log" \
+    gcc "${COMMON_CFLAGS[@]}" "${LUA_CFLAGS[@]}" \
+    "$ROOT/tests/phase6c_delayed_retrigger_render_substrate.c" \
+    -o "$BUILD/phase6c-delayed-retrigger-render-substrate" \
+    "${COMMON_LDFLAGS[@]}" "${LUA_LIBS[@]}"
+
+run_logged "$OUT/render-substrate-fixture-generator.log" \
+    "$BUILD/phase6c-delayed-retrigger-render-substrate" "$SUBSTRATE_OUT"
+
+for variant in master-only sampler-empty sample-state ordinary-note; do
+    fixture="$SUBSTRATE_OUT/phase6c-delayed-retrigger-substrate-${variant}.psy"
+    [[ -s "$fixture" ]] || {
+        echo "render-substrate fixture was not generated: $variant" >&2
+        exit 2
+    }
+    [[ "$(head -c 8 "$fixture")" == "PSY3SONG" ]] || {
+        echo "render-substrate fixture is not PSY3: $variant" >&2
+        exit 2
+    }
+done
+
+run_logged "$OUT/render-substrate-candidate-receipts.log" \
+    python3 "$ROOT/scripts/phase6c-delayed-retrigger-render-substrate.py" candidate \
+    "$ARTIFACT"
+run_logged "$OUT/render-substrate-candidate-validation.log" \
+    python3 "$ROOT/scripts/phase6c-delayed-retrigger-render-substrate.py" candidate-check \
+    "$ARTIFACT"
+
 cp "$ROOT/tests/phase6c_delayed_retrigger.pro" "$STAGING/probe.pro"
 set +e
 (
