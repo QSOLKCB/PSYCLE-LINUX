@@ -2,11 +2,112 @@
 # It invokes only source-pinned Psycle 1.12.0 UI identities and returns evidence.
 # It does not classify behavioral parity.
 
-Add-Type -TypeDefinition @"
+$phase6cAutomationReferences = @(
+    [System.Windows.Automation.AutomationElement].Assembly.Location
+    [System.Windows.Automation.ControlType].Assembly.Location
+) | Select-Object -Unique
+
+Add-Type -ReferencedAssemblies $phase6cAutomationReferences -TypeDefinition @"
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows.Automation;
+
+public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
+{
+    private readonly int processId;
+    private readonly object gate = new object();
+    private readonly Queue<AutomationElement> opened = new Queue<AutomationElement>();
+    private AutomationEventHandler handler;
+    private bool disposed;
+
+    public Phase6cRenderWindowOpenedObserver(uint processId)
+    {
+        this.processId = checked((int)processId);
+        handler = new AutomationEventHandler(OnWindowOpened);
+        Automation.AddAutomationEventHandler(
+            WindowPattern.WindowOpenedEvent,
+            AutomationElement.RootElement,
+            TreeScope.Descendants,
+            handler
+        );
+    }
+
+    private void OnWindowOpened(object sender, AutomationEventArgs args)
+    {
+        var element = sender as AutomationElement;
+        if (element == null)
+            return;
+        try
+        {
+            if (element.Current.ProcessId != processId ||
+                element.Current.ControlType != ControlType.Window ||
+                !string.Equals(
+                    element.Current.Name,
+                    "Render as Wav File",
+                    StringComparison.Ordinal
+                ))
+                return;
+            lock (gate)
+            {
+                if (!disposed)
+                    opened.Enqueue(element);
+            }
+        }
+        catch (ElementNotAvailableException)
+        {
+        }
+    }
+
+    public AutomationElement TakeNext()
+    {
+        lock (gate)
+        {
+            while (opened.Count > 0)
+            {
+                var element = opened.Dequeue();
+                try
+                {
+                    if (element.Current.ProcessId == processId &&
+                        element.Current.ControlType == ControlType.Window &&
+                        string.Equals(
+                            element.Current.Name,
+                            "Render as Wav File",
+                            StringComparison.Ordinal
+                        ))
+                        return element;
+                }
+                catch (ElementNotAvailableException)
+                {
+                }
+            }
+        }
+        return null;
+    }
+
+    public void Dispose()
+    {
+        AutomationEventHandler remove = null;
+        lock (gate)
+        {
+            if (disposed)
+                return;
+            disposed = true;
+            remove = handler;
+            handler = null;
+            opened.Clear();
+        }
+        if (remove != null)
+        {
+            Automation.RemoveAutomationEventHandler(
+                WindowPattern.WindowOpenedEvent,
+                AutomationElement.RootElement,
+                remove
+            );
+        }
+    }
+}
 
 public static class Phase6cRenderNative
 {
@@ -256,58 +357,19 @@ function Get-Phase6cRenderDialogs(
     return @($byHandle.Values)
 }
 
-function Test-Phase6cSameAutomationElement(
-    [System.Windows.Automation.AutomationElement]$Left,
-    [System.Windows.Automation.AutomationElement]$Right
-) {
-    if ($null -eq $Left -or $null -eq $Right) {
-        return $false
-    }
-    try {
-        if ($Right.Current.ProcessId -ne $Left.Current.ProcessId -or
-            $Right.Current.Name -cne $Left.Current.Name -or
-            $Right.Current.ControlType -ne $Left.Current.ControlType) {
-            return $false
-        }
-        $same = [System.Windows.Automation.Automation]::Compare($Left, $Right)
-        if (-not $same) {
-            return $false
-        }
-        # Re-read the retained element after Compare so a dialog that closed
-        # during the comparison is no longer treated as preexisting. This
-        # prevents a later window that reuses the old numeric HWND from being
-        # blacklisted for the rest of discovery.
-        return [long]$Right.Current.NativeWindowHandle -ne 0
-    }
-    catch [System.Windows.Automation.ElementNotAvailableException] {
-        return $false
-    }
-}
-
-function Get-Phase6cRenderDialog(
-    [System.Diagnostics.Process]$Process,
-    [int]$Polls = 1,
-    [System.Windows.Automation.AutomationElement[]]$PreexistingDialogs = @()
+function Wait-Phase6cOpenedRenderDialog(
+    [Phase6cRenderWindowOpenedObserver]$Observer,
+    [int]$Polls = 40
 ) {
     for ($poll = 0; $poll -lt $Polls; $poll++) {
-        $matches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
-        foreach ($candidate in @(Get-Phase6cRenderDialogs $Process)) {
-            $isPreexisting = $false
-            foreach ($preexisting in $PreexistingDialogs) {
-                if (Test-Phase6cSameAutomationElement $candidate $preexisting) {
-                    $isPreexisting = $true
-                    break
-                }
+        $dialog = $Observer.TakeNext()
+        if ($null -ne $dialog) {
+            Start-Sleep -Milliseconds 100
+            $extra = $Observer.TakeNext()
+            if ($null -ne $extra) {
+                throw "ambiguous newly opened Psycle Render as Wav File dialogs"
             }
-            if (-not $isPreexisting) {
-                [void]$matches.Add($candidate)
-            }
-        }
-        if ($matches.Count -gt 1) {
-            throw "ambiguous new Psycle Render as Wav File dialogs"
-        }
-        if ($matches.Count -eq 1) {
-            return $matches[0]
+            return $dialog
         }
         if ($poll + 1 -lt $Polls) {
             Start-Sleep -Milliseconds 200
@@ -453,6 +515,7 @@ function Invoke-Phase6cAudioRender(
         close_native_fallback_invoked = $false
         close_wm_close_invoked = $false
         preexisting_render_dialog_count = 0
+        render_dialog_open_event_armed = $false
         selected_render_dialog_native_handle = $null
         selected_render_dialog_runtime_id = @()
         dialog_discovery = $null
@@ -482,8 +545,9 @@ function Invoke-Phase6cAudioRender(
             throw "missing verified loaded-fixture window title"
         }
 
-        $preexistingRenderDialogs = @(Get-Phase6cRenderDialogs $Process)
-        $result.preexisting_render_dialog_count = $preexistingRenderDialogs.Count
+        $result.preexisting_render_dialog_count = @(
+            Get-Phase6cRenderDialogs $Process
+        ).Count
 
         $commands = @([Phase6cRenderNative]::Inspect([uint32]$Process.Id, $ExpectedTitle))
         $result.menu_inventory = @($commands | ForEach-Object {
@@ -503,26 +567,35 @@ function Invoke-Phase6cAudioRender(
             throw "source-pinned Render as Wav menu signature missing, disabled or ambiguous"
         }
         $result.command_verified = $true
-        if (-not [Phase6cRenderNative]::Invoke(
-            [uint32]$Process.Id,
-            $ExpectedTitle,
-            $matches[0]
-        )) {
-            throw "verified Render as Wav command dispatch failed"
-        }
-        $result.command_dispatched = $true
+        $dialogObserver = [Phase6cRenderWindowOpenedObserver]::new(
+            [uint32]$Process.Id
+        )
+        $result.render_dialog_open_event_armed = $true
+        try {
+            if (-not [Phase6cRenderNative]::Invoke(
+                [uint32]$Process.Id,
+                $ExpectedTitle,
+                $matches[0]
+            )) {
+                throw "verified Render as Wav command dispatch failed"
+            }
+            $result.command_dispatched = $true
 
-        $dialog = Get-Phase6cRenderDialog $Process 40 $preexistingRenderDialogs
-        if ($null -eq $dialog) {
-            throw "Render as Wav File dialog not observed"
+            $dialog = Wait-Phase6cOpenedRenderDialog $dialogObserver 40
+            if ($null -eq $dialog) {
+                throw "Render as Wav File WindowOpenedEvent not observed"
+            }
+        }
+        finally {
+            $dialogObserver.Dispose()
         }
         try {
             $result.selected_render_dialog_native_handle = [long]$dialog.Current.NativeWindowHandle
             $result.selected_render_dialog_runtime_id = @($dialog.GetRuntimeId())
-            $result.dialog_discovery = "new-after-command-excluding-live-preexisting-elements"
+            $result.dialog_discovery = "window-opened-event-after-command"
         }
         catch [System.Windows.Automation.ElementNotAvailableException] {
-            throw "newly discovered Render as Wav File dialog became unavailable before binding"
+            throw "newly opened Render as Wav File dialog became unavailable before binding"
         }
 
         $filename = Get-Phase6cRenderNode $dialog "1502" ([System.Windows.Automation.ControlType]::Edit)
