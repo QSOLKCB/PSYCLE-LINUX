@@ -137,7 +137,10 @@ The stronger observer deliberately does **not** modify
 `phase6c-delayed-retrigger.psy` or any of the PR #69/#70 versioned evidence.
 Instead, `tests/phase6c_delayed_retrigger_execution_fixture.c` creates a
 separate execution-only PSY3 witness with the same BPM/LPB/TPB family and a
-deterministic 64-frame impulse sample routed through the built-in Sampler.
+deterministic 512-frame sample routed through the built-in Sampler. Its
+four-frame impulse begins at frame 256, beyond the retained Sampler's default
+~5 ms / ~221-frame attack at 44.1 kHz, so the witness remains observable after
+the legacy attack ramp.
 
 The commands are spaced into independent one-beat windows:
 
