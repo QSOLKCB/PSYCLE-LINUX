@@ -319,7 +319,7 @@ jobs:
       - name: Observe pinned original delayed/retrigger fixture
         shell: pwsh
         env:
-          PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION: ${{ github.event_name == 'workflow_dispatch' && inputs.sampler_fault_location }}
+          PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION: ${{ (github.event_name == 'workflow_dispatch' && inputs.sampler_fault_location) || (github.event_name == 'pull_request' && github.head_ref == 'phase-6c/sampler-fault-location-observation') }}
         run: |
           $ErrorActionPreference = 'Stop'
           $collectFaultLocation = $env:PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION -eq 'true'
@@ -332,7 +332,7 @@ jobs:
       - name: Validate command observations
         shell: pwsh
         env:
-          PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION: ${{ github.event_name == 'workflow_dispatch' && inputs.sampler_fault_location }}
+          PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION: ${{ (github.event_name == 'workflow_dispatch' && inputs.sampler_fault_location) || (github.event_name == 'pull_request' && github.head_ref == 'phase-6c/sampler-fault-location-observation') }}
         run: |
           $ErrorActionPreference = 'Stop'
           $collectFaultLocation = $env:PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION -eq 'true'
@@ -385,6 +385,13 @@ jobs:
             python scripts/phase6c-sampler-fault-location.py original `
               phase6c-command-candidate phase6c-command-original
             if ($LASTEXITCODE -ne 0) { throw "original Sampler fault-location validation failed" }
+            $summaryPath = 'phase6c-command-original/original-sampler-fault-location-summary.json'
+            if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
+              throw "Sampler fault-location summary missing after validation"
+            }
+            Write-Host '--- PHASE6C_SAMPLER_FAULT_LOCATION_SUMMARY_BEGIN ---'
+            Get-Content -LiteralPath $summaryPath -Raw | Write-Host
+            Write-Host '--- PHASE6C_SAMPLER_FAULT_LOCATION_SUMMARY_END ---'
           } else {
             Write-Host "Sampler fault-location witness disabled for this run"
           }
