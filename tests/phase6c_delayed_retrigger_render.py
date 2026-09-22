@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import importlib.util
 from pathlib import Path
 import struct
@@ -442,5 +443,35 @@ with tempfile.TemporaryDirectory() as temporary:
         assert "binding mismatch" in str(exc)
     else:
         raise AssertionError("expected startup stable-output binding failure")
+
+with tempfile.TemporaryDirectory() as candidate_temp, tempfile.TemporaryDirectory() as original_temp:
+    candidate_root = Path(candidate_temp)
+    original_root = Path(original_temp)
+    source_receipt = {
+        "schema_version": 1,
+        "phase": "6C",
+        "scope": "pinned-original-source",
+        "contract": startup.CONTRACT,
+        "reference_build": startup.REFERENCE_BUILD,
+        "source_commit": startup.SOURCE_COMMIT,
+        "files": {
+            "Sampler.cpp": {"git_blob": startup.SAMPLER_BLOB},
+            "Song.cpp": {"git_blob": startup.SONG_BLOB},
+        },
+        "parity_status": "UNKNOWN",
+    }
+    source_path = candidate_root / startup.SOURCE_RECEIPT
+    source_path.write_text(
+        json.dumps(source_receipt, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    relative = startup.materialize_source_receipt(
+        candidate_root, original_root
+    )
+    assert relative == startup.SOURCE_RECEIPT
+    original_source = original_root / relative
+    assert original_source.is_file()
+    assert original_source.read_bytes() == source_path.read_bytes()
+    assert startup.validate_source(original_root) == source_receipt
 
 print("phase6c-delayed-retrigger-render: PASS")
