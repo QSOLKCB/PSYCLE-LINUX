@@ -375,9 +375,13 @@ jobs:
           python scripts/phase6c-sampler-work-boundary.py source-check `
             phase6c-command-candidate
           if ($LASTEXITCODE -ne 0) { throw "Sampler work-boundary source validation failed" }
-          python scripts/phase6c-sampler-work-boundary.py original `
-            phase6c-command-candidate phase6c-command-original
-          if ($LASTEXITCODE -ne 0) { throw "original Sampler work-boundary validation failed" }
+          if ($collectFaultLocation) {
+            Write-Host "Dedicated fault-location rerun: preserving the frozen #76 work-boundary projection without comparing it to fresh receipt bytes; the exact short E-DF control is validated by the fault-location contract below"
+          } else {
+            python scripts/phase6c-sampler-work-boundary.py original `
+              phase6c-command-candidate phase6c-command-original
+            if ($LASTEXITCODE -ne 0) { throw "original Sampler work-boundary validation failed" }
+          }
           python scripts/phase6c-sampler-fault-location.py candidate-check `
             phase6c-command-candidate
           if ($LASTEXITCODE -ne 0) { throw "Sampler fault-location candidate validation failed" }
