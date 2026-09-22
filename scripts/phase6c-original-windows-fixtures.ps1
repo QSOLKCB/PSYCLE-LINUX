@@ -80,6 +80,14 @@ if ($ObserveDelayedRetrigger -and (Test-Path -LiteralPath (Join-Path $outRoot "o
 if ($ObserveDelayedRetrigger -and (Test-Path -LiteralPath (Join-Path $outRoot "original-delayed-retrigger-execution.json"))) {
     $receiptNames += "delayed-retrigger-execution"
 }
+if ($ObserveDelayedRetrigger) {
+    foreach ($variant in @("control", "fd", "fb", "fa", "fe")) {
+        $name = "delayed-retrigger-isolation-$variant"
+        if (Test-Path -LiteralPath (Join-Path $outRoot ("original-{0}.json" -f $name))) {
+            $receiptNames += $name
+        }
+    }
+}
 foreach ($name in $receiptNames) {
     $receiptPath = Join-Path $outRoot ("original-{0}.json" -f $name)
     $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
