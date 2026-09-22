@@ -16,6 +16,15 @@ SAMPLER_CPP_BLOB = "6cc0bd7328d01131c3d41b68f4e5d4189959e364"
 SAMPLER_HPP_BLOB = "46da9fa80757b11ed146a21a529c70dbc6364f12"
 SONG_STRUCTS_BLOB = "3ad8cd1b1a0a41bc2225cfd3070bf205cbebec31"
 SOURCE_RECEIPT = "original-source-sampler-work-boundary.json"
+PROJECTION = (
+    ROOT
+    / "phase6c"
+    / "evidence"
+    / "sequencer-sampler-work-boundary"
+    / "observation.json"
+)
+QUALIFIED_DIAGNOSIS = "enabled-note-startup-pre-controller-work-associated-exit"
+HISTORICAL_DIAGNOSIS = "voice-tick-initialization-associated-exit"
 EXPECTED_ACCESS_VIOLATION_EXIT_CODE = -1073741819  # Windows 0xC0000005
 SETTINGS = {
     "sample_rate": 44100,
@@ -455,7 +464,7 @@ def diagnose(outcomes: dict[str, str]) -> str:
     if not release_live:
         return "post-sample-gate-pre-voice-tick-associated-exit"
     if not delayed_short_live:
-        return "voice-tick-initialization-associated-exit"
+        return QUALIFIED_DIAGNOSIS
     if not delayed_long_live and not ordinary_short_live:
         return "controller-work-associated-exit"
     if delayed_long_live and not ordinary_short_live:
@@ -463,6 +472,74 @@ def diagnose(outcomes: dict[str, str]) -> str:
     if not delayed_long_live and ordinary_short_live:
         return "delayed-work-transition-associated-exit"
     return "known-enabled-sample-crash-not-reproduced"
+
+
+def validate_projection(
+    candidate_root: Path, original_root: Path, summary: dict
+) -> str:
+    projection = read_json(PROJECTION)
+    if (
+        projection.get("schema_version") != 1
+        or projection.get("phase") != "6C"
+        or projection.get("contract") != CONTRACT
+        or projection.get("parity_status") != "UNKNOWN"
+        or projection.get("historical_diagnosis")
+        != HISTORICAL_DIAGNOSIS
+        or projection.get("qualified_diagnosis")
+        != QUALIFIED_DIAGNOSIS
+    ):
+        raise ValueError("Sampler work-boundary projection identity mismatch")
+
+    source = projection.get("source_identity")
+    if (
+        not isinstance(source, dict)
+        or source.get("source_commit") != SOURCE_COMMIT
+        or source.get("Sampler.cpp") != SAMPLER_CPP_BLOB
+        or source.get("Sampler.hpp") != SAMPLER_HPP_BLOB
+        or source.get("SongStructs.hpp") != SONG_STRUCTS_BLOB
+    ):
+        raise ValueError("Sampler work-boundary projection source mismatch")
+
+    fixtures = projection.get("fixtures")
+    if not isinstance(fixtures, dict) or set(fixtures) != set(VARIANTS):
+        raise ValueError("Sampler work-boundary projection fixture set mismatch")
+
+    for name in VARIANTS:
+        projected = fixtures[name]
+        candidate_path = candidate_root / candidate_receipt_name(name)
+        original_path = original_root / original_receipt_name(name)
+        candidate = read_json(candidate_path)
+        result = summary["results"][name]
+        if (
+            not isinstance(projected, dict)
+            or projected.get("fixture_sha256")
+            != candidate.get("fixture_sha256")
+            or projected.get("candidate_receipt_sha256")
+            != digest(candidate_path.read_bytes())
+            or projected.get("original_receipt_sha256")
+            != digest(original_path.read_bytes())
+            or projected.get("outcome") != result.get("outcome")
+            or projected.get("process_exit_code")
+            != result.get("process_exit_code")
+            or projected.get("observed_output")
+            != result.get("observed_output")
+        ):
+            raise ValueError(
+                f"Sampler work-boundary projection mismatch: {name}"
+            )
+
+    interpretation = projection.get("qualified_interpretation")
+    if (
+        not isinstance(interpretation, dict)
+        or interpretation.get("controller_work_reachable") is not False
+        or interpretation.get("voice_work_entry") != "unresolved"
+        or interpretation.get("voice_tick_fault_location") != "unresolved"
+        or interpretation.get("voice_selection_fault_location") != "unresolved"
+    ):
+        raise ValueError(
+            "Sampler work-boundary projection overstates fault location"
+        )
+    return str(PROJECTION.relative_to(ROOT))
 
 
 def validate_original(candidate_root: Path, original_root: Path) -> dict:
@@ -637,14 +714,18 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             }
         ),
         "interpretation_boundary": (
-            "the source-bound release/delayed/ordinary ladder isolates whether "
-            "the pinned original access violation begins before Voice::Tick, "
-            "during Voice::Tick initialization, or only once controller.Work "
-            "sample processing becomes reachable; it does not classify "
-            "delayed/retrigger parity"
+            "the source-bound release/delayed/ordinary ladder shows that the "
+            "pinned original access violation is associated with enabled-note "
+            "startup before normal controller.Work sample processing becomes "
+            "reachable; voice selection/setup, Voice::Tick initialization, "
+            "and pre-controller Voice::Work entry remain unresolved; it does "
+            "not classify delayed/retrigger parity"
         ),
         "parity_status": "UNKNOWN",
     }
+    summary["projection"] = validate_projection(
+        candidate_root, original_root, summary
+    )
     write_new(
         original_root / "original-sampler-work-boundary-isolation.json",
         summary,
