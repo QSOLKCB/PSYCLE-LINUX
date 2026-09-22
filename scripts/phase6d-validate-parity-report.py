@@ -297,20 +297,29 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
             "function-level fault location"
         )
 
+    unresolved = find_evidence_sentence(
+        value,
+        ("voice selection", "voice::tick", "voice::work"),
+        context + " unresolved startup alternatives",
+    )
     if re.search(
         r"\b(?:remain|remains)\s+unresolved\b",
-        normalized,
+        unresolved,
         re.IGNORECASE,
     ) is None:
         die(
-            f"{context} must keep the enabled-note startup fault location "
-            "explicitly unresolved"
+            f"{context} must bind voice selection, Voice::Tick, and "
+            "Voice::Work together to an explicit unresolved result"
         )
-    for phrase in ("voice selection", "voice::tick", "voice::work"):
-        if phrase not in normalized:
-            die(
-                f"{context} lost the unresolved startup alternative: {phrase}"
-            )
+    if re.search(
+        r"\b(?:exclude|excludes|excluded|resolved|proven|established)\b",
+        unresolved,
+        re.IGNORECASE,
+    ):
+        die(
+            f"{context} contradicts the unresolved startup alternatives: "
+            f"{unresolved}"
+        )
 
     return {
         "early_controls_survive": True,
