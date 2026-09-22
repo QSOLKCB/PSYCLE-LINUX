@@ -37,7 +37,11 @@ def delayed_validator():
         '"delayed-retrigger-substrate-master-only", '
         '"delayed-retrigger-substrate-sampler-empty", '
         '"delayed-retrigger-substrate-sample-state", '
-        '"delayed-retrigger-substrate-ordinary-note"'
+        '"delayed-retrigger-substrate-ordinary-note", '
+        '"sampler-voice-startup-note-no-previous-inst", '
+        '"sampler-voice-startup-note-missing-sample", '
+        '"sampler-voice-startup-note-sample-default-inst", '
+        '"sampler-voice-startup-note-sample-serialized-inst"'
     )
     source = source.replace(
         old,
