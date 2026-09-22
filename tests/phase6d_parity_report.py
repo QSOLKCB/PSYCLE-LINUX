@@ -172,10 +172,17 @@ class ParityReportSummary(unittest.TestCase):
         )
         self.check(False)
 
-    def test_delayed_work_boundary_voice_work_reversal_is_rejected(self):
+    def test_delayed_work_boundary_definitive_voice_tick_location_is_rejected(self):
         self.mutate_report(
-            "the current boundary is `Voice::Tick` initialization itself, not first `Voice::Work`",
-            "the current boundary is first `Voice::Work`, not `Voice::Tick` initialization",
+            "Voice selection/setup, `Voice::Tick` initialization, and pre-`controller.Work` `Voice::Work` entry remain unresolved.",
+            "The current fault boundary is inside `Voice::Tick` initialization before first `Voice::Work`.",
+        )
+        self.check(False)
+
+    def test_delayed_work_boundary_unresolved_alternatives_are_required(self):
+        self.mutate_report(
+            "Voice selection/setup, `Voice::Tick` initialization, and pre-`controller.Work` `Voice::Work` entry remain unresolved.",
+            "Voice selection/setup, `Voice::Tick` initialization, and pre-`controller.Work` `Voice::Work` entry are excluded.",
         )
         self.check(False)
 

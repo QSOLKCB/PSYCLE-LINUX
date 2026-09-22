@@ -557,7 +557,131 @@ assert work_boundary.diagnose({
     "delayed-note-short": "reference-process-exited-during-render",
     "delayed-note-long": "reference-process-exited-during-render",
     "ordinary-note-short": "reference-process-exited-during-render",
-}) == "voice-tick-initialization-associated-exit"
+}) == "enabled-note-startup-pre-controller-work-associated-exit"
+
+assert work_boundary.HISTORICAL_DIAGNOSIS == "voice-tick-initialization-associated-exit"
+assert work_boundary.QUALIFIED_DIAGNOSIS == (
+    "enabled-note-startup-pre-controller-work-associated-exit"
+)
+projection = json.loads(work_boundary.PROJECTION.read_text(encoding="utf-8"))
+assert projection["historical_diagnosis"] == work_boundary.HISTORICAL_DIAGNOSIS
+assert projection["qualified_diagnosis"] == work_boundary.QUALIFIED_DIAGNOSIS
+assert projection["qualified_interpretation"]["voice_work_entry"] == "unresolved"
+assert projection["qualified_interpretation"]["voice_tick_fault_location"] == "unresolved"
+
+with tempfile.TemporaryDirectory() as projection_temp:
+    projection_root = Path(projection_temp)
+    candidate_root = projection_root / "candidate"
+    original_root = projection_root / "original"
+    projection_path = (
+        projection_root
+        / "phase6c"
+        / "evidence"
+        / "sequencer-sampler-work-boundary"
+        / "observation.json"
+    )
+    candidate_root.mkdir()
+    original_root.mkdir()
+    projection_path.parent.mkdir(parents=True)
+
+    fixtures = {}
+    results = {}
+    original_bytes = {}
+    for name in work_boundary.VARIANTS:
+        fixture_sha256 = hashlib.sha256(name.encode("utf-8")).hexdigest()
+        candidate_path = candidate_root / work_boundary.candidate_receipt_name(name)
+        candidate_path.write_text(
+            json.dumps({"fixture_sha256": fixture_sha256}, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        original_path = original_root / work_boundary.original_receipt_name(name)
+        raw_original = (
+            json.dumps({"variant": name, "source": "synthetic-original"}, sort_keys=True)
+            + "\n"
+        ).encode("utf-8")
+        original_path.write_bytes(raw_original)
+        original_bytes[name] = raw_original
+
+        result = {
+            "outcome": "reference-process-exited-during-render",
+            "process_exit_code": work_boundary.EXPECTED_ACCESS_VIOLATION_EXIT_CODE,
+            "observed_output": None,
+        }
+        results[name] = result
+        fixtures[name] = {
+            "fixture_sha256": fixture_sha256,
+            "candidate_receipt_sha256": work_boundary.digest(
+                candidate_path.read_bytes()
+            ),
+            "original_receipt_sha256": work_boundary.digest(raw_original),
+            **result,
+        }
+
+    synthetic_projection = {
+        "schema_version": 1,
+        "phase": "6C",
+        "contract": work_boundary.CONTRACT,
+        "parity_status": "UNKNOWN",
+        "historical_diagnosis": work_boundary.HISTORICAL_DIAGNOSIS,
+        "qualified_diagnosis": work_boundary.QUALIFIED_DIAGNOSIS,
+        "source_identity": {
+            "source_commit": work_boundary.SOURCE_COMMIT,
+            "Sampler.cpp": work_boundary.SAMPLER_CPP_BLOB,
+            "Sampler.hpp": work_boundary.SAMPLER_HPP_BLOB,
+            "SongStructs.hpp": work_boundary.SONG_STRUCTS_BLOB,
+        },
+        "fixtures": fixtures,
+        "qualified_interpretation": {
+            "controller_work_reachable": False,
+            "voice_work_entry": "unresolved",
+            "voice_tick_fault_location": "unresolved",
+            "voice_selection_fault_location": "unresolved",
+        },
+    }
+    projection_path.write_text(
+        json.dumps(synthetic_projection, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    summary = {"results": results}
+
+    saved_projection = work_boundary.PROJECTION
+    saved_root = work_boundary.ROOT
+    work_boundary.PROJECTION = projection_path
+    work_boundary.ROOT = projection_root
+    try:
+        assert work_boundary.validate_projection(
+            candidate_root, original_root, summary
+        ) == "phase6c/evidence/sequencer-sampler-work-boundary/observation.json"
+
+        missing_name = "ordinary-note-short"
+        missing_path = (
+            original_root / work_boundary.original_receipt_name(missing_name)
+        )
+        missing_path.unlink()
+        try:
+            work_boundary.validate_projection(candidate_root, original_root, summary)
+        except ValueError as exc:
+            assert "original receipt missing" in str(exc)
+            assert missing_name in str(exc)
+        else:
+            raise AssertionError("expected missing original receipt rejection")
+
+        missing_path.write_bytes(original_bytes[missing_name])
+        modified_name = "delayed-note-short"
+        modified_path = (
+            original_root / work_boundary.original_receipt_name(modified_name)
+        )
+        modified_path.write_bytes(original_bytes[modified_name] + b" ")
+        try:
+            work_boundary.validate_projection(candidate_root, original_root, summary)
+        except ValueError as exc:
+            assert "projection mismatch" in str(exc)
+            assert modified_name in str(exc)
+        else:
+            raise AssertionError("expected modified original receipt rejection")
+    finally:
+        work_boundary.PROJECTION = saved_projection
+        work_boundary.ROOT = saved_root
 
 assert work_boundary.diagnose({
     "release-no-active-voice": "stable-finalized-output-process-alive",

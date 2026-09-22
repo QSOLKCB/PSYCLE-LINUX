@@ -378,17 +378,27 @@ zero-valued frames, SHA-256
 The other three fixtures all reach verified Save Wave dispatch, exit with
 Windows status `0xC0000005` (`-1073741819`), and retain zero-byte WAVs.
 
-The derived diagnosis is `voice-tick-initialization-associated-exit`. The
-one-row delayed fixture is the key discriminator: the crash occurs even though
-its 2.5-row delay cannot expire before the song ends, so no successful
-`Voice::Work()` path can reach `controller.Work()`. The current boundary is
-therefore inside `Voice::Tick()` after voice selection and before normal audio
-work. The remaining source order to isolate is legacy instrument/sample binding
-and pitch/speed calculation, resampler allocation/update, then
-envelope/pan/filter initialization.
+The historical generated receipt labels this result
+`voice-tick-initialization-associated-exit`. That label is preserved in the
+archived evidence and in the committed projection, but it is narrower than the
+observations prove.
 
-This remains an association boundary, not proof that any specific
-`Voice::Tick()` statement is the unique fault. It still does **not** provide a
+The one-row delayed fixture is still the key discriminator: its 2.5-row delay
+cannot expire before the song ends, so `controller.Work()` cannot be reached
+through normal sample processing before termination. That does **not** show
+that `Voice::Work()` was never entered: the pinned source can enter
+`Voice::Work()` and return while the delayed envelope remains `ENV_OFF`.
+The surviving release control also returns before the new-note voice-selection
+path. The evidence-qualified result is therefore
+`enabled-note-startup-pre-controller-work-associated-exit`.
+
+Voice selection/setup, `Voice::Tick()` initialization, and pre-
+`controller.Work()` `Voice::Work()` entry remain unresolved. A runtime
+fault-location witness is required before naming a function-level location.
+The hash-bound projection of workflow `35752301481` is committed at
+[`phase6c/evidence/sequencer-sampler-work-boundary/observation.json`](evidence/sequencer-sampler-work-boundary/observation.json).
+
+This remains diagnostic evidence only. It still does **not** provide a
 command-bearing delayed/retrigger runtime output and does not change
 `sequencer-delayed-retrigger` from `UNKNOWN`.
 

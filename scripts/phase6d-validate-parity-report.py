@@ -271,21 +271,45 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
             f"{context} must state that the one-row delayed fixture cannot "
             "reach controller.Work"
         )
+    unsupported_location = (
+        re.search(
+            r"\b(?:current|fault|crash|association)\s+boundary\s+"
+            r"(?:is|lies|sits).{0,100}\bvoice::tick\b",
+            normalized,
+            re.IGNORECASE,
+        )
+        or re.search(
+            r"voice::tick\s+initialization.{0,100}"
+            r"(?:before|not).{0,60}(?:first\s+)?voice::work",
+            normalized,
+            re.IGNORECASE,
+        )
+        or re.search(
+            r"\b(?:exclude|excludes|excluding|excluded)\s+"
+            r"(?:the\s+)?(?:first\s+)?voice::work\b",
+            normalized,
+            re.IGNORECASE,
+        )
+    )
+    if unsupported_location:
+        die(
+            f"{context} overstates the Sampler work-boundary evidence as a "
+            "function-level fault location"
+        )
+
     if re.search(
-        r"voice::tick\s+initialization.{0,100}"
-        r"(?:before|not).{0,60}(?:first\s+)?voice::work",
+        r"\b(?:remain|remains)\s+unresolved\b",
         normalized,
         re.IGNORECASE,
     ) is None:
         die(
-            f"{context} must preserve Voice::Tick initialization as the "
-            "current pre-Voice::Work boundary"
+            f"{context} must keep the enabled-note startup fault location "
+            "explicitly unresolved"
         )
-    for phrase in ("resampler", "envelope", "inside voice::tick"):
+    for phrase in ("voice selection", "voice::tick", "voice::work"):
         if phrase not in normalized:
             die(
-                f"{context} lost the next internal Voice::Tick boundary "
-                f"phrase: {phrase}"
+                f"{context} lost the unresolved startup alternative: {phrase}"
             )
 
     return {
@@ -295,8 +319,8 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
         "release_control_survives": True,
         "work_reachable_variants_exit": True,
         "short_delay_excludes_controller_work": True,
-        "voice_tick_initialization_boundary": True,
-        "next_boundary_inside_voice_tick": True,
+        "enabled_note_pre_controller_boundary": True,
+        "fault_location_unresolved": True,
     }
 
 

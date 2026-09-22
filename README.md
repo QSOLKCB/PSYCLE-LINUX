@@ -22,7 +22,7 @@ That distinction changes the implementation strategy.
 
 **C-Psycle is no longer treated as the literal implementation base for the final Linux Psycle.** The extensive work already completed against `cpsycle/` remains valuable as a preservation corpus, compatibility laboratory, behavioural oracle, Linux-port reference, and regression suite.
 
-Phase 6B is complete: the provenance-cleared SourceForge SVN r12005 C++ candidate has been imported as `psycle-cpp-r12005-sanitized/`, frozen by a reproducible baseline identity, and its historical Linux `psycle-player` build is maintained in CI. Phase 6C is now collecting evidence against the pinned Psycle 1.12.0 x86 reference, while Phase 6D keeps the human parity report mechanically synchronized with the canonical compatibility matrix. No Phase 7 engine convergence is justified until versioned original-Psycle observations produce real `DIFFERENT` or `MISSING` results.
+Phase 6B is complete: the provenance-cleared SourceForge SVN r12005 C++ candidate has been imported as `psycle-cpp-r12005-sanitized/`, frozen by a reproducible baseline identity, and its historical Linux `psycle-player` build is maintained in CI. Phase 6C is collecting evidence against the pinned Psycle 1.12.0 x86 reference, while Phase 6D keeps the human parity report mechanically synchronized with the canonical compatibility matrix. The current 20-contract matrix contains three scoped `PASS` results, one scoped serialization/save `MISSING` result, one scoped BPM/LPB/tick `DIFFERENT` result, and 15 `UNKNOWN` contracts. Those two confirmed gaps justify exactly two narrow Phase 7 convergence backlog items; broader engine changes remain evidence-gated.
 
 ## Dedication
 
@@ -81,9 +81,10 @@ See [UPSTREAM_ARCHITECTURE.md](UPSTREAM_ARCHITECTURE.md) for how that guide is u
 3. keep every compatibility row `UNKNOWN` until both observation sides and a versioned comparison verdict exist;
 4. expand the evidence set from PSY2/PSY3 into timing, tracker commands, routing, Sampler/XMSampler, native state, WAV/sample handling, render/bounce, recovery, and legally usable historical songs;
 5. keep `PSYCLE_CORE_PARITY.md` mechanically synchronized with the canonical matrix;
-6. generate the first Phase 7 implementation backlog only from confirmed `DIFFERENT` / `MISSING` evidence.
+6. preserve the frozen two-item Phase 7 backlog derived from the confirmed serialization/save `MISSING` and BPM/LPB/tick `DIFFERENT` results;
+7. continue the delayed/retrigger diagnostic lane without promoting it from `UNKNOWN` until a like-for-like original runtime output and candidate comparison exist.
 
-The current candidate evidence confirms that the historical player reaches both the project-authored PSY2 and PSY3 loaders. PSY2 exits cleanly under the maintained noninteractive procedure; PSY3 reaches playback but currently times out during noninteractive termination. These observations remain candidate-only evidence and are not original-Psycle parity claims.
+The current classified scope is three `PASS` contracts (PSY2 parse/load, PSY3 parse/load, and single-sequence order), one serialization/save `MISSING` contract, and one BPM/LPB/tick `DIFFERENT` contract; 15 contracts remain `UNKNOWN`. The first Phase 7 backlog items are therefore the exact-fixture PSY3 save capability and a distinct legacy LPB/TPB timing model. The delayed/retrigger Sampler diagnostics remain evidence work: the one-row delayed witness excludes normal `controller.Work` sample processing as a prerequisite for the observed crash, but voice selection/setup, `Voice::Tick` initialization, and pre-`controller.Work` `Voice::Work` entry remain unresolved.
 
 Only after the engine is sufficiently compatible should the project implement the full Linux tracker UI. **Qt is the leading candidate** because the original MFC UI cannot be carried directly to Linux; Qt Widgets should be evaluated first for faithful desktop behaviour, with QML remaining an option where it provides a demonstrated advantage.
 
