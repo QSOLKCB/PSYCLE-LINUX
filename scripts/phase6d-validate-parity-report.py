@@ -200,13 +200,26 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
         context + " Voice::Tick work-boundary result",
     )
     if re.search(
-        r"\bone\s+row(?:\s+sampler\s+local)?\s+e\s+df\b",
+        r"\brelease/no\s+active\s+voice\s+control.{0,160}"
+        r"\b(?:survive|survives|survived|retain|retains|retained)\b",
         work_boundary,
         re.IGNORECASE,
     ) is None:
         die(
-            f"{context} Voice::Tick work-boundary result lost the "
-            "one-row E-DF discriminator"
+            f"{context} must bind survival specifically to the "
+            "release/no-active-voice control"
+        )
+    if re.search(
+        r"\bone\s+row(?:\s+sampler\s+local)?\s+e\s+df\s*,\s*"
+        r"four\s+beat\s+e\s+df\s*,\s*and\s+"
+        r"one\s+row\s+ordinary\s+note\s+fixtures\s+"
+        r"(?:all|each)\s+exit(?:s|ed)?\b",
+        work_boundary,
+        re.IGNORECASE,
+    ) is None:
+        die(
+            f"{context} must bind the one-row E-DF, four-beat E-DF, "
+            "and one-row ordinary-note fixtures collectively to the exit result"
         )
     assert_positive_predicate(
         work_boundary,
