@@ -161,6 +161,36 @@ run_logged "$OUT/render-substrate-candidate-validation.log" \
     python3 "$ROOT/scripts/phase6c-delayed-retrigger-render-substrate.py" candidate-check \
     "$ARTIFACT"
 
+VOICE_OUT="$ARTIFACT/sampler-voice-startup"
+mkdir "$VOICE_OUT"
+run_logged "$OUT/voice-startup-fixture-build.log" \
+    gcc "${COMMON_CFLAGS[@]}" "${LUA_CFLAGS[@]}" \
+    "$ROOT/tests/phase6c_sampler_voice_startup_fixture.c" \
+    -o "$BUILD/phase6c-sampler-voice-startup" \
+    "${COMMON_LDFLAGS[@]}" "${LUA_LIBS[@]}"
+
+run_logged "$OUT/voice-startup-fixture-generator.log" \
+    "$BUILD/phase6c-sampler-voice-startup" "$VOICE_OUT"
+
+for variant in note-no-previous-inst note-missing-sample note-sample-default-inst note-sample-serialized-inst; do
+    fixture="$VOICE_OUT/phase6c-sampler-voice-startup-${variant}.psy"
+    [[ -s "$fixture" ]] || {
+        echo "voice-startup fixture was not generated: $variant" >&2
+        exit 2
+    }
+    [[ "$(head -c 8 "$fixture")" == "PSY3SONG" ]] || {
+        echo "voice-startup fixture is not PSY3: $variant" >&2
+        exit 2
+    }
+done
+
+run_logged "$OUT/voice-startup-candidate-receipts.log" \
+    python3 "$ROOT/scripts/phase6c-sampler-voice-startup.py" candidate \
+    "$ARTIFACT"
+run_logged "$OUT/voice-startup-candidate-validation.log" \
+    python3 "$ROOT/scripts/phase6c-sampler-voice-startup.py" candidate-check \
+    "$ARTIFACT"
+
 cp "$ROOT/tests/phase6c_delayed_retrigger.pro" "$STAGING/probe.pro"
 set +e
 (
