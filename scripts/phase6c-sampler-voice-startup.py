@@ -16,6 +16,28 @@ SOURCE_COMMIT = "7ac6d2c3553e2ee8dda55814d8e689919c345478"
 SAMPLER_BLOB = "6cc0bd7328d01131c3d41b68f4e5d4189959e364"
 SONG_BLOB = "9ed00469d29d0a5714cc7b86175d0dc4c6048e3a"
 SOURCE_RECEIPT = "original-source-sampler-voice-startup.json"
+SOURCE_SAMPLER_MARKERS = [
+    "lastInstrument[i]=255;",
+    "if (data._inst == 255)",
+    "data._inst = lastInstrument[channel];",
+    "if ( !Global::song().samples.IsEnabled(data._inst) ) return;",
+    "useVoice = GetFreeVoice();",
+    "_voices[useVoice].Tick(&data, channel, _resampler, baseC, multicmdMem);",
+    "inst = Global::song()._pInstrument[_instrument];",
+    "controller.wave = &wave;",
+]
+SOURCE_SONG_MARKERS = [
+    "for(int i(0) ; i < MAX_INSTRUMENTS ; ++i) "
+    "_pInstrument[i] = new Instrument();"
+]
+SOURCE_BOUNDARY = [
+    "Sampler constructor initializes every lastInstrument slot to 255",
+    "instrument FF with no previous instrument returns before sample lookup",
+    "disabled sample slot returns before voice selection",
+    "enabled sample advances through GetFreeVoice into Voice::Tick",
+    "Voice::Tick resolves the constructor-created legacy instrument slot",
+    "Voice::Tick binds the enabled sample to the voice controller before audio work",
+]
 SETTINGS = {
     "sample_rate": 44100,
     "bits_per_sample": 16,
@@ -198,6 +220,29 @@ def validate_candidate(root: Path) -> dict:
     return validated
 
 
+def expected_source_receipt() -> dict:
+    return {
+        "schema_version": 1,
+        "phase": "6C",
+        "scope": "pinned-original-source",
+        "contract": CONTRACT,
+        "reference_build": REFERENCE_BUILD,
+        "source_commit": SOURCE_COMMIT,
+        "files": {
+            "Sampler.cpp": {
+                "git_blob": SAMPLER_BLOB,
+                "markers": list(SOURCE_SAMPLER_MARKERS),
+            },
+            "Song.cpp": {
+                "git_blob": SONG_BLOB,
+                "markers": list(SOURCE_SONG_MARKERS),
+            },
+        },
+        "source_boundary": list(SOURCE_BOUNDARY),
+        "parity_status": "UNKNOWN",
+    }
+
+
 def collect_source(root: Path, sampler_path: Path, song_path: Path) -> dict:
     root = root.resolve()
     sampler_data = sampler_path.read_bytes()
@@ -209,76 +254,25 @@ def collect_source(root: Path, sampler_path: Path, song_path: Path) -> dict:
 
     sampler_text = sampler_data.replace(b"\r\n", b"\n").decode("utf-8")
     song_text = song_data.replace(b"\r\n", b"\n").decode("utf-8")
-    required_sampler = [
-        "lastInstrument[i]=255;",
-        "if (data._inst == 255)",
-        "data._inst = lastInstrument[channel];",
-        "if ( !Global::song().samples.IsEnabled(data._inst) ) return;",
-        "useVoice = GetFreeVoice();",
-        "_voices[useVoice].Tick(&data, channel, _resampler, baseC, multicmdMem);",
-        "inst = Global::song()._pInstrument[_instrument];",
-        "controller.wave = &wave;",
-    ]
-    for marker in required_sampler:
+    for marker in SOURCE_SAMPLER_MARKERS:
         if marker not in sampler_text:
             raise ValueError("pinned Sampler.cpp source marker missing: " + marker)
-    song_marker = (
-        "for(int i(0) ; i < MAX_INSTRUMENTS ; ++i) "
-        "_pInstrument[i] = new Instrument();"
-    )
-    if song_marker not in song_text:
-        raise ValueError("pinned Song.cpp default-instrument marker missing")
+    for marker in SOURCE_SONG_MARKERS:
+        if marker not in song_text:
+            raise ValueError("pinned Song.cpp source marker missing: " + marker)
 
-    receipt = {
-        "schema_version": 1,
-        "phase": "6C",
-        "scope": "pinned-original-source",
-        "contract": CONTRACT,
-        "reference_build": REFERENCE_BUILD,
-        "source_commit": SOURCE_COMMIT,
-        "files": {
-            "Sampler.cpp": {
-                "git_blob": SAMPLER_BLOB,
-                "markers": required_sampler,
-            },
-            "Song.cpp": {
-                "git_blob": SONG_BLOB,
-                "markers": [song_marker],
-            },
-        },
-        "source_boundary": [
-            "Sampler constructor initializes every lastInstrument slot to 255",
-            "instrument FF with no previous instrument returns before sample lookup",
-            "disabled sample slot returns before voice selection",
-            "enabled sample advances through GetFreeVoice into Voice::Tick",
-            "Voice::Tick resolves the constructor-created legacy instrument slot",
-            "Voice::Tick binds the enabled sample to the voice controller before audio work",
-        ],
-        "parity_status": "UNKNOWN",
-    }
+    receipt = expected_source_receipt()
     write_new(root / SOURCE_RECEIPT, receipt)
     return receipt
 
 
 def validate_source(root: Path) -> dict:
     receipt = read_json(root.resolve() / SOURCE_RECEIPT)
-    if (
-        receipt.get("schema_version") != 1
-        or receipt.get("phase") != "6C"
-        or receipt.get("scope") != "pinned-original-source"
-        or receipt.get("contract") != CONTRACT
-        or receipt.get("reference_build") != REFERENCE_BUILD
-        or receipt.get("source_commit") != SOURCE_COMMIT
-        or receipt.get("parity_status") != "UNKNOWN"
-    ):
-        raise ValueError("voice-startup source receipt identity mismatch")
-    files = receipt.get("files")
-    if (
-        not isinstance(files, dict)
-        or files.get("Sampler.cpp", {}).get("git_blob") != SAMPLER_BLOB
-        or files.get("Song.cpp", {}).get("git_blob") != SONG_BLOB
-    ):
-        raise ValueError("voice-startup source receipt blob mismatch")
+    expected = expected_source_receipt()
+    if receipt != expected:
+        raise ValueError(
+            "voice-startup source receipt differs from canonical source semantics"
+        )
     return receipt
 
 
