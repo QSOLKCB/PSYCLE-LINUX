@@ -254,10 +254,28 @@ def validate_original_attempt(
     ):
         if attempt.get(key) is not True:
             raise ValueError(f"same-witness original render did not verify {key}")
+    diagnostics = attempt.get("diagnostics")
+    teardown_diagnostic = (
+        "render output finalized and Close control was verified, "
+        "but dialog teardown did not complete"
+    )
+    completed_and_closed = (
+        attempt.get("dialog_closed") is True and diagnostics == []
+    )
+    completed_with_teardown_failure = (
+        attempt.get("dialog_closed") is False
+        and attempt.get("close_control_seen") is True
+        and attempt.get("close_uia_invoked") is True
+        and diagnostics == [teardown_diagnostic]
+    )
     if (
         attempt.get("outcome") != "rendered"
         or attempt.get("process_exited") is not False
         or attempt.get("process_exit_code") is not None
+        or not isinstance(attempt.get("stable_output_polls"), int)
+        or isinstance(attempt.get("stable_output_polls"), bool)
+        or attempt["stable_output_polls"] < 4
+        or not (completed_and_closed or completed_with_teardown_failure)
     ):
         raise ValueError("same-witness original render did not complete cleanly")
     expected_name = f"original-delayed-retrigger-sampulse-runtime-{index}.wav"
