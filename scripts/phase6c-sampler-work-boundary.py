@@ -487,6 +487,20 @@ def diagnose(outcomes: dict[str, str]) -> str:
     return "known-enabled-sample-crash-not-reproduced"
 
 
+def interpretation_for_outcomes(
+    outcomes: dict[str, str], diagnosis: str
+) -> str:
+    outcome_summary = ", ".join(
+        f"{name}={outcomes[name]}" for name in VARIANTS
+    )
+    return (
+        "the current work-boundary receipt set yields diagnosis "
+        f"{diagnosis} from outcomes {outcome_summary}; this interpretation is "
+        "limited to the current receipt set, does not rewrite the frozen "
+        "historical projection, and does not classify delayed/retrigger parity"
+    )
+
+
 def validate_projection(
     candidate_root: Path, original_root: Path, summary: dict
 ) -> str:
@@ -754,13 +768,8 @@ def validate_original(
                 and not isinstance(result.get("process_exit_code"), bool)
             }
         ),
-        "interpretation_boundary": (
-            "the source-bound release/delayed/ordinary ladder shows that the "
-            "pinned original access violation is associated with enabled-note "
-            "startup before normal controller.Work sample processing becomes "
-            "reachable; voice selection/setup, Voice::Tick initialization, "
-            "and pre-controller Voice::Work entry remain unresolved; it does "
-            "not classify delayed/retrigger parity"
+        "interpretation_boundary": interpretation_for_outcomes(
+            outcomes, diagnose(outcomes)
         ),
         "parity_status": "UNKNOWN",
     }
