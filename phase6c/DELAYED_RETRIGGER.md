@@ -227,6 +227,16 @@ None of these diagnostic outcomes can change `sequencer-delayed-retrigger`
 from `UNKNOWN`, and none is a substitute for the required same-witness,
 comparable-procedure original/candidate execution pair.
 
+The first complete diagnostic run, workflow `35723698458` at head
+`1a513153f8caf994114a14a510ca9efc683541ba`, passed the candidate and original
+evidence validators and produced `shared-sampled-fixture-or-render-path-failure`.
+The ordinary-note control and all four single-command variants reached their
+clean pre-render load gates, verified Save Wave dispatch, then exited with
+Windows status `0xC0000005` (`-1073741819`) and retained zero-byte outputs.
+Because the control fails identically, this evidence does **not** attribute the
+crash to `FD`, `FB`, `FA` or `FE`; the next investigation boundary is the
+shared sampled-fixture/original-render path itself.
+
 ## Epistemic boundary
 
 The three evidence roles remain separate:
