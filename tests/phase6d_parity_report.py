@@ -102,6 +102,27 @@ class ParityReportSummary(unittest.TestCase):
         )
         self.check(False)
 
+    def test_delayed_early_controls_neither_nor_is_rejected(self):
+        self.mutate_report(
+            "no-previous-instrument and missing-sample controls survive",
+            "neither no-previous-instrument nor missing-sample controls survive",
+        )
+        self.check(False)
+
+    def test_delayed_enabled_sample_neither_variant_exits_is_rejected(self):
+        self.mutate_report(
+            "both enabled-sample variants (constructor-default original Instrument and serialized instrument state) exit",
+            "neither enabled-sample variant (constructor-default original Instrument nor serialized instrument state) exits",
+        )
+        self.check(False)
+
+    def test_delayed_non_zero_byte_output_is_rejected(self):
+        self.mutate_report(
+            "exit with `0xC0000005` and zero-byte output",
+            "exit with `0xC0000005` and non-zero-byte output",
+        )
+        self.check(False)
+
 
 if __name__ == "__main__":
     unittest.main()
