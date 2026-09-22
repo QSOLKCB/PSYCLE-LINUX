@@ -189,6 +189,14 @@ public static class Phase6cRenderNative
         IntPtr result;
         return SendValue(button, 0x00F5, IntPtr.Zero, IntPtr.Zero, 2, 1000, out result) != IntPtr.Zero;
     }
+
+    public static bool CloseDialog(uint process, IntPtr dialog)
+    {
+        if (!Owned(dialog, process) || !IsWindowVisible(dialog))
+            return false;
+        IntPtr result;
+        return SendValue(dialog, 0x0010, IntPtr.Zero, IntPtr.Zero, 2, 1000, out result) != IntPtr.Zero;
+    }
 }
 "@
 
@@ -347,6 +355,7 @@ function Invoke-Phase6cAudioRender(
         close_control_seen = $false
         close_uia_invoked = $false
         close_native_fallback_invoked = $false
+        close_wm_close_invoked = $false
         requested_output = $null
         output = $null
         observed_output = $null
@@ -523,6 +532,22 @@ function Invoke-Phase6cAudioRender(
                         $buttonHandle
                     )) {
                         $result.close_native_fallback_invoked = $true
+                        for ($closePoll = 0; $closePoll -lt 20; $closePoll++) {
+                            Start-Sleep -Milliseconds 100
+                            if ($null -eq (Get-Phase6cRenderDialog $Process 1)) {
+                                $result.dialog_closed = $true
+                                break
+                            }
+                        }
+                    }
+                }
+                if (-not $result.dialog_closed) {
+                    $dialogHandle = [IntPtr]$currentDialog.Current.NativeWindowHandle
+                    if ([Phase6cRenderNative]::CloseDialog(
+                        [uint32]$Process.Id,
+                        $dialogHandle
+                    )) {
+                        $result.close_wm_close_invoked = $true
                         for ($closePoll = 0; $closePoll -lt 20; $closePoll++) {
                             Start-Sleep -Milliseconds 100
                             if ($null -eq (Get-Phase6cRenderDialog $Process 1)) {
