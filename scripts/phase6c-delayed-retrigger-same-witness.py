@@ -287,6 +287,36 @@ def validate_original_attempt(
     ):
         if attempt.get(key) is not True:
             raise ValueError(f"same-witness original render did not verify {key}")
+
+    runtime_id = attempt.get("selected_render_dialog_runtime_id")
+    preexisting_count = attempt.get("preexisting_render_dialog_count")
+    post_dispatch_count = attempt.get("render_dialog_post_dispatch_event_count")
+    selected_handle = attempt.get("selected_render_dialog_native_handle")
+    if (
+        attempt.get("render_dialog_open_event_armed") is not True
+        or attempt.get("render_dialog_dispatch_boundary_set") is not True
+        or attempt.get("dialog_discovery")
+        != "window-opened-event-after-successful-command-dispatch"
+        or not isinstance(preexisting_count, int)
+        or isinstance(preexisting_count, bool)
+        or preexisting_count < 0
+        or not isinstance(post_dispatch_count, int)
+        or isinstance(post_dispatch_count, bool)
+        or post_dispatch_count != 1
+        or not isinstance(selected_handle, int)
+        or isinstance(selected_handle, bool)
+        or selected_handle <= 0
+        or not isinstance(runtime_id, list)
+        or not runtime_id
+        or any(
+            not isinstance(value, int) or isinstance(value, bool)
+            for value in runtime_id
+        )
+    ):
+        raise ValueError(
+            "same-witness original render lacks bound post-dispatch dialog evidence"
+        )
+
     diagnostics = attempt.get("diagnostics")
     teardown_diagnostic = (
         "render output finalized and Close control was verified, "
