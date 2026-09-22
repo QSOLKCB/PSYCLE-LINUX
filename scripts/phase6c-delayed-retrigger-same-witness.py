@@ -314,7 +314,7 @@ def validate_original_attempt(
         or preexisting_count < 0
         or not isinstance(observed_window_count, int)
         or isinstance(observed_window_count, bool)
-        or observed_window_count < 1
+        or observed_window_count != 1
         or not isinstance(unresolved_event_count, int)
         or isinstance(unresolved_event_count, bool)
         or unresolved_event_count != 0
