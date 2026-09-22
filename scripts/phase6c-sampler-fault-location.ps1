@@ -187,7 +187,7 @@ function Invoke-Phase6cFaultLocationRender(
         return $result
     }
 
-    $commands = 'g;.ecxr;.exr -1;r;kv;lm;q'
+    $commands = 'sxd av;g;.ecxr;.exr -1;r;kv;lm;q'
     $argumentList = @(
         "-p",
         [string]$Process.Id,
