@@ -92,17 +92,41 @@ def main() -> None:
             if (-not (Test-Path -LiteralPath $renderDirectory)) {
                 New-Item -ItemType Directory -Path $renderDirectory | Out-Null
             }
+            $preRenderLoad = [ordered]@{
+                schema_version = 1
+                clean_accepted_load = [bool]$cleanAcceptedLoadEvidence
+                stable_marker_polls = $stableMarkerPolls
+                matched_marker = $matchedMarker
+                load_warning_dismissed = [bool]$loadWarningBootstrap.dismissed
+                process_running_before_render = [bool]$processRunningBeforeTermination
+            }
+            $renderSettings = [ordered]@{
+                sample_rate = 44100
+                bits_per_sample = 16
+                channels = "mono-mix"
+                dither = $false
+                range = "entire-song"
+            }
             if ($cleanAcceptedLoadEvidence -and [bool]$loadWarningBootstrap.dismissed) {
                 $renderOnePath = Join-Path $renderDirectory "original-delayed-retrigger-execution-1.wav"
                 $renderTwoPath = Join-Path $renderDirectory "original-delayed-retrigger-execution-2.wav"
                 $renderOne = Invoke-Phase6cAudioRender $process $windowTitle $renderOnePath
-                $renderTwo = Invoke-Phase6cAudioRender $process $windowTitle $renderTwoPath
+                $attempts = @($renderOne)
                 $renderBindings = @()
-                foreach ($attempt in @($renderOne, $renderTwo)) {
-                    if ($attempt.outcome -eq "rendered" -and $null -ne $attempt.output) {
-                        $renderBindings += [ordered]@{
-                            path = "delayed-retrigger-execution/$($attempt.output.path)"
-                            sha256 = [string]$attempt.output.sha256
+                if ($renderOne.outcome -eq "rendered" -and $null -ne $renderOne.output) {
+                    $renderBindings += [ordered]@{
+                        path = "delayed-retrigger-execution/$($renderOne.output.path)"
+                        sha256 = [string]$renderOne.output.sha256
+                    }
+                    $process.Refresh()
+                    if (-not $process.HasExited) {
+                        $renderTwo = Invoke-Phase6cAudioRender $process $windowTitle $renderTwoPath
+                        $attempts += $renderTwo
+                        if ($renderTwo.outcome -eq "rendered" -and $null -ne $renderTwo.output) {
+                            $renderBindings += [ordered]@{
+                                path = "delayed-retrigger-execution/$($renderTwo.output.path)"
+                                sha256 = [string]$renderTwo.output.sha256
+                            }
                         }
                     }
                 }
@@ -110,32 +134,29 @@ def main() -> None:
                     $renderBindings.Count -eq 2 -and
                     [string]$renderBindings[0].sha256 -ceq [string]$renderBindings[1].sha256
                 )
+                $runtimeOutcome = if ($deterministic) {
+                    "rendered-twice"
+                } elseif ([bool]$renderOne.save_invoked -and [bool]$renderOne.process_exited) {
+                    "reference-process-exited-during-render"
+                } else {
+                    "inconclusive"
+                }
                 $runtimeExecution = [ordered]@{
                     schema_version = 1
-                    outcome = if ($deterministic) { "rendered-twice" } else { "inconclusive" }
+                    outcome = $runtimeOutcome
                     deterministic = $deterministic
-                    settings = [ordered]@{
-                        sample_rate = 44100
-                        bits_per_sample = 16
-                        channels = "mono-mix"
-                        dither = $false
-                        range = "entire-song"
-                    }
+                    pre_render_load = $preRenderLoad
+                    settings = $renderSettings
                     renders = @($renderBindings)
-                    attempts = @($renderOne, $renderTwo)
+                    attempts = @($attempts)
                 }
             } else {
                 $runtimeExecution = [ordered]@{
                     schema_version = 1
                     outcome = "inconclusive"
                     deterministic = $false
-                    settings = [ordered]@{
-                        sample_rate = 44100
-                        bits_per_sample = 16
-                        channels = "mono-mix"
-                        dither = $false
-                        range = "entire-song"
-                    }
+                    pre_render_load = $preRenderLoad
+                    settings = $renderSettings
                     renders = @()
                     attempts = @()
                     diagnostics = @("clean accepted load and dismissed Load Warning are required before runtime execution observation")
@@ -155,7 +176,7 @@ def main() -> None:
         text,
         '            procedure = if ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',
         '            procedure = if ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger-execution") {\n'
-        '                "$Procedure; after the clean accepted-load gate, invoke only the source-pinned Psycle 1.12.0 Render as Wav File command and exact dialog controls; render the additive sampled command witness twice as mono 44.1 kHz 16-bit PCM with dither disabled; retain both outputs and require later validation to establish deterministic command-bearing runtime execution without classifying exact timing parity"\n'
+        '                "$Procedure; after the clean accepted-load gate, invoke only the source-pinned Psycle 1.12.0 Render as Wav File command and exact dialog controls; attempt the additive sampled command witness as mono 44.1 kHz 16-bit PCM with dither disabled; if the first render succeeds, repeat it for deterministic waveform validation; otherwise retain the exact process-exit/output evidence without promoting runtime command execution or parity"\n'
         '            } elseif ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger") {\n'
         '                "$Procedure; for the sequencer-delayed-retrigger contract load the exact frozen command fixture under pinned Psycle 1.12.0 x86 and retain the clean accepted-load/liveness evidence; command execution semantics are recorded separately from the pinned original source and are not inferred from this UI load receipt"\n'
         '            } elseif ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',
