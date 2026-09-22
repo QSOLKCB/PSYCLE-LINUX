@@ -194,8 +194,8 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
         value,
         (
             "release/no active voice",
-            "delayed note short",
-            "delayed note long",
+            "one row e df",
+            "four beat e df",
             "ordinary note",
         ),
         context + " Voice::Tick work-boundary result",
