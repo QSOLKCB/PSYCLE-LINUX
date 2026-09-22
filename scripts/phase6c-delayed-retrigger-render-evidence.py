@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import math
 from pathlib import Path, PurePosixPath
@@ -16,6 +17,7 @@ ORIGINAL_RECEIPT = "original-delayed-retrigger-execution.json"
 RUNTIME_RECEIPT = "original-delayed-retrigger-runtime.json"
 TITLE = "PSYCLE-LINUX Phase 6C delayed/retrigger execution witness"
 REFERENCE_BUILD = "Psycle 1.12.0 x86"
+ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_LAYOUT = {
     "bpm": 137,
     "lpb": 8,
@@ -45,6 +47,16 @@ def child(root: Path, relative: str) -> Path:
     result = (root / relative).resolve()
     result.relative_to(root.resolve())
     return result
+
+
+def load_module(name: str):
+    path = ROOT / "scripts" / name
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError("could not load evidence validator: " + name)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def read_json(path: Path) -> dict:
@@ -270,7 +282,18 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
     candidate_root = candidate_root.resolve()
     original_root = original_root.resolve()
     candidate = validate_candidate(candidate_root)
+    original_gate = load_module(
+        "phase6c-delayed-retrigger-original.py"
+    ).delayed_validator()
+    generic_load_result = original_gate.validate_pair(
+        "delayed-retrigger-execution",
+        CONTRACT,
+        candidate_root,
+        original_root,
+    )
     receipt = read_json(original_root / ORIGINAL_RECEIPT)
+    if receipt.get("load_result") != generic_load_result:
+        raise ValueError("generic original identity gate load-result mismatch")
     checks = {
         "schema_version": 1,
         "phase": "6C",
