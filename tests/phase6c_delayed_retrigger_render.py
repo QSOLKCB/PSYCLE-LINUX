@@ -24,6 +24,14 @@ assert isolation_spec is not None and isolation_spec.loader is not None
 isolation = importlib.util.module_from_spec(isolation_spec)
 isolation_spec.loader.exec_module(isolation)
 
+SUBSTRATE_SCRIPT = ROOT / "scripts" / "phase6c-delayed-retrigger-render-substrate.py"
+substrate_spec = importlib.util.spec_from_file_location(
+    "phase6c_render_substrate", SUBSTRATE_SCRIPT
+)
+assert substrate_spec is not None and substrate_spec.loader is not None
+substrate = importlib.util.module_from_spec(substrate_spec)
+substrate_spec.loader.exec_module(substrate)
+
 
 def wave_pcm16(frames: list[int], channels: int = 1, rate: int = 44100) -> bytes:
     if channels == 1:
@@ -242,5 +250,78 @@ with tempfile.TemporaryDirectory() as temporary:
     )
     assert bound["size_bytes"] == 0
     assert bound["path"].endswith(output.name)
+
+assert substrate.diagnose({
+    "master-only": "reference-process-exited-during-render",
+    "sampler-empty": "reference-process-exited-during-render",
+    "sample-state": "reference-process-exited-during-render",
+    "ordinary-note": "reference-process-exited-during-render",
+}) == "original-render-path-failure-before-sampler"
+
+assert substrate.diagnose({
+    "master-only": "rendered-once",
+    "sampler-empty": "reference-process-exited-during-render",
+    "sample-state": "reference-process-exited-during-render",
+    "ordinary-note": "reference-process-exited-during-render",
+}) == "sampler-machine-render-failure"
+
+assert substrate.diagnose({
+    "master-only": "rendered-once",
+    "sampler-empty": "rendered-once",
+    "sample-state": "reference-process-exited-during-render",
+    "ordinary-note": "reference-process-exited-during-render",
+}) == "sample-instrument-state-render-failure"
+
+assert substrate.diagnose({
+    "master-only": "rendered-once",
+    "sampler-empty": "rendered-once",
+    "sample-state": "rendered-once",
+    "ordinary-note": "reference-process-exited-during-render",
+}) == "ordinary-note-playback-render-failure"
+
+assert substrate.diagnose({
+    "master-only": "rendered-once",
+    "sampler-empty": "rendered-once",
+    "sample-state": "rendered-once",
+    "ordinary-note": "rendered-once",
+}) == "all-substrate-rungs-rendered-full-witness-detail-remains"
+
+assert substrate.diagnose({
+    "master-only": "reference-process-exited-during-render",
+    "sampler-empty": "rendered-once",
+    "sample-state": "reference-process-exited-during-render",
+    "ordinary-note": "reference-process-exited-during-render",
+}) == "nonmonotonic-substrate-result"
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    attempt = {"observed_output": None}
+    filename = "original-delayed-retrigger-substrate-master-only-1.wav"
+    assert substrate.validate_failed_observed_output(
+        root, "master-only", attempt, filename
+    ) is None
+
+    output_dir = root / "delayed-retrigger-substrate-master-only"
+    output_dir.mkdir()
+    output = output_dir / filename
+    output.write_bytes(b"")
+    try:
+        substrate.validate_failed_observed_output(
+            root, "master-only", attempt, filename
+        )
+    except ValueError as exc:
+        assert "unbound output file" in str(exc)
+    else:
+        raise AssertionError("expected substrate unbound-output rejection")
+
+    attempt["observed_output"] = {
+        "path": filename,
+        "size_bytes": 0,
+        "sha256": hashlib.sha256(b"").hexdigest(),
+    }
+    bound = substrate.validate_failed_observed_output(
+        root, "master-only", attempt, filename
+    )
+    assert bound["size_bytes"] == 0
 
 print("phase6c-delayed-retrigger-render: PASS")
