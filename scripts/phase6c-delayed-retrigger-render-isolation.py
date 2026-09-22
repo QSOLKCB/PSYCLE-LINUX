@@ -248,6 +248,28 @@ def validate_observed_output(
     }
 
 
+def validate_failed_observed_output(
+    original_root: Path,
+    name: str,
+    attempt: dict,
+    expected_filename: str,
+) -> dict | None:
+    observed_value = attempt.get("observed_output")
+    expected_relative = (
+        f"delayed-retrigger-isolation-{name}/" + expected_filename
+    )
+    expected_path = child(original_root, expected_relative)
+    if observed_value is None:
+        if expected_path.exists():
+            raise ValueError(
+                f"{name}: failed render created an unbound output file"
+            )
+        return None
+    return validate_observed_output(
+        original_root, name, observed_value, expected_filename
+    )
+
+
 def validate_original(candidate_root: Path, original_root: Path) -> dict:
     candidate_root = candidate_root.resolve()
     original_root = original_root.resolve()
@@ -357,21 +379,9 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                 != ["reference exited during offline render"]
             ):
                 raise ValueError(f"{name}: process-exit code/diagnostic mismatch")
-            observed_value = attempt.get("observed_output")
-            expected_relative = (
-                f"delayed-retrigger-isolation-{name}/" + expected_filename
+            observed = validate_failed_observed_output(
+                original_root, name, attempt, expected_filename
             )
-            expected_path = child(original_root, expected_relative)
-            if observed_value is None:
-                if expected_path.exists():
-                    raise ValueError(
-                        f"{name}: failed render created an unbound output file"
-                    )
-                observed = None
-            else:
-                observed = validate_observed_output(
-                    original_root, name, observed_value, expected_filename
-                )
             result = {
                 "outcome": "reference-process-exited-during-render",
                 "load_result": load_result,
