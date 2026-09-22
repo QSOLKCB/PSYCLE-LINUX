@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "contract": "sequencer-sampler-fault-location",
+  "parity_status": "UNKNOWN",
+  "function_location": "unresolved",
+  "target_variant": "delayed-note-short",
+  "fixture": {
+    "path": "sampler-work-boundary/phase6c-sampler-work-boundary-delayed-note-short.psy",
+    "sha256": "f1021ee05ef3e76e71dca9f7d9f982decaef225124c8242788dbd3191813b195",
+    "candidate_receipt_sha256": "7772bccff93a013abd158e9ca53b8d292e1bd715b07a36c4a742231f62625104",
+    "work_boundary_candidate_receipt_sha256": "3947bfa36f834c2abcaef8dffd338c179b820618f22e62e3557c2e0216108fc3"
+  },
+  "reference": {
+    "build": "Psycle 1.12.0 x86",
+    "executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6"
+  },
+  "debugger": {
+    "name": "cdb.exe",
+    "architecture": "x86",
+    "sha256": "12a6c6b54f901326bcfea057a9cdb9f786222424d456e2d4da29318d882e792b",
+    "file_version": "10.0.26100.4202 (WinBuild.160101.0800)",
+    "product_version": "10.0.26100.4202",
+    "provenance": "preinstalled-github-windows-runner-tool"
+  },
+  "canonical_observation": {
+    "workflow_run_id": 35772562875,
+    "pull_request": 78,
+    "head_sha": "ed1d2ad38700021d88141e9d5310367f6e7753d9",
+    "candidate_artifact": {
+      "id": 10714732662,
+      "name": "phase6c-delayed-retrigger-candidate",
+      "digest": "sha256:d64a3d111ac60938c2582adf0adb8985ca4941694e5536523de3fbc5f8330bb7"
+    },
+    "original_artifact": {
+      "id": 10715560789,
+      "name": "phase6c-delayed-retrigger-original",
+      "digest": "sha256:d444f5b19dc87da97d92215df8a7b4e4fed51b01aa718e6ced0c92f0189f80bb"
+    },
+    "original_receipt": {
+      "path": "original-sampler-fault-location.json",
+      "sha256": "01fcc8b4145be9aebc04c409c019cc4a9f3ecdd71c1af4751dd4ee4635eae2eb"
+    },
+    "summary_receipt": {
+      "path": "original-sampler-fault-location-summary.json",
+      "sha256": "b8743d7a2553336a6f34b8a8ad34b52136a90a101c54b54ce2435efff3e89e0c"
+    },
+    "uninstrumented_control": {
+      "path": "original-sampler-work-boundary-delayed-note-short.json",
+      "sha256": "d47e8543ca5b5b278fea6f587ff5d7f82d397fdf80435480d0e04225ea61b7e2",
+      "process_exit_code": -1073741819
+    },
+    "debugger_log": {
+      "path": "sampler-fault-location/cdb.log",
+      "sha256": "e1ba956b0a100426c5757fbadde08fcdf85b6ff4085778ed3d6b922db0f91f16"
+    },
+    "module_snapshot": {
+      "path": "sampler-fault-location/modules.json",
+      "sha256": "394736f23b035e3c9971aedb586631fe7226fe3c529d1de5f7f4d68085c2a428"
+    },
+    "exception": {
+      "code_hex": "0xc0000005",
+      "process_exit_code": -1073741819,
+      "address_hex": "0x00e6c377",
+      "module": "psycle.exe",
+      "module_base_hex": "0x00e10000",
+      "module_size_bytes": 7544832,
+      "module_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+      "module_offset_hex": "0x5c377",
+      "observed_output_size_bytes": 0,
+      "observed_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "validation": "successful"
+  },
+  "corroborating_observation": {
+    "workflow_run_id": 35770412423,
+    "head_sha": "d3c37b32bc709c6a77405d653cca15e704b2b453",
+    "candidate_artifact": {
+      "id": 10713757343,
+      "digest": "sha256:5f8684c2267758f0e46ef1f30c2bcb63d08293adffb7ef061a6a207d4c812755"
+    },
+    "original_artifact": {
+      "id": 10713974135,
+      "digest": "sha256:fbde95bb712a57b7050f79d29dff79cfa31750557dc5520a74f292a2fa5dca14"
+    },
+    "original_receipt_sha256": "d687e2ab5778eca7342371b40eefa52ec7b98ba22de2315e27c8198ff2f4181e",
+    "debugger_log_sha256": "60010c9fe1bf5f1ba42fbc85df934439b8fc2edd0717c027895d357213133220",
+    "module_snapshot_sha256": "646e9cd56679f18dd9dc203159913bdeb4341abb85b342fe13ebb1e983c8cec3",
+    "exception_address_hex": "0x0057c377",
+    "module_base_hex": "0x00520000",
+    "module_offset_hex": "0x5c377",
+    "validation_note": "collector completed and captured the same module-relative offset; the workflow later failed on an unrelated fresh-receipt versus immutable PR #76 historical projection check, fixed before the canonical rerun"
+  },
+  "derived_observation": {
+    "aslr_bases_differ": true,
+    "exception_addresses_differ": true,
+    "module_offset_matches_across_runs": true,
+    "stable_module_offset_hex": "0x5c377",
+    "source_function_identified": false,
+    "interpretation": "Two independent hosted runs place the second-chance 0xC0000005 at the same psycle.exe-relative offset despite different ASLR bases. This localizes the crash to a stable binary offset but does not identify a source function without an independent symbol/source mapping."
+  }
+}
