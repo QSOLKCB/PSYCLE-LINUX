@@ -291,6 +291,12 @@ jobs:
           python scripts/phase6c-delayed-retrigger-render-evidence.py original `
             phase6c-command-candidate phase6c-command-original
           if ($LASTEXITCODE -ne 0) { throw "original execution witness validation failed" }
+          python scripts/phase6c-delayed-retrigger-render-isolation.py candidate-check `
+            phase6c-command-candidate
+          if ($LASTEXITCODE -ne 0) { throw "render isolation candidate validation failed" }
+          python scripts/phase6c-delayed-retrigger-render-isolation.py original `
+            phase6c-command-candidate phase6c-command-original
+          if ($LASTEXITCODE -ne 0) { throw "original render isolation validation failed" }
 
       - name: Upload original command evidence
         if: always()
