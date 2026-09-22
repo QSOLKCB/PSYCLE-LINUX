@@ -134,9 +134,10 @@ def main() -> None:
                     $renderBindings.Count -eq 2 -and
                     [string]$renderBindings[0].sha256 -ceq [string]$renderBindings[1].sha256
                 )
+                $lastAttempt = $attempts[-1]
                 $runtimeOutcome = if ($deterministic) {
                     "rendered-twice"
-                } elseif ([bool]$renderOne.save_invoked -and [bool]$renderOne.process_exited) {
+                } elseif ([bool]$lastAttempt.save_invoked -and [bool]$lastAttempt.process_exited) {
                     "reference-process-exited-during-render"
                 } else {
                     "inconclusive"
@@ -176,7 +177,7 @@ def main() -> None:
         text,
         '            procedure = if ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',
         '            procedure = if ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger-execution") {\n'
-        '                "$Procedure; after the clean accepted-load gate, invoke only the source-pinned Psycle 1.12.0 Render as Wav File command and exact dialog controls; attempt the additive sampled command witness as mono 44.1 kHz 16-bit PCM with dither disabled; if the first render succeeds, repeat it for deterministic waveform validation; otherwise retain the exact process-exit/output evidence without promoting runtime command execution or parity"\n'
+        '                "$Procedure; after the clean accepted-load gate, invoke only the source-pinned Psycle 1.12.0 Render as Wav File command and exact dialog controls; attempt the additive sampled command witness as mono 44.1 kHz 16-bit PCM with dither disabled; if the first render succeeds, repeat it for deterministic waveform validation; if either attempted render exits the reference process, retain the exact process-exit/output evidence without promoting runtime command execution or parity"\n'
         '            } elseif ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger") {\n'
         '                "$Procedure; for the sequencer-delayed-retrigger contract load the exact frozen command fixture under pinned Psycle 1.12.0 x86 and retain the clean accepted-load/liveness evidence; command execution semantics are recorded separately from the pinned original source and are not inferred from this UI load receipt"\n'
         '            } elseif ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',
