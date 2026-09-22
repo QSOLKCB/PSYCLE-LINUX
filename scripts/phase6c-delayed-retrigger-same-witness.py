@@ -291,12 +291,17 @@ def validate_original_attempt(
     runtime_id = attempt.get("selected_render_dialog_runtime_id")
     preexisting_count = attempt.get("preexisting_render_dialog_count")
     post_dispatch_count = attempt.get("render_dialog_post_dispatch_event_count")
+    boundary_tick = attempt.get("render_dialog_dispatch_boundary_tick")
     selected_handle = attempt.get("selected_render_dialog_native_handle")
     if (
-        attempt.get("render_dialog_open_event_armed") is not True
+        attempt.get("render_dialog_native_event_hook_armed") is not True
         or attempt.get("render_dialog_dispatch_boundary_set") is not True
+        or not isinstance(boundary_tick, int)
+        or isinstance(boundary_tick, bool)
+        or boundary_tick < 0
+        or boundary_tick > 0xFFFFFFFF
         or attempt.get("dialog_discovery")
-        != "window-opened-event-after-successful-command-dispatch"
+        != "win-event-object-show-after-dispatch-tick-boundary"
         or not isinstance(preexisting_count, int)
         or isinstance(preexisting_count, bool)
         or preexisting_count < 0
