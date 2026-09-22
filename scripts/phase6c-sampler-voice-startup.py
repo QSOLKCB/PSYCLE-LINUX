@@ -200,15 +200,15 @@ def validate_candidate(root: Path) -> dict:
 
 def collect_source(root: Path, sampler_path: Path, song_path: Path) -> dict:
     root = root.resolve()
-    sampler_data = sampler_path.read_bytes().replace(b"\r\n", b"\n")
-    song_data = song_path.read_bytes().replace(b"\r\n", b"\n")
+    sampler_data = sampler_path.read_bytes()
+    song_data = song_path.read_bytes()
     if git_blob(sampler_data) != SAMPLER_BLOB:
         raise ValueError("pinned original Sampler.cpp blob mismatch")
     if git_blob(song_data) != SONG_BLOB:
         raise ValueError("pinned original Song.cpp blob mismatch")
 
-    sampler_text = sampler_data.decode("utf-8")
-    song_text = song_data.decode("utf-8")
+    sampler_text = sampler_data.replace(b"\r\n", b"\n").decode("utf-8")
+    song_text = song_data.replace(b"\r\n", b"\n").decode("utf-8")
     required_sampler = [
         "if (data._inst == 255)",
         "data._inst = lastInstrument[channel];",
