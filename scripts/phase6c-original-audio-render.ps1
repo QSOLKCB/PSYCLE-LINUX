@@ -335,6 +335,9 @@ function Invoke-Phase6cAudioRender(
         dialog_closed = $false
         requested_output = $null
         output = $null
+        observed_output = $null
+        process_exited = $false
+        process_exit_code = $null
         menu_inventory = @()
         diagnostics = @()
     }
@@ -512,6 +515,27 @@ function Invoke-Phase6cAudioRender(
     }
     catch {
         $diagnostics.Add($_.Exception.Message)
+    }
+
+    try {
+        $Process.Refresh()
+        $result.process_exited = [bool]$Process.HasExited
+        if ($result.process_exited) {
+            $result.process_exit_code = [int64]$Process.ExitCode
+        }
+    }
+    catch {
+        $diagnostics.Add("could not inspect reference process after render attempt: $($_.Exception.Message)")
+    }
+
+    if ($null -ne $result.requested_output -and
+        (Test-Path -LiteralPath $result.requested_output -PathType Leaf)) {
+        $observed = Get-Item -LiteralPath $result.requested_output
+        $result.observed_output = [ordered]@{
+            path = [System.IO.Path]::GetFileName($result.requested_output)
+            size_bytes = [int64]$observed.Length
+            sha256 = Get-Sha256 $result.requested_output
+        }
     }
 
     $result.diagnostics = @($diagnostics.ToArray())
