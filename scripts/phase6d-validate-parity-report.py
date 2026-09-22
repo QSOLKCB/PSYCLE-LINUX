@@ -98,8 +98,8 @@ def assert_positive_predicate(
     context: str,
 ) -> None:
     subject_scan = re.sub(
-        r"\bno\s+previous\s+instrument\b",
-        "previous instrument",
+        r"\bno\s+(?:previous\s+instrument|active\s+voice)\b",
+        "canonical control",
         sentence,
         flags=re.IGNORECASE,
     )
@@ -190,21 +190,113 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
     ):
         die(f"{context} contradicts the serialized-instrument boundary result")
 
+    work_boundary = find_evidence_sentence(
+        value,
+        (
+            "release/no active voice",
+            "four beat e df",
+            "ordinary note",
+        ),
+        context + " Voice::Tick work-boundary result",
+    )
     if re.search(
-        r"(?:isolate|boundary).{0,160}voice::tick.{0,160}"
-        r"(?:versus|vs\.?).{0,80}(?:first\s+)?voice::work",
-        normalized,
+        r"\brelease/no\s+active\s+voice\s+control.{0,160}"
+        r"\b(?:survive|survives|survived|retain|retains|retained)\b",
+        work_boundary,
+        re.IGNORECASE,
     ) is None:
         die(
-            f"{context} must preserve the next boundary as Voice::Tick "
-            "initialization versus first Voice::Work"
+            f"{context} must bind survival specifically to the "
+            "release/no-active-voice control"
         )
+    if re.search(
+        r"\bone\s+row(?:\s+sampler\s+local)?\s+e\s+df\s*,\s*"
+        r"four\s+beat\s+e\s+df\s*,\s*and\s+"
+        r"one\s+row\s+ordinary\s+note\s+fixtures\s+"
+        r"(?:all|each)\s+exit(?:s|ed)?\b",
+        work_boundary,
+        re.IGNORECASE,
+    ) is None:
+        die(
+            f"{context} must bind the one-row E-DF, four-beat E-DF, "
+            "and one-row ordinary-note fixtures collectively to the exit result"
+        )
+    assert_positive_predicate(
+        work_boundary,
+        r"\b(?:survive|survives|survived|retain|retains|retained)\b",
+        r"\b(?:(?:do|does|did)\s+not|never|cannot|can't|could\s+not|"
+        r"would\s+not|should\s+not|must\s+not|fail(?:s|ed)?\s+to|"
+        r"(?:(?:am|is|are|was|were)\s+)?unable\s+to)\s+"
+        r"(?:survive|retain)\b|\bnot\s+(?:survive|retain)\b",
+        context + " release/no-active-voice control",
+    )
+    assert_positive_predicate(
+        work_boundary,
+        r"\bexit(?:s|ed)?\b",
+        r"\b(?:(?:do|does|did)\s+not|never|cannot|can't|could\s+not|"
+        r"would\s+not|should\s+not|must\s+not|fail(?:s|ed)?\s+to|"
+        r"(?:(?:am|is|are|was|were)\s+)?unable\s+to)\s+"
+        r"exit\b|\bnot\s+exit\b",
+        context + " delayed/ordinary work-boundary fixtures",
+    )
+    if re.search(
+        r"\b(?:non\s+zero|nonzero|not\s+zero|zero\s+or\s+more)\s+byte",
+        work_boundary,
+        re.IGNORECASE,
+    ):
+        die(
+            f"{context} reverses the work-boundary zero-byte output result: "
+            f"{work_boundary}"
+        )
+    if "0xc0000005" not in work_boundary or re.search(
+        r"\bzero\s+byte\b", work_boundary, re.IGNORECASE
+    ) is None:
+        die(
+            f"{context} work-boundary exits must bind exact 0xC0000005 "
+            "and zero-byte output"
+        )
+
+    if "2.5 row" not in normalized or "one row" not in normalized:
+        die(
+            f"{context} must preserve the source-bound one-row versus "
+            "2.5-row E-DF timing discriminator"
+        )
+    if re.search(
+        r"\b(?:cannot|can't|does\s+not|could\s+not)\s+reach\s+"
+        r"controller\.work\b",
+        normalized,
+        re.IGNORECASE,
+    ) is None:
+        die(
+            f"{context} must state that the one-row delayed fixture cannot "
+            "reach controller.Work"
+        )
+    if re.search(
+        r"voice::tick\s+initialization.{0,100}"
+        r"(?:before|not).{0,60}(?:first\s+)?voice::work",
+        normalized,
+        re.IGNORECASE,
+    ) is None:
+        die(
+            f"{context} must preserve Voice::Tick initialization as the "
+            "current pre-Voice::Work boundary"
+        )
+    for phrase in ("resampler", "envelope", "inside voice::tick"):
+        if phrase not in normalized:
+            die(
+                f"{context} lost the next internal Voice::Tick boundary "
+                f"phrase: {phrase}"
+            )
 
     return {
         "early_controls_survive": True,
         "enabled_sample_variants_exit": True,
         "serialized_instrument_not_boundary": True,
-        "next_boundary_voice_tick_vs_work": True,
+        "release_control_survives": True,
+        "work_reachable_variants_exit": True,
+        "short_delay_excludes_controller_work": True,
+        "voice_tick_initialization_boundary": True,
+        "next_boundary_inside_voice_tick": True,
     }
 
 

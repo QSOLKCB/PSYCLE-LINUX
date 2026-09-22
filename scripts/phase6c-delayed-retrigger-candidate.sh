@@ -191,6 +191,36 @@ run_logged "$OUT/voice-startup-candidate-validation.log" \
     python3 "$ROOT/scripts/phase6c-sampler-voice-startup.py" candidate-check \
     "$ARTIFACT"
 
+WORK_BOUNDARY_OUT="$ARTIFACT/sampler-work-boundary"
+mkdir "$WORK_BOUNDARY_OUT"
+run_logged "$OUT/work-boundary-fixture-build.log" \
+    gcc "${COMMON_CFLAGS[@]}" "${LUA_CFLAGS[@]}" \
+    "$ROOT/tests/phase6c_sampler_work_boundary_fixture.c" \
+    -o "$BUILD/phase6c-sampler-work-boundary" \
+    "${COMMON_LDFLAGS[@]}" "${LUA_LIBS[@]}"
+
+run_logged "$OUT/work-boundary-fixture-generator.log" \
+    "$BUILD/phase6c-sampler-work-boundary" "$WORK_BOUNDARY_OUT"
+
+for variant in release-no-active-voice delayed-note-short delayed-note-long ordinary-note-short; do
+    fixture="$WORK_BOUNDARY_OUT/phase6c-sampler-work-boundary-${variant}.psy"
+    [[ -s "$fixture" ]] || {
+        echo "work-boundary fixture was not generated: $variant" >&2
+        exit 2
+    }
+    [[ "$(head -c 8 "$fixture")" == "PSY3SONG" ]] || {
+        echo "work-boundary fixture is not PSY3: $variant" >&2
+        exit 2
+    }
+done
+
+run_logged "$OUT/work-boundary-candidate-receipts.log" \
+    python3 "$ROOT/scripts/phase6c-sampler-work-boundary.py" candidate \
+    "$ARTIFACT"
+run_logged "$OUT/work-boundary-candidate-validation.log" \
+    python3 "$ROOT/scripts/phase6c-sampler-work-boundary.py" candidate-check \
+    "$ARTIFACT"
+
 cp "$ROOT/tests/phase6c_delayed_retrigger.pro" "$STAGING/probe.pro"
 set +e
 (

@@ -344,6 +344,54 @@ This result still does **not** provide a command-bearing delayed/retrigger
 runtime output and does not change `sequencer-delayed-retrigger` from
 `UNKNOWN`.
 
+## Sampler Voice::Tick / Voice::Work boundary isolation
+
+The next additive lane keeps the same pinned original Psycle commit
+`7ac6d2c3553e2ee8dda55814d8e689919c345478` and binds its interpretation to
+`Sampler.cpp` blob `6cc0bd7328d01131c3d41b68f4e5d4189959e364`,
+`Sampler.hpp` blob `46da9fa80757b11ed146a21a529c70dbc6364f12`, and
+`SongStructs.hpp` blob `3ad8cd1b1a0a41bc2225cfd3070bf205cbebec31`.
+
+The source-bound ladder separates four points:
+
+1. `release-no-active-voice` — enabled sample 0 plus release note 120 on an
+   empty track. Original `Sampler::Tick()` passes the sample-enabled gate but
+   returns because no voice is active, before `Voice::Tick()`;
+2. `delayed-note-short` — note 60 with Sampler-local extended command
+   `0x0E/0xDF` in a one-row song. This is distinct from global
+   `PatternCmd::NOTE_DELAY = 0xFD`, so `Player::ExecuteNotes()` forwards the
+   event into `Sampler::Tick()`. In `Voice::Tick()`, `E-DF` sets
+   `_triggerNoteDelay = 15/6` rows = 2.5 rows and leaves the envelopes
+   `ENV_OFF`; because the song is only one row, the delay cannot expire and
+   `Voice::Work()` must return before `controller.Work()`;
+3. `delayed-note-long` — the same `E-DF` event in a four-beat song, long
+   enough for the 2.5-row delay to expire and make sample work reachable;
+4. `ordinary-note-short` — a one-row ordinary note, making sample work
+   reachable immediately.
+
+Workflow `35752301481` at evidence head
+`4cf71eba6f7b5f6ba14be6089cf37422b16b5ca6` completes the candidate and
+pinned-Windows lanes. The release/no-active-voice control keeps the reference
+process alive and retains a finalized 4,868-byte mono PCM WAV with 2,412
+zero-valued frames, SHA-256
+`f40e6f9f280c993b8c0ecdf6a54ba8314462803b7075e46d7db0c4a2bd9dfbae`.
+The other three fixtures all reach verified Save Wave dispatch, exit with
+Windows status `0xC0000005` (`-1073741819`), and retain zero-byte WAVs.
+
+The derived diagnosis is `voice-tick-initialization-associated-exit`. The
+one-row delayed fixture is the key discriminator: the crash occurs even though
+its 2.5-row delay cannot expire before the song ends, so no successful
+`Voice::Work()` path can reach `controller.Work()`. The current boundary is
+therefore inside `Voice::Tick()` after voice selection and before normal audio
+work. The remaining source order to isolate is legacy instrument/sample binding
+and pitch/speed calculation, resampler allocation/update, then
+envelope/pan/filter initialization.
+
+This remains an association boundary, not proof that any specific
+`Voice::Tick()` statement is the unique fault. It still does **not** provide a
+command-bearing delayed/retrigger runtime output and does not change
+`sequencer-delayed-retrigger` from `UNKNOWN`.
+
 ## Epistemic boundary
 
 The three evidence roles remain separate:

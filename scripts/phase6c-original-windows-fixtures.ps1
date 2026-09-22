@@ -109,6 +109,19 @@ if ($ObserveDelayedRetrigger) {
         }
     }
 }
+if ($ObserveDelayedRetrigger) {
+    foreach ($variant in @(
+        "release-no-active-voice",
+        "delayed-note-short",
+        "delayed-note-long",
+        "ordinary-note-short"
+    )) {
+        $name = "sampler-work-boundary-$variant"
+        if (Test-Path -LiteralPath (Join-Path $outRoot ("original-{0}.json" -f $name))) {
+            $receiptNames += $name
+        }
+    }
+}
 foreach ($name in $receiptNames) {
     $receiptPath = Join-Path $outRoot ("original-{0}.json" -f $name)
     $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json

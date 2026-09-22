@@ -118,6 +118,27 @@ def main() -> None:
                 expected_load_warning_message = "This file is from a newer version of Psycle! This process will try to load it anyway."
             }
         }
+        $workBoundaryTitles = @{
+            "release-no-active-voice" = "PSYCLE-LINUX Phase 6C Sampler work boundary release no active voice"
+            "delayed-note-short" = "PSYCLE-LINUX Phase 6C Sampler work boundary delayed note short"
+            "delayed-note-long" = "PSYCLE-LINUX Phase 6C Sampler work boundary delayed note long"
+            "ordinary-note-short" = "PSYCLE-LINUX Phase 6C Sampler work boundary ordinary note short"
+        }
+        foreach ($workBoundaryVariant in @(
+            "release-no-active-voice",
+            "delayed-note-short",
+            "delayed-note-long",
+            "ordinary-note-short"
+        )) {
+            $fixtureSpecs += [ordered]@{
+                name = "sampler-work-boundary-$workBoundaryVariant"
+                candidate_receipt = "candidate-sampler-work-boundary-$workBoundaryVariant.json"
+                expected_contract = "sequencer-sampler-work-boundary-isolation"
+                expected_song_title = $workBoundaryTitles[$workBoundaryVariant]
+                load_warning_required = $true
+                expected_load_warning_message = "This file is from a newer version of Psycle! This process will try to load it anyway."
+            }
+        }
     }
 '''
     text = replace_once(
@@ -342,8 +363,10 @@ def main() -> None:
             }
         }
 
-        if ($ObserveDelayedRetrigger -and
-            [string]$spec.name -like "sampler-voice-startup-*") {
+        if ($ObserveDelayedRetrigger -and (
+            [string]$spec.name -like "sampler-voice-startup-*" -or
+            [string]$spec.name -like "sampler-work-boundary-*"
+        )) {
             $renderDirectory = Join-Path $outRoot ([string]$spec.name)
             if (-not (Test-Path -LiteralPath $renderDirectory)) {
                 New-Item -ItemType Directory -Path $renderDirectory | Out-Null
@@ -400,7 +423,7 @@ def main() -> None:
                     settings = $renderSettings
                     renders = @()
                     attempts = @()
-                    diagnostics = @("clean accepted load and dismissed Load Warning are required before Sampler voice-startup isolation")
+                    diagnostics = @("clean accepted load and dismissed Load Warning are required before Sampler voice/work boundary isolation")
                 }
             }
         }
@@ -424,6 +447,8 @@ def main() -> None:
         '                "$Procedure; after the clean accepted-load gate, invoke the same source-pinned Render as Wav File UI once for this cumulative Master/Sampler/sample-state/ordinary-note substrate rung; retain either a hash-bound PCM output or exact process-exit/output evidence solely to localize the PR #72 shared sampled-fixture/render failure; this diagnostic observation cannot promote delayed/retrigger parity"\n'
         '            } elseif ($ObserveDelayedRetrigger -and [string]$spec.name -like "sampler-voice-startup-*") {\n'
         '                "$Procedure; after the clean accepted-load gate, invoke the same source-pinned Render as Wav File UI once for this source-bound Sampler::Tick/Voice::Tick startup rung; retain finalized PCM/stable-process evidence or exact process-exit/output evidence solely to isolate the PR #73 ordinary-note failure boundary; this diagnostic observation cannot promote delayed/retrigger parity"\n'
+        '            } elseif ($ObserveDelayedRetrigger -and [string]$spec.name -like "sampler-work-boundary-*") {\n'
+        '                "$Procedure; after the clean accepted-load gate, invoke the same source-pinned Render as Wav File UI once for this source-bound release/delayed/ordinary Sampler work-boundary rung; retain finalized PCM/stable-process evidence or exact 0xC0000005 process-exit/output evidence solely to split Voice::Tick initialization from controller.Work-reachable sample processing; this diagnostic observation cannot promote delayed/retrigger parity"\n'
         '            } elseif ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger") {\n'
         '                "$Procedure; for the sequencer-delayed-retrigger contract load the exact frozen command fixture under pinned Psycle 1.12.0 x86 and retain the clean accepted-load/liveness evidence; command execution semantics are recorded separately from the pinned original source and are not inferred from this UI load receipt"\n'
         '            } elseif ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',

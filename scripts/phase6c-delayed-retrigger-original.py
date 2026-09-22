@@ -41,7 +41,11 @@ def delayed_validator():
         '"sampler-voice-startup-note-no-previous-inst", '
         '"sampler-voice-startup-note-missing-sample", '
         '"sampler-voice-startup-note-sample-default-inst", '
-        '"sampler-voice-startup-note-sample-serialized-inst"'
+        '"sampler-voice-startup-note-sample-serialized-inst", '
+        '"sampler-work-boundary-release-no-active-voice", '
+        '"sampler-work-boundary-delayed-note-short", '
+        '"sampler-work-boundary-delayed-note-long", '
+        '"sampler-work-boundary-ordinary-note-short"'
     )
     source = source.replace(
         old,
