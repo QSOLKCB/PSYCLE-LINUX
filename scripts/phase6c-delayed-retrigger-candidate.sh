@@ -6,6 +6,7 @@ ARTIFACT="$(realpath "${1:?candidate artifact root required}")"
 OUT="$ARTIFACT/delayed-retrigger"
 BUILD="$(mktemp -d)"
 STAGING="$ROOT/psycle-cpp-r12005-sanitized/psycle-player/phase6c-delayed-retrigger-probe-build"
+RENDER_STAGING="$ROOT/psycle-cpp-r12005-sanitized/psycle-player/phase6c-sampulse-render-build"
 
 [[ ! -e "$OUT" ]] || {
     echo 'refusing stale delayed/retrigger artifact directory' >&2
@@ -15,8 +16,12 @@ STAGING="$ROOT/psycle-cpp-r12005-sanitized/psycle-player/phase6c-delayed-retrigg
     echo 'refusing existing delayed/retrigger probe staging directory' >&2
     exit 2
 }
-mkdir "$OUT" "$STAGING"
-trap 'rm -rf -- "$BUILD" "$STAGING"' EXIT
+[[ ! -e "$RENDER_STAGING" ]] || {
+    echo 'refusing existing Sampulse render staging directory' >&2
+    exit 2
+}
+mkdir "$OUT" "$STAGING" "$RENDER_STAGING"
+trap 'rm -rf -- "$BUILD" "$STAGING" "$RENDER_STAGING"' EXIT
 
 run_logged() {
     local log="$1"
@@ -100,6 +105,25 @@ run_logged "$OUT/execution-candidate-receipt.log" \
 run_logged "$OUT/execution-candidate-validation.log" \
     python3 "$ROOT/scripts/phase6c-delayed-retrigger-render-evidence.py" candidate-check \
     "$ARTIFACT"
+
+run_logged "$OUT/sampulse-execution-fixture-build.log" \
+    gcc "${COMMON_CFLAGS[@]}" "${LUA_CFLAGS[@]}" \
+    "$ROOT/tests/phase6c_delayed_retrigger_sampulse_execution_fixture.c" \
+    -o "$BUILD/phase6c-delayed-retrigger-sampulse-execution-fixture" \
+    "${COMMON_LDFLAGS[@]}" "${LUA_LIBS[@]}"
+
+run_logged "$OUT/sampulse-execution-fixture-generator.log" \
+    "$BUILD/phase6c-delayed-retrigger-sampulse-execution-fixture" "$OUT"
+
+SAMPULSE_FIXTURE="$OUT/phase6c-delayed-retrigger-sampulse-execution.psy"
+[[ -s "$SAMPULSE_FIXTURE" ]] || {
+    echo 'Sampulse execution witness was not generated' >&2
+    exit 2
+}
+[[ "$(head -c 8 "$SAMPULSE_FIXTURE")" == "PSY3SONG" ]] || {
+    echo 'Sampulse execution witness is not PSY3' >&2
+    exit 2
+}
 
 ISOLATION_OUT="$ARTIFACT/delayed-retrigger-isolation"
 mkdir "$ISOLATION_OUT"
@@ -242,3 +266,38 @@ run_logged "$OUT/candidate-collect.log" \
     "$ARTIFACT" "$BUILD/phase6c-delayed-retrigger-probe"
 run_logged "$OUT/candidate-validation.log" \
     python3 "$ROOT/scripts/phase6c-delayed-retrigger-evidence.py" candidate "$ARTIFACT"
+
+cp "$ROOT/tests/phase6c_delayed_retrigger_sampulse_render.pro" "$RENDER_STAGING/render.pro"
+set +e
+(
+    cd "$RENDER_STAGING"
+    qmake CONFIG-=shared CONFIG+=release \
+        "PROBE_BUILD_DIR=$BUILD" "REPO_ROOT=$ROOT" \
+        -o "$BUILD/Makefile.sampulse-render" "$RENDER_STAGING/render.pro"
+) >"$OUT/sampulse-render-qmake.log" 2>&1
+render_qmake_status=$?
+set -e
+if (( render_qmake_status != 0 )); then
+    cat "$OUT/sampulse-render-qmake.log" >&2
+    exit "$render_qmake_status"
+fi
+
+run_logged "$OUT/sampulse-render-build.log" \
+    make -C "$BUILD" -f "$BUILD/Makefile.sampulse-render" -j2
+
+SAMPULSE_RUNTIME_OUT="$ARTIFACT/delayed-retrigger-sampulse-runtime"
+mkdir "$SAMPULSE_RUNTIME_OUT"
+for attempt in 1 2; do
+    run_logged "$OUT/sampulse-candidate-render-${attempt}.log" \
+        env PSYCLE_THREADS=1 \
+        "$BUILD/phase6c-delayed-retrigger-sampulse-render" \
+        "$SAMPULSE_FIXTURE" \
+        "$SAMPULSE_RUNTIME_OUT/candidate-delayed-retrigger-sampulse-runtime-${attempt}.wav"
+done
+
+run_logged "$OUT/sampulse-runtime-candidate-receipt.log" \
+    python3 "$ROOT/scripts/phase6c-delayed-retrigger-same-witness.py" candidate \
+    "$ARTIFACT"
+run_logged "$OUT/sampulse-runtime-candidate-validation.log" \
+    python3 "$ROOT/scripts/phase6c-delayed-retrigger-same-witness.py" candidate-check \
+    "$ARTIFACT"
