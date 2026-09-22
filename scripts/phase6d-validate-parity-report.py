@@ -56,19 +56,19 @@ def die(message: str) -> None:
 
 
 def normalize_cell(value: str) -> str:
-    return re.sub(r"\\s+", " ", value.strip())
+    return re.sub(r"\s+", " ", value.strip())
 
 
 def normalize_evidence_text(value: str) -> str:
     value = value.lower().replace("`", "").replace("-", " ")
-    return re.sub(r"\\s+", " ", value.strip())
+    return re.sub(r"\s+", " ", value.strip())
 
 
 def evidence_sentences(value: str) -> list[str]:
     normalized = normalize_evidence_text(value)
     return [
         sentence.strip()
-        for sentence in re.split(r"[.;](?:\\s+|$)", normalized)
+        for sentence in re.split(r"[.;](?:\s+|$)", normalized)
         if sentence.strip()
     ]
 
@@ -111,9 +111,9 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
     )
     assert_positive_predicate(
         early,
-        r"\\b(?:survive|survives|survived|retain|retains|retained)\\b",
-        r"\\b(?:(?:do|does|did)\\s+not|never|fail(?:s|ed)?\\s+to)\\s+"
-        r"(?:survive|retain)\\b|\\bnot\\s+(?:survive|retain)\\b",
+        r"\b(?:survive|survives|survived|retain|retains|retained)\b",
+        r"\b(?:(?:do|does|did)\s+not|never|fail(?:s|ed)?\s+to)\s+"
+        r"(?:survive|retain)\b|\bnot\s+(?:survive|retain)\b",
         context + " early controls",
     )
 
@@ -124,9 +124,9 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
     )
     assert_positive_predicate(
         enabled,
-        r"\\bexit(?:s|ed)?\\b",
-        r"\\b(?:(?:do|does|did)\\s+not|never|fail(?:s|ed)?\\s+to)\\s+"
-        r"exit\\b|\\bnot\\s+exit\\b",
+        r"\bexit(?:s|ed)?\b",
+        r"\b(?:(?:do|does|did)\s+not|never|fail(?:s|ed)?\s+to)\s+"
+        r"exit\b|\bnot\s+exit\b",
         context + " enabled-sample variants",
     )
     if "0xc0000005" not in enabled or "zero byte" not in enabled:
@@ -138,14 +138,14 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
     normalized = normalize_evidence_text(value)
     serialized_not_boundary = (
         re.search(
-            r"serialized instrument state\\s+(?:is|was)\\s+not\\s+"
-            r"(?:the\\s+)?differentiator",
+            r"serialized instrument state\s+(?:is|was)\s+not\s+"
+            r"(?:the\s+)?differentiator",
             normalized,
         )
         is not None
         or re.search(
-            r"boundary\\s+(?:is|was)\\s+enabled sample voice startup\\s*,?\\s*"
-            r"not\\s+serialized instrument state",
+            r"boundary\s+(?:is|was)\s+enabled sample voice startup\s*,?\s*"
+            r"not\s+serialized instrument state",
             normalized,
         )
         is not None
@@ -156,15 +156,15 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
             "the differentiating boundary"
         )
     if re.search(
-        r"serialized instrument state\\s+(?:is|was)\\s+"
-        r"(?:the\\s+)?differentiator",
+        r"serialized instrument state\s+(?:is|was)\s+"
+        r"(?:the\s+)?differentiator",
         normalized,
     ):
         die(f"{context} contradicts the serialized-instrument boundary result")
 
     if re.search(
         r"(?:isolate|boundary).{0,160}voice::tick.{0,160}"
-        r"(?:versus|vs\\.?).{0,80}(?:first\\s+)?voice::work",
+        r"(?:versus|vs\.?).{0,80}(?:first\s+)?voice::work",
         normalized,
     ) is None:
         die(
