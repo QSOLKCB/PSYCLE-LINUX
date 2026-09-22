@@ -116,6 +116,12 @@ run_logged "$OUT/sampulse-execution-fixture-generator.log" \
     "$BUILD/phase6c-delayed-retrigger-sampulse-execution-fixture" "$OUT"
 
 SAMPULSE_FIXTURE="$OUT/phase6c-delayed-retrigger-sampulse-execution.psy"
+MODERN_SAMPULSE_FIXTURE="$BUILD/phase6c-delayed-retrigger-sampulse-execution-modern.psy"
+mv "$SAMPULSE_FIXTURE" "$MODERN_SAMPULSE_FIXTURE"
+run_logged "$OUT/sampulse-eins-compat.log" \
+    python3 "$ROOT/scripts/phase6c-sampulse-eins-compat.py" \
+    "$MODERN_SAMPULSE_FIXTURE" "$SAMPULSE_FIXTURE"
+
 [[ -s "$SAMPULSE_FIXTURE" ]] || {
     echo 'Sampulse execution witness was not generated' >&2
     exit 2
