@@ -118,4 +118,78 @@ with tempfile.TemporaryDirectory() as temporary:
     else:
         raise AssertionError("expected observed-output binding failure")
 
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    output_dir = root / "delayed-retrigger-execution"
+    output_dir.mkdir()
+
+    first_name = "original-delayed-retrigger-execution-1.wav"
+    first_path = output_dir / first_name
+    first_data = b"completed-render"
+    first_path.write_bytes(first_data)
+    first_hash = hashlib.sha256(first_data).hexdigest()
+    first_binding = {
+        "path": "delayed-retrigger-execution/" + first_name,
+        "sha256": first_hash,
+    }
+    first_attempt = {
+        "outcome": "rendered",
+        "command_verified": True,
+        "command_dispatched": True,
+        "dialog_verified": True,
+        "controls_configured": True,
+        "save_invoked": True,
+        "process_exited": False,
+        "process_exit_code": None,
+        "output": {"path": first_name, "sha256": first_hash},
+    }
+
+    second_name = "original-delayed-retrigger-execution-2.wav"
+    second_path = output_dir / second_name
+    second_path.write_bytes(b"")
+    second_hash = hashlib.sha256(b"").hexdigest()
+    second_attempt = {
+        "outcome": "inconclusive",
+        "command_verified": True,
+        "command_dispatched": True,
+        "dialog_verified": True,
+        "controls_configured": True,
+        "save_invoked": True,
+        "process_exited": True,
+        "process_exit_code": -1073741819,
+        "output": None,
+        "diagnostics": ["reference exited during offline render"],
+        "observed_output": {
+            "path": second_name,
+            "size_bytes": 0,
+            "sha256": second_hash,
+        },
+    }
+    receipt = {
+        "load_result": "inconclusive",
+        "observation": "reference-process-exited-before-harness-termination",
+        "exit_code_before_termination": -1073741819,
+    }
+    runtime = {
+        "deterministic": False,
+        "renders": [first_binding],
+    }
+    exit_evidence = module.validate_process_exit_runtime(
+        root, receipt, runtime, [first_attempt, second_attempt]
+    )
+    assert exit_evidence["attempt_number"] == 2
+    assert exit_evidence["completed_render_count"] == 1
+    assert exit_evidence["completed_render_sha256"] == [first_hash]
+    assert exit_evidence["observed_output"]["path"].endswith(second_name)
+
+    try:
+        module.validate_process_exit_runtime(
+            root, receipt, {"deterministic": False, "renders": []},
+            [first_attempt, second_attempt],
+        )
+    except ValueError as exc:
+        assert "partial-render shape" in str(exc)
+    else:
+        raise AssertionError("expected second-render exit shape failure")
+
 print("phase6c-delayed-retrigger-render: PASS")
