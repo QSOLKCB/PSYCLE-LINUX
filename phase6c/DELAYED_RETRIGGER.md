@@ -293,6 +293,57 @@ This substrate evidence still does **not** provide a command-bearing original
 runtime output and does not change `sequencer-delayed-retrigger` from
 `UNKNOWN`.
 
+## Sampler voice-startup isolation
+
+The next additive lane binds its interpretation directly to original Psycle
+source commit `7ac6d2c3553e2ee8dda55814d8e689919c345478`. The evidence receipt pins
+`Sampler.cpp` blob `6cc0bd7328d01131c3d41b68f4e5d4189959e364` and
+`Song.cpp` blob `9ed00469d29d0a5714cc7b86175d0dc4c6048e3a`.
+
+The pinned source establishes these gates:
+
+- the Sampler constructor initializes every `lastInstrument[]` entry to 255;
+- instrument `FF` with no previous instrument returns before sample lookup;
+- a disabled/missing sample slot returns before voice selection;
+- an enabled sample advances through `GetFreeVoice()` into `Voice::Tick()`;
+- original Song construction allocates a default legacy `Instrument` for every slot;
+- `Voice::Tick()` resolves that instrument and binds the enabled sample before audio work.
+
+Four fresh-process PSY3 fixtures advance through those boundaries:
+
+1. `note-no-previous-inst` — note 60, instrument `FF`; sample 0 is present but
+   the source-pinned no-previous-instrument gate must return first;
+2. `note-missing-sample` — note 60, instrument 1; sample 1 is absent, so the
+   source-pinned sample-enabled gate must return before voice selection;
+3. `note-sample-default-inst` — note 60, sample 0 enabled, no serialized
+   C-Psycle instrument state; original Psycle uses its constructor-created
+   default legacy Instrument and enters voice startup;
+4. `note-sample-serialized-inst` — the same enabled sample plus serialized
+   instrument state.
+
+Workflow `35734490424` at evidence head
+`c4c4b55900d1444cbe644345e559067d3996c532` completes both candidate and
+pinned-Windows validation. The first two controls keep the reference process
+alive and each produce the same finalized 154,412-byte silent mono PCM output
+(SHA-256
+`bfcdb0b89773f22484650ad80fc52354ee7c584f89c272d0e8f67ee5546a6e8c`,
+77,184 zero-valued frames). Both enabled-sample rungs instead reach verified
+Save Wave dispatch, exit with Windows status `0xC0000005`
+(`-1073741819`), and retain zero-byte outputs.
+
+The derived diagnosis is
+`enabled-sample-voice-startup-associated-exit`. In particular, serialized
+C-Psycle instrument state is **not** the differentiator: the constructor-default
+original Instrument crashes at the same boundary. The next diagnostic rung
+must therefore split the operations after `samples.IsEnabled()`: voice
+selection / `Voice::Tick()` setup versus the first `Voice::Work()` audio
+operation. This remains an association boundary rather than proof that any one
+statement inside those functions is the unique fault.
+
+This result still does **not** provide a command-bearing delayed/retrigger
+runtime output and does not change `sequencer-delayed-retrigger` from
+`UNKNOWN`.
+
 ## Epistemic boundary
 
 The three evidence roles remain separate:
