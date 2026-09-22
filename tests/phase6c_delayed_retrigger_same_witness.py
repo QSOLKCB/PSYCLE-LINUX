@@ -224,6 +224,13 @@ with tempfile.TemporaryDirectory() as temporary:
         "post-dispatch dialog evidence",
     )
 
+    extra_observed_attempt = dict(completed_attempt)
+    extra_observed_attempt["render_dialog_post_dispatch_observed_window_event_count"] = 2
+    expect_value_error(
+        lambda: m.validate_original_attempt(root, extra_observed_attempt, 1),
+        "post-dispatch dialog evidence",
+    )
+
     missing_boundary_attempt = dict(completed_attempt)
     missing_boundary_attempt["render_dialog_dispatch_boundary_set"] = False
     expect_value_error(
