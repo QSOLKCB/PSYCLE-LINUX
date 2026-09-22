@@ -144,6 +144,41 @@ class ParityReportSummary(unittest.TestCase):
         )
         self.check(False)
 
+    def test_delayed_work_boundary_release_control_negation_is_rejected(self):
+        self.mutate_report(
+            "enabled-sample release/no-active-voice control survives",
+            "enabled-sample release/no-active-voice control does not survive",
+        )
+        self.check(False)
+
+    def test_delayed_work_boundary_exit_negation_is_rejected(self):
+        self.mutate_report(
+            "one-row `E-DF`, four-beat `E-DF`, and one-row ordinary-note fixtures all exit",
+            "one-row `E-DF`, four-beat `E-DF`, and one-row ordinary-note fixtures do not exit",
+        )
+        self.check(False)
+
+    def test_delayed_work_boundary_non_zero_output_is_rejected(self):
+        self.mutate_report(
+            "all exit with `0xC0000005` and zero-byte output",
+            "all exit with `0xC0000005` and non-zero-byte output",
+        )
+        self.check(False)
+
+    def test_delayed_work_boundary_controller_work_reversal_is_rejected(self):
+        self.mutate_report(
+            "it cannot reach `controller.Work`",
+            "it can reach `controller.Work`",
+        )
+        self.check(False)
+
+    def test_delayed_work_boundary_voice_work_reversal_is_rejected(self):
+        self.mutate_report(
+            "the current boundary is `Voice::Tick` initialization itself, not first `Voice::Work`",
+            "the current boundary is first `Voice::Work`, not `Voice::Tick` initialization",
+        )
+        self.check(False)
+
 
 if __name__ == "__main__":
     unittest.main()
