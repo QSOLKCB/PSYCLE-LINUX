@@ -2,7 +2,7 @@
 
 ## Status
 
-**Stronger original execution observer implemented; compatibility remains `UNKNOWN`.**
+**Original runtime execution-attempt observer implemented; compatibility remains `UNKNOWN`.**
 
 This slice follows the classified BPM/LPB/tick result and measures the next
 independent matrix contract, `sequencer-delayed-retrigger`. The final PR #69
@@ -13,9 +13,12 @@ under `phase6c/evidence/sequencer-delayed-retrigger/`.
 That comparison still deliberately does **not** promote the matrix row. The
 candidate has runtime scheduling evidence; the versioned original side has
 native fixture-acceptance evidence plus separately pinned source semantics.
-This follow-on adds the missing *observer implementation* for original runtime
-execution, but no new `PASS`, `DIFFERENT` or `MISSING` verdict is permitted
-until a clean run is versioned and its timing evidence is compared like-for-like.
+This follow-on adds the missing *execution-attempt observer* for original
+runtime behaviour. The pinned reference must first pass the existing clean-load
+gate before the observer touches the renderer. A renderer failure is retained as
+an original-runtime observation, not converted into command-execution evidence.
+No new `PASS`, `DIFFERENT` or `MISSING` verdict is permitted until a
+command-bearing original runtime output exists and is compared like-for-like.
 
 ## Project-authored fixture
 
@@ -158,18 +161,26 @@ by the pinned original resource definitions. Each render is forced to:
 - dither off;
 - separated track/wire/generator outputs off.
 
-The exact witness is rendered twice in the same pinned reference process. The
-validator requires both WAV files to be byte-identical, parses the RIFF/PCM
-payload directly, and requires multiple distinct impulse onsets in both the
-`FB` and `FA` beat windows. Failure, ambiguity, a changed UI identity,
-non-deterministic output, an unexpected WAV format, or missing retrigger-family
-impulses leaves the execution observation inconclusive.
+The first render attempt records the exact process and output state after Save
+Wave is dispatched. If that render succeeds and the reference remains alive,
+the observer repeats the render in the same process. Only two byte-identical
+WAV files that pass RIFF/PCM validation and expose multiple distinct impulse
+onsets in both the `FB` and `FA` beat windows are allowed to set
+`runtime_command_execution_observed: true`.
 
-This establishes a deterministic original-runtime **execution output** without
-pretending it already proves exact scheduling parity. The analyzer therefore
-writes `parity_status: UNKNOWN`. The next rung is to version a clean witness
-run, bind the original runtime receipt, and only then compare the observed onset
-timing with the already-frozen candidate scheduling evidence.
+If the reference process exits during the verified render attempt, the observer
+instead retains the pre-render clean-load predicate, non-zero process exit code,
+exact diagnostic and hash/size binding for any created output. That path writes
+`runtime_command_execution_observed: false` and remains `UNKNOWN`; it cannot
+be used as a delayed/retrigger execution trace.
+
+The first pinned-Windows attempt exposed exactly that second case: Psycle
+1.12.0 reached the clean accepted-load gate and verified Save Wave dispatch,
+then exited during offline rendering before a valid waveform was produced.
+This is useful failure evidence, but it does **not** complete the original
+command-execution observation. The next rung remains obtaining a reproducible
+command-bearing original runtime output before comparing onset timing with the
+already-frozen candidate schedule.
 
 ## Epistemic boundary
 
