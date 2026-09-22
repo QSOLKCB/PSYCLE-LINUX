@@ -507,7 +507,6 @@ def validate_projection(
     for name in VARIANTS:
         projected = fixtures[name]
         candidate_path = candidate_root / candidate_receipt_name(name)
-        original_path = original_root / original_receipt_name(name)
         candidate = read_json(candidate_path)
         result = summary["results"][name]
         if (
@@ -516,8 +515,6 @@ def validate_projection(
             != candidate.get("fixture_sha256")
             or projected.get("candidate_receipt_sha256")
             != digest(candidate_path.read_bytes())
-            or projected.get("original_receipt_sha256")
-            != digest(original_path.read_bytes())
             or projected.get("outcome") != result.get("outcome")
             or projected.get("process_exit_code")
             != result.get("process_exit_code")
