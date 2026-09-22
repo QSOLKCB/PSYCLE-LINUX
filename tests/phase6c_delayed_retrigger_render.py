@@ -464,6 +464,39 @@ startup.validate_completed_render_attempt(
     valid_completed_attempt, "note-sample-default-inst"
 )
 
+teardown_only_completed_attempt = {
+    "outcome": "rendered",
+    "process_exited": False,
+    "process_exit_code": None,
+    "dialog_closed": False,
+    "close_control_seen": True,
+    "close_uia_invoked": True,
+    "close_native_fallback_invoked": True,
+    "close_wm_close_invoked": True,
+    "stable_output_polls": 4,
+    "diagnostics": [
+        "render output finalized and Close control was verified, "
+        "but dialog teardown did not complete"
+    ],
+}
+startup.validate_completed_render_attempt(
+    teardown_only_completed_attempt, "note-sample-default-inst"
+)
+work_boundary.validate_completed_render_attempt(
+    teardown_only_completed_attempt, "release-no-active-voice"
+)
+
+invalid_teardown_completed_attempt = dict(teardown_only_completed_attempt)
+invalid_teardown_completed_attempt["close_control_seen"] = False
+try:
+    startup.validate_completed_render_attempt(
+        invalid_teardown_completed_attempt, "note-sample-default-inst"
+    )
+except ValueError as exc:
+    assert "terminal completion evidence" in str(exc)
+else:
+    raise AssertionError("expected unverified teardown-only completion rejection")
+
 valid_exit_receipt = {
     "exit_code_before_termination": startup.EXPECTED_ACCESS_VIOLATION_EXIT_CODE,
 }
@@ -682,6 +715,18 @@ with tempfile.TemporaryDirectory() as projection_temp:
     finally:
         work_boundary.PROJECTION = saved_projection
         work_boundary.ROOT = saved_root
+
+with tempfile.TemporaryDirectory() as rerun_candidate_temp, tempfile.TemporaryDirectory() as rerun_original_temp:
+    projection_path, projection_mode = work_boundary.projection_for_run(
+        Path(rerun_candidate_temp),
+        Path(rerun_original_temp),
+        {},
+        False,
+    )
+    assert projection_path == (
+        "phase6c/evidence/sequencer-sampler-work-boundary/observation.json"
+    )
+    assert projection_mode == "fresh-rerun-semantic-only"
 
 assert work_boundary.diagnose({
     "release-no-active-voice": "stable-finalized-output-process-alive",
