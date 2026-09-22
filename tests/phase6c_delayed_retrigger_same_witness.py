@@ -142,10 +142,13 @@ with tempfile.TemporaryDirectory() as temporary:
         "controls_configured": True,
         "save_invoked": True,
         "render_dialog_native_event_hook_armed": True,
+        "render_dialog_event_message_pump_started": True,
         "render_dialog_dispatch_boundary_set": True,
         "render_dialog_dispatch_boundary_tick": 123456,
+        "render_dialog_post_dispatch_observed_window_event_count": 1,
+        "render_dialog_unresolved_post_dispatch_event_count": 0,
         "render_dialog_post_dispatch_event_count": 1,
-        "dialog_discovery": "win-event-object-show-after-dispatch-tick-boundary",
+        "dialog_discovery": "pumped-win-event-object-show-strictly-after-dispatch-tick",
         "preexisting_render_dialog_count": 1,
         "selected_render_dialog_native_handle": 12345,
         "selected_render_dialog_runtime_id": [1, 2, 3],
@@ -183,6 +186,13 @@ with tempfile.TemporaryDirectory() as temporary:
         "post-dispatch dialog evidence",
     )
 
+    unpumped_attempt = dict(completed_attempt)
+    unpumped_attempt["render_dialog_event_message_pump_started"] = False
+    expect_value_error(
+        lambda: m.validate_original_attempt(root, unpumped_attempt, 1),
+        "post-dispatch dialog evidence",
+    )
+
     stale_discovery_attempt = dict(completed_attempt)
     stale_discovery_attempt["dialog_discovery"] = (
         "window-opened-event-after-successful-command-dispatch"
@@ -196,6 +206,21 @@ with tempfile.TemporaryDirectory() as temporary:
     ambiguous_event_attempt["render_dialog_post_dispatch_event_count"] = 2
     expect_value_error(
         lambda: m.validate_original_attempt(root, ambiguous_event_attempt, 1),
+        "post-dispatch dialog evidence",
+    )
+
+    unresolved_event_attempt = dict(completed_attempt)
+    unresolved_event_attempt["render_dialog_unresolved_post_dispatch_event_count"] = 1
+    unresolved_event_attempt["render_dialog_post_dispatch_observed_window_event_count"] = 2
+    expect_value_error(
+        lambda: m.validate_original_attempt(root, unresolved_event_attempt, 1),
+        "post-dispatch dialog evidence",
+    )
+
+    empty_observed_attempt = dict(completed_attempt)
+    empty_observed_attempt["render_dialog_post_dispatch_observed_window_event_count"] = 0
+    expect_value_error(
+        lambda: m.validate_original_attempt(root, empty_observed_attempt, 1),
         "post-dispatch dialog evidence",
     )
 
