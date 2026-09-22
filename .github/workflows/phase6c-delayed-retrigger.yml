@@ -121,6 +121,9 @@ jobs:
       - name: Check Sampler fault-location negative controls
         run: python3 tests/phase6c_sampler_fault_location.py
 
+      - name: Check same-witness Sampulse render negative controls
+        run: python3 tests/phase6c_delayed_retrigger_same_witness.py
+
       - name: Validate versioned compatibility matrix
         run: python3 scripts/phase6c-validate-matrix.py phase6c/compatibility-matrix.json
 
@@ -385,6 +388,12 @@ jobs:
           python scripts/phase6c-sampler-fault-location.py candidate-check `
             phase6c-command-candidate
           if ($LASTEXITCODE -ne 0) { throw "Sampler fault-location candidate validation failed" }
+          python scripts/phase6c-delayed-retrigger-same-witness.py candidate-check `
+            phase6c-command-candidate
+          if ($LASTEXITCODE -ne 0) { throw "same-witness Sampulse candidate validation failed" }
+          python scripts/phase6c-delayed-retrigger-same-witness.py original `
+            phase6c-command-candidate phase6c-command-original
+          if ($LASTEXITCODE -ne 0) { throw "same-witness Sampulse original validation failed" }
           if ($collectFaultLocation) {
             python scripts/phase6c-sampler-fault-location.py original `
               phase6c-command-candidate phase6c-command-original
