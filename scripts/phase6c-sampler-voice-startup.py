@@ -317,6 +317,22 @@ def require_attempt_prefix(attempt: object, name: str) -> dict:
     return attempt
 
 
+def validate_completed_render_attempt(attempt: dict, name: str) -> None:
+    if (
+        attempt.get("outcome") != "rendered"
+        or attempt.get("process_exited") is not False
+        or attempt.get("process_exit_code") is not None
+        or attempt.get("dialog_closed") is not True
+        or not isinstance(attempt.get("stable_output_polls"), int)
+        or isinstance(attempt.get("stable_output_polls"), bool)
+        or attempt["stable_output_polls"] < 4
+        or attempt.get("diagnostics") != []
+    ):
+        raise ValueError(
+            f"{name}: completed render lacks terminal completion evidence"
+        )
+
+
 def validate_observed_output(
     original_root: Path,
     name: str,
@@ -487,14 +503,9 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         outcome = runtime.get("outcome")
 
         if outcome == "rendered-once":
-            if (
-                load_result != "accepted"
-                or attempt.get("outcome") != "rendered"
-                or attempt.get("process_exited") is not False
-                or attempt.get("process_exit_code") is not None
-                or len(renders) != 1
-            ):
+            if load_result != "accepted" or len(renders) != 1:
                 raise ValueError(f"{name}: completed render state inconsistent")
+            validate_completed_render_attempt(attempt, name)
             expected_relative = f"sampler-voice-startup-{name}/" + filename
             output = attempt.get("output")
             if (
