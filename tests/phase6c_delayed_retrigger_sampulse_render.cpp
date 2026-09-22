@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
                         static_cast<std::size_t>(target_frames) * 2u, 0.0f);
                     psycle::core::Master& master =
                         static_cast<psycle::core::Master&>(
-                            *song.machine(MASTER_INDEX));
+                            *song.machine(psycle::core::MASTER_INDEX));
                     master._pMasterSamples = master_output.data();
 
                     psycle::core::Sequencer sequencer;
