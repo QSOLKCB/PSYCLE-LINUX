@@ -273,26 +273,44 @@ render_helper_source = ORIGINAL_AUDIO_RENDER_SCRIPT.read_text(encoding="utf-8")
 assert "$preexistingRenderDialogHandles" not in render_helper_source
 assert "Test-Phase6cSameAutomationElement" not in render_helper_source
 assert "[System.Windows.Automation.Automation]::Compare" not in render_helper_source
-assert "WindowPattern.WindowOpenedEvent" in render_helper_source
+assert "Automation.AddAutomationEventHandler" not in render_helper_source
+assert "WindowPattern.WindowOpenedEvent" not in render_helper_source
+assert "SetWinEventHook" in render_helper_source
+assert "EVENT_OBJECT_SHOW" in render_helper_source
+assert "eventTime" in render_helper_source
+assert "GetTickCount" in render_helper_source
+assert "TickAtOrAfter(eventTime, dispatchBoundaryTick)" in render_helper_source
 assert "Phase6cRenderWindowOpenedObserver" in render_helper_source
-assert "ArmAfterSuccessfulDispatch" in render_helper_source
-assert "render_dialog_open_event_armed" in render_helper_source
+assert "BeginDispatchBoundary" in render_helper_source
+assert "CancelDispatchBoundary" in render_helper_source
+assert "render_dialog_native_event_hook_armed" in render_helper_source
 assert "render_dialog_dispatch_boundary_set" in render_helper_source
+assert "render_dialog_dispatch_boundary_tick" in render_helper_source
 assert "render_dialog_post_dispatch_event_count" in render_helper_source
 assert "catch [System.Windows.Automation.ElementNotAvailableException]" in render_helper_source
 assert "selected_render_dialog_native_handle" in render_helper_source
 assert "selected_render_dialog_runtime_id" in render_helper_source
 assert (
-    "window-opened-event-after-successful-command-dispatch"
+    "win-event-object-show-after-dispatch-tick-boundary"
     in render_helper_source
 )
 
+invoke_start = render_helper_source.index("public static bool Invoke(")
+invoke_end = render_helper_source.index("public static string SetText(", invoke_start)
+invoke_source = render_helper_source[invoke_start:invoke_end]
+boundary_index = invoke_source.index("observer.BeginDispatchBoundary();")
+post_index = invoke_source.index("PostMessage(")
+assert boundary_index < post_index
+assert "observer.CancelDispatchBoundary();" in invoke_source
+
 dispatch_index = render_helper_source.index("$result.command_dispatched = $true")
-arm_index = render_helper_source.index("$dialogObserver.ArmAfterSuccessfulDispatch()")
-wait_index = render_helper_source.index(
-    "$dialog = Wait-Phase6cOpenedRenderDialog $dialogObserver 40"
+tick_index = render_helper_source.index(
+    "$result.render_dialog_dispatch_boundary_tick = [uint32]("
 )
-assert dispatch_index < arm_index < wait_index
+wait_index = render_helper_source.index(
+    "$dialog = Wait-Phase6cOpenedRenderDialog $Process $dialogObserver 40"
+)
+assert dispatch_index < tick_index < wait_index
 
 wait_start = render_helper_source.index("function Wait-Phase6cOpenedRenderDialog(")
 wait_end = render_helper_source.index(
@@ -301,6 +319,7 @@ wait_end = render_helper_source.index(
 wait_source = render_helper_source[wait_start:wait_end]
 assert "Start-Sleep -Milliseconds 100" not in wait_source
 assert "$Observer.ThrowIfAmbiguous()" in wait_source
+assert "TakeNextHandle" in wait_source
 
 assert render_helper_source.count("$dialogObserver.ThrowIfAmbiguous()") >= 3
 assert "$dialogObserver.Seal()" in render_helper_source
