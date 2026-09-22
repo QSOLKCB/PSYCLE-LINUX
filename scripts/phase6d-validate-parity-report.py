@@ -98,7 +98,7 @@ def assert_positive_predicate(
     context: str,
 ) -> None:
     subject_negation = re.search(
-        r"\b(?:neither|none|no)\b",
+        r"\b(?:neither|none)\b",
         sentence,
         re.IGNORECASE,
     )
