@@ -68,6 +68,14 @@ def main() -> None:
             load_warning_required = $true
             expected_load_warning_message = "This file is from a newer version of Psycle! This process will try to load it anyway."
         }
+        $fixtureSpecs += [ordered]@{
+            name = "delayed-retrigger-sampulse-runtime"
+            candidate_receipt = "candidate-delayed-retrigger-sampulse-runtime.json"
+            expected_contract = "sequencer-delayed-retrigger-same-witness-render"
+            expected_song_title = "PSYCLE-LINUX Phase 6C delayed/retrigger Sampulse execution witness"
+            load_warning_required = $true
+            expected_load_warning_message = "This file is from a newer version of Psycle! This process will try to load it anyway."
+        }
         foreach ($isolationVariant in @("control", "fd", "fb", "fa", "fe")) {
             $variantLabel = if ($isolationVariant -eq "control") {
                 "control"
@@ -314,6 +322,86 @@ def main() -> None:
             }
         }
 
+
+        if ($ObserveDelayedRetrigger -and
+            $spec.name -eq "delayed-retrigger-sampulse-runtime") {
+            $renderDirectory = Join-Path $outRoot "delayed-retrigger-sampulse-runtime"
+            if (-not (Test-Path -LiteralPath $renderDirectory)) {
+                New-Item -ItemType Directory -Path $renderDirectory | Out-Null
+            }
+            $preRenderLoad = [ordered]@{
+                schema_version = 1
+                clean_accepted_load = [bool]$cleanAcceptedLoadEvidence
+                stable_marker_polls = $stableMarkerPolls
+                matched_marker = $matchedMarker
+                load_warning_dismissed = [bool]$loadWarningBootstrap.dismissed
+                process_running_before_render = [bool]$processRunningBeforeTermination
+            }
+            $renderSettings = [ordered]@{
+                sample_rate = 44100
+                bits_per_sample = 16
+                channels = "mono-mix"
+                dither = $false
+                range = "entire-song"
+            }
+            if ($cleanAcceptedLoadEvidence -and [bool]$loadWarningBootstrap.dismissed) {
+                $renderOnePath = Join-Path $renderDirectory "original-delayed-retrigger-sampulse-runtime-1.wav"
+                $renderTwoPath = Join-Path $renderDirectory "original-delayed-retrigger-sampulse-runtime-2.wav"
+                $renderOne = Invoke-Phase6cAudioRender $process $windowTitle $renderOnePath
+                $attempts = @($renderOne)
+                $renderBindings = @()
+                if ($renderOne.outcome -eq "rendered" -and $null -ne $renderOne.output) {
+                    $renderBindings += [ordered]@{
+                        path = "delayed-retrigger-sampulse-runtime/$($renderOne.output.path)"
+                        sha256 = [string]$renderOne.output.sha256
+                    }
+                    $process.Refresh()
+                    if (-not $process.HasExited) {
+                        $renderTwo = Invoke-Phase6cAudioRender $process $windowTitle $renderTwoPath
+                        $attempts += $renderTwo
+                        if ($renderTwo.outcome -eq "rendered" -and $null -ne $renderTwo.output) {
+                            $renderBindings += [ordered]@{
+                                path = "delayed-retrigger-sampulse-runtime/$($renderTwo.output.path)"
+                                sha256 = [string]$renderTwo.output.sha256
+                            }
+                        }
+                    }
+                }
+                $deterministic = (
+                    $renderBindings.Count -eq 2 -and
+                    [string]$renderBindings[0].sha256 -ceq [string]$renderBindings[1].sha256
+                )
+                $lastAttempt = $attempts[-1]
+                $runtimeOutcome = if ($deterministic) {
+                    "rendered-twice"
+                } elseif ([bool]$lastAttempt.save_invoked -and [bool]$lastAttempt.process_exited) {
+                    "reference-process-exited-during-render"
+                } else {
+                    "inconclusive"
+                }
+                $runtimeExecution = [ordered]@{
+                    schema_version = 1
+                    outcome = $runtimeOutcome
+                    deterministic = $deterministic
+                    pre_render_load = $preRenderLoad
+                    settings = $renderSettings
+                    renders = @($renderBindings)
+                    attempts = @($attempts)
+                }
+            } else {
+                $runtimeExecution = [ordered]@{
+                    schema_version = 1
+                    outcome = "inconclusive"
+                    deterministic = $false
+                    pre_render_load = $preRenderLoad
+                    settings = $renderSettings
+                    renders = @()
+                    attempts = @()
+                    diagnostics = @("clean accepted load and dismissed Load Warning are required before same-witness Sampulse rendering")
+                }
+            }
+        }
+
         if ($ObserveDelayedRetrigger -and
             [string]$spec.name -like "delayed-retrigger-isolation-*") {
             $renderDirectory = Join-Path $outRoot ([string]$spec.name)
@@ -520,6 +608,8 @@ def main() -> None:
         '                "$Procedure; after a fresh clean accepted load of the exact short Sampler-local E-DF witness, attach only a preinstalled hash-bound x86 cdb debugger before Save Wave; capture the second-chance c0000005 exception address and a pre-render loaded-module map so a module-relative offset can be derived without requiring symbols; missing tools, attach failure, missing address, or unresolved module remain inconclusive; this diagnostic lane cannot promote parity or name a source function"\n'
         '            } elseif ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger-execution") {\n'
         '                "$Procedure; after the clean accepted-load gate, invoke only the source-pinned Psycle 1.12.0 Render as Wav File command and exact dialog controls; attempt the additive sampled command witness as mono 44.1 kHz 16-bit PCM with dither disabled; if the first render succeeds, repeat it for deterministic waveform validation; if either attempted render exits the reference process, retain the exact process-exit/output evidence without promoting runtime command execution or parity"\n'
+        '            } elseif ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger-sampulse-runtime") {\n'
+        '                "$Procedure; after the clean accepted-load gate, render the exact four-beat XMSampler/Sampulse command-bearing witness twice through the same source-pinned Render as Wav File procedure as mono 44.1 kHz 16-bit PCM with dither disabled; require deterministic repeated output before the shared onset analyzer may mark original runtime command execution observed; exact onset timing remains unclassified"\n'
         '            } elseif ($ObserveDelayedRetrigger -and [string]$spec.name -like "delayed-retrigger-isolation-*") {\n'
         '                "$Procedure; after the clean accepted-load gate, invoke the same source-pinned Render as Wav File UI once for this fresh-process control-or-single-command sampled witness; retain either the hash-bound PCM output or exact process-exit/output evidence solely to isolate the PR #71 render failure; this diagnostic observation cannot promote delayed/retrigger parity"\n'
         '            } elseif ($ObserveDelayedRetrigger -and [string]$spec.name -like "delayed-retrigger-substrate-*") {\n'
