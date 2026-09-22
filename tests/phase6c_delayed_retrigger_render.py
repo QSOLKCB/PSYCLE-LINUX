@@ -32,6 +32,14 @@ assert substrate_spec is not None and substrate_spec.loader is not None
 substrate = importlib.util.module_from_spec(substrate_spec)
 substrate_spec.loader.exec_module(substrate)
 
+STARTUP_SCRIPT = ROOT / "scripts" / "phase6c-sampler-voice-startup.py"
+startup_spec = importlib.util.spec_from_file_location(
+    "phase6c_sampler_voice_startup", STARTUP_SCRIPT
+)
+assert startup_spec is not None and startup_spec.loader is not None
+startup = importlib.util.module_from_spec(startup_spec)
+startup_spec.loader.exec_module(startup)
+
 
 def wave_pcm16(frames: list[int], channels: int = 1, rate: int = 44100) -> bytes:
     if channels == 1:
@@ -353,5 +361,86 @@ with tempfile.TemporaryDirectory() as temporary:
     assert stable["frame_count"] == 64
     assert stable["nonzero_frame_count"] == 0
     assert stable["observed_output"]["sha256"] == hashlib.sha256(data).hexdigest()
+
+assert startup.diagnose({
+    "note-no-previous-inst": "reference-process-exited-during-render",
+    "note-missing-sample": "reference-process-exited-during-render",
+    "note-sample-default-inst": "reference-process-exited-during-render",
+    "note-sample-serialized-inst": "reference-process-exited-during-render",
+}) == "sampler-dispatch-before-instrument-resolution-associated-exit"
+
+assert startup.diagnose({
+    "note-no-previous-inst": "stable-finalized-output-process-alive",
+    "note-missing-sample": "reference-process-exited-during-render",
+    "note-sample-default-inst": "reference-process-exited-during-render",
+    "note-sample-serialized-inst": "reference-process-exited-during-render",
+}) == "explicit-instrument-or-sample-gate-associated-exit"
+
+assert startup.diagnose({
+    "note-no-previous-inst": "stable-finalized-output-process-alive",
+    "note-missing-sample": "stable-finalized-output-process-alive",
+    "note-sample-default-inst": "reference-process-exited-during-render",
+    "note-sample-serialized-inst": "reference-process-exited-during-render",
+}) == "enabled-sample-voice-startup-associated-exit"
+
+assert startup.diagnose({
+    "note-no-previous-inst": "stable-finalized-output-process-alive",
+    "note-missing-sample": "stable-finalized-output-process-alive",
+    "note-sample-default-inst": "stable-finalized-output-process-alive",
+    "note-sample-serialized-inst": "reference-process-exited-during-render",
+}) == "serialized-instrument-state-associated-exit"
+
+assert startup.diagnose({
+    "note-no-previous-inst": "stable-finalized-output-process-alive",
+    "note-missing-sample": "stable-finalized-output-process-alive",
+    "note-sample-default-inst": "stable-finalized-output-process-alive",
+    "note-sample-serialized-inst": "stable-finalized-output-process-alive",
+}) == "all-startup-gates-survive-known-crash-not-reproduced"
+
+assert startup.diagnose({
+    "note-no-previous-inst": "reference-process-exited-during-render",
+    "note-missing-sample": "stable-finalized-output-process-alive",
+    "note-sample-default-inst": "reference-process-exited-during-render",
+    "note-sample-serialized-inst": "reference-process-exited-during-render",
+}) == "nonmonotonic-startup-result"
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    name = "note-no-previous-inst"
+    output_dir = root / ("sampler-voice-startup-" + name)
+    output_dir.mkdir()
+    filename = "original-sampler-voice-startup-note-no-previous-inst-1.wav"
+    output = output_dir / filename
+    data = wave_pcm16([0] * 64)
+    output.write_bytes(data)
+    attempt = {
+        "process_exited": False,
+        "process_exit_code": None,
+        "dialog_closed": False,
+        "stable_output_polls": 4,
+        "observed_output": {
+            "path": filename,
+            "size_bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        },
+    }
+    stable = startup.validate_stable_alive_output(
+        root, name, attempt, filename, module
+    )
+    assert stable["frame_count"] == 64
+    assert stable["nonzero_frame_count"] == 0
+    assert stable["observed_output"]["sha256"] == hashlib.sha256(data).hexdigest()
+
+    bad = dict(attempt)
+    bad["observed_output"] = dict(attempt["observed_output"])
+    bad["observed_output"]["size_bytes"] += 1
+    try:
+        startup.validate_stable_alive_output(
+            root, name, bad, filename, module
+        )
+    except ValueError as exc:
+        assert "binding mismatch" in str(exc)
+    else:
+        raise AssertionError("expected startup stable-output binding failure")
 
 print("phase6c-delayed-retrigger-render: PASS")
