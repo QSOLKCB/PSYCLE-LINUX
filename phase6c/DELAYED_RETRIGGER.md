@@ -181,9 +181,13 @@ The first pinned-Windows attempt exposed exactly that second case: Psycle
 1.12.0 reached the clean accepted-load gate and verified Save Wave dispatch,
 then exited during offline rendering before a valid waveform was produced.
 This is useful failure evidence, but it does **not** complete the original
-command-execution observation. The next rung remains obtaining a reproducible
-command-bearing original runtime output before comparing onset timing with the
-already-frozen candidate schedule.
+command-execution observation. The next rung remains obtaining and versioning a
+reproducible command-bearing original runtime output from this sampled witness,
+then collecting candidate execution evidence from the **same** witness with a
+comparable rendered-onset procedure before any timing classification. The
+already-frozen PR #69 one-beat callback schedule remains preservation evidence;
+it is not a like-for-like comparison partner for this separate four-beat
+sampled witness.
 
 ## Epistemic boundary
 
