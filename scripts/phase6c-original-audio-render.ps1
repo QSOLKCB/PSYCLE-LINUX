@@ -264,7 +264,20 @@ function Test-Phase6cSameAutomationElement(
         return $false
     }
     try {
-        return [System.Windows.Automation.Automation]::Compare($Left, $Right)
+        if ($Right.Current.ProcessId -ne $Left.Current.ProcessId -or
+            $Right.Current.Name -cne $Left.Current.Name -or
+            $Right.Current.ControlType -ne $Left.Current.ControlType) {
+            return $false
+        }
+        $same = [System.Windows.Automation.Automation]::Compare($Left, $Right)
+        if (-not $same) {
+            return $false
+        }
+        # Re-read the retained element after Compare so a dialog that closed
+        # during the comparison is no longer treated as preexisting. This
+        # prevents a later window that reuses the old numeric HWND from being
+        # blacklisted for the rest of discovery.
+        return [long]$Right.Current.NativeWindowHandle -ne 0
     }
     catch [System.Windows.Automation.ElementNotAvailableException] {
         return $false
