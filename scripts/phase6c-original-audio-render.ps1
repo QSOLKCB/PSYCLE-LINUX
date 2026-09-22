@@ -20,6 +20,10 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
     private readonly object gate = new object();
     private readonly Queue<AutomationElement> opened = new Queue<AutomationElement>();
     private AutomationEventHandler handler;
+    private long eventSequence;
+    private long dispatchSequence;
+    private int postDispatchEventCount;
+    private bool dispatchBoundarySet;
     private bool disposed;
 
     public Phase6cRenderWindowOpenedObserver(uint processId)
@@ -36,6 +40,7 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
 
     private void OnWindowOpened(object sender, AutomationEventArgs args)
     {
+        long sequence = System.Threading.Interlocked.Increment(ref eventSequence);
         var element = sender as AutomationElement;
         if (element == null)
             return;
@@ -51,12 +56,38 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
                 return;
             lock (gate)
             {
-                if (!disposed)
+                if (!disposed &&
+                    dispatchBoundarySet &&
+                    sequence > dispatchSequence)
+                {
                     opened.Enqueue(element);
+                    postDispatchEventCount += 1;
+                }
             }
         }
         catch (ElementNotAvailableException)
         {
+        }
+    }
+
+    public void ArmAfterSuccessfulDispatch()
+    {
+        lock (gate)
+        {
+            if (disposed)
+                throw new ObjectDisposedException(
+                    "Phase6cRenderWindowOpenedObserver"
+                );
+            opened.Clear();
+            postDispatchEventCount = 0;
+            // Any callback that began before this point has a sequence at or
+            // below this cutoff, even if it was waiting to enter the gate.
+            // Only callbacks beginning after successful command dispatch are
+            // eligible for evidence.
+            dispatchSequence = System.Threading.Interlocked.Read(
+                ref eventSequence
+            );
+            dispatchBoundarySet = true;
         }
     }
 
@@ -86,17 +117,43 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
         return null;
     }
 
-    public void Dispose()
+    public int PostDispatchEventCount
     {
-        AutomationEventHandler remove = null;
+        get
+        {
+            lock (gate)
+            {
+                return postDispatchEventCount;
+            }
+        }
+    }
+
+    public void ThrowIfAmbiguous()
+    {
         lock (gate)
         {
-            if (disposed)
-                return;
-            disposed = true;
-            remove = handler;
-            handler = null;
-            opened.Clear();
+            if (postDispatchEventCount > 1)
+                throw new InvalidOperationException(
+                    "multiple post-dispatch Render as Wav File windows observed"
+                );
+        }
+    }
+
+    public int Seal()
+    {
+        AutomationEventHandler remove = null;
+        int count;
+        lock (gate)
+        {
+            count = postDispatchEventCount;
+            if (!disposed)
+            {
+                disposed = true;
+                dispatchBoundarySet = false;
+                remove = handler;
+                handler = null;
+                opened.Clear();
+            }
         }
         if (remove != null)
         {
@@ -106,6 +163,12 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
                 remove
             );
         }
+        return count;
+    }
+
+    public void Dispose()
+    {
+        Seal();
     }
 }
 
@@ -362,13 +425,9 @@ function Wait-Phase6cOpenedRenderDialog(
     [int]$Polls = 40
 ) {
     for ($poll = 0; $poll -lt $Polls; $poll++) {
+        $Observer.ThrowIfAmbiguous()
         $dialog = $Observer.TakeNext()
         if ($null -ne $dialog) {
-            Start-Sleep -Milliseconds 100
-            $extra = $Observer.TakeNext()
-            if ($null -ne $extra) {
-                throw "ambiguous newly opened Psycle Render as Wav File dialogs"
-            }
             return $dialog
         }
         if ($poll + 1 -lt $Polls) {
@@ -516,6 +575,8 @@ function Invoke-Phase6cAudioRender(
         close_wm_close_invoked = $false
         preexisting_render_dialog_count = 0
         render_dialog_open_event_armed = $false
+        render_dialog_dispatch_boundary_set = $false
+        render_dialog_post_dispatch_event_count = 0
         selected_render_dialog_native_handle = $null
         selected_render_dialog_runtime_id = @()
         dialog_discovery = $null
@@ -528,6 +589,7 @@ function Invoke-Phase6cAudioRender(
         diagnostics = @()
     }
     $diagnostics = [System.Collections.Generic.List[string]]::new()
+    $dialogObserver = $null
 
     try {
         $OutputPath = [System.IO.Path]::GetFullPath($OutputPath)
@@ -571,28 +633,26 @@ function Invoke-Phase6cAudioRender(
             [uint32]$Process.Id
         )
         $result.render_dialog_open_event_armed = $true
-        try {
-            if (-not [Phase6cRenderNative]::Invoke(
-                [uint32]$Process.Id,
-                $ExpectedTitle,
-                $matches[0]
-            )) {
-                throw "verified Render as Wav command dispatch failed"
-            }
-            $result.command_dispatched = $true
+        if (-not [Phase6cRenderNative]::Invoke(
+            [uint32]$Process.Id,
+            $ExpectedTitle,
+            $matches[0]
+        )) {
+            throw "verified Render as Wav command dispatch failed"
+        }
+        $result.command_dispatched = $true
+        $dialogObserver.ArmAfterSuccessfulDispatch()
+        $result.render_dialog_dispatch_boundary_set = $true
 
-            $dialog = Wait-Phase6cOpenedRenderDialog $dialogObserver 40
-            if ($null -eq $dialog) {
-                throw "Render as Wav File WindowOpenedEvent not observed"
-            }
+        $dialog = Wait-Phase6cOpenedRenderDialog $dialogObserver 40
+        if ($null -eq $dialog) {
+            throw "post-dispatch Render as Wav File WindowOpenedEvent not observed"
         }
-        finally {
-            $dialogObserver.Dispose()
-        }
+        $dialogObserver.ThrowIfAmbiguous()
         try {
             $result.selected_render_dialog_native_handle = [long]$dialog.Current.NativeWindowHandle
             $result.selected_render_dialog_runtime_id = @($dialog.GetRuntimeId())
-            $result.dialog_discovery = "window-opened-event-after-command"
+            $result.dialog_discovery = "window-opened-event-after-successful-command-dispatch"
         }
         catch [System.Windows.Automation.ElementNotAvailableException] {
             throw "newly opened Render as Wav File dialog became unavailable before binding"
@@ -658,6 +718,7 @@ function Invoke-Phase6cAudioRender(
         $previousHash = $null
         for ($poll = 0; $poll -lt 120; $poll++) {
             Start-Sleep -Milliseconds 250
+            $dialogObserver.ThrowIfAmbiguous()
             $Process.Refresh()
             if ($Process.HasExited) {
                 throw "reference exited during offline render"
@@ -756,6 +817,12 @@ function Invoke-Phase6cAudioRender(
         if (-not (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
             throw "offline render output missing after completion"
         }
+        $dialogObserver.ThrowIfAmbiguous()
+        $result.render_dialog_post_dispatch_event_count = $dialogObserver.Seal()
+        $dialogObserver = $null
+        if ($result.render_dialog_post_dispatch_event_count -ne 1) {
+            throw "offline render requires exactly one post-dispatch Render as Wav File event"
+        }
         $result.output = [ordered]@{
             path = [System.IO.Path]::GetFileName($OutputPath)
             sha256 = Get-Sha256 $OutputPath
@@ -764,6 +831,19 @@ function Invoke-Phase6cAudioRender(
     }
     catch {
         $diagnostics.Add($_.Exception.Message)
+    }
+    finally {
+        if ($null -ne $dialogObserver) {
+            try {
+                $result.render_dialog_post_dispatch_event_count = $dialogObserver.Seal()
+            }
+            catch {
+                $diagnostics.Add(
+                    "could not seal render-dialog observer: $($_.Exception.Message)"
+                )
+            }
+            $dialogObserver = $null
+        }
     }
 
     try {
