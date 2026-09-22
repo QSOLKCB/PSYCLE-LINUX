@@ -8,7 +8,9 @@ It targets the exact project-authored `delayed-note-short` Sampler-local
 `sequencer-sampler-work-boundary-isolation`. The ordinary Phase 6C workflow
 continues to run that fixture uninstrumented. A manual workflow dispatch with
 `sampler_fault_location=true` adds a second fresh-process observation after a
-clean accepted load.
+clean accepted load. For connector-driven evidence collection, the dedicated
+PR head branch `phase-6c/sampler-fault-location-observation` is an equivalent
+explicit opt-in; no other pull-request branch enables the debugger witness.
 
 The optional observation:
 
