@@ -270,13 +270,16 @@ with tempfile.TemporaryDirectory() as temporary:
     assert bound["path"].endswith(output.name)
 
 render_helper_source = ORIGINAL_AUDIO_RENDER_SCRIPT.read_text(encoding="utf-8")
-assert "$preexistingRenderDialogs" in render_helper_source
 assert "$preexistingRenderDialogHandles" not in render_helper_source
-assert "[System.Windows.Automation.Automation]::Compare" in render_helper_source
+assert "Test-Phase6cSameAutomationElement" not in render_helper_source
+assert "[System.Windows.Automation.Automation]::Compare" not in render_helper_source
+assert "WindowPattern.WindowOpenedEvent" in render_helper_source
+assert "Phase6cRenderWindowOpenedObserver" in render_helper_source
+assert "render_dialog_open_event_armed" in render_helper_source
 assert "catch [System.Windows.Automation.ElementNotAvailableException]" in render_helper_source
 assert "selected_render_dialog_native_handle" in render_helper_source
 assert "selected_render_dialog_runtime_id" in render_helper_source
-assert "new-after-command-excluding-live-preexisting-elements" in render_helper_source
+assert "window-opened-event-after-command" in render_helper_source
 
 assert substrate.diagnose({
     "master-only": "reference-process-exited-during-render",
