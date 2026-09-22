@@ -507,7 +507,14 @@ def validate_projection(
     for name in VARIANTS:
         projected = fixtures[name]
         candidate_path = candidate_root / candidate_receipt_name(name)
+        original_path = original_root / original_receipt_name(name)
         candidate = read_json(candidate_path)
+        try:
+            original_bytes = original_path.read_bytes()
+        except FileNotFoundError as exc:
+            raise ValueError(
+                f"Sampler work-boundary projection original receipt missing: {name}"
+            ) from exc
         result = summary["results"][name]
         if (
             not isinstance(projected, dict)
@@ -515,6 +522,8 @@ def validate_projection(
             != candidate.get("fixture_sha256")
             or projected.get("candidate_receipt_sha256")
             != digest(candidate_path.read_bytes())
+            or projected.get("original_receipt_sha256")
+            != digest(original_bytes)
             or projected.get("outcome") != result.get("outcome")
             or projected.get("process_exit_code")
             != result.get("process_exit_code")
