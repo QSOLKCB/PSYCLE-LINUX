@@ -67,6 +67,21 @@ def main() -> None:
             load_warning_required = $true
             expected_load_warning_message = "This file is from a newer version of Psycle! This process will try to load it anyway."
         }
+        foreach ($isolationVariant in @("control", "fd", "fb", "fa", "fe")) {
+            $variantLabel = if ($isolationVariant -eq "control") {
+                "control"
+            } else {
+                $isolationVariant.ToUpperInvariant()
+            }
+            $fixtureSpecs += [ordered]@{
+                name = "delayed-retrigger-isolation-$isolationVariant"
+                candidate_receipt = "candidate-delayed-retrigger-isolation-$isolationVariant.json"
+                expected_contract = "sequencer-delayed-retrigger-render-isolation"
+                expected_song_title = "PSYCLE-LINUX Phase 6C delayed/retrigger render isolation $variantLabel"
+                load_warning_required = $true
+                expected_load_warning_message = "This file is from a newer version of Psycle! This process will try to load it anyway."
+            }
+        }
     }
 '''
     text = replace_once(
