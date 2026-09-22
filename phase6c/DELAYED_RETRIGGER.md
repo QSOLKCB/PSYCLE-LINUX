@@ -237,6 +237,62 @@ Because the control fails identically, this evidence does **not** attribute the
 crash to `FD`, `FB`, `FA` or `FE`; the next investigation boundary is the
 shared sampled-fixture/original-render path itself.
 
+## Original render-substrate isolation
+
+The follow-on substrate ladder keeps every PR #69/#70 receipt, the PR #71 full
+execution witness and the PR #72 command-isolation witnesses unchanged. It
+creates four cumulative PSY3 fixtures and runs each in a fresh pinned Psycle
+process:
+
+1. `master-only` — Master plus the four-beat song geometry only;
+2. `sampler-empty` — adds the built-in Sampler wired to Master;
+3. `sample-state` — adds the deterministic 512-frame sample and instrument
+   state but no note;
+4. `ordinary-note` — adds one ordinary note at beat 0.
+
+The first complete substrate observation, workflow `35730075034` at evidence
+head `0a99e8a7af3aa2d714e1c85480d16ddaf62c9ab0`, establishes a narrower
+runtime boundary.
+
+The first three rungs all:
+
+- pass the clean original-reference load/identity gate;
+- reach verified Save Wave dispatch;
+- keep the Psycle process alive with no exit code;
+- produce the same finalized mono 44.1 kHz / 16-bit PCM WAV;
+- retain file size `154412` bytes and SHA-256
+  `bfcdb0b89773f22484650ad80fc52354ee7c584f89c272d0e8f67ee5546a6e8c`;
+- contain `77184` zero-valued PCM frames (about 1.7502 seconds);
+- remain byte-stable for at least four polls.
+
+Those controls are deliberately recorded as
+`stable-finalized-output-process-alive`, **not** as a normally completed
+Render-dialog transaction: the `Render as Wav File` dialog remained open and
+did not reach the helper's expected terminal Close state.
+
+The fourth rung changes only by adding one ordinary note. It reaches the same
+clean pre-render gate and verified Save Wave dispatch, then the reference
+process exits with Windows status `0xC0000005` (`-1073741819`) while the
+requested WAV remains zero bytes.
+
+Therefore the evidence does not implicate mere Sampler presence or embedded
+sample/instrument state. It narrows the observed process-exit boundary to an
+**ordinary-note-present Sampler execution path after three stable-output
+controls**. This is an association boundary, not a claim that note playback has
+already been proven as the unique root cause.
+
+Pinned original source is consistent with that next focus:
+`Player::StartRecording()` changes the offline sample rate before recording,
+`Player::SampleRate()` propagates that rate to every present machine, and
+`Player::Work()` executes sequencer notes before recursively processing the
+Master graph and writing the recording buffer. The next diagnostic step should
+therefore isolate ordinary-note routing / Sampler voice startup before
+returning to delayed/retrigger timing.
+
+This substrate evidence still does **not** provide a command-bearing original
+runtime output and does not change `sequencer-delayed-retrigger` from
+`UNKNOWN`.
+
 ## Epistemic boundary
 
 The three evidence roles remain separate:
