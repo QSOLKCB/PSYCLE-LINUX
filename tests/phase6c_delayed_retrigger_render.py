@@ -277,23 +277,49 @@ assert "Automation.AddAutomationEventHandler" not in render_helper_source
 assert "WindowPattern.WindowOpenedEvent" not in render_helper_source
 assert "SetWinEventHook" in render_helper_source
 assert "EVENT_OBJECT_SHOW" in render_helper_source
+assert "WINEVENT_OUTOFCONTEXT" in render_helper_source
+assert "GetMessage(" in render_helper_source
+assert "DispatchMessage(" in render_helper_source
+assert "PostThreadMessage(" in render_helper_source
+assert "Phase6cRenderWinEventPump" in render_helper_source
+assert "render_dialog_event_message_pump_started" in render_helper_source
 assert "eventTime" in render_helper_source
 assert "GetTickCount" in render_helper_source
-assert "TickAtOrAfter(eventTime, dispatchBoundaryTick)" in render_helper_source
+assert "TickStrictlyAfter(eventTime, dispatchBoundaryTick)" in render_helper_source
+assert "return unchecked((int)(value - boundary)) > 0;" in render_helper_source
 assert "Phase6cRenderWindowOpenedObserver" in render_helper_source
 assert "BeginDispatchBoundary" in render_helper_source
 assert "CancelDispatchBoundary" in render_helper_source
 assert "render_dialog_native_event_hook_armed" in render_helper_source
 assert "render_dialog_dispatch_boundary_set" in render_helper_source
 assert "render_dialog_dispatch_boundary_tick" in render_helper_source
+assert "render_dialog_post_dispatch_observed_window_event_count" in render_helper_source
+assert "render_dialog_unresolved_post_dispatch_event_count" in render_helper_source
 assert "render_dialog_post_dispatch_event_count" in render_helper_source
 assert "catch [System.Windows.Automation.ElementNotAvailableException]" in render_helper_source
 assert "selected_render_dialog_native_handle" in render_helper_source
 assert "selected_render_dialog_runtime_id" in render_helper_source
 assert (
-    "win-event-object-show-after-dispatch-tick-boundary"
+    "pumped-win-event-object-show-strictly-after-dispatch-tick"
     in render_helper_source
 )
+
+observer_start = render_helper_source.index("private void OnWinEvent(")
+observer_end = render_helper_source.index("private void FlushPump()", observer_start)
+observer_source = render_helper_source[observer_start:observer_end]
+count_index = observer_source.index("postDispatchObservedWindowEventCount += 1;")
+liveness_index = observer_source.index("GetWindowThreadProcessId(window, out owner)")
+assert count_index < liveness_index
+assert "unresolvedPostDispatchEventCount += 1;" in observer_source
+
+pump_start = render_helper_source.index("private void Pump()")
+pump_end = render_helper_source.index(
+    "private static bool TickStrictlyAfter", pump_start
+)
+pump_source = render_helper_source[pump_start:pump_end]
+assert "SetWinEventHook(" in pump_source
+assert "GetMessage(" in pump_source
+assert "DispatchMessage(" in pump_source
 
 invoke_start = render_helper_source.index("public static bool Invoke(")
 invoke_end = render_helper_source.index("public static string SetText(", invoke_start)
@@ -323,6 +349,10 @@ assert "TakeNextHandle" in wait_source
 
 assert render_helper_source.count("$dialogObserver.ThrowIfAmbiguous()") >= 3
 assert "$dialogObserver.Seal()" in render_helper_source
+assert (
+    'render_dialog_unresolved_post_dispatch_event_count -ne 0'
+    in render_helper_source
+)
 assert (
     'render_dialog_post_dispatch_event_count -ne 1'
     in render_helper_source
