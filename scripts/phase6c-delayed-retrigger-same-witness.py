@@ -31,7 +31,10 @@ CANDIDATE_RENDER_PROCEDURE = {
     "target_beats": 4.25,
     "threads": 1,
     "repeat_count": 2,
-    "event_spanning_first_callback_frames": 62000,
+    "sequencer_single_work": True,
+    "player_work_direct": False,
+    "harness_owned_master_stereo_buffer": True,
+    "master_buffer_float_count": "2 * target_frames",
     "loader_preallocation": (
         "project-owned harness preallocates empty XM instrument/sample slot 0 "
         "because retained r12005 LoadEINSv1 loads into existing vectors; "
