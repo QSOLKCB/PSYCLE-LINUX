@@ -59,8 +59,25 @@ def main() -> None:
             load_warning_required = $true
             expected_load_warning_message = "This file is from a newer version of Psycle! This process will try to load it anyway."
         }
+        $fixtureSpecs += [ordered]@{
+            name = "delayed-retrigger-execution"
+            candidate_receipt = "candidate-delayed-retrigger-execution.json"
+            expected_contract = "sequencer-delayed-retrigger-execution-observer"
+            expected_song_title = "PSYCLE-LINUX Phase 6C delayed/retrigger execution witness"
+            load_warning_required = $true
+            expected_load_warning_message = "This file is from a newer version of Psycle! This process will try to load it anyway."
+        }
     }
 '''
+    text = replace_once(
+        text,
+        "Add-Type -AssemblyName System.Windows.Forms\nAdd-Type -TypeDefinition @\"",
+        "Add-Type -AssemblyName System.Windows.Forms\n"
+        ". (Join-Path $PSScriptRoot \"phase6c-original-audio-render.ps1\")\n"
+        "Add-Type -TypeDefinition @\"",
+        "offline render helper",
+    )
+
     text = replace_once(
         text,
         "\n    foreach ($spec in $fixtureSpecs) {",
@@ -68,13 +85,90 @@ def main() -> None:
         "fixture specification",
     )
 
+    runtime_block = r'''
+        $runtimeExecution = $null
+        if ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger-execution") {
+            $renderDirectory = Join-Path $outRoot "delayed-retrigger-execution"
+            if (-not (Test-Path -LiteralPath $renderDirectory)) {
+                New-Item -ItemType Directory -Path $renderDirectory | Out-Null
+            }
+            if ($cleanAcceptedLoadEvidence -and [bool]$loadWarningBootstrap.dismissed) {
+                $renderOnePath = Join-Path $renderDirectory "original-delayed-retrigger-execution-1.wav"
+                $renderTwoPath = Join-Path $renderDirectory "original-delayed-retrigger-execution-2.wav"
+                $renderOne = Invoke-Phase6cAudioRender $process $windowTitle $renderOnePath
+                $renderTwo = Invoke-Phase6cAudioRender $process $windowTitle $renderTwoPath
+                $renderBindings = @()
+                foreach ($attempt in @($renderOne, $renderTwo)) {
+                    if ($attempt.outcome -eq "rendered" -and $null -ne $attempt.output) {
+                        $renderBindings += [ordered]@{
+                            path = "delayed-retrigger-execution/$($attempt.output.path)"
+                            sha256 = [string]$attempt.output.sha256
+                        }
+                    }
+                }
+                $deterministic = (
+                    $renderBindings.Count -eq 2 -and
+                    [string]$renderBindings[0].sha256 -ceq [string]$renderBindings[1].sha256
+                )
+                $runtimeExecution = [ordered]@{
+                    schema_version = 1
+                    outcome = if ($deterministic) { "rendered-twice" } else { "inconclusive" }
+                    deterministic = $deterministic
+                    settings = [ordered]@{
+                        sample_rate = 44100
+                        bits_per_sample = 16
+                        channels = "mono-mix"
+                        dither = $false
+                        range = "entire-song"
+                    }
+                    renders = @($renderBindings)
+                    attempts = @($renderOne, $renderTwo)
+                }
+            } else {
+                $runtimeExecution = [ordered]@{
+                    schema_version = 1
+                    outcome = "inconclusive"
+                    deterministic = $false
+                    settings = [ordered]@{
+                        sample_rate = 44100
+                        bits_per_sample = 16
+                        channels = "mono-mix"
+                        dither = $false
+                        range = "entire-song"
+                    }
+                    renders = @()
+                    attempts = @()
+                    diagnostics = @("clean accepted load and dismissed Load Warning are required before runtime execution observation")
+                }
+            }
+        }
+
+'''
+    text = replace_once(
+        text,
+        "        $evidenceLines = [System.Collections.Generic.List[string]]::new()",
+        runtime_block + "        $evidenceLines = [System.Collections.Generic.List[string]]::new()",
+        "runtime execution observation",
+    )
+
     text = replace_once(
         text,
         '            procedure = if ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',
-        '            procedure = if ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger") {\n'
-        '                "$Procedure; for the sequencer-delayed-retrigger contract load the exact command fixture under pinned Psycle 1.12.0 x86 and retain the clean accepted-load/liveness evidence; command execution semantics are recorded separately from the pinned original source and are not inferred from this UI load receipt"\n'
+        '            procedure = if ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger-execution") {\n'
+        '                "$Procedure; after the clean accepted-load gate, invoke only the source-pinned Psycle 1.12.0 Render as Wav File command and exact dialog controls; render the additive sampled command witness twice as mono 44.1 kHz 16-bit PCM with dither disabled; retain both outputs and require later validation to establish deterministic command-bearing runtime execution without classifying exact timing parity"\n'
+        '            } elseif ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger") {\n'
+        '                "$Procedure; for the sequencer-delayed-retrigger contract load the exact frozen command fixture under pinned Psycle 1.12.0 x86 and retain the clean accepted-load/liveness evidence; command execution semantics are recorded separately from the pinned original source and are not inferred from this UI load receipt"\n'
         '            } elseif ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',
         "procedure",
+    )
+
+    text = replace_once(
+        text,
+        "            sequence_order_ui = $sequenceOrderUi\n            runtime_identity_diagnostics = @($runtimeIdentityDiagnostics)",
+        "            sequence_order_ui = $sequenceOrderUi\n"
+        "            runtime_execution = $runtimeExecution\n"
+        "            runtime_identity_diagnostics = @($runtimeIdentityDiagnostics)",
+        "runtime execution receipt",
     )
 
     args.output.write_text(text, encoding="utf-8", newline="\n")
