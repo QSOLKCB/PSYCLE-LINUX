@@ -96,6 +96,19 @@ if ($ObserveDelayedRetrigger) {
         }
     }
 }
+if ($ObserveDelayedRetrigger) {
+    foreach ($variant in @(
+        "note-no-previous-inst",
+        "note-missing-sample",
+        "note-sample-default-inst",
+        "note-sample-serialized-inst"
+    )) {
+        $name = "sampler-voice-startup-$variant"
+        if (Test-Path -LiteralPath (Join-Path $outRoot ("original-{0}.json" -f $name))) {
+            $receiptNames += $name
+        }
+    }
+}
 foreach ($name in $receiptNames) {
     $receiptPath = Join-Path $outRoot ("original-{0}.json" -f $name)
     $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json

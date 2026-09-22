@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import importlib.util
 from pathlib import Path
 import struct
@@ -31,6 +32,14 @@ substrate_spec = importlib.util.spec_from_file_location(
 assert substrate_spec is not None and substrate_spec.loader is not None
 substrate = importlib.util.module_from_spec(substrate_spec)
 substrate_spec.loader.exec_module(substrate)
+
+STARTUP_SCRIPT = ROOT / "scripts" / "phase6c-sampler-voice-startup.py"
+startup_spec = importlib.util.spec_from_file_location(
+    "phase6c_sampler_voice_startup", STARTUP_SCRIPT
+)
+assert startup_spec is not None and startup_spec.loader is not None
+startup = importlib.util.module_from_spec(startup_spec)
+startup_spec.loader.exec_module(startup)
 
 
 def wave_pcm16(frames: list[int], channels: int = 1, rate: int = 44100) -> bytes:
@@ -353,5 +362,179 @@ with tempfile.TemporaryDirectory() as temporary:
     assert stable["frame_count"] == 64
     assert stable["nonzero_frame_count"] == 0
     assert stable["observed_output"]["sha256"] == hashlib.sha256(data).hexdigest()
+
+assert startup.diagnose({
+    "note-no-previous-inst": "reference-process-exited-during-render",
+    "note-missing-sample": "reference-process-exited-during-render",
+    "note-sample-default-inst": "reference-process-exited-during-render",
+    "note-sample-serialized-inst": "reference-process-exited-during-render",
+}) == "sampler-dispatch-before-instrument-resolution-associated-exit"
+
+assert startup.diagnose({
+    "note-no-previous-inst": "stable-finalized-output-process-alive",
+    "note-missing-sample": "reference-process-exited-during-render",
+    "note-sample-default-inst": "reference-process-exited-during-render",
+    "note-sample-serialized-inst": "reference-process-exited-during-render",
+}) == "explicit-instrument-or-sample-gate-associated-exit"
+
+assert startup.diagnose({
+    "note-no-previous-inst": "stable-finalized-output-process-alive",
+    "note-missing-sample": "stable-finalized-output-process-alive",
+    "note-sample-default-inst": "reference-process-exited-during-render",
+    "note-sample-serialized-inst": "reference-process-exited-during-render",
+}) == "enabled-sample-voice-startup-associated-exit"
+
+assert startup.diagnose({
+    "note-no-previous-inst": "stable-finalized-output-process-alive",
+    "note-missing-sample": "stable-finalized-output-process-alive",
+    "note-sample-default-inst": "stable-finalized-output-process-alive",
+    "note-sample-serialized-inst": "reference-process-exited-during-render",
+}) == "serialized-instrument-state-associated-exit"
+
+assert startup.diagnose({
+    "note-no-previous-inst": "stable-finalized-output-process-alive",
+    "note-missing-sample": "stable-finalized-output-process-alive",
+    "note-sample-default-inst": "stable-finalized-output-process-alive",
+    "note-sample-serialized-inst": "stable-finalized-output-process-alive",
+}) == "all-startup-gates-survive-known-crash-not-reproduced"
+
+assert startup.diagnose({
+    "note-no-previous-inst": "reference-process-exited-during-render",
+    "note-missing-sample": "stable-finalized-output-process-alive",
+    "note-sample-default-inst": "reference-process-exited-during-render",
+    "note-sample-serialized-inst": "reference-process-exited-during-render",
+}) == "nonmonotonic-startup-result"
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    name = "note-no-previous-inst"
+    output_dir = root / ("sampler-voice-startup-" + name)
+    output_dir.mkdir()
+    filename = "original-sampler-voice-startup-note-no-previous-inst-1.wav"
+    output = output_dir / filename
+    data = wave_pcm16([0] * 64)
+    output.write_bytes(data)
+    attempt = {
+        "process_exited": False,
+        "process_exit_code": None,
+        "dialog_closed": False,
+        "stable_output_polls": 4,
+        "observed_output": {
+            "path": filename,
+            "size_bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        },
+    }
+    stable = startup.validate_stable_alive_output(
+        root, name, attempt, filename, module
+    )
+    assert stable["frame_count"] == 64
+    assert stable["nonzero_frame_count"] == 0
+    assert stable["observed_output"]["sha256"] == hashlib.sha256(data).hexdigest()
+
+    bad = dict(attempt)
+    bad["observed_output"] = dict(attempt["observed_output"])
+    bad["observed_output"]["size_bytes"] += 1
+    try:
+        startup.validate_stable_alive_output(
+            root, name, bad, filename, module
+        )
+    except ValueError as exc:
+        assert "binding mismatch" in str(exc)
+    else:
+        raise AssertionError("expected startup stable-output binding failure")
+
+valid_completed_attempt = {
+    "outcome": "rendered",
+    "process_exited": False,
+    "process_exit_code": None,
+    "dialog_closed": True,
+    "stable_output_polls": 4,
+    "diagnostics": [],
+}
+startup.validate_completed_render_attempt(
+    valid_completed_attempt, "note-sample-default-inst"
+)
+
+valid_exit_receipt = {
+    "exit_code_before_termination": startup.EXPECTED_ACCESS_VIOLATION_EXIT_CODE,
+}
+valid_exit_attempt = {
+    "process_exit_code": startup.EXPECTED_ACCESS_VIOLATION_EXIT_CODE,
+    "diagnostics": ["reference exited during offline render"],
+}
+assert startup.validate_expected_access_violation(
+    valid_exit_receipt,
+    valid_exit_attempt,
+    "note-sample-default-inst",
+) == startup.EXPECTED_ACCESS_VIOLATION_EXIT_CODE
+
+bad_exit_receipt = {"exit_code_before_termination": 1}
+bad_exit_attempt = {
+    "process_exit_code": 1,
+    "diagnostics": ["reference exited during offline render"],
+}
+try:
+    startup.validate_expected_access_violation(
+        bad_exit_receipt,
+        bad_exit_attempt,
+        "note-sample-default-inst",
+    )
+except ValueError as exc:
+    assert "0xC0000005" in str(exc)
+else:
+    raise AssertionError("expected unrelated nonzero exit-code rejection")
+
+invalid_completed_attempt = dict(valid_completed_attempt)
+invalid_completed_attempt.update(
+    {
+        "dialog_closed": False,
+        "stable_output_polls": 0,
+        "diagnostics": ["completion was never observed"],
+    }
+)
+try:
+    startup.validate_completed_render_attempt(
+        invalid_completed_attempt, "note-sample-default-inst"
+    )
+except ValueError as exc:
+    assert "terminal completion evidence" in str(exc)
+else:
+    raise AssertionError("expected incomplete rendered-attempt rejection")
+
+with tempfile.TemporaryDirectory() as candidate_temp, tempfile.TemporaryDirectory() as original_temp:
+    candidate_root = Path(candidate_temp)
+    original_root = Path(original_temp)
+    source_receipt = startup.expected_source_receipt()
+    source_path = candidate_root / startup.SOURCE_RECEIPT
+    source_path.write_text(
+        json.dumps(source_receipt, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    relative = startup.materialize_source_receipt(
+        candidate_root, original_root
+    )
+    assert relative == startup.SOURCE_RECEIPT
+    original_source = original_root / relative
+    assert original_source.is_file()
+    assert original_source.read_bytes() == source_path.read_bytes()
+    assert startup.validate_source(original_root) == source_receipt
+
+    corrupted = startup.expected_source_receipt()
+    corrupted["files"]["Sampler.cpp"]["markers"] = []
+    corrupted["files"]["Song.cpp"]["markers"] = []
+    corrupted["source_boundary"] = [
+        "enabled samples return before voice selection"
+    ]
+    original_source.write_text(
+        json.dumps(corrupted, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    try:
+        startup.validate_source(original_root)
+    except ValueError as exc:
+        assert "canonical source semantics" in str(exc)
+    else:
+        raise AssertionError("expected corrupted source receipt rejection")
 
 print("phase6c-delayed-retrigger-render: PASS")

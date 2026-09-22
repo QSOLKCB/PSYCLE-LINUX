@@ -59,6 +59,155 @@ def normalize_cell(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip())
 
 
+def normalize_evidence_text(value: str) -> str:
+    value = value.lower().replace("`", "").replace("-", " ")
+    return re.sub(r"\s+", " ", value.strip())
+
+
+def evidence_sentences(value: str) -> list[str]:
+    normalized = normalize_evidence_text(value)
+    return [
+        sentence.strip()
+        for sentence in re.split(r"[.;](?:\s+|$)", normalized)
+        if sentence.strip()
+    ]
+
+
+def find_evidence_sentence(
+    value: str,
+    required_terms: tuple[str, ...],
+    context: str,
+) -> str:
+    matches = [
+        sentence
+        for sentence in evidence_sentences(value)
+        if all(term in sentence for term in required_terms)
+    ]
+    if len(matches) != 1:
+        die(
+            f"{context} must contain exactly one semantic result clause with "
+            f"terms {required_terms}, found {len(matches)}"
+        )
+    return matches[0]
+
+
+def assert_positive_predicate(
+    sentence: str,
+    positive_pattern: str,
+    negative_pattern: str,
+    context: str,
+) -> None:
+    subject_scan = re.sub(
+        r"\bno\s+previous\s+instrument\b",
+        "previous instrument",
+        sentence,
+        flags=re.IGNORECASE,
+    )
+    subject_negation = re.search(
+        r"\b(?:neither|none|no)\b",
+        subject_scan,
+        re.IGNORECASE,
+    )
+    if subject_negation is not None or re.search(
+        negative_pattern, sentence, re.IGNORECASE
+    ):
+        die(f"{context} reverses the canonical result polarity: {sentence}")
+    if re.search(positive_pattern, sentence, re.IGNORECASE) is None:
+        die(f"{context} lacks the required positive result predicate: {sentence}")
+
+
+def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
+    early = find_evidence_sentence(
+        value,
+        ("no previous instrument", "missing sample"),
+        context + " early controls",
+    )
+    assert_positive_predicate(
+        early,
+        r"\b(?:survive|survives|survived|retain|retains|retained)\b",
+        r"\b(?:(?:do|does|did)\s+not|never|cannot|can't|could\s+not|"
+        r"would\s+not|should\s+not|must\s+not|fail(?:s|ed)?\s+to|"
+        r"(?:(?:am|is|are|was|were)\s+)?unable\s+to)\s+"
+        r"(?:survive|retain)\b|\bnot\s+(?:survive|retain)\b",
+        context + " early controls",
+    )
+
+    enabled = find_evidence_sentence(
+        value,
+        ("enabled sample", "constructor default", "serialized instrument state"),
+        context + " enabled-sample variants",
+    )
+    assert_positive_predicate(
+        enabled,
+        r"\bexit(?:s|ed)?\b",
+        r"\b(?:(?:do|does|did)\s+not|never|cannot|can't|could\s+not|"
+        r"would\s+not|should\s+not|must\s+not|fail(?:s|ed)?\s+to|"
+        r"(?:(?:am|is|are|was|were)\s+)?unable\s+to)\s+"
+        r"exit\b|\bnot\s+exit\b",
+        context + " enabled-sample variants",
+    )
+    if re.search(
+        r"\b(?:non\s+zero|nonzero|not\s+zero|zero\s+or\s+more)\s+byte",
+        enabled,
+        re.IGNORECASE,
+    ):
+        die(
+            f"{context} reverses the canonical zero-byte output result: "
+            f"{enabled}"
+        )
+    if "0xc0000005" not in enabled or re.search(
+        r"\bzero\s+byte\b", enabled, re.IGNORECASE
+    ) is None:
+        die(
+            f"{context} enabled-sample result must bind the exit to "
+            "0xC0000005 and zero-byte output"
+        )
+
+    normalized = normalize_evidence_text(value)
+    serialized_not_boundary = (
+        re.search(
+            r"serialized instrument state\s+(?:is|was)\s+not\s+"
+            r"(?:the\s+)?differentiator",
+            normalized,
+        )
+        is not None
+        or re.search(
+            r"boundary\s+(?:is|was)\s+enabled sample voice startup\s*,?\s*"
+            r"not\s+serialized instrument state",
+            normalized,
+        )
+        is not None
+    )
+    if not serialized_not_boundary:
+        die(
+            f"{context} must state that serialized instrument state is not "
+            "the differentiating boundary"
+        )
+    if re.search(
+        r"serialized instrument state\s+(?:is|was)\s+"
+        r"(?:the\s+)?differentiator",
+        normalized,
+    ):
+        die(f"{context} contradicts the serialized-instrument boundary result")
+
+    if re.search(
+        r"(?:isolate|boundary).{0,160}voice::tick.{0,160}"
+        r"(?:versus|vs\.?).{0,80}(?:first\s+)?voice::work",
+        normalized,
+    ) is None:
+        die(
+            f"{context} must preserve the next boundary as Voice::Tick "
+            "initialization versus first Voice::Work"
+        )
+
+    return {
+        "early_controls_survive": True,
+        "enabled_sample_variants_exit": True,
+        "serialized_instrument_not_boundary": True,
+        "next_boundary_voice_tick_vs_work": True,
+    }
+
+
 def extract_matrix_table(report: str) -> dict[str, list[str]]:
     start_marker = "## Engine compatibility matrix"
     end_marker = "## UI-only gaps"
@@ -142,6 +291,21 @@ def main() -> int:
                 f"{row_id} report status {report_status!r} does not match "
                 f"matrix status {status!r}"
             )
+
+        if row_id == "sequencer-delayed-retrigger":
+            matrix_signature = delayed_evidence_signature(
+                str(row.get("notes", "")),
+                "sequencer-delayed-retrigger matrix notes",
+            )
+            report_signature = delayed_evidence_signature(
+                report_rows[label][5],
+                "sequencer-delayed-retrigger human projection",
+            )
+            if report_signature != matrix_signature:
+                die(
+                    "sequencer-delayed-retrigger human projection semantic "
+                    "result differs from canonical matrix notes"
+                )
 
         if status != "UNKNOWN":
             classified += 1
