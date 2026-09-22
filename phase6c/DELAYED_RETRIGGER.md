@@ -436,6 +436,30 @@ requires the ordinary uninstrumented short-`E-DF` control to reproduce exact
 This lane remains diagnostic and cannot change delayed/retrigger parity from
 `UNKNOWN`.
 
+### Hosted result
+
+PR #78 workflow `35772562875` at head
+`ed1d2ad38700021d88141e9d5310367f6e7753d9` completed the candidate and
+Windows-original validation. The uninstrumented short-`E-DF` control again
+exited with `0xC0000005`. The instrumented fresh process used preinstalled
+x86 CDB `10.0.26100.4202` (SHA-256
+`12a6c6b54f901326bcfea057a9cdb9f786222424d456e2d4da29318d882e792b`)
+and captured the second-chance exception at `0x00e6c377`. The pinned
+`psycle.exe` was loaded at `0x00e10000`, so the module-relative offset is
+**`0x5c377`**.
+
+Corroborating workflow `35770412423` independently loaded the same pinned
+executable at `0x00520000` and captured the exception at `0x0057c377`,
+again yielding **`0x5c377`**. That earlier workflow later failed an unrelated
+fresh-receipt versus immutable historical-projection check; the collector
+evidence itself is retained only as corroboration.
+
+The repeated offset across different ASLR bases establishes a stable
+binary-relative crash position. It does not identify a source function:
+`function_location` remains `unresolved`. The complete hash-bound projection
+is committed at
+[`sequencer-sampler-fault-location/observation.json`](evidence/sequencer-sampler-fault-location/observation.json).
+
 ## Epistemic boundary
 
 The three evidence roles remain separate:
