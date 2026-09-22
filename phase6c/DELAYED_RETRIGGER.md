@@ -402,6 +402,40 @@ This remains diagnostic evidence only. It still does **not** provide a
 command-bearing delayed/retrigger runtime output and does not change
 `sequencer-delayed-retrigger` from `UNKNOWN`.
 
+## Opt-in Sampler fault-location witness
+
+The next additive lane does not alter the four frozen work-boundary observations.
+Ordinary push and pull-request CI continues to execute the short `E-DF` fixture
+without a debugger. A manual workflow dispatch may set
+`sampler_fault_location=true`, which adds a second fresh-process run of that
+same candidate-bound fixture after the same clean-load and Load Warning gates.
+
+The diagnostic collector:
+
+- accepts only a preinstalled **x86 `cdb.exe`** and records its SHA-256 and
+  version; it does not download debugger tooling;
+- snapshots the live Psycle module base addresses, sizes and file hashes before
+  render;
+- attaches after clean load and before the verified `Render as Wav` /
+  `Save Wave` operation;
+- retains a second-chance `0xC0000005` exception address when exposed by CDB;
+- maps that address back to the pre-render module snapshot and derives a
+  module-relative offset.
+
+A missing debugger, failed attach, missing exception address, exit-code
+mismatch, or address outside the module snapshot is recorded as
+**inconclusive**. A captured module offset is still not a source-function
+identity: the receipt keeps `function_location: unresolved`, and symbol
+availability is not silently substituted with source inference.
+
+The candidate-side receipt is input binding only. The original validator also
+requires the ordinary uninstrumented short-`E-DF` control to reproduce exact
+`0xC0000005` before accepting the optional instrumented observation. See
+[`sequencer-sampler-fault-location/README.md`](evidence/sequencer-sampler-fault-location/README.md).
+
+This lane remains diagnostic and cannot change delayed/retrigger parity from
+`UNKNOWN`.
+
 ## Epistemic boundary
 
 The three evidence roles remain separate:
