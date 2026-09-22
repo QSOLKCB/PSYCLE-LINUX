@@ -21,6 +21,23 @@ ORIGINAL_RECEIPT = "original-delayed-retrigger-sampulse-runtime.json"
 ORIGINAL_ANALYSIS = "original-delayed-retrigger-sampulse-runtime-analysis.json"
 COMPARISON = "delayed-retrigger-sampulse-runtime-comparison.json"
 REFERENCE_BUILD = "Psycle 1.12.0 x86"
+CANDIDATE_RENDER_PROCEDURE = {
+    "engine": "frozen SourceForge SVN r12005 C++ candidate",
+    "sample_rate": 44100,
+    "bits_per_sample": 16,
+    "channels": "mono-mix",
+    "dither": False,
+    "fixed_frame_render": True,
+    "target_beats": 4.25,
+    "threads": 1,
+    "repeat_count": 2,
+    "event_spanning_first_callback_frames": 62000,
+    "loader_preallocation": (
+        "project-owned harness preallocates empty XM instrument/sample slot 0 "
+        "because retained r12005 LoadEINSv1 loads into existing vectors; "
+        "post-load validation requires the EINS bytes to overwrite both slots"
+    ),
+}
 
 
 def load_module(path: Path, name: str):
@@ -69,6 +86,26 @@ def render_binding(root: Path, relative: str) -> tuple[dict, bytes]:
     return {"path": relative, "sha256": digest(data)}, data
 
 
+def artifact_binding(root: Path, relative: str) -> dict:
+    binding, _ = render_binding(root, relative)
+    return binding
+
+
+def validate_artifact_binding(root: Path, value: object, expected_path: str) -> dict:
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"path", "sha256"}
+        or value.get("path") != expected_path
+        or not isinstance(value.get("sha256"), str)
+        or len(value["sha256"]) != 64
+    ):
+        raise ValueError("invalid retained artifact binding: " + expected_path)
+    actual = artifact_binding(root, expected_path)
+    if actual != value:
+        raise ValueError("retained artifact binding mismatch: " + expected_path)
+    return actual
+
+
 def validate_pair_of_waves(
     root: Path, prefix: str, role: str
 ) -> tuple[list[dict], bytes, dict]:
@@ -110,16 +147,29 @@ def collect_candidate(root: Path) -> dict:
         "song_title": TITLE,
         "machine_substrate": "XMSampler/Sampulse",
         "command_layout": base.EXPECTED_LAYOUT["commands"],
-        "render_procedure": {
-            "engine": "frozen SourceForge SVN r12005 C++ candidate",
-            "sample_rate": 44100,
-            "bits_per_sample": 16,
-            "channels": "mono-mix",
-            "dither": False,
-            "fixed_frame_render": True,
-            "target_beats": 4.25,
-            "threads": 1,
-            "repeat_count": 2,
+        "render_procedure": CANDIDATE_RENDER_PROCEDURE,
+        "renderer_provenance": {
+            "binary": artifact_binding(
+                root,
+                f"{NAME}/phase6c-delayed-retrigger-sampulse-render",
+            ),
+            "source": artifact_binding(root, f"{NAME}/render-probe.cpp"),
+            "project": artifact_binding(root, f"{NAME}/render-probe.pro"),
+            "fixture_generator_source": artifact_binding(
+                root, f"{NAME}/fixture-generator.c"
+            ),
+            "eins_converter_source": artifact_binding(root, f"{NAME}/eins-compat.py"),
+            "eins_converter_log": artifact_binding(
+                root, "delayed-retrigger/sampulse-eins-compat.log"
+            ),
+            "render_logs": [
+                artifact_binding(
+                    root, "delayed-retrigger/sampulse-candidate-render-1.log"
+                ),
+                artifact_binding(
+                    root, "delayed-retrigger/sampulse-candidate-render-2.log"
+                ),
+            ],
         },
         "renders": renders,
         "render_sha256": digest(wave),
@@ -146,11 +196,35 @@ def validate_candidate(root: Path) -> dict:
         or receipt.get("song_title") != TITLE
         or receipt.get("machine_substrate") != "XMSampler/Sampulse"
         or receipt.get("command_layout") != base.EXPECTED_LAYOUT["commands"]
+        or receipt.get("render_procedure") != CANDIDATE_RENDER_PROCEDURE
         or receipt.get("runtime_command_execution_observed") is not True
         or receipt.get("timing_interpretation") != "deferred"
         or receipt.get("parity_status") != "UNKNOWN"
     ):
         raise ValueError("same-witness candidate receipt identity mismatch")
+    provenance = receipt.get("renderer_provenance")
+    if not isinstance(provenance, dict):
+        raise ValueError("same-witness candidate renderer provenance is missing")
+    expected_single = {
+        "binary": f"{NAME}/phase6c-delayed-retrigger-sampulse-render",
+        "source": f"{NAME}/render-probe.cpp",
+        "project": f"{NAME}/render-probe.pro",
+        "fixture_generator_source": f"{NAME}/fixture-generator.c",
+        "eins_converter_source": f"{NAME}/eins-compat.py",
+        "eins_converter_log": "delayed-retrigger/sampulse-eins-compat.log",
+    }
+    for key, expected_path in expected_single.items():
+        validate_artifact_binding(root, provenance.get(key), expected_path)
+    logs = provenance.get("render_logs")
+    if not isinstance(logs, list) or len(logs) != 2:
+        raise ValueError("same-witness candidate render-log provenance is invalid")
+    for index, value in enumerate(logs, start=1):
+        validate_artifact_binding(
+            root,
+            value,
+            f"delayed-retrigger/sampulse-candidate-render-{index}.log",
+        )
+
     renders, wave, analysis = validate_pair_of_waves(
         root, "candidate-delayed-retrigger-sampulse-runtime", "candidate"
     )
