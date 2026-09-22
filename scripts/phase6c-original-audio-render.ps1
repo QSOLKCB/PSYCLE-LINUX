@@ -20,6 +20,28 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
     private const int OBJID_WINDOW = 0;
     private const int CHILDID_SELF = 0;
     private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+    private const uint WM_QUIT = 0x0012;
+    private const uint WM_APP_FLUSH = 0x8031;
+    private const uint GA_ROOT = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSG
+    {
+        public IntPtr hwnd;
+        public uint message;
+        public IntPtr wParam;
+        public IntPtr lParam;
+        public uint time;
+        public POINT point;
+        public uint lPrivate;
+    }
 
     private delegate void WinEventDelegate(
         IntPtr hook,
@@ -45,11 +67,36 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
     [DllImport("user32.dll", SetLastError=true)]
     private static extern bool UnhookWinEvent(IntPtr hook);
 
+    [DllImport("user32.dll", SetLastError=true)]
+    private static extern int GetMessage(
+        out MSG message,
+        IntPtr window,
+        uint minFilter,
+        uint maxFilter
+    );
+
+    [DllImport("user32.dll")]
+    private static extern bool TranslateMessage(ref MSG message);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr DispatchMessage(ref MSG message);
+
+    [DllImport("user32.dll", SetLastError=true)]
+    private static extern bool PostThreadMessage(
+        uint threadId,
+        uint message,
+        IntPtr wParam,
+        IntPtr lParam
+    );
+
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(
         IntPtr window,
         out uint processId
     );
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr window, uint flags);
 
     [DllImport("user32.dll", CharSet=CharSet.Unicode)]
     private static extern int GetWindowText(
@@ -61,19 +108,53 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
     [DllImport("kernel32.dll")]
     private static extern uint GetTickCount();
 
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
     private readonly uint processId;
     private readonly object gate = new object();
     private readonly Queue<IntPtr> opened = new Queue<IntPtr>();
+    private readonly System.Threading.ManualResetEventSlim ready =
+        new System.Threading.ManualResetEventSlim(false);
+    private readonly System.Threading.ManualResetEventSlim stopped =
+        new System.Threading.ManualResetEventSlim(false);
+    private readonly System.Threading.ManualResetEventSlim flushed =
+        new System.Threading.ManualResetEventSlim(false);
+    private readonly System.Threading.Thread pumpThread;
+
     private WinEventDelegate handler;
     private IntPtr hook;
+    private uint pumpThreadId;
     private uint dispatchBoundaryTick;
     private int postDispatchEventCount;
+    private int postDispatchObservedWindowEventCount;
+    private int unresolvedPostDispatchEventCount;
+    private int hookError;
     private bool dispatchBoundarySet;
     private bool disposed;
 
     public Phase6cRenderWindowOpenedObserver(uint processId)
     {
         this.processId = processId;
+        pumpThread = new System.Threading.Thread(Pump);
+        pumpThread.IsBackground = true;
+        pumpThread.Name = "Phase6cRenderWinEventPump";
+        pumpThread.Start();
+
+        if (!ready.Wait(5000))
+            throw new InvalidOperationException(
+                "render WinEvent message pump did not initialize"
+            );
+        if (hook == IntPtr.Zero)
+            throw new InvalidOperationException(
+                "could not install process-filtered EVENT_OBJECT_SHOW hook: " +
+                hookError
+            );
+    }
+
+    private void Pump()
+    {
+        pumpThreadId = GetCurrentThreadId();
         handler = new WinEventDelegate(OnWinEvent);
         hook = SetWinEventHook(
             EVENT_OBJECT_SHOW,
@@ -85,14 +166,57 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
             WINEVENT_OUTOFCONTEXT
         );
         if (hook == IntPtr.Zero)
-            throw new InvalidOperationException(
-                "could not install process-filtered EVENT_OBJECT_SHOW hook"
-            );
+            hookError = Marshal.GetLastWin32Error();
+        ready.Set();
+
+        if (hook == IntPtr.Zero)
+        {
+            stopped.Set();
+            return;
+        }
+
+        try
+        {
+            MSG message;
+            int status;
+            while ((status = GetMessage(
+                out message,
+                IntPtr.Zero,
+                0,
+                0
+            )) > 0)
+            {
+                if (message.message == WM_APP_FLUSH)
+                {
+                    flushed.Set();
+                    continue;
+                }
+                TranslateMessage(ref message);
+                DispatchMessage(ref message);
+            }
+            if (status < 0)
+            {
+                lock (gate)
+                {
+                    unresolvedPostDispatchEventCount += 1;
+                }
+            }
+        }
+        finally
+        {
+            IntPtr current = hook;
+            hook = IntPtr.Zero;
+            if (current != IntPtr.Zero)
+                UnhookWinEvent(current);
+            stopped.Set();
+        }
     }
 
-    private static bool TickAtOrAfter(uint value, uint boundary)
+    private static bool TickStrictlyAfter(uint value, uint boundary)
     {
-        return unchecked((int)(value - boundary)) >= 0;
+        // Equal millisecond timestamps are intentionally inconclusive:
+        // they cannot prove which side of the dispatch boundary occurred first.
+        return unchecked((int)(value - boundary)) > 0;
     }
 
     private void OnWinEvent(
@@ -111,9 +235,41 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
             window == IntPtr.Zero)
             return;
 
+        lock (gate)
+        {
+            if (disposed ||
+                !dispatchBoundarySet ||
+                !TickStrictlyAfter(eventTime, dispatchBoundaryTick))
+                return;
+
+            // Count first. The process-filtered WinEvent hook already bound this
+            // event to the observed Psycle process at generation time. A HWND
+            // may be gone or reused before this out-of-context callback runs;
+            // liveness must not erase evidence that another window was shown.
+            postDispatchObservedWindowEventCount += 1;
+        }
+
         uint owner;
         if (GetWindowThreadProcessId(window, out owner) == 0 ||
             owner != processId)
+        {
+            lock (gate)
+            {
+                unresolvedPostDispatchEventCount += 1;
+            }
+            return;
+        }
+
+        IntPtr root = GetAncestor(window, GA_ROOT);
+        if (root == IntPtr.Zero)
+        {
+            lock (gate)
+            {
+                unresolvedPostDispatchEventCount += 1;
+            }
+            return;
+        }
+        if (root != window)
             return;
 
         var title = new StringBuilder(256);
@@ -127,18 +283,39 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
 
         lock (gate)
         {
-            if (disposed ||
-                !dispatchBoundarySet ||
-                !TickAtOrAfter(eventTime, dispatchBoundaryTick))
+            if (disposed)
                 return;
-
             opened.Enqueue(window);
             postDispatchEventCount += 1;
         }
     }
 
+    private void FlushPump()
+    {
+        if (pumpThreadId == 0 ||
+            GetCurrentThreadId() == pumpThreadId ||
+            disposed)
+            return;
+
+        flushed.Reset();
+        if (!PostThreadMessage(
+            pumpThreadId,
+            WM_APP_FLUSH,
+            IntPtr.Zero,
+            IntPtr.Zero
+        ))
+            throw new InvalidOperationException(
+                "could not post render WinEvent flush message"
+            );
+        if (!flushed.Wait(2000))
+            throw new InvalidOperationException(
+                "render WinEvent message pump flush timed out"
+            );
+    }
+
     public void BeginDispatchBoundary()
     {
+        FlushPump();
         lock (gate)
         {
             if (disposed)
@@ -147,10 +324,8 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
                 );
             opened.Clear();
             postDispatchEventCount = 0;
-            // WinEvent supplies dwmsEventTime from when the window event
-            // occurred, not when this out-of-context callback is delivered.
-            // Capturing GetTickCount immediately before PostMessage therefore
-            // rejects callbacks for windows that actually opened earlier.
+            postDispatchObservedWindowEventCount = 0;
+            unresolvedPostDispatchEventCount = 0;
             dispatchBoundaryTick = GetTickCount();
             dispatchBoundarySet = true;
         }
@@ -163,6 +338,18 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
             dispatchBoundarySet = false;
             opened.Clear();
             postDispatchEventCount = 0;
+            postDispatchObservedWindowEventCount = 0;
+            unresolvedPostDispatchEventCount = 0;
+        }
+    }
+
+    public bool MessagePumpStarted
+    {
+        get
+        {
+            return pumpThreadId != 0 &&
+                hook != IntPtr.Zero &&
+                !stopped.IsSet;
         }
     }
 
@@ -177,8 +364,33 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
         }
     }
 
+    public int PostDispatchObservedWindowEventCount
+    {
+        get
+        {
+            FlushPump();
+            lock (gate)
+            {
+                return postDispatchObservedWindowEventCount;
+            }
+        }
+    }
+
+    public int UnresolvedPostDispatchEventCount
+    {
+        get
+        {
+            FlushPump();
+            lock (gate)
+            {
+                return unresolvedPostDispatchEventCount;
+            }
+        }
+    }
+
     public long TakeNextHandle()
     {
+        FlushPump();
         lock (gate)
         {
             while (opened.Count > 0)
@@ -189,6 +401,8 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
                     GetWindowThreadProcessId(window, out owner) != 0 &&
                     owner == processId)
                     return window.ToInt64();
+
+                unresolvedPostDispatchEventCount += 1;
             }
         }
         return 0;
@@ -198,6 +412,7 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
     {
         get
         {
+            FlushPump();
             lock (gate)
             {
                 return postDispatchEventCount;
@@ -207,8 +422,13 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
 
     public void ThrowIfAmbiguous()
     {
+        FlushPump();
         lock (gate)
         {
+            if (unresolvedPostDispatchEventCount > 0)
+                throw new InvalidOperationException(
+                    "unresolved post-dispatch Psycle window-show event observed"
+                );
             if (postDispatchEventCount > 1)
                 throw new InvalidOperationException(
                     "multiple post-dispatch Render as Wav File windows observed"
@@ -218,25 +438,36 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
 
     public int Seal()
     {
-        IntPtr remove = IntPtr.Zero;
+        FlushPump();
+
         int count;
+        uint threadId;
         lock (gate)
         {
             count = postDispatchEventCount;
-            if (!disposed)
-            {
-                disposed = true;
-                dispatchBoundarySet = false;
-                remove = hook;
-                hook = IntPtr.Zero;
-                handler = null;
-                opened.Clear();
-            }
+            if (disposed)
+                return count;
+            disposed = true;
+            dispatchBoundarySet = false;
+            threadId = pumpThreadId;
         }
-        if (remove != IntPtr.Zero && !UnhookWinEvent(remove))
-            throw new InvalidOperationException(
-                "could not remove EVENT_OBJECT_SHOW hook"
-            );
+
+        if (threadId != 0)
+        {
+            if (!PostThreadMessage(
+                threadId,
+                WM_QUIT,
+                IntPtr.Zero,
+                IntPtr.Zero
+            ))
+                throw new InvalidOperationException(
+                    "could not stop render WinEvent message pump"
+                );
+            if (!stopped.Wait(5000))
+                throw new InvalidOperationException(
+                    "render WinEvent message pump did not stop"
+                );
+        }
         return count;
     }
 
@@ -678,8 +909,11 @@ function Invoke-Phase6cAudioRender(
         close_wm_close_invoked = $false
         preexisting_render_dialog_count = 0
         render_dialog_native_event_hook_armed = $false
+        render_dialog_event_message_pump_started = $false
         render_dialog_dispatch_boundary_set = $false
         render_dialog_dispatch_boundary_tick = $null
+        render_dialog_post_dispatch_observed_window_event_count = 0
+        render_dialog_unresolved_post_dispatch_event_count = 0
         render_dialog_post_dispatch_event_count = 0
         selected_render_dialog_native_handle = $null
         selected_render_dialog_runtime_id = @()
@@ -737,6 +971,12 @@ function Invoke-Phase6cAudioRender(
             [uint32]$Process.Id
         )
         $result.render_dialog_native_event_hook_armed = $true
+        $result.render_dialog_event_message_pump_started = [bool](
+            $dialogObserver.MessagePumpStarted
+        )
+        if (-not $result.render_dialog_event_message_pump_started) {
+            throw "render WinEvent message pump is not running"
+        }
         if (-not [Phase6cRenderNative]::Invoke(
             [uint32]$Process.Id,
             $ExpectedTitle,
@@ -759,7 +999,7 @@ function Invoke-Phase6cAudioRender(
         try {
             $result.selected_render_dialog_native_handle = [long]$dialog.Current.NativeWindowHandle
             $result.selected_render_dialog_runtime_id = @($dialog.GetRuntimeId())
-            $result.dialog_discovery = "win-event-object-show-after-dispatch-tick-boundary"
+            $result.dialog_discovery = "pumped-win-event-object-show-strictly-after-dispatch-tick"
         }
         catch [System.Windows.Automation.ElementNotAvailableException] {
             throw "newly opened Render as Wav File dialog became unavailable before binding"
@@ -926,9 +1166,16 @@ function Invoke-Phase6cAudioRender(
             throw "offline render output missing after completion"
         }
         $dialogObserver.ThrowIfAmbiguous()
+        $result.render_dialog_post_dispatch_observed_window_event_count = [int](
+            $dialogObserver.PostDispatchObservedWindowEventCount
+        )
+        $result.render_dialog_unresolved_post_dispatch_event_count = [int](
+            $dialogObserver.UnresolvedPostDispatchEventCount
+        )
         $result.render_dialog_post_dispatch_event_count = $dialogObserver.Seal()
         $dialogObserver = $null
-        if ($result.render_dialog_post_dispatch_event_count -ne 1) {
+        if ($result.render_dialog_post_dispatch_event_count -ne 1 -or
+            $result.render_dialog_unresolved_post_dispatch_event_count -ne 0) {
             throw "offline render requires exactly one post-dispatch Render as Wav File event"
         }
         $result.output = [ordered]@{
@@ -943,6 +1190,12 @@ function Invoke-Phase6cAudioRender(
     finally {
         if ($null -ne $dialogObserver) {
             try {
+                $result.render_dialog_post_dispatch_observed_window_event_count = [int](
+                    $dialogObserver.PostDispatchObservedWindowEventCount
+                )
+                $result.render_dialog_unresolved_post_dispatch_event_count = [int](
+                    $dialogObserver.UnresolvedPostDispatchEventCount
+                )
                 $result.render_dialog_post_dispatch_event_count = $dialogObserver.Seal()
             }
             catch {
