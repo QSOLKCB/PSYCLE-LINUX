@@ -75,6 +75,32 @@ FIXTURE="$OUT/phase6c-delayed-retrigger.psy"
     exit 2
 }
 
+run_logged "$OUT/execution-fixture-build.log" \
+    gcc "${COMMON_CFLAGS[@]}" "${LUA_CFLAGS[@]}" \
+    "$ROOT/tests/phase6c_delayed_retrigger_execution_fixture.c" \
+    -o "$BUILD/phase6c-delayed-retrigger-execution-fixture" \
+    "${COMMON_LDFLAGS[@]}" "${LUA_LIBS[@]}"
+
+run_logged "$OUT/execution-fixture-generator.log" \
+    "$BUILD/phase6c-delayed-retrigger-execution-fixture" "$OUT"
+
+EXECUTION_FIXTURE="$OUT/phase6c-delayed-retrigger-execution.psy"
+[[ -s "$EXECUTION_FIXTURE" ]] || {
+    echo 'delayed/retrigger execution witness was not generated' >&2
+    exit 2
+}
+[[ "$(head -c 8 "$EXECUTION_FIXTURE")" == "PSY3SONG" ]] || {
+    echo 'delayed/retrigger execution witness is not PSY3' >&2
+    exit 2
+}
+
+run_logged "$OUT/execution-candidate-receipt.log" \
+    python3 "$ROOT/scripts/phase6c-delayed-retrigger-render-evidence.py" candidate \
+    "$ARTIFACT"
+run_logged "$OUT/execution-candidate-validation.log" \
+    python3 "$ROOT/scripts/phase6c-delayed-retrigger-render-evidence.py" candidate-check \
+    "$ARTIFACT"
+
 cp "$ROOT/tests/phase6c_delayed_retrigger.pro" "$STAGING/probe.pro"
 set +e
 (

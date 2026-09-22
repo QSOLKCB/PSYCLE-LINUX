@@ -29,7 +29,7 @@ def delayed_validator():
             "generic original validator PSY3 warning-scope anchor changed"
         )
     source = source.replace(
-        old, '{"psy3", "sequence-order", "delayed-retrigger"}'
+        old, '{"psy3", "sequence-order", "delayed-retrigger", "delayed-retrigger-execution"}'
     )
     module = types.ModuleType("phase6c_original_receipts_delayed")
     module.__file__ = str(VALIDATOR_PATH)

@@ -77,6 +77,9 @@ if ($ObserveBpmLpbTick -and (Test-Path -LiteralPath (Join-Path $outRoot "origina
 if ($ObserveDelayedRetrigger -and (Test-Path -LiteralPath (Join-Path $outRoot "original-delayed-retrigger.json"))) {
     $receiptNames += "delayed-retrigger"
 }
+if ($ObserveDelayedRetrigger -and (Test-Path -LiteralPath (Join-Path $outRoot "original-delayed-retrigger-execution.json"))) {
+    $receiptNames += "delayed-retrigger-execution"
+}
 foreach ($name in $receiptNames) {
     $receiptPath = Join-Path $outRoot ("original-{0}.json" -f $name)
     $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json

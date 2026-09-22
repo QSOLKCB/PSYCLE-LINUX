@@ -2,20 +2,23 @@
 
 ## Status
 
-**Versioned deferred comparison; compatibility remains `UNKNOWN`.**
+**Original runtime execution-attempt observer implemented; compatibility remains `UNKNOWN`.**
 
 This slice follows the classified BPM/LPB/tick result and measures the next
 independent matrix contract, `sequencer-delayed-retrigger`. The final PR #69
 push run `35457374404` at head
-`9310b08bae744093c068a4f557bbd1b80bd499c8` is now versioned under
-`phase6c/evidence/sequencer-delayed-retrigger/`.
+`9310b08bae744093c068a4f557bbd1b80bd499c8` remains the versioned comparison
+under `phase6c/evidence/sequencer-delayed-retrigger/`.
 
-The comparison has been performed, but it deliberately does **not** promote the
-matrix row. The candidate has runtime scheduling evidence; the original side
-has native fixture-acceptance evidence plus separately pinned source semantics.
-Those are not like-for-like execution observations, so `PASS`, `DIFFERENT`
-and `MISSING` remain unsupported until a stronger original runtime execution
-observer exists.
+That comparison still deliberately does **not** promote the matrix row. The
+candidate has runtime scheduling evidence; the versioned original side has
+native fixture-acceptance evidence plus separately pinned source semantics.
+This follow-on adds the missing *execution-attempt observer* for original
+runtime behaviour. The pinned reference must first pass the existing clean-load
+gate before the observer touches the renderer. A renderer failure is retained as
+an original-runtime observation, not converted into command-execution evidence.
+No new `PASS`, `DIFFERENT` or `MISSING` verdict is permitted until a
+command-bearing original runtime output exists and is compared like-for-like.
 
 ## Project-authored fixture
 
@@ -127,6 +130,64 @@ remaining tracker-command rung is to obtain a stronger original-Psycle execution
 observation—such as runtime scheduling/callback evidence or another
 deterministic execution output that can be compared like-for-like—before any
 `PASS`, `DIFFERENT` or `MISSING` claim is permitted.
+
+## Additive original execution witness
+
+The stronger observer deliberately does **not** modify
+`phase6c-delayed-retrigger.psy` or any of the PR #69/#70 versioned evidence.
+Instead, `tests/phase6c_delayed_retrigger_execution_fixture.c` creates a
+separate execution-only PSY3 witness with the same BPM/LPB/TPB family and a
+deterministic 512-frame sample routed through the built-in Sampler. Its
+four-frame impulse begins at frame 256, beyond the retained Sampler's default
+~5 ms / ~221-frame attack at 44.1 kHz, so the witness remains observable after
+the legacy attack ramp.
+
+The commands are spaced into independent one-beat windows:
+
+- beat 0: `FD 7F` on note 60;
+- beat 1: `FB 3F` on note 60;
+- beat 2: `FA 42` on note 60;
+- beat 3: `FE 04`;
+- beat 3.125: an ordinary note marker after the LPB command.
+
+The native-Windows observer first applies the existing accepted-load, Load
+Warning, VC90 identity and liveness gates. Only then does the new helper invoke
+the source-pinned Psycle 1.12.0 File-menu command `Render as Wav...`
+(command ID `32894`) and the exact `Render as Wav File` controls documented
+by the pinned original resource definitions. Each render is forced to:
+
+- output to file;
+- record the entire song;
+- 44.1 kHz;
+- 16-bit PCM;
+- mono mix;
+- dither off;
+- separated track/wire/generator outputs off.
+
+The first render attempt records the exact process and output state after Save
+Wave is dispatched. If that render succeeds and the reference remains alive,
+the observer repeats the render in the same process. Only two byte-identical
+WAV files that pass RIFF/PCM validation and expose multiple distinct impulse
+onsets in both the `FB` and `FA` beat windows are allowed to set
+`runtime_command_execution_observed: true`.
+
+If the reference process exits during the verified render attempt, the observer
+instead retains the pre-render clean-load predicate, non-zero process exit code,
+exact diagnostic and hash/size binding for any created output. That path writes
+`runtime_command_execution_observed: false` and remains `UNKNOWN`; it cannot
+be used as a delayed/retrigger execution trace.
+
+The first pinned-Windows attempt exposed exactly that second case: Psycle
+1.12.0 reached the clean accepted-load gate and verified Save Wave dispatch,
+then exited during offline rendering before a valid waveform was produced.
+This is useful failure evidence, but it does **not** complete the original
+command-execution observation. The next rung remains obtaining and versioning a
+reproducible command-bearing original runtime output from this sampled witness,
+then collecting candidate execution evidence from the **same** witness with a
+comparable rendered-onset procedure before any timing classification. The
+already-frozen PR #69 one-beat callback schedule remains preservation evidence;
+it is not a like-for-like comparison partner for this separate four-beat
+sampled witness.
 
 ## Epistemic boundary
 
