@@ -200,7 +200,7 @@
       "cpsycle": {
         "reusable": "fixture-construction-only"
       },
-      "notes": "Versioned final PR #69 evidence remains UNKNOWN: pinned Psycle 1.12.0 x86 accepts the exact command fixture and pinned original source binds FD/FB/FA/FE command semantics, while the frozen candidate provides runtime scheduling observations. No like-for-like original runtime command execution trace exists, so PASS, DIFFERENT and MISSING remain unsupported until a stronger original execution observer is added.",
+      "notes": "Versioned final PR #69 evidence remains UNKNOWN: pinned Psycle 1.12.0 x86 accepts the exact command fixture and pinned original source binds FD/FB/FA/FE command semantics, while the frozen candidate provides runtime scheduling observations. A stronger original execution-attempt observer is now implemented separately on a four-beat sampled witness, but its first pinned render exits after verified Save Wave dispatch before producing a valid command-bearing waveform. Before PASS, DIFFERENT, or MISSING can be considered, obtain and version a command-bearing original runtime output and collect candidate execution evidence using the same sampled witness and a comparable rendered-onset procedure. The frozen PR #69 one-beat callback schedule remains preservation evidence and must not be treated as the like-for-like comparison partner for the sampled witness.",
       "comparison": "phase6c/evidence/sequencer-delayed-retrigger/comparison.json"
     },
     {
