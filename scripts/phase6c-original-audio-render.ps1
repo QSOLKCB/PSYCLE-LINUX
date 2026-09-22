@@ -16,61 +16,128 @@ using System.Windows.Automation;
 
 public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
 {
-    private readonly int processId;
+    private const uint EVENT_OBJECT_SHOW = 0x8002;
+    private const int OBJID_WINDOW = 0;
+    private const int CHILDID_SELF = 0;
+    private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+
+    private delegate void WinEventDelegate(
+        IntPtr hook,
+        uint eventType,
+        IntPtr window,
+        int objectId,
+        int childId,
+        uint eventThread,
+        uint eventTime
+    );
+
+    [DllImport("user32.dll", SetLastError=true)]
+    private static extern IntPtr SetWinEventHook(
+        uint eventMin,
+        uint eventMax,
+        IntPtr module,
+        WinEventDelegate callback,
+        uint processId,
+        uint threadId,
+        uint flags
+    );
+
+    [DllImport("user32.dll", SetLastError=true)]
+    private static extern bool UnhookWinEvent(IntPtr hook);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(
+        IntPtr window,
+        out uint processId
+    );
+
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)]
+    private static extern int GetWindowText(
+        IntPtr window,
+        StringBuilder text,
+        int count
+    );
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetTickCount();
+
+    private readonly uint processId;
     private readonly object gate = new object();
-    private readonly Queue<AutomationElement> opened = new Queue<AutomationElement>();
-    private AutomationEventHandler handler;
-    private long eventSequence;
-    private long dispatchSequence;
+    private readonly Queue<IntPtr> opened = new Queue<IntPtr>();
+    private WinEventDelegate handler;
+    private IntPtr hook;
+    private uint dispatchBoundaryTick;
     private int postDispatchEventCount;
     private bool dispatchBoundarySet;
     private bool disposed;
 
     public Phase6cRenderWindowOpenedObserver(uint processId)
     {
-        this.processId = checked((int)processId);
-        handler = new AutomationEventHandler(OnWindowOpened);
-        Automation.AddAutomationEventHandler(
-            WindowPattern.WindowOpenedEvent,
-            AutomationElement.RootElement,
-            TreeScope.Descendants,
-            handler
+        this.processId = processId;
+        handler = new WinEventDelegate(OnWinEvent);
+        hook = SetWinEventHook(
+            EVENT_OBJECT_SHOW,
+            EVENT_OBJECT_SHOW,
+            IntPtr.Zero,
+            handler,
+            processId,
+            0,
+            WINEVENT_OUTOFCONTEXT
         );
+        if (hook == IntPtr.Zero)
+            throw new InvalidOperationException(
+                "could not install process-filtered EVENT_OBJECT_SHOW hook"
+            );
     }
 
-    private void OnWindowOpened(object sender, AutomationEventArgs args)
+    private static bool TickAtOrAfter(uint value, uint boundary)
     {
-        long sequence = System.Threading.Interlocked.Increment(ref eventSequence);
-        var element = sender as AutomationElement;
-        if (element == null)
+        return unchecked((int)(value - boundary)) >= 0;
+    }
+
+    private void OnWinEvent(
+        IntPtr ignoredHook,
+        uint eventType,
+        IntPtr window,
+        int objectId,
+        int childId,
+        uint ignoredThread,
+        uint eventTime
+    )
+    {
+        if (eventType != EVENT_OBJECT_SHOW ||
+            objectId != OBJID_WINDOW ||
+            childId != CHILDID_SELF ||
+            window == IntPtr.Zero)
             return;
-        try
+
+        uint owner;
+        if (GetWindowThreadProcessId(window, out owner) == 0 ||
+            owner != processId)
+            return;
+
+        var title = new StringBuilder(256);
+        GetWindowText(window, title, title.Capacity);
+        if (!string.Equals(
+            title.ToString(),
+            "Render as Wav File",
+            StringComparison.Ordinal
+        ))
+            return;
+
+        lock (gate)
         {
-            if (element.Current.ProcessId != processId ||
-                element.Current.ControlType != ControlType.Window ||
-                !string.Equals(
-                    element.Current.Name,
-                    "Render as Wav File",
-                    StringComparison.Ordinal
-                ))
+            if (disposed ||
+                !dispatchBoundarySet ||
+                !TickAtOrAfter(eventTime, dispatchBoundaryTick))
                 return;
-            lock (gate)
-            {
-                if (!disposed &&
-                    dispatchBoundarySet &&
-                    sequence > dispatchSequence)
-                {
-                    opened.Enqueue(element);
-                    postDispatchEventCount += 1;
-                }
-            }
-        }
-        catch (ElementNotAvailableException)
-        {
+
+            opened.Enqueue(window);
+            postDispatchEventCount += 1;
         }
     }
 
-    public void ArmAfterSuccessfulDispatch()
+    public void BeginDispatchBoundary()
     {
         lock (gate)
         {
@@ -80,41 +147,51 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
                 );
             opened.Clear();
             postDispatchEventCount = 0;
-            // Any callback that began before this point has a sequence at or
-            // below this cutoff, even if it was waiting to enter the gate.
-            // Only callbacks beginning after successful command dispatch are
-            // eligible for evidence.
-            dispatchSequence = System.Threading.Interlocked.Read(
-                ref eventSequence
-            );
+            // WinEvent supplies dwmsEventTime from when the window event
+            // occurred, not when this out-of-context callback is delivered.
+            // Capturing GetTickCount immediately before PostMessage therefore
+            // rejects callbacks for windows that actually opened earlier.
+            dispatchBoundaryTick = GetTickCount();
             dispatchBoundarySet = true;
         }
     }
 
-    public AutomationElement TakeNext()
+    public void CancelDispatchBoundary()
+    {
+        lock (gate)
+        {
+            dispatchBoundarySet = false;
+            opened.Clear();
+            postDispatchEventCount = 0;
+        }
+    }
+
+    public uint DispatchBoundaryTick
+    {
+        get
+        {
+            lock (gate)
+            {
+                return dispatchBoundaryTick;
+            }
+        }
+    }
+
+    public long TakeNextHandle()
     {
         lock (gate)
         {
             while (opened.Count > 0)
             {
-                var element = opened.Dequeue();
-                try
-                {
-                    if (element.Current.ProcessId == processId &&
-                        element.Current.ControlType == ControlType.Window &&
-                        string.Equals(
-                            element.Current.Name,
-                            "Render as Wav File",
-                            StringComparison.Ordinal
-                        ))
-                        return element;
-                }
-                catch (ElementNotAvailableException)
-                {
-                }
+                IntPtr window = opened.Dequeue();
+                uint owner;
+                if (window != IntPtr.Zero &&
+                    GetWindowThreadProcessId(window, out owner) != 0 &&
+                    owner == processId)
+                    return window.ToInt64();
             }
         }
-        return null;
+        return 0;
     }
 
     public int PostDispatchEventCount
@@ -141,7 +218,7 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
 
     public int Seal()
     {
-        AutomationEventHandler remove = null;
+        IntPtr remove = IntPtr.Zero;
         int count;
         lock (gate)
         {
@@ -150,19 +227,16 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
             {
                 disposed = true;
                 dispatchBoundarySet = false;
-                remove = handler;
+                remove = hook;
+                hook = IntPtr.Zero;
                 handler = null;
                 opened.Clear();
             }
         }
-        if (remove != null)
-        {
-            Automation.RemoveAutomationEventHandler(
-                WindowPattern.WindowOpenedEvent,
-                AutomationElement.RootElement,
-                remove
+        if (remove != IntPtr.Zero && !UnhookWinEvent(remove))
+            throw new InvalidOperationException(
+                "could not remove EVENT_OBJECT_SHOW hook"
             );
-        }
         return count;
     }
 
@@ -292,7 +366,12 @@ public static class Phase6cRenderNative
         return result.ToArray();
     }
 
-    public static bool Invoke(uint process, string title, Command expected)
+    public static bool Invoke(
+        uint process,
+        string title,
+        Command expected,
+        Phase6cRenderWindowOpenedObserver observer
+    )
     {
         var matches = new List<Command>();
         foreach (var item in Inspect(process, title))
@@ -300,13 +379,22 @@ public static class Phase6cRenderNative
             if (Plain(item.Label) == "Render as Wav..." && item.Id == 32894)
                 matches.Add(item);
         }
-        if (matches.Count != 1) return false;
+        if (matches.Count != 1 || observer == null) return false;
         var command = matches[0];
         if (!command.Enabled || command.Window != expected.Window ||
             command.Id != expected.Id || command.Label != expected.Label)
             return false;
-        return PostMessage(
-            new IntPtr(command.Window), 0x0111, new IntPtr(command.Id), IntPtr.Zero);
+
+        observer.BeginDispatchBoundary();
+        bool posted = PostMessage(
+            new IntPtr(command.Window),
+            0x0111,
+            new IntPtr(command.Id),
+            IntPtr.Zero
+        );
+        if (!posted)
+            observer.CancelDispatchBoundary();
+        return posted;
     }
 
     public static string SetText(
@@ -421,14 +509,29 @@ function Get-Phase6cRenderDialogs(
 }
 
 function Wait-Phase6cOpenedRenderDialog(
+    [System.Diagnostics.Process]$Process,
     [Phase6cRenderWindowOpenedObserver]$Observer,
     [int]$Polls = 40
 ) {
     for ($poll = 0; $poll -lt $Polls; $poll++) {
         $Observer.ThrowIfAmbiguous()
-        $dialog = $Observer.TakeNext()
-        if ($null -ne $dialog) {
-            return $dialog
+        $handle = [long]$Observer.TakeNextHandle()
+        if ($handle -ne 0) {
+            try {
+                $dialog = [System.Windows.Automation.AutomationElement]::FromHandle(
+                    [IntPtr]$handle
+                )
+                if ($null -ne $dialog -and
+                    $dialog.Current.ProcessId -eq $Process.Id -and
+                    $dialog.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window -and
+                    $dialog.Current.Name -ceq "Render as Wav File") {
+                    return $dialog
+                }
+            }
+            catch [System.Windows.Automation.ElementNotAvailableException] {
+                # The event was real but the window vanished before binding.
+                # Continue within the existing bounded discovery window.
+            }
         }
         if ($poll + 1 -lt $Polls) {
             Start-Sleep -Milliseconds 200
@@ -574,8 +677,9 @@ function Invoke-Phase6cAudioRender(
         close_native_fallback_invoked = $false
         close_wm_close_invoked = $false
         preexisting_render_dialog_count = 0
-        render_dialog_open_event_armed = $false
+        render_dialog_native_event_hook_armed = $false
         render_dialog_dispatch_boundary_set = $false
+        render_dialog_dispatch_boundary_tick = $null
         render_dialog_post_dispatch_event_count = 0
         selected_render_dialog_native_handle = $null
         selected_render_dialog_runtime_id = @()
@@ -632,27 +736,30 @@ function Invoke-Phase6cAudioRender(
         $dialogObserver = [Phase6cRenderWindowOpenedObserver]::new(
             [uint32]$Process.Id
         )
-        $result.render_dialog_open_event_armed = $true
+        $result.render_dialog_native_event_hook_armed = $true
         if (-not [Phase6cRenderNative]::Invoke(
             [uint32]$Process.Id,
             $ExpectedTitle,
-            $matches[0]
+            $matches[0],
+            $dialogObserver
         )) {
             throw "verified Render as Wav command dispatch failed"
         }
         $result.command_dispatched = $true
-        $dialogObserver.ArmAfterSuccessfulDispatch()
         $result.render_dialog_dispatch_boundary_set = $true
+        $result.render_dialog_dispatch_boundary_tick = [uint32](
+            $dialogObserver.DispatchBoundaryTick
+        )
 
-        $dialog = Wait-Phase6cOpenedRenderDialog $dialogObserver 40
+        $dialog = Wait-Phase6cOpenedRenderDialog $Process $dialogObserver 40
         if ($null -eq $dialog) {
-            throw "post-dispatch Render as Wav File WindowOpenedEvent not observed"
+            throw "post-dispatch Render as Wav File EVENT_OBJECT_SHOW not observed"
         }
         $dialogObserver.ThrowIfAmbiguous()
         try {
             $result.selected_render_dialog_native_handle = [long]$dialog.Current.NativeWindowHandle
             $result.selected_render_dialog_runtime_id = @($dialog.GetRuntimeId())
-            $result.dialog_discovery = "window-opened-event-after-successful-command-dispatch"
+            $result.dialog_discovery = "win-event-object-show-after-dispatch-tick-boundary"
         }
         catch [System.Windows.Automation.ElementNotAvailableException] {
             throw "newly opened Render as Wav File dialog became unavailable before binding"
