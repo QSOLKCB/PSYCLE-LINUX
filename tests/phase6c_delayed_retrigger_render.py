@@ -24,6 +24,14 @@ assert isolation_spec is not None and isolation_spec.loader is not None
 isolation = importlib.util.module_from_spec(isolation_spec)
 isolation_spec.loader.exec_module(isolation)
 
+SUBSTRATE_SCRIPT = ROOT / "scripts" / "phase6c-delayed-retrigger-render-substrate.py"
+substrate_spec = importlib.util.spec_from_file_location(
+    "phase6c_render_substrate", SUBSTRATE_SCRIPT
+)
+assert substrate_spec is not None and substrate_spec.loader is not None
+substrate = importlib.util.module_from_spec(substrate_spec)
+substrate_spec.loader.exec_module(substrate)
+
 
 def wave_pcm16(frames: list[int], channels: int = 1, rate: int = 44100) -> bytes:
     if channels == 1:
@@ -242,5 +250,108 @@ with tempfile.TemporaryDirectory() as temporary:
     )
     assert bound["size_bytes"] == 0
     assert bound["path"].endswith(output.name)
+
+assert substrate.diagnose({
+    "master-only": "reference-process-exited-during-render",
+    "sampler-empty": "reference-process-exited-during-render",
+    "sample-state": "reference-process-exited-during-render",
+    "ordinary-note": "reference-process-exited-during-render",
+}) == "master-only-associated-reference-exit"
+
+assert substrate.diagnose({
+    "master-only": "stable-finalized-output-process-alive",
+    "sampler-empty": "reference-process-exited-during-render",
+    "sample-state": "reference-process-exited-during-render",
+    "ordinary-note": "reference-process-exited-during-render",
+}) == "sampler-presence-associated-reference-exit"
+
+assert substrate.diagnose({
+    "master-only": "stable-finalized-output-process-alive",
+    "sampler-empty": "stable-finalized-output-process-alive",
+    "sample-state": "reference-process-exited-during-render",
+    "ordinary-note": "reference-process-exited-during-render",
+}) == "sample-state-associated-reference-exit"
+
+assert substrate.diagnose({
+    "master-only": "stable-finalized-output-process-alive",
+    "sampler-empty": "stable-finalized-output-process-alive",
+    "sample-state": "stable-finalized-output-process-alive",
+    "ordinary-note": "reference-process-exited-during-render",
+}) == "ordinary-note-associated-reference-exit-after-stable-output-controls"
+
+assert substrate.diagnose({
+    "master-only": "stable-finalized-output-process-alive",
+    "sampler-empty": "stable-finalized-output-process-alive",
+    "sample-state": "stable-finalized-output-process-alive",
+    "ordinary-note": "stable-finalized-output-process-alive",
+}) == "all-substrate-controls-survive-full-witness-detail-remains"
+
+assert substrate.diagnose({
+    "master-only": "reference-process-exited-during-render",
+    "sampler-empty": "stable-finalized-output-process-alive",
+    "sample-state": "reference-process-exited-during-render",
+    "ordinary-note": "reference-process-exited-during-render",
+}) == "nonmonotonic-substrate-result"
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    attempt = {"observed_output": None}
+    filename = "original-delayed-retrigger-substrate-master-only-1.wav"
+    assert substrate.validate_failed_observed_output(
+        root, "master-only", attempt, filename
+    ) is None
+
+    output_dir = root / "delayed-retrigger-substrate-master-only"
+    output_dir.mkdir()
+    output = output_dir / filename
+    output.write_bytes(b"")
+    try:
+        substrate.validate_failed_observed_output(
+            root, "master-only", attempt, filename
+        )
+    except ValueError as exc:
+        assert "unbound output file" in str(exc)
+    else:
+        raise AssertionError("expected substrate unbound-output rejection")
+
+    attempt["observed_output"] = {
+        "path": filename,
+        "size_bytes": 0,
+        "sha256": hashlib.sha256(b"").hexdigest(),
+    }
+    bound = substrate.validate_failed_observed_output(
+        root, "master-only", attempt, filename
+    )
+    assert bound["size_bytes"] == 0
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    output_dir = root / "delayed-retrigger-substrate-master-only"
+    output_dir.mkdir()
+    filename = "original-delayed-retrigger-substrate-master-only-1.wav"
+    output = output_dir / filename
+    data = wave_pcm16([0] * 64)
+    output.write_bytes(data)
+    attempt = {
+        "process_exited": False,
+        "process_exit_code": None,
+        "dialog_closed": False,
+        "stable_output_polls": 4,
+        "observed_output": {
+            "path": filename,
+            "size_bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        },
+    }
+    stable = substrate.validate_stable_alive_output(
+        root,
+        "master-only",
+        attempt,
+        filename,
+        module,
+    )
+    assert stable["frame_count"] == 64
+    assert stable["nonzero_frame_count"] == 0
+    assert stable["observed_output"]["sha256"] == hashlib.sha256(data).hexdigest()
 
 print("phase6c-delayed-retrigger-render: PASS")
