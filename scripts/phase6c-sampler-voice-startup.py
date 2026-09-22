@@ -210,6 +210,7 @@ def collect_source(root: Path, sampler_path: Path, song_path: Path) -> dict:
     sampler_text = sampler_data.replace(b"\r\n", b"\n").decode("utf-8")
     song_text = song_data.replace(b"\r\n", b"\n").decode("utf-8")
     required_sampler = [
+        "lastInstrument[i]=255;",
         "if (data._inst == 255)",
         "data._inst = lastInstrument[channel];",
         "if ( !Global::song().samples.IsEnabled(data._inst) ) return;",
@@ -246,6 +247,7 @@ def collect_source(root: Path, sampler_path: Path, song_path: Path) -> dict:
             },
         },
         "source_boundary": [
+            "Sampler constructor initializes every lastInstrument slot to 255",
             "instrument FF with no previous instrument returns before sample lookup",
             "disabled sample slot returns before voice selection",
             "enabled sample advances through GetFreeVoice into Voice::Tick",
