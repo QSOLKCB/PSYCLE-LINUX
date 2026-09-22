@@ -58,6 +58,27 @@ onsets = [
 ]
 valid_wave = pcm_wave(onsets)
 
+
+def write_provenance(root: Path) -> None:
+    runtime = root / m.NAME
+    runtime.mkdir(exist_ok=True)
+    for name in (
+        "phase6c-delayed-retrigger-sampulse-render",
+        "render-probe.cpp",
+        "render-probe.pro",
+        "fixture-generator.c",
+        "eins-compat.py",
+    ):
+        (runtime / name).write_bytes(("fixture:" + name).encode())
+    delayed = root / "delayed-retrigger"
+    delayed.mkdir(exist_ok=True)
+    (delayed / "sampulse-eins-compat.log").write_text("EINS PASS\n")
+    for index in (1, 2):
+        (delayed / f"sampulse-candidate-render-{index}.log").write_text(
+            f"render {index} PASS\n"
+        )
+
+
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     fixture = root / m.FIXTURE
@@ -65,7 +86,7 @@ with tempfile.TemporaryDirectory() as temporary:
     fixture.write_bytes(b"PSY3SONG" + b"same-witness-sampulse")
 
     render_dir = root / m.NAME
-    render_dir.mkdir()
+    write_provenance(root)
     for index in (1, 2):
         (render_dir / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav").write_bytes(
             valid_wave
@@ -93,7 +114,7 @@ with tempfile.TemporaryDirectory() as temporary:
     fixture.parent.mkdir(parents=True)
     fixture.write_bytes(b"PSY3SONG" + b"same-witness-sampulse")
     render_dir = root / m.NAME
-    render_dir.mkdir()
+    write_provenance(root)
     (render_dir / "candidate-delayed-retrigger-sampulse-runtime-1.wav").write_bytes(
         valid_wave
     )
