@@ -211,40 +211,85 @@ function Get-Phase6cRenderDialogs(
         [System.Windows.Automation.TreeScope]::Children,
         $condition
     )
-    $ownedWindows = @($windows)
+    $ownedWindows = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
     foreach ($window in $windows) {
-        $ownedWindows += @(
-            $window.FindAll(
+        try {
+            [void]$ownedWindows.Add($window)
+            $descendants = $window.FindAll(
                 [System.Windows.Automation.TreeScope]::Descendants,
                 $condition
-            ) | Where-Object {
-                $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window
+            )
+            foreach ($descendant in $descendants) {
+                try {
+                    if ($descendant.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window) {
+                        [void]$ownedWindows.Add($descendant)
+                    }
+                }
+                catch [System.Windows.Automation.ElementNotAvailableException] {
+                    continue
+                }
             }
-        )
+        }
+        catch [System.Windows.Automation.ElementNotAvailableException] {
+            continue
+        }
     }
+
     $byHandle = @{}
-    foreach ($window in @($ownedWindows | Where-Object {
-        $_.Current.Name -ceq "Render as Wav File"
-    })) {
-        $handle = [long]$window.Current.NativeWindowHandle
-        if ($handle -ne 0 -and -not $byHandle.ContainsKey($handle)) {
-            $byHandle[$handle] = $window
+    foreach ($window in $ownedWindows) {
+        try {
+            if ($window.Current.Name -cne "Render as Wav File") {
+                continue
+            }
+            if ($window.Current.ProcessId -ne $Process.Id) {
+                continue
+            }
+            $handle = [long]$window.Current.NativeWindowHandle
+            if ($handle -ne 0 -and -not $byHandle.ContainsKey($handle)) {
+                $byHandle[$handle] = $window
+            }
+        }
+        catch [System.Windows.Automation.ElementNotAvailableException] {
+            continue
         }
     }
     return @($byHandle.Values)
 }
 
+function Test-Phase6cSameAutomationElement(
+    [System.Windows.Automation.AutomationElement]$Left,
+    [System.Windows.Automation.AutomationElement]$Right
+) {
+    if ($null -eq $Left -or $null -eq $Right) {
+        return $false
+    }
+    try {
+        return [System.Windows.Automation.Automation]::Compare($Left, $Right)
+    }
+    catch [System.Windows.Automation.ElementNotAvailableException] {
+        return $false
+    }
+}
+
 function Get-Phase6cRenderDialog(
     [System.Diagnostics.Process]$Process,
     [int]$Polls = 1,
-    [long[]]$ExcludedNativeHandles = @()
+    [System.Windows.Automation.AutomationElement[]]$PreexistingDialogs = @()
 ) {
     for ($poll = 0; $poll -lt $Polls; $poll++) {
-        $matches = @(
-            Get-Phase6cRenderDialogs $Process | Where-Object {
-                $ExcludedNativeHandles -notcontains [long]$_.Current.NativeWindowHandle
+        $matches = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
+        foreach ($candidate in @(Get-Phase6cRenderDialogs $Process)) {
+            $isPreexisting = $false
+            foreach ($preexisting in $PreexistingDialogs) {
+                if (Test-Phase6cSameAutomationElement $candidate $preexisting) {
+                    $isPreexisting = $true
+                    break
+                }
             }
-        )
+            if (-not $isPreexisting) {
+                [void]$matches.Add($candidate)
+            }
+        }
         if ($matches.Count -gt 1) {
             throw "ambiguous new Psycle Render as Wav File dialogs"
         }
@@ -258,26 +303,22 @@ function Get-Phase6cRenderDialog(
     return $null
 }
 
-function Get-Phase6cRenderDialogByHandle(
+function Get-Phase6cLiveRenderDialog(
     [System.Diagnostics.Process]$Process,
-    [IntPtr]$NativeHandle
+    [System.Windows.Automation.AutomationElement]$Dialog
 ) {
-    if ($NativeHandle -eq [IntPtr]::Zero) {
+    if ($null -eq $Dialog) {
         return $null
     }
     try {
-        $dialog = [System.Windows.Automation.AutomationElement]::FromHandle(
-            $NativeHandle
-        )
-        if ($null -eq $dialog -or
-            $dialog.Current.ProcessId -ne $Process.Id -or
-            $dialog.Current.ControlType -ne [System.Windows.Automation.ControlType]::Window -or
-            $dialog.Current.Name -cne "Render as Wav File") {
+        if ($Dialog.Current.ProcessId -ne $Process.Id -or
+            $Dialog.Current.ControlType -ne [System.Windows.Automation.ControlType]::Window -or
+            $Dialog.Current.Name -cne "Render as Wav File") {
             return $null
         }
-        return $dialog
+        return $Dialog
     }
-    catch {
+    catch [System.Windows.Automation.ElementNotAvailableException] {
         return $null
     }
 }
@@ -399,6 +440,9 @@ function Invoke-Phase6cAudioRender(
         close_native_fallback_invoked = $false
         close_wm_close_invoked = $false
         preexisting_render_dialog_count = 0
+        selected_render_dialog_native_handle = $null
+        selected_render_dialog_runtime_id = @()
+        dialog_discovery = $null
         requested_output = $null
         output = $null
         observed_output = $null
@@ -425,12 +469,8 @@ function Invoke-Phase6cAudioRender(
             throw "missing verified loaded-fixture window title"
         }
 
-        $preexistingRenderDialogHandles = @(
-            Get-Phase6cRenderDialogs $Process | ForEach-Object {
-                [long]$_.Current.NativeWindowHandle
-            }
-        )
-        $result.preexisting_render_dialog_count = $preexistingRenderDialogHandles.Count
+        $preexistingRenderDialogs = @(Get-Phase6cRenderDialogs $Process)
+        $result.preexisting_render_dialog_count = $preexistingRenderDialogs.Count
 
         $commands = @([Phase6cRenderNative]::Inspect([uint32]$Process.Id, $ExpectedTitle))
         $result.menu_inventory = @($commands | ForEach-Object {
@@ -459,9 +499,17 @@ function Invoke-Phase6cAudioRender(
         }
         $result.command_dispatched = $true
 
-        $dialog = Get-Phase6cRenderDialog $Process 40 $preexistingRenderDialogHandles
+        $dialog = Get-Phase6cRenderDialog $Process 40 $preexistingRenderDialogs
         if ($null -eq $dialog) {
             throw "Render as Wav File dialog not observed"
+        }
+        try {
+            $result.selected_render_dialog_native_handle = [long]$dialog.Current.NativeWindowHandle
+            $result.selected_render_dialog_runtime_id = @($dialog.GetRuntimeId())
+            $result.dialog_discovery = "new-after-command-excluding-live-preexisting-elements"
+        }
+        catch [System.Windows.Automation.ElementNotAvailableException] {
+            throw "newly discovered Render as Wav File dialog became unavailable before binding"
         }
 
         $filename = Get-Phase6cRenderNode $dialog "1502" ([System.Windows.Automation.ControlType]::Edit)
@@ -543,7 +591,7 @@ function Invoke-Phase6cAudioRender(
                 $result.stable_output_polls = 0
             }
 
-            $currentDialog = Get-Phase6cRenderDialogByHandle $Process $dialogHandle
+            $currentDialog = Get-Phase6cLiveRenderDialog $Process $dialog
             if ($null -eq $currentDialog) {
                 throw "Render as Wav File dialog disappeared before completion"
             }
@@ -568,7 +616,7 @@ function Invoke-Phase6cAudioRender(
                 $result.close_uia_invoked = $true
                 for ($closePoll = 0; $closePoll -lt 20; $closePoll++) {
                     Start-Sleep -Milliseconds 100
-                    if ($null -eq (Get-Phase6cRenderDialogByHandle $Process $dialogHandle)) {
+                    if ($null -eq (Get-Phase6cLiveRenderDialog $Process $dialog)) {
                         $result.dialog_closed = $true
                         break
                     }
@@ -584,7 +632,7 @@ function Invoke-Phase6cAudioRender(
                         $result.close_native_fallback_invoked = $true
                         for ($closePoll = 0; $closePoll -lt 20; $closePoll++) {
                             Start-Sleep -Milliseconds 100
-                            if ($null -eq (Get-Phase6cRenderDialogByHandle $Process $dialogHandle)) {
+                            if ($null -eq (Get-Phase6cLiveRenderDialog $Process $dialog)) {
                                 $result.dialog_closed = $true
                                 break
                             }
@@ -600,7 +648,7 @@ function Invoke-Phase6cAudioRender(
                         $result.close_wm_close_invoked = $true
                         for ($closePoll = 0; $closePoll -lt 20; $closePoll++) {
                             Start-Sleep -Milliseconds 100
-                            if ($null -eq (Get-Phase6cRenderDialogByHandle $Process $dialogHandle)) {
+                            if ($null -eq (Get-Phase6cLiveRenderDialog $Process $dialog)) {
                                 $result.dialog_closed = $true
                                 break
                             }
