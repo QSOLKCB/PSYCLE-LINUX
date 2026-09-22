@@ -23,6 +23,7 @@
 #include <pattern.h>
 #include <patterns.h>
 #include <patternevent.h>
+#include <player.h>
 #include <plugincatcher.h>
 #include <sample.h>
 #include <samples.h>
