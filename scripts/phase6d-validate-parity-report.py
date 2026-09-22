@@ -194,12 +194,20 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
         value,
         (
             "release/no active voice",
-            "one row e df",
             "four beat e df",
             "ordinary note",
         ),
         context + " Voice::Tick work-boundary result",
     )
+    if re.search(
+        r"\bone\s+row(?:\s+sampler\s+local)?\s+e\s+df\b",
+        work_boundary,
+        re.IGNORECASE,
+    ) is None:
+        die(
+            f"{context} Voice::Tick work-boundary result lost the "
+            "one-row E-DF discriminator"
+        )
     assert_positive_predicate(
         work_boundary,
         r"\b(?:survive|survives|survived|retain|retains|retained)\b",
