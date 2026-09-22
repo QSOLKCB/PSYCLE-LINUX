@@ -88,6 +88,14 @@ if ($ObserveDelayedRetrigger) {
         }
     }
 }
+if ($ObserveDelayedRetrigger) {
+    foreach ($variant in @("master-only", "sampler-empty", "sample-state", "ordinary-note")) {
+        $name = "delayed-retrigger-substrate-$variant"
+        if (Test-Path -LiteralPath (Join-Path $outRoot ("original-{0}.json" -f $name))) {
+            $receiptNames += $name
+        }
+    }
+}
 foreach ($name in $receiptNames) {
     $receiptPath = Join-Path $outRoot ("original-{0}.json" -f $name)
     $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
