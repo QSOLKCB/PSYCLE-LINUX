@@ -178,6 +178,17 @@ public static class Phase6cRenderNative
             return "render combo CBN_SELCHANGE notification failed";
         return null;
     }
+
+    public static bool ClickButton(
+        uint process, IntPtr dialog, IntPtr button)
+    {
+        if (!Owned(dialog, process) || !Owned(button, process) ||
+            Class(button) != "Button" || !IsWindowEnabled(button) ||
+            !IsWindowVisible(button) || !DescendsFrom(button, dialog))
+            return false;
+        IntPtr result;
+        return SendValue(button, 0x00F5, IntPtr.Zero, IntPtr.Zero, 2, 1000, out result) != IntPtr.Zero;
+    }
 }
 "@
 
@@ -333,6 +344,9 @@ function Invoke-Phase6cAudioRender(
         save_invoked = $false
         stable_output_polls = 0
         dialog_closed = $false
+        close_control_seen = $false
+        close_uia_invoked = $false
+        close_native_fallback_invoked = $false
         requested_output = $null
         output = $null
         observed_output = $null
@@ -484,12 +498,15 @@ function Invoke-Phase6cAudioRender(
                 $_.Current.IsEnabled
             })
             if ($result.stable_output_polls -ge 4 -and $closeButtons.Count -eq 1) {
+                $result.close_control_seen = $true
+                $closeElement = $closeButtons[0]
                 $close = [System.Windows.Automation.InvokePattern](
-                    $closeButtons[0].GetCurrentPattern(
+                    $closeElement.GetCurrentPattern(
                         [System.Windows.Automation.InvokePattern]::Pattern
                     )
                 )
                 $close.Invoke()
+                $result.close_uia_invoked = $true
                 for ($closePoll = 0; $closePoll -lt 20; $closePoll++) {
                     Start-Sleep -Milliseconds 100
                     if ($null -eq (Get-Phase6cRenderDialog $Process 1)) {
@@ -497,12 +514,35 @@ function Invoke-Phase6cAudioRender(
                         break
                     }
                 }
+                if (-not $result.dialog_closed) {
+                    $dialogHandle = [IntPtr]$currentDialog.Current.NativeWindowHandle
+                    $buttonHandle = [IntPtr]$closeElement.Current.NativeWindowHandle
+                    if ([Phase6cRenderNative]::ClickButton(
+                        [uint32]$Process.Id,
+                        $dialogHandle,
+                        $buttonHandle
+                    )) {
+                        $result.close_native_fallback_invoked = $true
+                        for ($closePoll = 0; $closePoll -lt 20; $closePoll++) {
+                            Start-Sleep -Milliseconds 100
+                            if ($null -eq (Get-Phase6cRenderDialog $Process 1)) {
+                                $result.dialog_closed = $true
+                                break
+                            }
+                        }
+                    }
+                }
                 break
             }
         }
 
-        if ($result.stable_output_polls -lt 4 -or -not $result.dialog_closed) {
+        if ($result.stable_output_polls -lt 4 -or -not $result.close_control_seen) {
             throw "offline render did not reach a stable completed output"
+        }
+        if (-not $result.dialog_closed) {
+            $diagnostics.Add(
+                "render output finalized and Close control was verified, but dialog teardown did not complete"
+            )
         }
         if (-not (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
             throw "offline render output missing after completion"
