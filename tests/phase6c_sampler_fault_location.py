@@ -184,4 +184,50 @@ assert (
     == "inconclusive-tool-unavailable"
 )
 
+observation_path = (
+    ROOT
+    / "phase6c"
+    / "evidence"
+    / "sequencer-sampler-fault-location"
+    / "observation.json"
+)
+observation = json.loads(observation_path.read_text(encoding="utf-8"))
+assert observation["schema_version"] == 1
+assert observation["contract"] == module.CONTRACT
+assert observation["parity_status"] == "UNKNOWN"
+assert observation["function_location"] == "unresolved"
+assert observation["fixture"]["sha256"] == (
+    "f1021ee05ef3e76e71dca9f7d9f982decaef225124c8242788dbd3191813b195"
+)
+assert observation["reference"]["executable_sha256"] == (
+    "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6"
+)
+canonical = observation["canonical_observation"]
+corroborating = observation["corroborating_observation"]
+derived = observation["derived_observation"]
+assert canonical["workflow_run_id"] == 35772562875
+assert canonical["validation"] == "successful"
+assert canonical["exception"]["code_hex"] == "0xc0000005"
+assert canonical["exception"]["process_exit_code"] == module.EXPECTED_EXIT
+assert canonical["exception"]["module_offset_hex"] == "0x5c377"
+assert corroborating["workflow_run_id"] == 35770412423
+assert corroborating["module_offset_hex"] == "0x5c377"
+assert canonical["exception"]["module_base_hex"] != corroborating["module_base_hex"]
+assert canonical["exception"]["address_hex"] != corroborating["exception_address_hex"]
+assert (
+    int(canonical["exception"]["address_hex"], 16)
+    - int(canonical["exception"]["module_base_hex"], 16)
+    == int(canonical["exception"]["module_offset_hex"], 16)
+)
+assert (
+    int(corroborating["exception_address_hex"], 16)
+    - int(corroborating["module_base_hex"], 16)
+    == int(corroborating["module_offset_hex"], 16)
+)
+assert derived["aslr_bases_differ"] is True
+assert derived["exception_addresses_differ"] is True
+assert derived["module_offset_matches_across_runs"] is True
+assert derived["stable_module_offset_hex"] == "0x5c377"
+assert derived["source_function_identified"] is False
+
 print("phase6c-sampler-fault-location: PASS")

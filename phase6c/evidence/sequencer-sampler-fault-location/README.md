@@ -8,7 +8,9 @@ It targets the exact project-authored `delayed-note-short` Sampler-local
 `sequencer-sampler-work-boundary-isolation`. The ordinary Phase 6C workflow
 continues to run that fixture uninstrumented. A manual workflow dispatch with
 `sampler_fault_location=true` adds a second fresh-process observation after a
-clean accepted load.
+clean accepted load. The temporary PR-head opt-in used to collect the first
+hosted observation was removed after the evidence was frozen, so merged
+`main` returns to manual opt-in only.
 
 The optional observation:
 
@@ -34,3 +36,24 @@ remains `unresolved`. The observation cannot change
 The uninstrumented control and the instrumented receipt are validated together
 by `scripts/phase6c-sampler-fault-location.py`. Artifact paths and hashes are
 checked relative to the independently downloaded original-evidence artifact.
+
+## Versioned hosted observation
+
+PR #78 produced a validated hosted observation in workflow `35772562875` at
+head `ed1d2ad38700021d88141e9d5310367f6e7753d9`. The exact short
+`E-DF` control again exited with `0xC0000005`, while x86 CDB captured the
+second-chance exception at `0x00e6c377` inside the pinned `psycle.exe`
+loaded at `0x00e10000`, yielding module-relative offset **`0x5c377`**.
+
+An earlier collection run, workflow `35770412423` at head
+`d3c37b32bc709c6a77405d653cca15e704b2b453`, loaded the same executable
+at `0x00520000` and captured the exception at `0x0057c377`, producing the
+same **`0x5c377`** module-relative offset. That run later failed an unrelated
+fresh-receipt versus immutable historical-projection check; it is retained only
+as corroborating diagnostic evidence.
+
+The stable offset across different ASLR bases localizes the failure to a
+repeatable `psycle.exe` binary position. It still does **not** identify a
+source function: `function_location` remains `unresolved`. The complete
+workflow/artifact/receipt bindings are frozen in
+[`observation.json`](observation.json).
