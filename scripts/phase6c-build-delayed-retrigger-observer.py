@@ -45,7 +45,8 @@ def main() -> None:
         text,
         "    [switch]$ObserveSequenceOrder\n)",
         "    [switch]$ObserveSequenceOrder,\n\n"
-        "    [switch]$ObserveDelayedRetrigger\n)",
+        "    [switch]$ObserveDelayedRetrigger,\n\n"
+        "    [switch]$CollectSamplerFaultLocation\n)",
         "parameter",
     )
 
@@ -139,6 +140,16 @@ def main() -> None:
                 expected_load_warning_message = "This file is from a newer version of Psycle! This process will try to load it anyway."
             }
         }
+        if ($CollectSamplerFaultLocation) {
+            $fixtureSpecs += [ordered]@{
+                name = "sampler-fault-location"
+                candidate_receipt = "candidate-sampler-fault-location.json"
+                expected_contract = "sequencer-sampler-fault-location"
+                expected_song_title = $workBoundaryTitles["delayed-note-short"]
+                load_warning_required = $true
+                expected_load_warning_message = "This file is from a newer version of Psycle! This process will try to load it anyway."
+            }
+        }
     }
 '''
     text = replace_once(
@@ -146,6 +157,7 @@ def main() -> None:
         "Add-Type -AssemblyName System.Windows.Forms\nAdd-Type -TypeDefinition @\"",
         "Add-Type -AssemblyName System.Windows.Forms\n"
         ". (Join-Path $PSScriptRoot \"phase6c-original-audio-render.ps1\")\n"
+        ". (Join-Path $PSScriptRoot \"phase6c-sampler-fault-location.ps1\")\n"
         "Add-Type -TypeDefinition @\"",
         "offline render helper",
     )
@@ -159,6 +171,71 @@ def main() -> None:
 
     runtime_block = r'''
         $runtimeExecution = $null
+        if ($CollectSamplerFaultLocation -and $spec.name -eq "sampler-fault-location") {
+            $renderDirectory = Join-Path $outRoot "sampler-fault-location"
+            if (-not (Test-Path -LiteralPath $renderDirectory)) {
+                New-Item -ItemType Directory -Path $renderDirectory | Out-Null
+            }
+            $preRenderLoad = [ordered]@{
+                schema_version = 1
+                clean_accepted_load = [bool]$cleanAcceptedLoadEvidence
+                stable_marker_polls = $stableMarkerPolls
+                matched_marker = $matchedMarker
+                load_warning_dismissed = [bool]$loadWarningBootstrap.dismissed
+                process_running_before_render = [bool]$processRunningBeforeTermination
+            }
+            $renderSettings = [ordered]@{
+                sample_rate = 44100
+                bits_per_sample = 16
+                channels = "mono-mix"
+                dither = $false
+                range = "entire-song"
+            }
+            if ($cleanAcceptedLoadEvidence -and [bool]$loadWarningBootstrap.dismissed) {
+                $renderPath = Join-Path $renderDirectory "original-sampler-fault-location-1.wav"
+                $faultLocation = Invoke-Phase6cFaultLocationRender -Process $process -ExpectedTitle $windowTitle -OutputPath $renderPath -EvidenceDirectory $renderDirectory -ArtifactRoot $outRoot
+                $attempts = @()
+                if ($null -ne $faultLocation.render_attempt) {
+                    $attempts = @($faultLocation.render_attempt)
+                }
+                $runtimeExecution = [ordered]@{
+                    schema_version = 1
+                    outcome = if ($faultLocation.outcome -eq "captured-module-offset") {
+                        "fault-location-captured"
+                    } else {
+                        "inconclusive"
+                    }
+                    diagnostic_only = $true
+                    parity_status = "UNKNOWN"
+                    pre_render_load = $preRenderLoad
+                    settings = $renderSettings
+                    attempts = @($attempts)
+                    renders = @()
+                    fault_location = $faultLocation
+                }
+            } else {
+                $runtimeExecution = [ordered]@{
+                    schema_version = 1
+                    outcome = "inconclusive"
+                    diagnostic_only = $true
+                    parity_status = "UNKNOWN"
+                    pre_render_load = $preRenderLoad
+                    settings = $renderSettings
+                    attempts = @()
+                    renders = @()
+                    fault_location = [ordered]@{
+                        schema_version = 1
+                        scope = "pinned-original-sampler-fault-location"
+                        outcome = "inconclusive-clean-load-required"
+                        function_location = "unresolved"
+                        diagnostics = @(
+                            "clean accepted load and dismissed Load Warning are required before debugger attachment"
+                        )
+                    }
+                }
+            }
+        }
+
         if ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger-execution") {
             $renderDirectory = Join-Path $outRoot "delayed-retrigger-execution"
             if (-not (Test-Path -LiteralPath $renderDirectory)) {
@@ -439,7 +516,9 @@ def main() -> None:
     text = replace_once(
         text,
         '            procedure = if ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',
-        '            procedure = if ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger-execution") {\n'
+        '            procedure = if ($CollectSamplerFaultLocation -and $spec.name -eq "sampler-fault-location") {\n'
+        '                "$Procedure; after a fresh clean accepted load of the exact short Sampler-local E-DF witness, attach only a preinstalled hash-bound x86 cdb debugger before Save Wave; capture the second-chance c0000005 exception address and a pre-render loaded-module map so a module-relative offset can be derived without requiring symbols; missing tools, attach failure, missing address, or unresolved module remain inconclusive; this diagnostic lane cannot promote parity or name a source function"\n'
+        '            } elseif ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger-execution") {\n'
         '                "$Procedure; after the clean accepted-load gate, invoke only the source-pinned Psycle 1.12.0 Render as Wav File command and exact dialog controls; attempt the additive sampled command witness as mono 44.1 kHz 16-bit PCM with dither disabled; if the first render succeeds, repeat it for deterministic waveform validation; if either attempted render exits the reference process, retain the exact process-exit/output evidence without promoting runtime command execution or parity"\n'
         '            } elseif ($ObserveDelayedRetrigger -and [string]$spec.name -like "delayed-retrigger-isolation-*") {\n'
         '                "$Procedure; after the clean accepted-load gate, invoke the same source-pinned Render as Wav File UI once for this fresh-process control-or-single-command sampled witness; retain either the hash-bound PCM output or exact process-exit/output evidence solely to isolate the PR #71 render failure; this diagnostic observation cannot promote delayed/retrigger parity"\n'
@@ -448,7 +527,7 @@ def main() -> None:
         '            } elseif ($ObserveDelayedRetrigger -and [string]$spec.name -like "sampler-voice-startup-*") {\n'
         '                "$Procedure; after the clean accepted-load gate, invoke the same source-pinned Render as Wav File UI once for this source-bound Sampler::Tick/Voice::Tick startup rung; retain finalized PCM/stable-process evidence or exact process-exit/output evidence solely to isolate the PR #73 ordinary-note failure boundary; this diagnostic observation cannot promote delayed/retrigger parity"\n'
         '            } elseif ($ObserveDelayedRetrigger -and [string]$spec.name -like "sampler-work-boundary-*") {\n'
-        '                "$Procedure; after the clean accepted-load gate, invoke the same source-pinned Render as Wav File UI once for this source-bound release/delayed/ordinary Sampler work-boundary rung; retain finalized PCM/stable-process evidence or exact 0xC0000005 process-exit/output evidence solely to split Voice::Tick initialization from controller.Work-reachable sample processing; this diagnostic observation cannot promote delayed/retrigger parity"\n'
+        '                "$Procedure; after the clean accepted-load gate, invoke the same source-pinned Render as Wav File UI once for this source-bound release/delayed/ordinary Sampler work-boundary rung; retain finalized PCM/stable-process evidence or exact 0xC0000005 process-exit/output evidence solely to establish whether normal controller.Work sample processing is required; Voice selection/setup, Voice::Tick initialization, and pre-controller.Work Voice::Work entry remain unresolved; this diagnostic observation cannot promote delayed/retrigger parity"\n'
         '            } elseif ($ObserveDelayedRetrigger -and $spec.name -eq "delayed-retrigger") {\n'
         '                "$Procedure; for the sequencer-delayed-retrigger contract load the exact frozen command fixture under pinned Psycle 1.12.0 x86 and retain the clean accepted-load/liveness evidence; command execution semantics are recorded separately from the pinned original source and are not inferred from this UI load receipt"\n'
         '            } elseif ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',

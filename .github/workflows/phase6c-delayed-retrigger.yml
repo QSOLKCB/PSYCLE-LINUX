@@ -8,6 +8,7 @@ on:
     paths:
       - 'phase6c/DELAYED_RETRIGGER.md'
       - 'phase6c/evidence/sequencer-delayed-retrigger/**'
+      - 'phase6c/evidence/sequencer-sampler-fault-location/**'
       - 'phase6c/compatibility-matrix.json'
       - 'scripts/phase6c-validate-matrix.py'
       - 'PSYCLE_CORE_PARITY.md'
@@ -15,9 +16,12 @@ on:
       - 'tests/phase6c_delayed_retrigger*'
       - 'tests/phase6c_sampler_voice_startup_fixture.c'
       - 'tests/phase6c_sampler_work_boundary_fixture.c'
+      - 'tests/phase6c_sampler_fault_location.py'
       - 'scripts/phase6c-delayed-retrigger-*'
       - 'scripts/phase6c-sampler-voice-startup.py'
       - 'scripts/phase6c-sampler-work-boundary.py'
+      - 'scripts/phase6c-sampler-fault-location.py'
+      - 'scripts/phase6c-sampler-fault-location.ps1'
       - 'scripts/phase6c-build-delayed-retrigger-observer.py'
       - 'scripts/phase6c-original-windows-fixtures.ps1'
       - 'scripts/phase6c-original-audio-render.ps1'
@@ -40,6 +44,7 @@ on:
     paths:
       - 'phase6c/DELAYED_RETRIGGER.md'
       - 'phase6c/evidence/sequencer-delayed-retrigger/**'
+      - 'phase6c/evidence/sequencer-sampler-fault-location/**'
       - 'phase6c/compatibility-matrix.json'
       - 'scripts/phase6c-validate-matrix.py'
       - 'PSYCLE_CORE_PARITY.md'
@@ -47,9 +52,12 @@ on:
       - 'tests/phase6c_delayed_retrigger*'
       - 'tests/phase6c_sampler_voice_startup_fixture.c'
       - 'tests/phase6c_sampler_work_boundary_fixture.c'
+      - 'tests/phase6c_sampler_fault_location.py'
       - 'scripts/phase6c-delayed-retrigger-*'
       - 'scripts/phase6c-sampler-voice-startup.py'
       - 'scripts/phase6c-sampler-work-boundary.py'
+      - 'scripts/phase6c-sampler-fault-location.py'
+      - 'scripts/phase6c-sampler-fault-location.ps1'
       - 'scripts/phase6c-build-delayed-retrigger-observer.py'
       - 'scripts/phase6c-original-windows-fixtures.ps1'
       - 'scripts/phase6c-original-audio-render.ps1'
@@ -69,6 +77,12 @@ on:
       - 'cpsycle/**'
       - '.github/workflows/phase6c-delayed-retrigger.yml'
   workflow_dispatch:
+    inputs:
+      sampler_fault_location:
+        description: 'Collect the opt-in pinned-original Sampler exception/module-offset witness'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -103,6 +117,9 @@ jobs:
 
       - name: Check offline render analyzer negative controls
         run: python3 tests/phase6c_delayed_retrigger_render.py
+
+      - name: Check Sampler fault-location negative controls
+        run: python3 tests/phase6c_sampler_fault_location.py
 
       - name: Validate versioned compatibility matrix
         run: python3 scripts/phase6c-validate-matrix.py phase6c/compatibility-matrix.json
@@ -208,6 +225,10 @@ jobs:
             phase6c-command-evidence "$SRC/Sampler.cpp" "$SRC/Sampler.hpp" "$SRC/SongStructs.hpp"
           python3 scripts/phase6c-sampler-work-boundary.py source-check \
             phase6c-command-evidence
+          python3 scripts/phase6c-sampler-fault-location.py candidate \
+            phase6c-command-evidence
+          python3 scripts/phase6c-sampler-fault-location.py candidate-check \
+            phase6c-command-evidence
 
       - name: Upload candidate command evidence
         if: always()
@@ -278,7 +299,8 @@ jobs:
           foreach ($path in @(
             $generated,
             'scripts/phase6c-original-windows-fixtures.ps1',
-            'scripts/phase6c-original-audio-render.ps1'
+            'scripts/phase6c-original-audio-render.ps1',
+            'scripts/phase6c-sampler-fault-location.ps1'
           )) {
             $tokens = $null
             $errors = $null
@@ -296,17 +318,24 @@ jobs:
 
       - name: Observe pinned original delayed/retrigger fixture
         shell: pwsh
+        env:
+          PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION: ${{ github.event_name == 'workflow_dispatch' && inputs.sampler_fault_location }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $collectFaultLocation = $env:PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION -eq 'true'
           ./scripts/phase6c-original-windows-fixtures.ps1 `
             -CandidateArtifactRoot 'phase6c-command-candidate' `
             -Out 'phase6c-command-original' `
-            -ObserveDelayedRetrigger
+            -ObserveDelayedRetrigger `
+            -CollectSamplerFaultLocation:$collectFaultLocation
 
       - name: Validate command observations
         shell: pwsh
+        env:
+          PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION: ${{ github.event_name == 'workflow_dispatch' && inputs.sampler_fault_location }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $collectFaultLocation = $env:PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION -eq 'true'
           python scripts/phase6c-delayed-retrigger-evidence.py candidate phase6c-command-candidate
           if ($LASTEXITCODE -ne 0) { throw "candidate command validation failed" }
           python scripts/phase6c-delayed-retrigger-evidence.py source-check phase6c-command-candidate
@@ -349,6 +378,16 @@ jobs:
           python scripts/phase6c-sampler-work-boundary.py original `
             phase6c-command-candidate phase6c-command-original
           if ($LASTEXITCODE -ne 0) { throw "original Sampler work-boundary validation failed" }
+          python scripts/phase6c-sampler-fault-location.py candidate-check `
+            phase6c-command-candidate
+          if ($LASTEXITCODE -ne 0) { throw "Sampler fault-location candidate validation failed" }
+          if ($collectFaultLocation) {
+            python scripts/phase6c-sampler-fault-location.py original `
+              phase6c-command-candidate phase6c-command-original
+            if ($LASTEXITCODE -ne 0) { throw "original Sampler fault-location validation failed" }
+          } else {
+            Write-Host "Sampler fault-location witness disabled for this run"
+          }
 
       - name: Upload original command evidence
         if: always()
