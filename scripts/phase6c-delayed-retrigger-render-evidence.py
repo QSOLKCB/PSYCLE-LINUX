@@ -278,6 +278,104 @@ def validate_observed_output(original_root: Path, value: object) -> dict:
     }
 
 
+def validate_completed_render_attempt(
+    original_root: Path,
+    attempt: object,
+    value: object,
+    attempt_number: int,
+) -> bytes:
+    validated = validate_render_attempt(attempt, "rendered")
+    if validated.get("process_exited") is not False:
+        raise ValueError("reference exited during a supposedly successful render")
+    if validated.get("process_exit_code") is not None:
+        raise ValueError("successful render unexpectedly recorded a process exit code")
+
+    output = validated.get("output")
+    expected_name = f"original-delayed-retrigger-execution-{attempt_number}.wav"
+    if (
+        not isinstance(output, dict)
+        or set(output) != {"path", "sha256"}
+        or output.get("path") != expected_name
+        or not isinstance(output.get("sha256"), str)
+    ):
+        raise ValueError("successful render attempt output binding is invalid")
+    data = bound_bytes(original_root, value)
+    if (
+        value.get("path") != "delayed-retrigger-execution/" + expected_name
+        or value.get("sha256") != output["sha256"]
+        or digest(data) != output["sha256"]
+    ):
+        raise ValueError("successful render attempt does not match retained render binding")
+    return data
+
+
+def validate_process_exit_runtime(
+    original_root: Path,
+    receipt: dict,
+    runtime: dict,
+    attempts: list[object],
+) -> dict:
+    if (
+        receipt.get("load_result") != "inconclusive"
+        or receipt.get("observation")
+        != "reference-process-exited-before-harness-termination"
+        or runtime.get("deterministic") is not False
+    ):
+        raise ValueError("original render process-exit observation is inconsistent")
+
+    renders = runtime.get("renders")
+    if (
+        not isinstance(renders, list)
+        or len(renders) not in {0, 1}
+        or len(attempts) not in {1, 2}
+        or len(attempts) != len(renders) + 1
+    ):
+        raise ValueError("original render process-exit partial-render shape is inconsistent")
+
+    completed_hashes = []
+    for index, value in enumerate(renders, start=1):
+        data = validate_completed_render_attempt(
+            original_root, attempts[index - 1], value, index
+        )
+        completed_hashes.append(digest(data))
+
+    attempt_number = len(attempts)
+    attempt = validate_render_attempt(attempts[-1], "inconclusive")
+    if attempt.get("process_exited") is not True:
+        raise ValueError("render process-exit outcome lacks process-exit evidence")
+    if attempt.get("output") is not None:
+        raise ValueError("failed render attempt unexpectedly records a completed output")
+    exit_code = attempt.get("process_exit_code")
+    if (
+        not isinstance(exit_code, int)
+        or isinstance(exit_code, bool)
+        or exit_code == 0
+        or receipt.get("exit_code_before_termination") != exit_code
+    ):
+        raise ValueError("render process-exit code is missing or inconsistent")
+    diagnostics = attempt.get("diagnostics")
+    if diagnostics != ["reference exited during offline render"]:
+        raise ValueError("render process-exit diagnostic is unexpected")
+
+    observed_output = validate_observed_output(
+        original_root, attempt.get("observed_output")
+    )
+    expected_output = (
+        "delayed-retrigger-execution/"
+        f"original-delayed-retrigger-execution-{attempt_number}.wav"
+    )
+    if observed_output["path"] != expected_output:
+        raise ValueError("failed render attempt is bound to the wrong output path")
+
+    return {
+        "attempt_number": attempt_number,
+        "completed_render_count": len(completed_hashes),
+        "completed_render_sha256": completed_hashes,
+        "process_exit_code": exit_code,
+        "observed_output": observed_output,
+    }
+
+
 def validate_original(candidate_root: Path, original_root: Path) -> dict:
     candidate_root = candidate_root.resolve()
     original_root = original_root.resolve()
@@ -352,15 +450,12 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         renders = runtime.get("renders")
         if not isinstance(renders, list) or len(renders) != 2 or len(attempts) != 2:
             raise ValueError("expected exactly two successful original offline renders")
-        for attempt in attempts:
-            validated = validate_render_attempt(attempt, "rendered")
-            if validated.get("process_exited") is not False:
-                raise ValueError("reference exited during a supposedly successful render")
-            if validated.get("process_exit_code") is not None:
-                raise ValueError("successful render unexpectedly recorded a process exit code")
-
-        first = bound_bytes(original_root, renders[0])
-        second = bound_bytes(original_root, renders[1])
+        first = validate_completed_render_attempt(
+            original_root, attempts[0], renders[0], 1
+        )
+        second = validate_completed_render_attempt(
+            original_root, attempts[1], renders[1], 2
+        )
         if first != second or digest(first) != digest(second):
             raise ValueError("repeated original offline renders are not byte-identical")
 
@@ -392,31 +487,8 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "parity_status": "UNKNOWN",
         }
     elif outcome == "reference-process-exited-during-render":
-        if (
-            receipt.get("load_result") != "inconclusive"
-            or receipt.get("observation")
-            != "reference-process-exited-before-harness-termination"
-            or runtime.get("deterministic") is not False
-            or runtime.get("renders") != []
-            or len(attempts) != 1
-        ):
-            raise ValueError("original render process-exit observation is inconsistent")
-        attempt = validate_render_attempt(attempts[0], "inconclusive")
-        if attempt.get("process_exited") is not True:
-            raise ValueError("render process-exit outcome lacks process-exit evidence")
-        exit_code = attempt.get("process_exit_code")
-        if (
-            not isinstance(exit_code, int)
-            or isinstance(exit_code, bool)
-            or exit_code == 0
-            or receipt.get("exit_code_before_termination") != exit_code
-        ):
-            raise ValueError("render process-exit code is missing or inconsistent")
-        diagnostics = attempt.get("diagnostics")
-        if diagnostics != ["reference exited during offline render"]:
-            raise ValueError("render process-exit diagnostic is unexpected")
-        observed_output = validate_observed_output(
-            original_root, attempt.get("observed_output")
+        exit_evidence = validate_process_exit_runtime(
+            original_root, receipt, runtime, attempts
         )
         result = {
             "schema_version": 1,
@@ -431,13 +503,17 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "runtime_command_execution_observed": False,
             "offline_renderer": "Psycle 1.12.0 Render as Wav File",
             "render_attempt_verified": True,
-            "process_exit_code": exit_code,
-            "observed_output": observed_output,
+            "failed_render_attempt": exit_evidence["attempt_number"],
+            "completed_render_count": exit_evidence["completed_render_count"],
+            "completed_render_sha256": exit_evidence["completed_render_sha256"],
+            "process_exit_code": exit_evidence["process_exit_code"],
+            "observed_output": exit_evidence["observed_output"],
             "interpretation_boundary": (
-                "the exact fixture reached the clean accepted-load gate and the "
-                "source-pinned Render as Wav UI reached verified Save Wave dispatch, "
-                "but the pinned reference process exited before a valid waveform was "
-                "produced; this is retained as original-runtime failure evidence and "
+                "the exact fixture reached the clean accepted-load gate and each "
+                "completed render attempt is hash-bound; the final source-pinned "
+                "Render as Wav attempt reached verified Save Wave dispatch but the "
+                "pinned reference process exited before that attempt produced a valid "
+                "waveform; this is retained as original-runtime failure evidence and "
                 "does not establish delayed/retrigger command execution or parity"
             ),
             "parity_status": "UNKNOWN",
