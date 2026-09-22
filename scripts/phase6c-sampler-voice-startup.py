@@ -16,6 +16,7 @@ SOURCE_COMMIT = "7ac6d2c3553e2ee8dda55814d8e689919c345478"
 SAMPLER_BLOB = "6cc0bd7328d01131c3d41b68f4e5d4189959e364"
 SONG_BLOB = "9ed00469d29d0a5714cc7b86175d0dc4c6048e3a"
 SOURCE_RECEIPT = "original-source-sampler-voice-startup.json"
+EXPECTED_ACCESS_VIOLATION_EXIT_CODE = -1073741819  # Windows 0xC0000005
 SOURCE_SAMPLER_MARKERS = [
     "lastInstrument[i]=255;",
     "if (data._inst == 255)",
@@ -317,6 +318,24 @@ def require_attempt_prefix(attempt: object, name: str) -> dict:
     return attempt
 
 
+def validate_expected_access_violation(
+    receipt: dict, attempt: dict, name: str
+) -> int:
+    exit_code = attempt.get("process_exit_code")
+    if (
+        not isinstance(exit_code, int)
+        or isinstance(exit_code, bool)
+        or exit_code != EXPECTED_ACCESS_VIOLATION_EXIT_CODE
+        or receipt.get("exit_code_before_termination") != exit_code
+        or attempt.get("diagnostics")
+        != ["reference exited during offline render"]
+    ):
+        raise ValueError(
+            f"{name}: process exit does not match expected 0xC0000005 access violation"
+        )
+    return exit_code
+
+
 def validate_completed_render_attempt(attempt: dict, name: str) -> None:
     if (
         attempt.get("outcome") != "rendered"
@@ -540,16 +559,9 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                 or attempt.get("output") is not None
             ):
                 raise ValueError(f"{name}: process-exit state inconsistent")
-            exit_code = attempt.get("process_exit_code")
-            if (
-                not isinstance(exit_code, int)
-                or isinstance(exit_code, bool)
-                or exit_code == 0
-                or receipt.get("exit_code_before_termination") != exit_code
-                or attempt.get("diagnostics")
-                != ["reference exited during offline render"]
-            ):
-                raise ValueError(f"{name}: process-exit identity mismatch")
+            exit_code = validate_expected_access_violation(
+                receipt, attempt, name
+            )
             observed = validate_observed_output(
                 original_root, name, attempt, filename
             )
