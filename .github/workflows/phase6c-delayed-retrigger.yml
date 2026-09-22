@@ -319,7 +319,7 @@ jobs:
       - name: Observe pinned original delayed/retrigger fixture
         shell: pwsh
         env:
-          PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION: ${{ (github.event_name == 'workflow_dispatch' && inputs.sampler_fault_location) || (github.event_name == 'pull_request' && github.head_ref == 'phase-6c/sampler-fault-location-observation') }}
+          PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION: ${{ github.event_name == 'workflow_dispatch' && inputs.sampler_fault_location }}
         run: |
           $ErrorActionPreference = 'Stop'
           $collectFaultLocation = $env:PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION -eq 'true'
@@ -332,7 +332,7 @@ jobs:
       - name: Validate command observations
         shell: pwsh
         env:
-          PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION: ${{ (github.event_name == 'workflow_dispatch' && inputs.sampler_fault_location) || (github.event_name == 'pull_request' && github.head_ref == 'phase-6c/sampler-fault-location-observation') }}
+          PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION: ${{ github.event_name == 'workflow_dispatch' && inputs.sampler_fault_location }}
         run: |
           $ErrorActionPreference = 'Stop'
           $collectFaultLocation = $env:PSYCLE_PHASE6C_COLLECT_FAULT_LOCATION -eq 'true'
