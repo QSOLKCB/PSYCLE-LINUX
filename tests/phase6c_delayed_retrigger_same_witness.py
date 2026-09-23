@@ -293,6 +293,19 @@ expect_value_error(
     "machine-specific MACD state",
 )
 
+master_muted_chunks = []
+for fourcc, version, payload in m.parse_psy3_chunks(valid_fixture):
+    if fourcc == b"MACD" and struct.unpack_from("<i", payload, 0)[0] == 128:
+        changed = bytearray(payload)
+        routing_position = payload.index(b"\0", 8) + 1
+        changed[routing_position + 1] = 1
+        payload = bytes(changed)
+    master_muted_chunks.append((fourcc, version, payload))
+expect_value_error(
+    lambda: m.validate_fixture_identity(repack_chunks(master_muted_chunks)),
+    "does not route sampler slot 0 directly to Master slot 128",
+)
+
 embedded_sngi = bytearray(
     next(
         payload
@@ -896,6 +909,18 @@ with tempfile.TemporaryDirectory() as temporary:
     binding, data = m.validate_original_attempt(root, completed_attempt, 1)
     assert data == valid_wave
     assert binding["sha256"] == m.digest(valid_wave)
+
+    closed_without_close_evidence = dict(completed_attempt)
+    closed_without_close_evidence["dialog_closed"] = True
+    closed_without_close_evidence["close_control_seen"] = False
+    closed_without_close_evidence["close_uia_invoked"] = False
+    closed_without_close_evidence["diagnostics"] = []
+    expect_value_error(
+        lambda: m.validate_original_attempt(
+            root, closed_without_close_evidence, 1
+        ),
+        "did not complete cleanly",
+    )
 
     incomplete_attempt = dict(completed_attempt)
     incomplete_attempt["stable_output_polls"] = 3
