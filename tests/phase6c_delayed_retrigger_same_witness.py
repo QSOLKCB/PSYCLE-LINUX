@@ -207,6 +207,28 @@ onsets = [
 valid_wave = pcm_wave(onsets, frames=m.CANDIDATE_TARGET_FRAMES)
 valid_fixture = candidate_fixture_bytes()
 
+strict_original_analysis, strict_observed, strict_error = (
+    m.analyze_original_command_evidence(valid_wave)
+)
+assert strict_observed is True
+assert strict_error is None
+assert strict_original_analysis["window_onset_counts"]["retrigger_beat_1"] == 3
+
+silent_wave = pcm_wave([], frames=m.CANDIDATE_TARGET_FRAMES)
+silent_analysis, silent_observed, silent_error = (
+    m.analyze_original_command_evidence(silent_wave)
+)
+assert silent_observed is False
+assert "fewer than five distinct impulse onsets" in silent_error
+assert silent_analysis["frame_count"] == m.CANDIDATE_TARGET_FRAMES
+assert silent_analysis["onset_frames"] == []
+assert silent_analysis["window_onset_counts"] == {
+    "note_delay_beat_0": 0,
+    "retrigger_beat_1": 0,
+    "retr_cont_beat_2": 0,
+    "extended_marker_beat_3": 0,
+}
+
 expect_value_error(
     lambda: m.validate_fixture_identity(
         candidate_fixture_bytes(include_legacy_pattern=False)
@@ -1020,17 +1042,29 @@ with tempfile.TemporaryDirectory() as temporary:
     assert early_quarantine["observed_output"] is None
 
     valid_binding_attempt = dict(ambiguous_attempt)
-    valid_binding_attempt[
-        "render_dialog_post_dispatch_observed_window_event_count"
-    ] = 1
+    valid_binding_attempt.update(
+        {
+            "render_dialog_post_dispatch_observed_window_event_count": 1,
+            "render_dialog_post_dispatch_event_count": 1,
+            "render_dialog_unresolved_post_dispatch_event_count": 0,
+            "diagnostics": ["Render as Wav File controls were not found"],
+            "observed_output": None,
+        }
+    )
     valid_binding_runtime = dict(inconclusive_runtime)
     valid_binding_runtime["attempts"] = [valid_binding_attempt]
-    expect_value_error(
-        lambda: m.validate_original_inconclusive_runtime(
-            root, valid_binding_runtime
-        ),
-        "valid post-dispatch dialog binding",
+    post_binding_root = root / "post-binding-failure"
+    post_binding_root.mkdir()
+    valid_binding_quarantine = m.validate_original_inconclusive_runtime(
+        post_binding_root, valid_binding_runtime
     )
+    assert valid_binding_quarantine["inconclusive_reason"] == (
+        "post-binding-render-automation-failure"
+    )
+    assert valid_binding_quarantine["binding_error"] is None
+    assert valid_binding_quarantine["observed_output"] is None
+    assert valid_binding_quarantine["retained_renders"] == []
+    assert m.inconclusive_render_binding_status(valid_binding_quarantine) == "accepted"
 
 valid_original_runtime = {
     "schema_version": 1,
