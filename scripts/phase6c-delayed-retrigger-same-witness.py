@@ -247,6 +247,116 @@ def validate_candidate(root: Path) -> dict:
     return receipt
 
 
+def validate_original_event_binding(attempt: dict) -> None:
+    validate_original_event_binding(attempt)
+
+
+def validate_original_inconclusive_runtime(
+    original_root: Path, runtime: object
+) -> dict:
+    if not isinstance(runtime, dict):
+        raise ValueError("same-witness original runtime receipt is missing")
+    attempts = runtime.get("attempts")
+    pre = runtime.get("pre_render_load")
+    if (
+        runtime.get("schema_version") != 1
+        or runtime.get("outcome") != "inconclusive"
+        or runtime.get("deterministic") is not False
+        or runtime.get("settings") != ORIGINAL_RENDER_SETTINGS
+        or runtime.get("renders") != []
+        or not isinstance(attempts, list)
+        or len(attempts) != 1
+        or not isinstance(pre, dict)
+        or pre.get("schema_version") != 1
+        or pre.get("clean_accepted_load") is not True
+        or pre.get("load_warning_dismissed") is not True
+        or pre.get("process_running_before_render") is not True
+        or pre.get("matched_marker") != Path(FIXTURE).name
+        or not isinstance(pre.get("stable_marker_polls"), int)
+        or isinstance(pre.get("stable_marker_polls"), bool)
+        or pre["stable_marker_polls"] < 4
+    ):
+        raise ValueError("same-witness inconclusive original runtime mismatch")
+
+    attempt = attempts[0]
+    if not isinstance(attempt, dict):
+        raise ValueError("same-witness inconclusive render attempt is not an object")
+    for key in (
+        "command_verified",
+        "command_dispatched",
+        "dialog_verified",
+        "controls_configured",
+        "save_invoked",
+    ):
+        if attempt.get(key) is not True:
+            raise ValueError(
+                f"same-witness inconclusive render did not verify {key}"
+            )
+    diagnostics = attempt.get("diagnostics")
+    if (
+        attempt.get("outcome") != "inconclusive"
+        or attempt.get("process_exited") is not False
+        or attempt.get("process_exit_code") is not None
+        or attempt.get("output") is not None
+        or not isinstance(diagnostics, list)
+        or not diagnostics
+    ):
+        raise ValueError("same-witness inconclusive render shape mismatch")
+
+    try:
+        validate_original_event_binding(attempt)
+    except ValueError as exc:
+        binding_error = str(exc)
+    else:
+        raise ValueError(
+            "same-witness inconclusive render has valid post-dispatch dialog binding"
+        )
+
+    expected_name = "original-delayed-retrigger-sampulse-runtime-1.wav"
+    expected_relative = f"{NAME}/{expected_name}"
+    expected_path = child(original_root, expected_relative)
+    observed = attempt.get("observed_output")
+    if observed is None:
+        if expected_path.exists():
+            raise ValueError(
+                "same-witness inconclusive render created an unbound output file"
+            )
+        observed_binding = None
+    else:
+        if (
+            not isinstance(observed, dict)
+            or set(observed) != {"path", "size_bytes", "sha256"}
+            or observed.get("path") != expected_name
+            or not isinstance(observed.get("size_bytes"), int)
+            or isinstance(observed.get("size_bytes"), bool)
+            or observed["size_bytes"] < 0
+            or not isinstance(observed.get("sha256"), str)
+            or len(observed["sha256"]) != 64
+        ):
+            raise ValueError(
+                "same-witness inconclusive observed output binding is invalid"
+            )
+        data = expected_path.read_bytes()
+        if (
+            len(data) != observed["size_bytes"]
+            or digest(data) != observed["sha256"]
+        ):
+            raise ValueError(
+                "same-witness inconclusive observed output binding mismatch"
+            )
+        observed_binding = {
+            "path": expected_relative,
+            "size_bytes": observed["size_bytes"],
+            "sha256": observed["sha256"],
+        }
+
+    return {
+        "binding_error": binding_error,
+        "diagnostics": diagnostics,
+        "observed_output": observed_binding,
+    }
+
+
 def validate_original_runtime_procedure(runtime: object) -> list[dict]:
     if not isinstance(runtime, dict):
         raise ValueError("same-witness original runtime receipt is missing")
@@ -399,6 +509,73 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         raise ValueError("same-witness original receipt identity mismatch")
 
     runtime = receipt.get("runtime_execution")
+    if isinstance(runtime, dict) and runtime.get("outcome") == "inconclusive":
+        quarantine = validate_original_inconclusive_runtime(
+            original_root, runtime
+        )
+        original_analysis = {
+            "schema_version": 1,
+            "phase": "6C",
+            "contract": CONTRACT,
+            "evidence_role": "original-runtime",
+            "reference_build": REFERENCE_BUILD,
+            "fixture": candidate["fixture"],
+            "fixture_sha256": candidate["fixture_sha256"],
+            "machine_substrate": "XMSampler/Sampulse",
+            "outcome": "inconclusive",
+            "renders": [],
+            "render_sha256": None,
+            "analysis": None,
+            "runtime_command_execution_observed": False,
+            "fresh_render_event_binding": "rejected",
+            "fresh_render_event_binding_error": quarantine["binding_error"],
+            "observed_output": quarantine["observed_output"],
+            "diagnostics": quarantine["diagnostics"],
+            "timing_interpretation": "deferred",
+            "parity_status": "UNKNOWN",
+        }
+        write_new(original_root / ORIGINAL_ANALYSIS, original_analysis)
+
+        comparison = {
+            "schema_version": 1,
+            "phase": "6C",
+            "contract": CONTRACT,
+            "fixture_sha256": candidate["fixture_sha256"],
+            "same_fixture_bytes": True,
+            "same_onset_analyzer": (
+                "phase6c-delayed-retrigger-render-evidence.py::analyze_wave"
+            ),
+            "candidate": {
+                "render_sha256": candidate["render_sha256"],
+                "analysis": candidate["analysis"],
+                "runtime_command_execution_observed": True,
+            },
+            "original": {
+                "reference_build": REFERENCE_BUILD,
+                "outcome": "inconclusive",
+                "render_sha256": None,
+                "analysis": None,
+                "runtime_command_execution_observed": False,
+                "fresh_render_event_binding": "rejected",
+                "fresh_render_event_binding_error": quarantine["binding_error"],
+                "observed_output": quarantine["observed_output"],
+            },
+            "command_bearing_runtime_pair_observed": False,
+            "exact_onset_timing_interpretation": "deferred",
+            "classification_allowed": False,
+            "parity_status": "UNKNOWN",
+            "interpretation_boundary": (
+                "The candidate rendered the exact four-beat Sampulse/XMSampler "
+                "witness, but the fresh pinned-original render attempt was "
+                "quarantined because its post-dispatch dialog evidence was "
+                "ambiguous. No original command-bearing runtime execution or "
+                "cross-side runtime pair is claimed from this attempt, and "
+                "delayed/retrigger parity remains unclassified."
+            ),
+        }
+        write_new(original_root / COMPARISON, comparison)
+        return comparison
+
     attempts = validate_original_runtime_procedure(runtime)
 
     first_binding, first = validate_original_attempt(original_root, attempts[0], 1)
