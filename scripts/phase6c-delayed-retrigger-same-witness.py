@@ -146,13 +146,14 @@ def validate_pair_of_waves(
 def validate_candidate_render_log(root: Path, index: int) -> dict:
     relative = f"delayed-retrigger/sampulse-candidate-render-{index}.log"
     path = child(root, relative)
-    lines = [
-        line.strip()
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
     summaries: list[dict] = []
-    for line in lines:
+    for raw_line in path.read_bytes().splitlines():
+        if not raw_line.strip():
+            continue
+        try:
+            line = raw_line.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            continue
         try:
             value = json.loads(line)
         except json.JSONDecodeError:
