@@ -293,6 +293,26 @@ expect_value_error(
     "machine-specific MACD state",
 )
 
+embedded_sngi = bytearray(
+    next(
+        payload
+        for fourcc, _version, payload in m.parse_psy3_chunks(valid_fixture)
+        if fourcc == b"SNGI"
+    )
+)
+struct.pack_into("<i", embedded_sngi, 4, 200)
+hidden_loader_visible = (
+    b"SNGI"
+    + struct.pack("<II", 4, len(embedded_sngi))
+    + bytes(embedded_sngi)
+)
+unknown_chunks = list(m.parse_psy3_chunks(valid_fixture))
+unknown_chunks.append((b"JUNK", 0, hidden_loader_visible))
+expect_value_error(
+    lambda: m.validate_fixture_identity(repack_chunks(unknown_chunks)),
+    "top-level chunk layout",
+)
+
 
 def candidate_render_summary(index: int, output_path: Path) -> dict:
     compiled = m.expected_compiled_provenance()
