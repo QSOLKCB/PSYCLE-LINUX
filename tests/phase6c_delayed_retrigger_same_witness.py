@@ -92,7 +92,8 @@ def synthetic_eins_payload() -> bytes:
 
 def machine_payload(slot: int, machine_type: int, *, input_slot: int, output_slot: int,
                     input_count: int, output_count: int, edit_name: str,
-                    input_volume: float = 1.0, wire_multiplier: float = 1.0) -> bytes:
+                    input_volume: float = 1.0, wire_multiplier: float = 1.0,
+                    machine_state: bytes = b"") -> bytes:
     payload = bytearray()
     payload += struct.pack("<ii", slot, machine_type)
     payload += b"\0"
@@ -115,6 +116,7 @@ def machine_payload(slot: int, machine_type: int, *, input_slot: int, output_slo
             incon,
         )
     payload += edit_name.encode("utf-8") + b"\0"
+    payload += machine_state
     return bytes(payload)
 
 
@@ -131,6 +133,7 @@ def candidate_fixture_bytes(
     *,
     include_legacy_pattern: bool = True,
     master_input_volume: float = 1.0,
+    include_xmsampler_state: bool = True,
 ) -> bytes:
     def chunk(fourcc: bytes, version: int, payload: bytes) -> bytes:
         return fourcc + struct.pack("<II", version, len(payload)) + payload
@@ -175,6 +178,11 @@ def candidate_fixture_bytes(
             machine_payload(
                 0, 12, input_slot=-1, output_slot=128,
                 input_count=0, output_count=1, edit_name="XMSampler",
+                machine_state=(
+                    m.expected_xmsampler_macd_state_bytes()
+                    if include_xmsampler_state
+                    else b""
+                ),
             ),
         ),
         chunk(
@@ -245,6 +253,20 @@ expect_value_error(
     ),
     "canonical audible sampler-to-Master gain",
 )
+expect_value_error(
+    lambda: m.validate_fixture_identity(
+        candidate_fixture_bytes(include_xmsampler_state=False)
+    ),
+    "machine-specific MACD state",
+)
+
+state_mutated_chunks = []
+for fourcc, version, payload in m.parse_psy3_chunks(valid_fixture):
+    if fourcc == b"MACD" and struct.unpack_from("<i", payload, 0)[0] == 0:
+        changed = bytearray(payload)
+        changed[-1] ^= 0x01
+        payload = bytes(changed)
+    state_mutated_chunks.append((fourcc, version, payload))
 
 sngi_mutated_chunks = []
 for fourcc, version, payload in m.parse_psy3_chunks(valid_fixture):
@@ -266,9 +288,13 @@ expect_value_error(
     lambda: m.validate_fixture_identity(repack_chunks(sngi_mutated_chunks)),
     "SNGI payload",
 )
+expect_value_error(
+    lambda: m.validate_fixture_identity(repack_chunks(state_mutated_chunks)),
+    "machine-specific MACD state",
+)
 
 
-def candidate_render_summary() -> dict:
+def candidate_render_summary(index: int, output_path: Path) -> dict:
     compiled = m.expected_compiled_provenance()
     return {
         "schema_version": 1,
@@ -288,6 +314,9 @@ def candidate_render_summary() -> dict:
         "engine_xmsampler_sha256": compiled["engine_xmsampler_sha256"],
         "master_buffer_float_count": 2 * m.CANDIDATE_TARGET_FRAMES,
         "final_play_beat": m.CANDIDATE_TARGET_FRAMES / m.CANDIDATE_BEAT_FRAMES,
+        "output_path": str(output_path),
+        "output_size_bytes": len(valid_wave),
+        "output_sha256": m.digest(valid_wave),
     }
 
 
@@ -429,8 +458,15 @@ def write_provenance(root: Path) -> None:
     )
     (delayed / "sampulse-eins-compat.log").write_text("EINS PASS\n")
     for index in (1, 2):
+        output_path = (
+            runtime
+            / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+        )
         (delayed / f"sampulse-candidate-render-{index}.log").write_text(
-            json.dumps(candidate_render_summary(), sort_keys=True) + "\n",
+            json.dumps(
+                candidate_render_summary(index, output_path),
+                sort_keys=True,
+            ) + "\n",
             encoding="utf-8",
         )
 
@@ -462,6 +498,8 @@ with tempfile.TemporaryDirectory() as temporary:
         assert collected["analysis"]["window_onset_counts"]["extended_marker_beat_3"] > 0
         assert collected["analysis"]["frame_count"] == m.CANDIDATE_TARGET_FRAMES
         assert collected["fixture_identity"]["machine_type"] == 12
+    assert collected["fixture_identity"]["playback_graph"]["sampler_state"]["voices"] == 64
+    assert collected["fixture_identity"]["playback_graph"]["sampler_state"]["channel_count"] == 64
         assert m.validate_candidate(root)["parity_status"] == "UNKNOWN"
     finally:
         m.validate_reproducible_renderer_build = original_rebuild_check
@@ -981,7 +1019,7 @@ with tempfile.TemporaryDirectory() as temporary:
     different_wave[-2:] = struct.pack("<h", 1)
     different_wave = bytes(different_wave)
     second_path.write_bytes(different_wave)
-    closed_second_attempt = dict(closed_first_attempt)
+    closed_second_attempt = dict(completed_attempt)
     closed_second_attempt["output"] = {
         "path": second_path.name,
         "sha256": m.digest(different_wave),
@@ -1005,6 +1043,10 @@ with tempfile.TemporaryDirectory() as temporary:
         "nondeterministic-completed-render-pair"
     )
     assert nondeterministic["binding_error"] is None
+    assert nondeterministic["diagnostics"] == [
+        "render output finalized and Close control was verified, "
+        "but dialog teardown did not complete"
+    ]
     assert len(nondeterministic["retained_renders"]) == 2
     assert len(nondeterministic["retained_render_analyses"]) == 2
     assert (
