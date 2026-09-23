@@ -756,6 +756,26 @@ with tempfile.TemporaryDirectory() as temporary:
     fixture.write_bytes(valid_fixture)
     render_dir = root / m.NAME
     write_provenance(root)
+    substituted = bytearray(valid_wave)
+    substituted[-2:] = struct.pack("<h", 1)
+    substituted = bytes(substituted)
+    for index in (1, 2):
+        (
+            render_dir
+            / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+        ).write_bytes(substituted)
+    expect_value_error(
+        lambda: m.collect_candidate(root),
+        "renderer output identity does not match retained WAV",
+    )
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    fixture = root / m.FIXTURE
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(valid_fixture)
+    render_dir = root / m.NAME
+    write_provenance(root)
     (render_dir / "candidate-delayed-retrigger-sampulse-runtime-1.wav").write_bytes(
         valid_wave
     )
