@@ -1074,6 +1074,21 @@ binding_error = work_boundary.validate_fresh_render_event_binding_or_quarantine(
 assert binding_error is not None
 assert "fresh render lacks bound post-dispatch dialog evidence" in binding_error
 
+startup.require_attempt_dispatch_prefix(
+    fresh_ambiguous_attempt,
+    "note-no-previous-inst",
+)
+startup_binding_error = (
+    startup.validate_fresh_render_event_binding_or_quarantine(
+        fresh_ambiguous_attempt,
+        "note-no-previous-inst",
+        "inconclusive",
+        [],
+    )
+)
+assert startup_binding_error is not None
+assert "fresh render lacks bound post-dispatch dialog evidence" in startup_binding_error
+
 early_fresh_ambiguous_attempt = dict(fresh_ambiguous_attempt)
 early_fresh_ambiguous_attempt.update(
     {
@@ -1099,6 +1114,21 @@ early_binding_error = (
 )
 assert early_binding_error is not None
 assert "fresh render lacks bound post-dispatch dialog evidence" in early_binding_error
+
+startup.require_attempt_dispatch_prefix(
+    early_fresh_ambiguous_attempt,
+    "note-no-previous-inst",
+)
+early_startup_binding_error = (
+    startup.validate_fresh_render_event_binding_or_quarantine(
+        early_fresh_ambiguous_attempt,
+        "note-no-previous-inst",
+        "inconclusive",
+        [],
+    )
+)
+assert early_startup_binding_error is not None
+assert "fresh render lacks bound post-dispatch dialog evidence" in early_startup_binding_error
 
 assert work_boundary.diagnose({
     "release-no-active-voice": "inconclusive",
