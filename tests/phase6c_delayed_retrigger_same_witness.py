@@ -310,7 +310,7 @@ unknown_chunks = list(m.parse_psy3_chunks(valid_fixture))
 unknown_chunks.append((b"JUNK", 0, hidden_loader_visible))
 expect_value_error(
     lambda: m.validate_fixture_identity(repack_chunks(unknown_chunks)),
-    "top-level chunk layout",
+    "unknown top-level chunk",
 )
 
 
