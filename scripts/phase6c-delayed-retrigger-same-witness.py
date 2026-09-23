@@ -39,6 +39,17 @@ EXPECTED_COMPRESSED_SAMPLE_SHA256 = (
 EXPECTED_SNGI_PAYLOAD_SHA256 = (
     "66af0fbe63b11d37590af5bfaf90ff15d999fbb30d52409f529ba88f51ed19ad"
 )
+EXPECTED_XMSAMPLER_MACD_SHA256 = (
+    "7bcba4bfa2f423e20c90f76c48eeca9c44962161b174ee1e0e344f065b2caaf9"
+)
+EXPECTED_XMSAMPLER_SPECIFIC_SHA256 = (
+    "7690f43c027f3fd936cd2a50158b0b4664adfcf7bc1d414ab436821b8561fe03"
+)
+EXPECTED_XMSAMPLER_EXTENSION_SHA256 = (
+    "5743fcdda132127999b7ac1571fb76e6829114fdf143ab4075e5f7d585cff677"
+)
+STRICT_ANALYZER_ID = "phase6c-delayed-retrigger-render-evidence.py::analyze_wave"
+RELAXED_ANALYZER_ID = "phase6c-delayed-retrigger-same-witness.py::analyze_wave_observation"
 REQUIRED_RENDERER_DEFINED_SYMBOLS = (
     "psycle::core::Psy3Filter::LoadEINSv1",
     "psycle::core::Sequencer::Work(unsigned int)",
@@ -269,6 +280,133 @@ def validate_sequence_playback(chunks: list[tuple[bytes, int, bytes]]) -> dict:
     }
 
 
+def expected_xmsampler_macd_state_bytes() -> bytes:
+    body = bytearray()
+    body += struct.pack("<III", 0x00010002, 64, 1)
+    for _ in range(128):
+        body += struct.pack("<ii", 0, 0)
+    body += struct.pack("<BBii", 0, 1, 128, 0)
+    channel = (
+        b"CHAN"
+        + struct.pack("<i", 20)
+        + struct.pack("<iiiii", 200, 100, 127, 0, 4)
+    )
+    body += channel * 64
+    body += struct.pack("<I", 1)
+    if len(body) != 2842:
+        raise AssertionError("canonical XMSampler specific body size changed")
+
+    state = bytearray(struct.pack("<I", len(body)))
+    state += body
+    state += b"PMAP" + bytes((110,))
+    for index in range(110):
+        state += struct.pack("<BH", index, index)
+    state += b"PBUS\0"
+    return bytes(state)
+
+
+def validate_xmsampler_macd_state(payload: bytes, position: int) -> dict:
+    state = payload[position:]
+    expected = expected_xmsampler_macd_state_bytes()
+    if state != expected:
+        raise ValueError(
+            "same-witness XMSampler machine-specific MACD state differs from canonical payload"
+        )
+    if digest(payload) != EXPECTED_XMSAMPLER_MACD_SHA256:
+        raise ValueError("same-witness XMSampler complete MACD digest mismatch")
+
+    specific_size = struct.unpack_from("<I", state, 0)[0]
+    specific_end = 4 + specific_size
+    if (
+        specific_size != 2842
+        or specific_end > len(state)
+        or digest(state[:specific_end]) != EXPECTED_XMSAMPLER_SPECIFIC_SHA256
+    ):
+        raise ValueError("same-witness XMSampler specific chunk identity mismatch")
+
+    cursor = 4
+    version, voices, quality = struct.unpack_from("<III", state, cursor)
+    cursor += 12
+    zxx = []
+    for _ in range(128):
+        zxx.append(struct.unpack_from("<ii", state, cursor))
+        cursor += 8
+    amiga_slides, use_filters = struct.unpack_from("<BB", state, cursor)
+    cursor += 2
+    global_volume, panning_mode = struct.unpack_from("<ii", state, cursor)
+    cursor += 8
+
+    channel_states = []
+    for _ in range(64):
+        if state[cursor : cursor + 4] != b"CHAN":
+            raise ValueError("same-witness XMSampler channel state tag mismatch")
+        channel_size = struct.unpack_from("<i", state, cursor + 4)[0]
+        if channel_size != 20 or cursor + 8 + channel_size > specific_end:
+            raise ValueError("same-witness XMSampler channel state size mismatch")
+        values = struct.unpack_from("<iiiii", state, cursor + 8)
+        channel_states.append(values)
+        cursor += 8 + channel_size
+    if cursor + 4 != specific_end:
+        raise ValueError("same-witness XMSampler specific parser boundary mismatch")
+    instrument_bank = struct.unpack_from("<I", state, cursor)[0]
+    cursor += 4
+
+    if (
+        version != 0x00010002
+        or voices != 64
+        or quality != 1
+        or any(item != (0, 0) for item in zxx)
+        or amiga_slides != 0
+        or use_filters != 1
+        or global_volume != 128
+        or panning_mode != 0
+        or any(item != (200, 100, 127, 0, 4) for item in channel_states)
+        or instrument_bank != 1
+        or cursor != specific_end
+    ):
+        raise ValueError("same-witness XMSampler loader-consumed state mismatch")
+
+    extension = state[specific_end:]
+    if digest(extension) != EXPECTED_XMSAMPLER_EXTENSION_SHA256:
+        raise ValueError("same-witness XMSampler modern MACD extension mismatch")
+    cursor = 0
+    if extension[cursor : cursor + 4] != b"PMAP":
+        raise ValueError("same-witness XMSampler parameter map tag mismatch")
+    cursor += 4
+    if cursor >= len(extension) or extension[cursor] != 110:
+        raise ValueError("same-witness XMSampler parameter map count mismatch")
+    cursor += 1
+    for expected_index in range(110):
+        if cursor + 3 > len(extension):
+            raise ValueError("same-witness XMSampler parameter map is truncated")
+        source, target = struct.unpack_from("<BH", extension, cursor)
+        cursor += 3
+        if (source, target) != (expected_index, expected_index):
+            raise ValueError("same-witness XMSampler parameter map mismatch")
+    if extension[cursor : cursor + 4] != b"PBUS":
+        raise ValueError("same-witness XMSampler bus-state tag mismatch")
+    cursor += 4
+    if cursor >= len(extension) or extension[cursor] != 0:
+        raise ValueError("same-witness XMSampler bus-state value mismatch")
+    cursor += 1
+    if cursor != len(extension) or position + len(state) != len(payload):
+        raise ValueError("same-witness XMSampler MACD parser did not end at chunk boundary")
+
+    return {
+        "specific_size": specific_size,
+        "specific_sha256": digest(state[:specific_end]),
+        "extension_sha256": digest(extension),
+        "version": version,
+        "voices": voices,
+        "resampler_quality": quality,
+        "global_volume": global_volume,
+        "panning_mode": panning_mode,
+        "instrument_bank": instrument_bank,
+        "channel_count": len(channel_states),
+        "macd_sha256": digest(payload),
+    }
+
+
 def parse_machine_routing(payload: bytes) -> dict:
     if len(payload) < 8:
         raise ValueError("same-witness fixture MACD payload is truncated")
@@ -308,7 +446,7 @@ def parse_machine_routing(payload: bytes) -> dict:
                 "input_connected": input_connected,
             }
         )
-    edit_name, _ = read_cstring(
+    edit_name, state_offset = read_cstring(
         payload, position, f"MACD slot {slot} edit name"
     )
     return {
@@ -323,6 +461,8 @@ def parse_machine_routing(payload: bytes) -> dict:
         "output_count": output_count,
         "connections": connections,
         "edit_name": edit_name,
+        "state_offset": state_offset,
+        "payload_size": len(payload),
         "sha256": digest(payload),
     }
 
@@ -342,13 +482,12 @@ def validate_playback_graph(
         raise ValueError(
             "same-witness fixture must contain exactly sampler and Master MACD v3 chunks"
         )
-    machines = {
-        parsed["slot"]: parsed
-        for parsed in (
-            parse_machine_routing(payload)
-            for _version, payload in machine_chunks
-        )
-    }
+    parsed_machines = [
+        (parse_machine_routing(payload), payload)
+        for _version, payload in machine_chunks
+    ]
+    machines = {parsed["slot"]: parsed for parsed, _payload in parsed_machines}
+    machine_payloads = {parsed["slot"]: payload for parsed, payload in parsed_machines}
     if set(machines) != {0, 128}:
         raise ValueError("same-witness fixture playback machine set mismatch")
     sampler = machines[0]
@@ -365,6 +504,7 @@ def validate_playback_graph(
     ]
     if (
         sampler["machine_type"] != 12
+        or sampler["edit_name"] != "XMSampler"
         or sampler["bypassed"] != 0
         or sampler["muted"] != 0
         or sampler["input_count"] != 0
@@ -383,6 +523,10 @@ def validate_playback_graph(
             "same-witness fixture does not route sampler slot 0 directly to Master slot 128"
         )
 
+    xmsampler_state = validate_xmsampler_macd_state(
+        machine_payloads[0], sampler["state_offset"]
+    )
+
     active_gains = (
         sampler_outputs[0]["wire_multiplier"],
         master_inputs[0]["input_volume"],
@@ -400,6 +544,7 @@ def validate_playback_graph(
         "sampler_slot": 0,
         "sampler_type": sampler["machine_type"],
         "sampler_macd_sha256": sampler["sha256"],
+        "sampler_state": xmsampler_state,
         "master_slot": 128,
         "master_type": master["machine_type"],
         "master_macd_sha256": master["sha256"],
@@ -1344,6 +1489,15 @@ def validate_candidate_render_log(root: Path, index: int) -> dict:
 
     summary = summaries[0]
     final_play_beat = summary.get("final_play_beat")
+    expected_name = f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+    expected_relative = f"{NAME}/{expected_name}"
+    output_path = summary.get("output_path")
+    output_size = summary.get("output_size_bytes")
+    output_sha256 = summary.get("output_sha256")
+    retained = child(root, expected_relative).read_bytes()
+    normalized_output_path = (
+        output_path.replace("\\", "/") if isinstance(output_path, str) else None
+    )
     if (
         summary.get("fixed_frame_render") is not True
         or summary.get("sample_rate") != 44100
@@ -1366,6 +1520,13 @@ def validate_candidate_render_log(root: Path, index: int) -> dict:
         or len(summary["engine_xmsampler_sha256"]) != 64
         or summary.get("master_buffer_float_count")
         != 2 * CANDIDATE_TARGET_FRAMES
+        or not isinstance(normalized_output_path, str)
+        or not normalized_output_path.endswith("/" + expected_relative)
+        or not isinstance(output_size, int)
+        or isinstance(output_size, bool)
+        or output_size != len(retained)
+        or not isinstance(output_sha256, str)
+        or output_sha256 != digest(retained)
         or not isinstance(final_play_beat, (int, float))
         or isinstance(final_play_beat, bool)
         or not math.isfinite(float(final_play_beat))
@@ -1375,7 +1536,9 @@ def validate_candidate_render_log(root: Path, index: int) -> dict:
             "same-witness candidate render log does not substantiate "
             "the fixed-frame single-thread procedure"
         )
-    return summary
+    normalized = dict(summary)
+    normalized["output_path"] = expected_relative
+    return normalized
 
 
 def validate_candidate_render_logs(root: Path) -> list[dict]:
@@ -1383,7 +1546,9 @@ def validate_candidate_render_logs(root: Path) -> list[dict]:
         validate_candidate_render_log(root, index)
         for index in (1, 2)
     ]
-    if observations[0] != observations[1]:
+    left = {key: value for key, value in observations[0].items() if key != "output_path"}
+    right = {key: value for key, value in observations[1].items() if key != "output_path"}
+    if left != right:
         raise ValueError(
             "same-witness candidate renderer procedure observations differ"
         )
@@ -1795,10 +1960,15 @@ def validate_original_inconclusive_runtime(
             raise ValueError(
                 "same-witness inconclusive pair is actually byte-identical"
             )
+        retained_diagnostics = [
+            diagnostic
+            for attempt in attempts
+            for diagnostic in attempt.get("diagnostics", [])
+        ]
         return {
             "inconclusive_reason": "nondeterministic-completed-render-pair",
             "binding_error": None,
-            "diagnostics": [],
+            "diagnostics": retained_diagnostics,
             "observed_output": None,
             "retained_renders": retained_renders,
             "retained_render_analyses": retained_analyses,
@@ -2194,9 +2364,9 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "contract": CONTRACT,
             "fixture_sha256": candidate["fixture_sha256"],
             "same_fixture_bytes": True,
-            "same_onset_analyzer": (
-                "phase6c-delayed-retrigger-render-evidence.py::analyze_wave"
-            ),
+            "same_onset_analyzer": False,
+            "candidate_onset_analyzer": STRICT_ANALYZER_ID,
+            "original_retained_render_analyzer": RELAXED_ANALYZER_ID,
             "candidate": {
                 "render_sha256": candidate["render_sha256"],
                 "analysis": candidate["analysis"],
@@ -2253,6 +2423,7 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "inconclusive_reason": quarantine["inconclusive_reason"],
             "renders": quarantine["retained_renders"],
             "retained_render_analyses": quarantine["retained_render_analyses"],
+            "retained_render_analyzer": RELAXED_ANALYZER_ID,
             "render_sha256": None,
             "analysis": None,
             "runtime_command_execution_observed": False,
@@ -2272,9 +2443,9 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "contract": CONTRACT,
             "fixture_sha256": candidate["fixture_sha256"],
             "same_fixture_bytes": True,
-            "same_onset_analyzer": (
-                "phase6c-delayed-retrigger-render-evidence.py::analyze_wave"
-            ),
+            "same_onset_analyzer": False,
+            "candidate_onset_analyzer": STRICT_ANALYZER_ID,
+            "original_retained_render_analyzer": RELAXED_ANALYZER_ID,
             "candidate": {
                 "render_sha256": candidate["render_sha256"],
                 "analysis": candidate["analysis"],
@@ -2357,7 +2528,11 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         "contract": CONTRACT,
         "fixture_sha256": candidate["fixture_sha256"],
         "same_fixture_bytes": True,
-        "same_onset_analyzer": "phase6c-delayed-retrigger-render-evidence.py::analyze_wave",
+        "same_onset_analyzer": command_execution_observed,
+        "candidate_onset_analyzer": STRICT_ANALYZER_ID,
+        "original_onset_analyzer": (
+            STRICT_ANALYZER_ID if command_execution_observed else RELAXED_ANALYZER_ID
+        ),
         "candidate": {
             "render_sha256": candidate["render_sha256"],
             "analysis": candidate["analysis"],
