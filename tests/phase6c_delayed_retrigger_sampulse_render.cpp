@@ -12,8 +12,10 @@
 #include <universalis/os/thread_name.hpp>
 
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <string>
 #include <vector>
 
 int main(int argc, char** argv) {
@@ -27,6 +29,12 @@ int main(int argc, char** argv) {
         static stream_logger diagnostics(std::cerr);
         multiplex_logger::singleton().add(diagnostics);
         universalis::os::thread_name thread_name("phase6c-sampulse-render");
+
+        const char* requested_threads = std::getenv("PSYCLE_THREADS");
+        if (requested_threads == 0 || std::string(requested_threads) != "1") {
+            std::cerr << "candidate render requires PSYCLE_THREADS=1\n";
+            return 69;
+        }
 
         psycle::core::Player& player = psycle::core::Player::singleton();
         psycle::core::MachineFactory& factory =
@@ -116,7 +124,13 @@ int main(int argc, char** argv) {
                             << ",\"sample_rate\":44100"
                             << ",\"channels\":1"
                             << ",\"bits_per_sample\":16"
+                            << ",\"target_beats\":4.25"
                             << ",\"target_frames\":" << target_frames
+                            << ",\"threads\":1"
+                            << ",\"sequencer_work_calls\":1"
+                            << ",\"player_work_direct\":false"
+                            << ",\"master_buffer_float_count\":"
+                            << master_output.size()
                             << ",\"final_play_beat\":" << final_beat
                             << "}" << std::endl;
                     }
