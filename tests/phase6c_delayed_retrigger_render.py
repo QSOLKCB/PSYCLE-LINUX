@@ -194,6 +194,101 @@ with tempfile.TemporaryDirectory() as temporary:
     output_dir = root / "delayed-retrigger-execution"
     output_dir.mkdir()
 
+    # Ambiguous fresh dialog binding after dispatch is retained as UNKNOWN.
+    ambiguous_name = "original-delayed-retrigger-execution-1.wav"
+    ambiguous_path = output_dir / ambiguous_name
+    ambiguous_path.write_bytes(b"partial")
+    ambiguous_attempt = {
+        **valid_render_event_binding(),
+        "outcome": "inconclusive",
+        "command_verified": True,
+        "command_dispatched": True,
+        "dialog_verified": False,
+        "controls_configured": False,
+        "save_invoked": False,
+        "process_exited": False,
+        "process_exit_code": None,
+        "output": None,
+        "diagnostics": ["multiple post-dispatch Psycle window-show events observed"],
+        "observed_output": {
+            "path": ambiguous_name,
+            "size_bytes": len(b"partial"),
+            "sha256": hashlib.sha256(b"partial").hexdigest(),
+        },
+        "render_dialog_post_dispatch_observed_window_event_count": 2,
+    }
+    ambiguous = module.validate_inconclusive_runtime(
+        root,
+        {"exit_code_before_termination": None},
+        {"deterministic": False, "renders": []},
+        [ambiguous_attempt],
+    )
+    assert ambiguous["inconclusive_reason"] == "ambiguous-render-dialog-binding"
+    assert ambiguous["binding_error"] is not None
+    assert ambiguous["observed_output"]["path"].endswith(ambiguous_name)
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    (root / "delayed-retrigger-execution").mkdir()
+
+    # A real reference exit before Save Wave is non-evidentiary but preserved.
+    pre_save_exit = {
+        **valid_render_event_binding(),
+        "outcome": "inconclusive",
+        "command_verified": True,
+        "command_dispatched": True,
+        "dialog_verified": True,
+        "controls_configured": False,
+        "save_invoked": False,
+        "process_exited": True,
+        "process_exit_code": -1073741819,
+        "output": None,
+        "diagnostics": ["reference exited before Save Wave invocation"],
+        "observed_output": None,
+    }
+    exited = module.validate_inconclusive_runtime(
+        root,
+        {"exit_code_before_termination": -1073741819},
+        {"deterministic": False, "renders": []},
+        [pre_save_exit],
+    )
+    assert exited["inconclusive_reason"] == "process-exit-before-completed-save"
+    assert exited["process_exit_code"] == -1073741819
+    assert exited["binding_error"] is None
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    (root / "delayed-retrigger-execution").mkdir()
+
+    # A bound dialog can fail later in UI automation without invalidating evidence.
+    post_binding = {
+        **valid_render_event_binding(),
+        "outcome": "inconclusive",
+        "command_verified": True,
+        "command_dispatched": True,
+        "dialog_verified": True,
+        "controls_configured": False,
+        "save_invoked": False,
+        "process_exited": False,
+        "process_exit_code": None,
+        "output": None,
+        "diagnostics": ["Render as Wav File controls were not found"],
+        "observed_output": None,
+    }
+    quarantined = module.validate_inconclusive_runtime(
+        root,
+        {},
+        {"deterministic": False, "renders": []},
+        [post_binding],
+    )
+    assert quarantined["inconclusive_reason"] == "post-binding-render-automation-failure"
+    assert quarantined["binding_error"] is None
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    output_dir = root / "delayed-retrigger-execution"
+    output_dir.mkdir()
+
     first_name = "original-delayed-retrigger-execution-1.wav"
     first_path = output_dir / first_name
     first_data = b"completed-render"
