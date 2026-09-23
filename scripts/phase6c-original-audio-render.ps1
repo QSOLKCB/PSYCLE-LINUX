@@ -10,6 +10,7 @@ $phase6cAutomationReferences = @(
 
 Add-Type -ReferencedAssemblies $phase6cAutomationReferences -TypeDefinition @"
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Automation;
