@@ -8,6 +8,7 @@ import importlib.util
 import json
 import math
 import struct
+import subprocess
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -324,15 +325,31 @@ def validate_same_witness_analysis(
     return analysis
 
 
+def reviewed_repository_bytes(path: Path) -> bytes:
+    """Read the committed blob, independent of checkout line-ending conversion."""
+    try:
+        relative = path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError("reviewed input is outside the repository") from exc
+    try:
+        return subprocess.check_output(
+            ["git", "cat-file", "blob", f"HEAD:{relative}"],
+            cwd=ROOT,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError(f"could not read reviewed repository input: {relative}") from exc
+
+
 def reviewed_digest(path: Path) -> str:
-    return digest(path.read_bytes())
+    return digest(reviewed_repository_bytes(path))
 
 
 def validate_retained_reviewed_copy(
     root: Path, retained_relative: str, reviewed_path: Path, label: str
 ) -> dict:
     retained = child(root, retained_relative).read_bytes()
-    reviewed = reviewed_path.read_bytes()
+    reviewed = reviewed_repository_bytes(reviewed_path)
     if retained != reviewed:
         raise ValueError(f"same-witness retained {label} differs from reviewed repository input")
     return {"path": retained_relative, "sha256": digest(retained)}
