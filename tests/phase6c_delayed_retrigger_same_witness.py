@@ -91,7 +91,8 @@ def synthetic_eins_payload() -> bytes:
 
 
 def machine_payload(slot: int, machine_type: int, *, input_slot: int, output_slot: int,
-                    input_count: int, output_count: int, edit_name: str) -> bytes:
+                    input_count: int, output_count: int, edit_name: str,
+                    input_volume: float = 1.0, wire_multiplier: float = 1.0) -> bytes:
     payload = bytearray()
     payload += struct.pack("<ii", slot, machine_type)
     payload += b"\0"
@@ -104,12 +105,33 @@ def machine_payload(slot: int, machine_type: int, *, input_slot: int, output_slo
             incon = 1 if input_slot >= 0 else 0
         else:
             inp, out, outcon, incon = -1, -1, 0, 0
-        payload += struct.pack("<iiffBB", inp, out, 1.0, 1.0, outcon, incon)
+        payload += struct.pack(
+            "<iiffBB",
+            inp,
+            out,
+            input_volume if index == 0 else 1.0,
+            wire_multiplier if index == 0 else 1.0,
+            outcon,
+            incon,
+        )
     payload += edit_name.encode("utf-8") + b"\0"
     return bytes(payload)
 
 
-def candidate_fixture_bytes() -> bytes:
+def beerz77_literal(data: bytes) -> bytes:
+    encoded = bytearray(b"\x04" + struct.pack("<I", len(data)))
+    for offset in range(0, len(data), 255):
+        literal = data[offset : offset + 255]
+        encoded.append(len(literal))
+        encoded += literal
+    return bytes(encoded)
+
+
+def candidate_fixture_bytes(
+    *,
+    include_legacy_pattern: bool = True,
+    master_input_volume: float = 1.0,
+) -> bytes:
     def chunk(fourcc: bytes, version: int, payload: bytes) -> bytes:
         return fourcc + struct.pack("<II", version, len(payload)) + payload
 
@@ -127,7 +149,13 @@ def candidate_fixture_bytes() -> bytes:
     patd = bytearray()
     patd += struct.pack("<iii", 0, 32, 16)
     patd += b"Execution Witness\0"
-    patd += struct.pack("<I", 0)
+    compressed_pattern = (
+        beerz77_literal(m.expected_legacy_pattern_bytes(32, 16))
+        if include_legacy_pattern
+        else b""
+    )
+    patd += struct.pack("<I", len(compressed_pattern))
+    patd += compressed_pattern
     patd += struct.pack("<IIiii", 0, 0, 480, 1920, len(m.EXPECTED_FIXTURE_EVENTS))
     for track, offset, note, inst, mach, volume, command, parameter in m.EXPECTED_FIXTURE_EVENTS:
         patd += struct.pack("<iii", track, offset, 1)
@@ -152,6 +180,7 @@ def candidate_fixture_bytes() -> bytes:
                 128, 0, input_slot=0, output_slot=-1,
                 input_count=1, output_count=0,
                 edit_name="Psycle Master and Minimixer",
+                input_volume=master_input_volume,
             ),
         ),
         chunk(b"EINS", 0x00010000, synthetic_eins_payload()),
@@ -177,6 +206,19 @@ onsets = [
 ]
 valid_wave = pcm_wave(onsets, frames=m.CANDIDATE_TARGET_FRAMES)
 valid_fixture = candidate_fixture_bytes()
+
+expect_value_error(
+    lambda: m.validate_fixture_identity(
+        candidate_fixture_bytes(include_legacy_pattern=False)
+    ),
+    "pattern compression payload",
+)
+expect_value_error(
+    lambda: m.validate_fixture_identity(
+        candidate_fixture_bytes(master_input_volume=0.0)
+    ),
+    "canonical audible sampler-to-Master gain",
+)
 
 
 def candidate_render_summary() -> dict:
@@ -359,18 +401,23 @@ with tempfile.TemporaryDirectory() as temporary:
             valid_wave
         )
 
-    collected = m.collect_candidate(root)
-    assert collected["runtime_command_execution_observed"] is True
-    assert len(collected["render_observations"]) == 2
-    assert collected["render_observations"][0]["threads"] == 1
-    assert collected["timing_interpretation"] == "deferred"
-    assert collected["analysis"]["window_onset_counts"]["retrigger_beat_1"] == 3
-    assert collected["analysis"]["window_onset_counts"]["retr_cont_beat_2"] == 2
-    assert collected["analysis"]["window_onset_counts"]["note_delay_beat_0"] > 0
-    assert collected["analysis"]["window_onset_counts"]["extended_marker_beat_3"] > 0
-    assert collected["analysis"]["frame_count"] == m.CANDIDATE_TARGET_FRAMES
-    assert collected["fixture_identity"]["machine_type"] == 12
-    assert m.validate_candidate(root)["parity_status"] == "UNKNOWN"
+    original_rebuild_check = m.validate_reproducible_renderer_build
+    m.validate_reproducible_renderer_build = lambda _root: None
+    try:
+        collected = m.collect_candidate(root)
+        assert collected["runtime_command_execution_observed"] is True
+        assert len(collected["render_observations"]) == 2
+        assert collected["render_observations"][0]["threads"] == 1
+        assert collected["timing_interpretation"] == "deferred"
+        assert collected["analysis"]["window_onset_counts"]["retrigger_beat_1"] == 3
+        assert collected["analysis"]["window_onset_counts"]["retr_cont_beat_2"] == 2
+        assert collected["analysis"]["window_onset_counts"]["note_delay_beat_0"] > 0
+        assert collected["analysis"]["window_onset_counts"]["extended_marker_beat_3"] > 0
+        assert collected["analysis"]["frame_count"] == m.CANDIDATE_TARGET_FRAMES
+        assert collected["fixture_identity"]["machine_type"] == 12
+        assert m.validate_candidate(root)["parity_status"] == "UNKNOWN"
+    finally:
+        m.validate_reproducible_renderer_build = original_rebuild_check
 
     receipt_path = root / m.CANDIDATE_RECEIPT
     receipt = json.loads(receipt_path.read_text())
@@ -663,6 +710,7 @@ with tempfile.TemporaryDirectory() as temporary:
     assert retained["inconclusive_reason"] == "pre-render-load-not-accepted"
     assert retained["retained_renders"] == []
     assert retained["pre_render_load"]["clean_accepted_load"] is False
+    assert m.inconclusive_render_binding_status(retained) == "not-attempted"
 
     promoted = json.loads(json.dumps(runtime))
     promoted["pre_render_load"]["clean_accepted_load"] = True
