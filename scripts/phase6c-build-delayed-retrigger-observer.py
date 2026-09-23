@@ -356,7 +356,7 @@ def main() -> None:
                         sha256 = [string]$renderOne.output.sha256
                     }
                     $process.Refresh()
-                    if (-not $process.HasExited) {
+                    if (-not $process.HasExited -and [bool]$renderOne.dialog_closed) {
                         $renderTwo = Invoke-Phase6cAudioRender $process $windowTitle $renderTwoPath
                         $attempts += $renderTwo
                         if ($renderTwo.outcome -eq "rendered" -and $null -ne $renderTwo.output) {
