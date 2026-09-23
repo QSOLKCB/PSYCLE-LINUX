@@ -241,14 +241,15 @@ int main(int argc, char** argv) {
                     sequencer.set_player(player);
                     sequencer.Work(target_frames);
 
-                    const int rendered = target_frames;
                     const double final_beat = player.playPos();
                     player.stop();
                     player.stopRecording();
 
                     std::ifstream output(argv[2], std::ios::binary | std::ios::ate);
-                    const std::streamoff output_size =
-                        output ? output.tellg() : static_cast<std::streamoff>(-1);
+                    std::streamoff output_size = static_cast<std::streamoff>(-1);
+                    if (output) {
+                        output_size = static_cast<std::streamoff>(output.tellg());
+                    }
                     if (!output || output_size <= 44) {
                         std::cerr << "candidate render output missing or empty\n";
                         result = 67;
