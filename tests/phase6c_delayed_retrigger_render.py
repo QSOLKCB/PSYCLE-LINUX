@@ -568,6 +568,17 @@ teardown_only_completed_attempt = {
     "close_native_fallback_invoked": True,
     "close_wm_close_invoked": True,
     "stable_output_polls": 4,
+    "render_dialog_native_event_hook_armed": True,
+    "render_dialog_event_message_pump_started": True,
+    "render_dialog_dispatch_boundary_set": True,
+    "render_dialog_dispatch_boundary_tick": 123456,
+    "render_dialog_post_dispatch_observed_window_event_count": 1,
+    "render_dialog_unresolved_post_dispatch_event_count": 0,
+    "render_dialog_post_dispatch_event_count": 1,
+    "dialog_discovery": "pumped-win-event-object-show-strictly-after-dispatch-tick",
+    "preexisting_render_dialog_count": 0,
+    "selected_render_dialog_native_handle": 12345,
+    "selected_render_dialog_runtime_id": [1, 2, 3],
     "diagnostics": [
         "render output finalized and Close control was verified, "
         "but dialog teardown did not complete"
@@ -579,6 +590,38 @@ startup.validate_completed_render_attempt(
 work_boundary.validate_completed_render_attempt(
     teardown_only_completed_attempt, "release-no-active-voice"
 )
+
+fresh_attempt = {
+    **teardown_only_completed_attempt,
+    "command_verified": True,
+    "command_dispatched": True,
+    "dialog_verified": True,
+    "controls_configured": True,
+    "save_invoked": True,
+}
+work_boundary.require_attempt_prefix(fresh_attempt, "release-no-active-voice")
+for altered in (
+    {
+        "render_dialog_native_event_hook_armed": False,
+        "render_dialog_event_message_pump_started": False,
+        "render_dialog_post_dispatch_observed_window_event_count": 0,
+        "render_dialog_post_dispatch_event_count": 0,
+        "render_dialog_unresolved_post_dispatch_event_count": 9,
+    },
+    {"render_dialog_post_dispatch_observed_window_event_count": 2},
+    {"selected_render_dialog_native_handle": None},
+):
+    unbound = {**fresh_attempt, **altered}
+    for check in (
+        work_boundary.require_attempt_prefix,
+        work_boundary.validate_completed_render_attempt,
+    ):
+        try:
+            check(unbound, "release-no-active-voice")
+        except ValueError as exc:
+            assert "bound post-dispatch dialog evidence" in str(exc)
+        else:
+            raise AssertionError("expected unbound fresh work-boundary attempt rejection")
 
 invalid_teardown_completed_attempt = dict(teardown_only_completed_attempt)
 invalid_teardown_completed_attempt["close_control_seen"] = False

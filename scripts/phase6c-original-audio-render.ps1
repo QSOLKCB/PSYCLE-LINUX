@@ -5,6 +5,7 @@
 $phase6cAutomationReferences = @(
     [System.Windows.Automation.AutomationElement].Assembly.Location
     [System.Windows.Automation.ControlType].Assembly.Location
+    [System.Collections.Generic.Queue[IntPtr]].Assembly.Location
 ) | Select-Object -Unique
 
 Add-Type -ReferencedAssemblies $phase6cAutomationReferences -TypeDefinition @"
@@ -462,17 +463,22 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
         }
     }
 
-    public int Seal()
+    // Indices: observed Psycle window events, unresolved events, render dialogs.
+    // Return one snapshot after the pump has stopped; separate getters can race
+    // with a callback and produce a receipt that never described one state.
+    public int[] Seal()
     {
         FlushPump();
 
-        int count;
         uint threadId;
         lock (gate)
         {
-            count = postDispatchEventCount;
             if (disposed)
-                return count;
+                return new int[] {
+                    postDispatchObservedWindowEventCount,
+                    unresolvedPostDispatchEventCount,
+                    postDispatchEventCount
+                };
             disposed = true;
             dispatchBoundarySet = false;
             threadId = pumpThreadId;
@@ -494,7 +500,14 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
                     "render WinEvent message pump did not stop"
                 );
         }
-        return count;
+        lock (gate)
+        {
+            return new int[] {
+                postDispatchObservedWindowEventCount,
+                unresolvedPostDispatchEventCount,
+                postDispatchEventCount
+            };
+        }
     }
 
     public void Dispose()
@@ -1192,15 +1205,13 @@ function Invoke-Phase6cAudioRender(
             throw "offline render output missing after completion"
         }
         $dialogObserver.ThrowIfAmbiguous()
-        $result.render_dialog_post_dispatch_observed_window_event_count = [int](
-            $dialogObserver.PostDispatchObservedWindowEventCount
-        )
-        $result.render_dialog_unresolved_post_dispatch_event_count = [int](
-            $dialogObserver.UnresolvedPostDispatchEventCount
-        )
-        $result.render_dialog_post_dispatch_event_count = $dialogObserver.Seal()
+        $eventSnapshot = $dialogObserver.Seal()
+        $result.render_dialog_post_dispatch_observed_window_event_count = [int]$eventSnapshot[0]
+        $result.render_dialog_unresolved_post_dispatch_event_count = [int]$eventSnapshot[1]
+        $result.render_dialog_post_dispatch_event_count = [int]$eventSnapshot[2]
         $dialogObserver = $null
-        if ($result.render_dialog_post_dispatch_event_count -ne 1 -or
+        if ($result.render_dialog_post_dispatch_observed_window_event_count -ne 1 -or
+            $result.render_dialog_post_dispatch_event_count -ne 1 -or
             $result.render_dialog_unresolved_post_dispatch_event_count -ne 0) {
             throw "offline render requires exactly one post-dispatch Render as Wav File event"
         }
@@ -1216,13 +1227,10 @@ function Invoke-Phase6cAudioRender(
     finally {
         if ($null -ne $dialogObserver) {
             try {
-                $result.render_dialog_post_dispatch_observed_window_event_count = [int](
-                    $dialogObserver.PostDispatchObservedWindowEventCount
-                )
-                $result.render_dialog_unresolved_post_dispatch_event_count = [int](
-                    $dialogObserver.UnresolvedPostDispatchEventCount
-                )
-                $result.render_dialog_post_dispatch_event_count = $dialogObserver.Seal()
+                $eventSnapshot = $dialogObserver.Seal()
+                $result.render_dialog_post_dispatch_observed_window_event_count = [int]$eventSnapshot[0]
+                $result.render_dialog_unresolved_post_dispatch_event_count = [int]$eventSnapshot[1]
+                $result.render_dialog_post_dispatch_event_count = [int]$eventSnapshot[2]
             }
             catch {
                 $diagnostics.Add(
