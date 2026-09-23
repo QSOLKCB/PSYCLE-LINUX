@@ -97,6 +97,31 @@ CONTRACT = "sequencer-delayed-retrigger-same-witness-render"
 NAME = "delayed-retrigger-sampulse-runtime"
 FIXTURE = "delayed-retrigger/phase6c-delayed-retrigger-sampulse-execution.psy"
 TITLE = "PSYCLE-LINUX Phase 6C delayed/retrigger Sampulse execution witness"
+EXPECTED_INFO_PAYLOAD = (
+    TITLE.encode("utf-8") + b"\0Unnamed\0No Comments\0"
+)
+EXPECTED_INFO_PAYLOAD_SHA256 = (
+    "0f7eac3eff49e57435cbdb4deba7e62f098a2f886db1cf230a5f4390b139764e"
+)
+EXPECTED_TOP_LEVEL_LAYOUT = (
+    (b"INFO", 0),
+    (b"SNGI", 4),
+    (b"SEQD", 2),
+    (b"PATD", 2),
+    (b"PATD", 0x00010002),
+    (b"MACD", 3),
+    (b"MACD", 3),
+    (b"EINS", 0x00010000),
+)
+EXPECTED_MASTER_STATE_SHA256 = (
+    "4703cfdaa33a2085dfc554c10e572903a2b78fade0de0aa29bac9385be31424c"
+)
+EXPECTED_MASTER_SPECIFIC_SHA256 = (
+    "dcb7f4ba6c9ea763b23ecebc81f74f37a0804d237702338b6a6b26923f47fe0f"
+)
+EXPECTED_MASTER_EXTENSION_SHA256 = (
+    "606dc4d051124dc4ee5c0125210f9271875ba081ce3915b354a0c49b7c7324bb"
+)
 CANDIDATE_RECEIPT = "candidate-delayed-retrigger-sampulse-runtime.json"
 ORIGINAL_RECEIPT = "original-delayed-retrigger-sampulse-runtime.json"
 ORIGINAL_ANALYSIS = "original-delayed-retrigger-sampulse-runtime-analysis.json"
@@ -407,6 +432,87 @@ def validate_xmsampler_macd_state(payload: bytes, position: int) -> dict:
     }
 
 
+def expected_master_macd_state_bytes() -> bytes:
+    state = bytearray(struct.pack("<IiB", 5, 256, 0))
+    state += struct.pack("<iihhhh", 0, 2, 0, 0, 1, 1)
+    state += b"PMAP" + bytes((18,))
+    for index in range(18):
+        state += struct.pack("<BH", index, index)
+    state += b"PBUS\0"
+    return bytes(state)
+
+
+def validate_master_macd_state(payload: bytes, position: int) -> dict:
+    state = payload[position:]
+    expected = expected_master_macd_state_bytes()
+    if state != expected or digest(state) != EXPECTED_MASTER_STATE_SHA256:
+        raise ValueError(
+            "same-witness Master machine-specific MACD state differs from canonical payload"
+        )
+    if len(state) < 9:
+        raise ValueError("same-witness Master specific state is truncated")
+
+    specific_size, out_dry, decrease_on_clip = struct.unpack_from("<IiB", state, 0)
+    specific_end = 4 + specific_size
+    if (
+        specific_size != 5
+        or specific_end != 9
+        or digest(state[:specific_end]) != EXPECTED_MASTER_SPECIFIC_SHA256
+        or out_dry != 256
+        or decrease_on_clip != 0
+    ):
+        raise ValueError("same-witness Master loader-consumed output state mismatch")
+
+    extension = state[specific_end:]
+    if digest(extension) != EXPECTED_MASTER_EXTENSION_SHA256:
+        raise ValueError("same-witness Master modern MACD extension mismatch")
+
+    cursor = 0
+    input_index, pair_count = struct.unpack_from("<ii", extension, cursor)
+    cursor += 8
+    pairs = []
+    for _ in range(pair_count):
+        if cursor + 4 > len(extension):
+            raise ValueError("same-witness Master wire mapping is truncated")
+        pairs.append(struct.unpack_from("<hh", extension, cursor))
+        cursor += 4
+    if input_index != 0 or pairs != [(0, 0), (1, 1)]:
+        raise ValueError("same-witness Master stereo wire mapping mismatch")
+
+    if extension[cursor : cursor + 4] != b"PMAP":
+        raise ValueError("same-witness Master parameter map tag mismatch")
+    cursor += 4
+    if cursor >= len(extension) or extension[cursor] != 18:
+        raise ValueError("same-witness Master parameter map count mismatch")
+    cursor += 1
+    for expected_index in range(18):
+        if cursor + 3 > len(extension):
+            raise ValueError("same-witness Master parameter map is truncated")
+        source, target = struct.unpack_from("<BH", extension, cursor)
+        cursor += 3
+        if (source, target) != (expected_index, expected_index):
+            raise ValueError("same-witness Master parameter map mismatch")
+
+    if extension[cursor : cursor + 4] != b"PBUS":
+        raise ValueError("same-witness Master bus-state tag mismatch")
+    cursor += 4
+    if cursor >= len(extension) or extension[cursor] != 0:
+        raise ValueError("same-witness Master bus-state value mismatch")
+    cursor += 1
+    if cursor != len(extension) or position + len(state) != len(payload):
+        raise ValueError("same-witness Master MACD parser did not end at chunk boundary")
+
+    return {
+        "specific_size": specific_size,
+        "specific_sha256": digest(state[:specific_end]),
+        "extension_sha256": digest(extension),
+        "out_dry": out_dry,
+        "decrease_on_clip": decrease_on_clip,
+        "wire_mapping": pairs,
+        "macd_state_sha256": digest(state),
+    }
+
+
 def parse_machine_routing(payload: bytes) -> dict:
     if len(payload) < 8:
         raise ValueError("same-witness fixture MACD payload is truncated")
@@ -513,6 +619,8 @@ def validate_playback_graph(
         or sampler_outputs[0]["output_slot"] != 128
         or sampler_outputs[0]["input_slot"] != -1
         or master["machine_type"] != 0
+        or master["edit_name"] != "Psycle Master and Minimixer"
+        or master["bypassed"] != 0
         or master["muted"] != 0
         or master["input_count"] != 1
         or master["output_count"] != 0
@@ -526,6 +634,9 @@ def validate_playback_graph(
 
     xmsampler_state = validate_xmsampler_macd_state(
         machine_payloads[0], sampler["state_offset"]
+    )
+    master_state = validate_master_macd_state(
+        machine_payloads[128], master["state_offset"]
     )
 
     active_gains = (
@@ -549,6 +660,7 @@ def validate_playback_graph(
         "master_slot": 128,
         "master_type": master["machine_type"],
         "master_macd_sha256": master["sha256"],
+        "master_state": master_state,
         "route": [0, 128],
     }
 
@@ -749,24 +861,32 @@ def expected_legacy_pattern_bytes(pattern_lines: int, pattern_tracks: int) -> by
 def validate_fixture_identity(data: bytes) -> dict:
     chunks = parse_psy3_chunks(data)
     observed_layout = [(fourcc, version) for fourcc, version, _payload in chunks]
-    allowed_chunk_ids = {b"INFO", b"SNGI", b"SEQD", b"PATD", b"MACD", b"EINS"}
-    unknown_chunk_ids = [
-        fourcc for fourcc, _version, _payload in chunks
-        if fourcc not in allowed_chunk_ids
-    ]
-    if unknown_chunk_ids:
+    if tuple(observed_layout) != EXPECTED_TOP_LEVEL_LAYOUT:
         raise ValueError(
-            "same-witness fixture contains unknown top-level chunk that the "
-            "frozen loader could rescan bytewise"
+            "same-witness fixture top-level chunk layout differs from canonical witness"
         )
-    playback_graph = validate_playback_graph(chunks)
 
     info = [payload for fourcc, _version, payload in chunks if fourcc == b"INFO"]
-    if len(info) != 1:
-        raise ValueError("same-witness fixture must contain exactly one INFO chunk")
-    title, _ = read_cstring(info[0], 0, "song title")
-    if title != TITLE:
-        raise ValueError("same-witness fixture song title mismatch")
+    if (
+        len(info) != 1
+        or info[0] != EXPECTED_INFO_PAYLOAD
+        or digest(info[0]) != EXPECTED_INFO_PAYLOAD_SHA256
+    ):
+        raise ValueError(
+            "same-witness fixture INFO payload differs from canonical complete metadata"
+        )
+    title, position = read_cstring(info[0], 0, "song title")
+    author, position = read_cstring(info[0], position, "song author")
+    comment, position = read_cstring(info[0], position, "song comment")
+    if (
+        title != TITLE
+        or author != "Unnamed"
+        or comment != "No Comments"
+        or position != len(info[0])
+    ):
+        raise ValueError("same-witness fixture INFO metadata mismatch")
+
+    playback_graph = validate_playback_graph(chunks)
 
     sngi = [
         (version, payload)
@@ -1507,6 +1627,13 @@ def validate_candidate_render_log(root: Path, index: int) -> dict:
     final_play_beat = summary.get("final_play_beat")
     expected_name = f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
     expected_relative = f"{NAME}/{expected_name}"
+    fixture_bytes = child(root, FIXTURE).read_bytes()
+    input_path = summary.get("input_path")
+    input_size = summary.get("input_size_bytes")
+    input_sha256 = summary.get("input_sha256")
+    normalized_input_path = (
+        input_path.replace("\\", "/") if isinstance(input_path, str) else None
+    )
     output_path = summary.get("output_path")
     output_size = summary.get("output_size_bytes")
     output_sha256 = summary.get("output_sha256")
@@ -1546,6 +1673,22 @@ def validate_candidate_render_log(root: Path, index: int) -> dict:
             "the fixed-frame single-thread procedure"
         )
     if (
+        not isinstance(normalized_input_path, str)
+        or not (
+            normalized_input_path == FIXTURE
+            or normalized_input_path.endswith("/" + FIXTURE)
+        )
+        or not isinstance(input_size, int)
+        or isinstance(input_size, bool)
+        or input_size != len(fixture_bytes)
+        or not isinstance(input_sha256, str)
+        or input_sha256 != digest(fixture_bytes)
+    ):
+        raise ValueError(
+            "same-witness candidate renderer input identity does not match retained fixture"
+        )
+
+    if (
         not isinstance(normalized_output_path, str)
         or not normalized_output_path.endswith("/" + expected_relative)
         or not isinstance(output_size, int)
@@ -1559,6 +1702,7 @@ def validate_candidate_render_log(root: Path, index: int) -> dict:
         )
 
     normalized = dict(summary)
+    normalized["input_path"] = FIXTURE
     normalized["output_path"] = expected_relative
     return normalized
 
