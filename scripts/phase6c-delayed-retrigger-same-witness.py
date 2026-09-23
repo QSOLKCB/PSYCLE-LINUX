@@ -1893,13 +1893,21 @@ def validate_original_inconclusive_runtime(
     except ValueError as exc:
         binding_error = str(exc)
         validate_original_ambiguous_event_binding(attempt)
-        inconclusive_reason = "ambiguous-final-render-attempt"
+        inconclusive_reason = (
+            "process-exit-before-save-wave"
+            if exited_validly
+            else "ambiguous-final-render-attempt"
+        )
     else:
         # The dialog can be bound unambiguously and still fail later in UIA or
-        # harness automation. This is non-evidentiary UNKNOWN, not malformed
-        # evidence and not a completed render.
+        # harness automation. A process exit before Save Wave is likewise
+        # retained as non-evidentiary UNKNOWN.
         binding_error = None
-        inconclusive_reason = "post-binding-render-automation-failure"
+        inconclusive_reason = (
+            "process-exit-before-save-wave"
+            if exited_validly
+            else "post-binding-render-automation-failure"
+        )
 
     observed_binding = validate_original_observed_output(
         original_root, attempt, len(attempts)
