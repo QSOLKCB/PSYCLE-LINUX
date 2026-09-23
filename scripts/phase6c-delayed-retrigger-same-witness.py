@@ -799,6 +799,48 @@ def validate_same_witness_analysis(
     return analysis
 
 
+def analyze_wave_observation(data: bytes) -> dict:
+    """Describe a valid PCM render without requiring command-bearing onset counts."""
+    parsed = base.parse_pcm16_wave(data)
+    onsets = base.onset_frames(parsed["frames"])
+    beat_frames = parsed["sample_rate"] * 60.0 / base.EXPECTED_LAYOUT["bpm"]
+    counts = [0, 0, 0, 0]
+    beat_positions = []
+    for frame in onsets:
+        beat = frame / beat_frames
+        beat_positions.append(beat)
+        bucket = min(3, max(0, int(math.floor(beat + 1e-9))))
+        counts[bucket] += 1
+    return {
+        "sample_rate": parsed["sample_rate"],
+        "channels": parsed["channels"],
+        "bits_per_sample": parsed["bits_per_sample"],
+        "frame_count": len(parsed["frames"]),
+        "onset_frames": onsets,
+        "onset_beats": [round(value, 9) for value in beat_positions],
+        "window_onset_counts": {
+            "note_delay_beat_0": counts[0],
+            "retrigger_beat_1": counts[1],
+            "retr_cont_beat_2": counts[2],
+            "extended_marker_beat_3": counts[3],
+        },
+    }
+
+
+def analyze_original_command_evidence(data: bytes) -> tuple[dict, bool, str | None]:
+    """Keep valid original audio even when it does not prove command execution."""
+    observation = analyze_wave_observation(data)
+    try:
+        strict = validate_same_witness_analysis(
+            base.analyze_wave(data),
+            "original",
+            require_all_command_windows=True,
+        )
+    except ValueError as exc:
+        return observation, False, str(exc)
+    return strict, True, None
+
+
 def reviewed_repository_bytes(path: Path) -> bytes:
     """Read the committed blob, independent of checkout line-ending conversion."""
     try:
@@ -1792,18 +1834,21 @@ def validate_original_inconclusive_runtime(
         validate_original_event_binding(attempt)
     except ValueError as exc:
         binding_error = str(exc)
+        validate_original_ambiguous_event_binding(attempt)
+        inconclusive_reason = "ambiguous-final-render-attempt"
     else:
-        raise ValueError(
-            "same-witness inconclusive render has valid post-dispatch dialog binding"
-        )
+        # The dialog can be bound unambiguously and still fail later in UIA or
+        # harness automation. This is non-evidentiary UNKNOWN, not malformed
+        # evidence and not a completed render.
+        binding_error = None
+        inconclusive_reason = "post-binding-render-automation-failure"
 
-    validate_original_ambiguous_event_binding(attempt)
     observed_binding = validate_original_observed_output(
         original_root, attempt, len(attempts)
     )
 
     return {
-        "inconclusive_reason": "ambiguous-final-render-attempt",
+        "inconclusive_reason": inconclusive_reason,
         "binding_error": binding_error,
         "diagnostics": diagnostics,
         "observed_output": observed_binding,
@@ -2197,17 +2242,17 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
     expected_runtime_renders = [first_binding, second_binding]
     if runtime.get("renders") != expected_runtime_renders:
         raise ValueError("same-witness original runtime render bindings mismatch")
-    analysis = validate_same_witness_analysis(
-        base.analyze_wave(first),
-        "original",
-        require_all_command_windows=True,
+    analysis, command_execution_observed, analysis_error = (
+        analyze_original_command_evidence(first)
     )
-    second_analysis = validate_same_witness_analysis(
-        base.analyze_wave(second),
-        "original",
-        require_all_command_windows=True,
+    second_analysis, second_command_execution_observed, second_analysis_error = (
+        analyze_original_command_evidence(second)
     )
-    if analysis != second_analysis:
+    if (
+        analysis != second_analysis
+        or command_execution_observed != second_command_execution_observed
+        or analysis_error != second_analysis_error
+    ):
         raise ValueError("same-witness original onset analyses differ")
 
     original_analysis = {
@@ -2222,7 +2267,8 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         "renders": [first_binding, second_binding],
         "render_sha256": digest(first),
         "analysis": analysis,
-        "runtime_command_execution_observed": True,
+        "runtime_command_execution_observed": command_execution_observed,
+        "command_execution_analysis_error": analysis_error,
         "timing_interpretation": "deferred",
         "parity_status": "UNKNOWN",
     }
@@ -2244,17 +2290,28 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "reference_build": REFERENCE_BUILD,
             "render_sha256": original_analysis["render_sha256"],
             "analysis": original_analysis["analysis"],
-            "runtime_command_execution_observed": True,
+            "runtime_command_execution_observed": command_execution_observed,
+            "command_execution_analysis_error": analysis_error,
         },
-        "command_bearing_runtime_pair_observed": True,
+        "command_bearing_runtime_pair_observed": command_execution_observed,
         "exact_onset_timing_interpretation": "deferred",
         "classification_allowed": False,
         "parity_status": "UNKNOWN",
         "interpretation_boundary": (
-            "Both sides rendered the exact same four-beat Sampulse/XMSampler witness "
-            "with the same command geometry and the same onset analyzer. This completes "
-            "the command-bearing runtime evidence pair. Exact onset timing is retained "
-            "for the next evidence rung and is not classified in this receipt."
+            (
+                "Both sides rendered the exact same four-beat Sampulse/XMSampler "
+                "witness with the same command geometry and the same onset analyzer. "
+                "This completes the command-bearing runtime evidence pair. Exact onset "
+                "timing is retained for the next evidence rung and is not classified "
+                "in this receipt."
+            )
+            if command_execution_observed
+            else (
+                "The pinned original produced a deterministic repeated render pair, "
+                "but that audio did not satisfy the conservative command-bearing onset "
+                "criteria. The bound WAVs and relaxed onset observation are retained; "
+                "runtime command execution is not claimed and parity remains UNKNOWN."
+            )
         ),
     }
     write_new(original_root / COMPARISON, comparison)
