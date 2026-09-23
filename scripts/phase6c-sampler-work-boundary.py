@@ -382,6 +382,30 @@ def require_attempt_prefix(
     return attempt
 
 
+def validate_fresh_render_event_binding_or_quarantine(
+    attempt: dict,
+    name: str,
+    outcome: object,
+    renders: object,
+) -> str | None:
+    """Reject bad fresh binding unless the attempt is already non-evidentiary."""
+    try:
+        require_fresh_render_event_binding(attempt, name)
+    except ValueError as exc:
+        diagnostics = attempt.get("diagnostics")
+        if (
+            outcome == "inconclusive"
+            and renders == []
+            and attempt.get("outcome") == "inconclusive"
+            and attempt.get("output") is None
+            and isinstance(diagnostics, list)
+            and diagnostics
+        ):
+            return str(exc)
+        raise
+    return None
+
+
 def validate_completed_render_attempt(
     attempt: dict, name: str, *, historical: bool = False
 ) -> None:
@@ -703,10 +727,25 @@ def validate_original(
         if len(attempts) != 1:
             raise ValueError(f"{name}: expected one work-boundary render attempt")
         attempt = require_attempt_prefix(
-            attempts[0], name, historical=replay_historical_projection
+            attempts[0], name, historical=True
         )
         filename = f"original-sampler-work-boundary-{name}-1.wav"
         outcome = runtime.get("outcome")
+
+        if not replay_historical_projection:
+            binding_error = validate_fresh_render_event_binding_or_quarantine(
+                attempt, name, outcome, renders
+            )
+            if binding_error is not None:
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "load_result": load_result,
+                    "process_exit_code": None,
+                    "diagnostics": attempt.get("diagnostics"),
+                    "fresh_render_event_binding": "rejected",
+                    "fresh_render_event_binding_error": binding_error,
+                }
+                continue
 
         if outcome == "rendered-once":
             if load_result != "accepted" or len(renders) != 1:
