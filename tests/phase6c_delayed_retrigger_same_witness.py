@@ -338,6 +338,56 @@ with tempfile.TemporaryDirectory() as temporary:
     assert "post-dispatch dialog evidence" in quarantine["binding_error"]
     assert quarantine["observed_output"]["path"].endswith(original_path.name)
     assert quarantine["observed_output"]["sha256"] == m.digest(valid_wave)
+    assert quarantine["retained_renders"] == []
+
+    partial_second_attempt = dict(ambiguous_attempt)
+    partial_second_attempt["observed_output"] = None
+    partial_runtime = dict(inconclusive_runtime)
+    partial_runtime["renders"] = [
+        {
+            "path": f"{m.NAME}/{original_path.name}",
+            "sha256": m.digest(valid_wave),
+        }
+    ]
+    partial_runtime["attempts"] = [completed_attempt, partial_second_attempt]
+    partial_quarantine = m.validate_original_inconclusive_runtime(
+        root, partial_runtime
+    )
+    assert partial_quarantine["retained_renders"] == partial_runtime["renders"]
+    assert len(partial_quarantine["retained_render_analyses"]) == 1
+    assert "post-dispatch dialog evidence" in partial_quarantine["binding_error"]
+
+    crash_attempt = dict(completed_attempt)
+    crash_attempt.update(
+        {
+            "outcome": "inconclusive",
+            "process_exited": True,
+            "process_exit_code": -1073741819,
+            "output": None,
+            "dialog_closed": False,
+            "stable_output_polls": 0,
+            "diagnostics": ["reference exited during offline render"],
+            "observed_output": {
+                "path": original_path.name,
+                "size_bytes": len(valid_wave),
+                "sha256": m.digest(valid_wave),
+            },
+        }
+    )
+    crash_runtime = {
+        **inconclusive_runtime,
+        "outcome": "reference-process-exited-during-render",
+        "attempts": [crash_attempt],
+        "renders": [],
+    }
+    crash = m.validate_original_process_exit_runtime(
+        root,
+        crash_runtime,
+        {"exit_code_before_termination": -1073741819},
+    )
+    assert crash["process_exit_code"] == -1073741819
+    assert crash["observed_output"]["sha256"] == m.digest(valid_wave)
+    assert crash["retained_renders"] == []
 
     early_ambiguous_attempt = dict(ambiguous_attempt)
     early_ambiguous_attempt.update(
