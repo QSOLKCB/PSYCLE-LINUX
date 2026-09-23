@@ -283,6 +283,9 @@ assert "PeekMessage(" in render_helper_source
 assert "PM_NOREMOVE" in render_helper_source
 assert "DispatchMessage(" in render_helper_source
 assert "PostThreadMessage(" in render_helper_source
+assert "WM_QUIT" not in render_helper_source
+assert "WM_APP_STOP" in render_helper_source
+assert "WM_APP_DRAINED" in render_helper_source
 assert "Phase6cRenderWinEventPump" in render_helper_source
 assert "render_dialog_event_message_pump_started" in render_helper_source
 assert "eventTime" in render_helper_source
@@ -336,14 +339,40 @@ assert "PeekMessage(" in pump_source
 assert "SetWinEventHook(" in pump_source
 assert "GetMessage(" in pump_source
 assert "DispatchMessage(" in pump_source
+stop_message_index = pump_source.index(
+    "message.message == WM_APP_STOP"
+)
+unhook_index = pump_source.index(
+    "UnhookWinEvent(current)", stop_message_index
+)
+drain_post_index = pump_source.index(
+    "WM_APP_DRAINED", unhook_index
+)
+drained_message_index = pump_source.index(
+    "message.message == WM_APP_DRAINED", drain_post_index
+)
+assert (
+    stop_message_index
+    < unhook_index
+    < drain_post_index
+    < drained_message_index
+)
 
 seal_start = render_helper_source.index("public int[] Seal()")
 seal_end = render_helper_source.index("public void Dispose()", seal_start)
 seal_source = render_helper_source[seal_start:seal_end]
+stop_request_index = seal_source.index("WM_APP_STOP")
 stop_wait_index = seal_source.index("if (!stopped.Wait(5000))")
+stop_error_index = seal_source.index("if (stopError != 0)")
 disposed_assignment_index = seal_source.index("disposed = true;")
 boundary_cancel_index = seal_source.index("dispatchBoundarySet = false;")
-assert stop_wait_index < disposed_assignment_index < boundary_cancel_index
+assert (
+    stop_request_index
+    < stop_wait_index
+    < stop_error_index
+    < disposed_assignment_index
+    < boundary_cancel_index
+)
 
 invoke_start = render_helper_source.index("public static bool Invoke(")
 invoke_end = render_helper_source.index("public static string SetText(", invoke_start)
