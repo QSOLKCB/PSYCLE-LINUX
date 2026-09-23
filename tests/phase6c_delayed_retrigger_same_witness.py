@@ -46,6 +46,38 @@ def expect_value_error(fn, phrase: str) -> None:
         raise AssertionError("expected ValueError")
 
 
+def candidate_fixture_bytes() -> bytes:
+    def chunk(fourcc: bytes, version: int, payload: bytes) -> bytes:
+        return fourcc + struct.pack("<II", version, len(payload)) + payload
+
+    info = m.TITLE.encode("utf-8") + b"\0"
+    sngi = struct.pack("<iii", 16, 137, 8)
+    patd = bytearray()
+    patd += struct.pack("<iii", 0, 32, 16)
+    patd += b"Execution Witness\0"
+    patd += struct.pack("<I", 0)
+    patd += struct.pack("<IIiii", 0, 0, 480, 1920, len(m.EXPECTED_FIXTURE_EVENTS))
+    for track, offset, note, inst, mach, volume, command, parameter in m.EXPECTED_FIXTURE_EVENTS:
+        patd += struct.pack("<iii", track, offset, 1)
+        patd += struct.pack(
+            "<iiiiii", note, inst, mach, volume, command, parameter
+        )
+    chunks = [
+        chunk(b"INFO", 0, info),
+        chunk(b"SNGI", 4, sngi),
+        chunk(b"PATD", 2, bytes(patd)),
+        chunk(b"MACD", 3, struct.pack("<ii", 0, 12)),
+        chunk(b"EINS", 0x00010000, b""),
+    ]
+    return (
+        b"PSY3SONG"
+        + struct.pack("<I", 0x11)
+        + struct.pack("<I", 4)
+        + struct.pack("<I", len(chunks))
+        + b"".join(chunks)
+    )
+
+
 beat = 44100.0 * 60.0 / 137.0
 onsets = [
     int(round(0.0625 * beat)),
@@ -56,7 +88,8 @@ onsets = [
     int(round(2.0625 * beat)),
     int(round(3.125 * beat)),
 ]
-valid_wave = pcm_wave(onsets)
+valid_wave = pcm_wave(onsets, frames=m.CANDIDATE_TARGET_FRAMES)
+valid_fixture = candidate_fixture_bytes()
 
 
 def candidate_render_summary() -> dict:
@@ -71,6 +104,8 @@ def candidate_render_summary() -> dict:
         "threads": 1,
         "sequencer_work_calls": 1,
         "player_work_direct": False,
+        "renderer_source_sha256": m.reviewed_digest(m.REVIEWED_RENDERER_SOURCE),
+        "renderer_project_sha256": m.reviewed_digest(m.REVIEWED_RENDERER_PROJECT),
         "master_buffer_float_count": 2 * m.CANDIDATE_TARGET_FRAMES,
         "final_play_beat": m.CANDIDATE_TARGET_FRAMES / m.CANDIDATE_BEAT_FRAMES,
     }
@@ -79,16 +114,70 @@ def candidate_render_summary() -> dict:
 def write_provenance(root: Path) -> None:
     runtime = root / m.NAME
     runtime.mkdir(exist_ok=True)
-    for name in (
-        "phase6c-delayed-retrigger-sampulse-render",
-        "render-probe.cpp",
-        "render-probe.pro",
-        "fixture-generator.c",
-        "eins-compat.py",
-    ):
-        (runtime / name).write_bytes(("fixture:" + name).encode())
+    binary = runtime / "phase6c-delayed-retrigger-sampulse-render"
+    binary.write_bytes(b"\x7fELFphase6c-test-renderer")
+    (runtime / "render-probe.cpp").write_bytes(
+        m.REVIEWED_RENDERER_SOURCE.read_bytes()
+    )
+    (runtime / "render-probe.pro").write_bytes(
+        m.REVIEWED_RENDERER_PROJECT.read_bytes()
+    )
+    (runtime / "fixture-generator.c").write_bytes(
+        m.REVIEWED_FIXTURE_GENERATOR.read_bytes()
+    )
+    (runtime / "eins-compat.py").write_bytes(
+        m.REVIEWED_EINS_CONVERTER.read_bytes()
+    )
+    (runtime / "renderer-build-provenance.hpp").write_bytes(
+        m.expected_build_header()
+    )
+
     delayed = root / "delayed-retrigger"
     delayed.mkdir(exist_ok=True)
+    qmake_log = delayed / "sampulse-render-qmake.log"
+    build_log = delayed / "sampulse-render-build.log"
+    qmake_log.write_text("Project MESSAGE: phase6c Sampulse render\n")
+    build_log.write_text(
+        "g++ tests/phase6c_delayed_retrigger_sampulse_render.cpp "
+        "-o phase6c-delayed-retrigger-sampulse-render\n"
+    )
+    attestation = {
+        "schema_version": 1,
+        "reviewed_inputs": {
+            "renderer_source": {
+                "path": "tests/phase6c_delayed_retrigger_sampulse_render.cpp",
+                "sha256": m.reviewed_digest(m.REVIEWED_RENDERER_SOURCE),
+            },
+            "renderer_project": {
+                "path": "tests/phase6c_delayed_retrigger_sampulse_render.pro",
+                "sha256": m.reviewed_digest(m.REVIEWED_RENDERER_PROJECT),
+            },
+            "fixture_generator": {
+                "path": "tests/phase6c_delayed_retrigger_sampulse_execution_fixture.c",
+                "sha256": m.reviewed_digest(m.REVIEWED_FIXTURE_GENERATOR),
+            },
+            "eins_converter": {
+                "path": "scripts/phase6c-sampulse-eins-compat.py",
+                "sha256": m.reviewed_digest(m.REVIEWED_EINS_CONVERTER),
+            },
+        },
+        "binary": {
+            "path": f"{m.NAME}/phase6c-delayed-retrigger-sampulse-render",
+            "sha256": m.digest(binary.read_bytes()),
+        },
+        "qmake_log": {
+            "path": "delayed-retrigger/sampulse-render-qmake.log",
+            "sha256": m.digest(qmake_log.read_bytes()),
+        },
+        "build_log": {
+            "path": "delayed-retrigger/sampulse-render-build.log",
+            "sha256": m.digest(build_log.read_bytes()),
+        },
+    }
+    (runtime / "renderer-build-provenance.json").write_text(
+        json.dumps(attestation, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     (delayed / "sampulse-eins-compat.log").write_text("EINS PASS\n")
     for index in (1, 2):
         (delayed / f"sampulse-candidate-render-{index}.log").write_text(
@@ -101,7 +190,7 @@ with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     fixture = root / m.FIXTURE
     fixture.parent.mkdir(parents=True)
-    fixture.write_bytes(b"PSY3SONG" + b"same-witness-sampulse")
+    fixture.write_bytes(valid_fixture)
 
     render_dir = root / m.NAME
     write_provenance(root)
@@ -117,6 +206,10 @@ with tempfile.TemporaryDirectory() as temporary:
     assert collected["timing_interpretation"] == "deferred"
     assert collected["analysis"]["window_onset_counts"]["retrigger_beat_1"] == 3
     assert collected["analysis"]["window_onset_counts"]["retr_cont_beat_2"] == 2
+    assert collected["analysis"]["window_onset_counts"]["note_delay_beat_0"] > 0
+    assert collected["analysis"]["window_onset_counts"]["extended_marker_beat_3"] > 0
+    assert collected["analysis"]["frame_count"] == m.CANDIDATE_TARGET_FRAMES
+    assert collected["fixture_identity"]["machine_type"] == 12
     assert m.validate_candidate(root)["parity_status"] == "UNKNOWN"
 
     receipt_path = root / m.CANDIDATE_RECEIPT
@@ -132,7 +225,89 @@ with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     fixture = root / m.FIXTURE
     fixture.parent.mkdir(parents=True)
-    fixture.write_bytes(b"PSY3SONG" + b"same-witness-sampulse")
+    fixture.write_bytes(b"PSY3SONGx")
+    render_dir = root / m.NAME
+    write_provenance(root)
+    for index in (1, 2):
+        (
+            render_dir
+            / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+        ).write_bytes(valid_wave)
+    expect_value_error(
+        lambda: m.collect_candidate(root),
+        "fixture",
+    )
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    fixture = root / m.FIXTURE
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(valid_fixture)
+    render_dir = root / m.NAME
+    write_provenance(root)
+    truncated = pcm_wave(onsets, frames=60360)
+    for index in (1, 2):
+        (
+            render_dir
+            / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+        ).write_bytes(truncated)
+    expect_value_error(
+        lambda: m.collect_candidate(root),
+        "frame count does not match fixed-frame target",
+    )
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    fixture = root / m.FIXTURE
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(valid_fixture)
+    render_dir = root / m.NAME
+    write_provenance(root)
+    missing_windows = pcm_wave(
+        [
+            int(round(1.0 * beat)),
+            int(round(1.0625 * beat)),
+            int(round(1.125 * beat)),
+            int(round(2.0 * beat)),
+            int(round(2.0625 * beat)),
+        ],
+        frames=m.CANDIDATE_TARGET_FRAMES,
+    )
+    for index in (1, 2):
+        (
+            render_dir
+            / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+        ).write_bytes(missing_windows)
+    expect_value_error(
+        lambda: m.collect_candidate(root),
+        "does not expose every command-bearing window",
+    )
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    fixture = root / m.FIXTURE
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(valid_fixture)
+    render_dir = root / m.NAME
+    write_provenance(root)
+    for index in (1, 2):
+        (
+            render_dir
+            / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+        ).write_bytes(valid_wave)
+    (render_dir / "render-probe.cpp").write_bytes(b"x")
+    (render_dir / "render-probe.pro").write_bytes(b"x")
+    (render_dir / "phase6c-delayed-retrigger-sampulse-render").write_bytes(b"x")
+    expect_value_error(
+        lambda: m.collect_candidate(root),
+        "retained renderer source differs",
+    )
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    fixture = root / m.FIXTURE
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(valid_fixture)
     render_dir = root / m.NAME
     write_provenance(root)
     for index in (1, 2):
@@ -152,7 +327,7 @@ with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     fixture = root / m.FIXTURE
     fixture.parent.mkdir(parents=True)
-    fixture.write_bytes(b"PSY3SONG" + b"same-witness-sampulse")
+    fixture.write_bytes(valid_fixture)
     render_dir = root / m.NAME
     write_provenance(root)
     (render_dir / "candidate-delayed-retrigger-sampulse-runtime-1.wav").write_bytes(
