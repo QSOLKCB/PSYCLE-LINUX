@@ -237,6 +237,55 @@ def analyze_wave(data: bytes) -> dict:
     }
 
 
+def validate_render_event_binding(attempt: dict) -> None:
+    runtime_id = attempt.get("selected_render_dialog_runtime_id")
+    preexisting_count = attempt.get("preexisting_render_dialog_count")
+    post_dispatch_count = attempt.get("render_dialog_post_dispatch_event_count")
+    observed_window_count = attempt.get(
+        "render_dialog_post_dispatch_observed_window_event_count"
+    )
+    unresolved_event_count = attempt.get(
+        "render_dialog_unresolved_post_dispatch_event_count"
+    )
+    boundary_tick = attempt.get("render_dialog_dispatch_boundary_tick")
+    selected_handle = attempt.get("selected_render_dialog_native_handle")
+    if (
+        attempt.get("render_dialog_native_event_hook_armed") is not True
+        or attempt.get("render_dialog_event_message_pump_started") is not True
+        or attempt.get("render_dialog_dispatch_boundary_set") is not True
+        or not isinstance(boundary_tick, int)
+        or isinstance(boundary_tick, bool)
+        or boundary_tick < 0
+        or boundary_tick > 0xFFFFFFFF
+        or attempt.get("dialog_discovery")
+        != "pumped-win-event-object-show-strictly-after-dispatch-tick"
+        or not isinstance(preexisting_count, int)
+        or isinstance(preexisting_count, bool)
+        or preexisting_count < 0
+        or not isinstance(observed_window_count, int)
+        or isinstance(observed_window_count, bool)
+        or observed_window_count != 1
+        or not isinstance(unresolved_event_count, int)
+        or isinstance(unresolved_event_count, bool)
+        or unresolved_event_count != 0
+        or not isinstance(post_dispatch_count, int)
+        or isinstance(post_dispatch_count, bool)
+        or post_dispatch_count != 1
+        or not isinstance(selected_handle, int)
+        or isinstance(selected_handle, bool)
+        or selected_handle <= 0
+        or not isinstance(runtime_id, list)
+        or not runtime_id
+        or any(
+            not isinstance(value, int) or isinstance(value, bool)
+            for value in runtime_id
+        )
+    ):
+        raise ValueError(
+            "original render attempt lacks bound post-dispatch dialog evidence"
+        )
+
+
 def validate_render_attempt(attempt: object, expected_outcome: str) -> dict:
     if not isinstance(attempt, dict):
         raise ValueError("original render attempt must be an object")
@@ -250,6 +299,7 @@ def validate_render_attempt(attempt: object, expected_outcome: str) -> dict:
     for key, value in required_flags.items():
         if attempt.get(key) is not value:
             raise ValueError("original render attempt did not reach verified Save Wave: " + key)
+    validate_render_event_binding(attempt)
     if attempt.get("outcome") != expected_outcome:
         raise ValueError("unexpected original render attempt outcome")
     return attempt
