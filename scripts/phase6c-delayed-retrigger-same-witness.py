@@ -36,6 +36,9 @@ EXPECTED_SMPD_SHA256 = (
 EXPECTED_COMPRESSED_SAMPLE_SHA256 = (
     "6e0dc7e70768adbb91ab84a325d734b9a4eb19576dcc4547999447eb210f3bf0"
 )
+EXPECTED_SNGI_PAYLOAD_SHA256 = (
+    "66af0fbe63b11d37590af5bfaf90ff15d999fbb30d52409f529ba88f51ed19ad"
+)
 REQUIRED_RENDERER_DEFINED_SYMBOLS = (
     "psycle::core::Psy3Filter::LoadEINSv1",
     "psycle::core::Sequencer::Work(unsigned int)",
@@ -608,12 +611,48 @@ def validate_fixture_identity(data: bytes) -> dict:
     if title != TITLE:
         raise ValueError("same-witness fixture song title mismatch")
 
-    sngi = [payload for fourcc, _version, payload in chunks if fourcc == b"SNGI"]
-    if len(sngi) != 1 or len(sngi[0]) < 12:
-        raise ValueError("same-witness fixture SNGI identity is invalid")
-    song_tracks, bpm, lpb = struct.unpack_from("<iii", sngi[0], 0)
-    if (song_tracks, bpm, lpb) != (16, 137, 8):
-        raise ValueError("same-witness fixture tempo/track geometry mismatch")
+    sngi = [
+        (version, payload)
+        for fourcc, version, payload in chunks
+        if fourcc == b"SNGI"
+    ]
+    if (
+        len(sngi) != 1
+        or sngi[0][0] != 4
+        or len(sngi[0][1]) != 109
+        or digest(sngi[0][1]) != EXPECTED_SNGI_PAYLOAD_SHA256
+    ):
+        raise ValueError(
+            "same-witness fixture SNGI payload differs from canonical complete song state"
+        )
+    sngi_payload = sngi[0][1]
+    song_tracks, bpm, lpb = struct.unpack_from("<iii", sngi_payload, 0)
+    (
+        octave,
+        machine_soloed,
+        track_soloed,
+        sequence_bus,
+        midi_selected,
+        auxcol_selected,
+        instrument_selected,
+        sequence_width,
+    ) = struct.unpack_from("<iiiiiiii", sngi_payload, 12)
+    track_flags = list(sngi_payload[44:76])
+    if (
+        (song_tracks, bpm, lpb) != (16, 137, 8)
+        or octave != 4
+        or machine_soloed != -1
+        or track_soloed != -1
+        or sequence_bus != 128
+        or midi_selected != 0
+        or auxcol_selected != 0
+        or instrument_selected != 0
+        or sequence_width != 1
+        or track_flags != [0] * 32
+    ):
+        raise ValueError(
+            "same-witness fixture SNGI loader-consumed state mismatch"
+        )
 
     machine_matches = []
     for fourcc, _version, payload in chunks:
@@ -992,18 +1031,29 @@ def validate_renderer_code_identity(root: Path) -> dict:
     }
 
 
-def elf_text_sha256(path: Path, work: Path, label: str) -> str:
-    dumped = work / (label + ".text")
+def normalized_elf_sha256(path: Path, work: Path, label: str) -> str:
+    """Hash complete behavior-affecting ELF/link state, excluding debug/tool notes."""
+    normalized = work / (label + ".normalized-elf")
     try:
+        shutil.copyfile(path, normalized)
         subprocess.check_output(
-            ["objcopy", "--dump-section", f".text={dumped}", str(path)],
+            [
+                "objcopy",
+                "--strip-debug",
+                "--remove-section=.comment",
+                "--remove-section=.note.gnu.build-id",
+                str(normalized),
+            ],
             stderr=subprocess.STDOUT,
         )
     except (OSError, subprocess.CalledProcessError) as exc:
-        raise ValueError("same-witness renderer .text inspection failed") from exc
-    if not dumped.is_file() or dumped.stat().st_size == 0:
-        raise ValueError("same-witness renderer .text section is missing")
-    return digest(dumped.read_bytes())
+        raise ValueError(
+            "same-witness renderer normalized ELF inspection failed"
+        ) from exc
+    data = normalized.read_bytes()
+    if not data.startswith(b"\x7fELF"):
+        raise ValueError("same-witness normalized renderer is not ELF")
+    return digest(data)
 
 
 def validate_reproducible_renderer_build(root: Path) -> None:
@@ -1064,11 +1114,11 @@ def validate_reproducible_renderer_build(root: Path) -> None:
                 raise ValueError(
                     "same-witness renderer reproducible build failed"
                 )
-            retained_text = elf_text_sha256(retained, build, "retained")
-            rebuilt_text = elf_text_sha256(rebuilt, build, "rebuilt")
-            if retained_text != rebuilt_text:
+            retained_elf = normalized_elf_sha256(retained, build, "retained")
+            rebuilt_elf = normalized_elf_sha256(rebuilt, build, "rebuilt")
+            if retained_elf != rebuilt_elf:
                 raise ValueError(
-                    "same-witness renderer reproducible build code identity mismatch"
+                    "same-witness renderer reproducible normalized ELF identity mismatch"
                 )
     finally:
         shutil.rmtree(staging, ignore_errors=True)
@@ -1740,7 +1790,7 @@ def validate_original_inconclusive_runtime(
                     "same-witness nondeterministic render binding mismatch"
                 )
             retained_renders.append(binding)
-            retained_analyses.append(base.analyze_wave(data))
+            retained_analyses.append(analyze_wave_observation(data))
         if retained_renders[0]["sha256"] == retained_renders[1]["sha256"]:
             raise ValueError(
                 "same-witness inconclusive pair is actually byte-identical"
@@ -1776,7 +1826,7 @@ def validate_original_inconclusive_runtime(
                 "same-witness one-render inconclusive state lacks teardown failure"
             )
         retained_renders.append(binding)
-        retained_analyses.append(base.analyze_wave(data))
+        retained_analyses.append(analyze_wave_observation(data))
         observed_binding = None
         if attempts[0].get("observed_output") is not None:
             observed_binding = validate_original_observed_output(
@@ -1804,7 +1854,7 @@ def validate_original_inconclusive_runtime(
                 "same-witness inconclusive retained render binding mismatch"
             )
         retained_renders.append(binding)
-        retained_analyses.append(base.analyze_wave(data))
+        retained_analyses.append(analyze_wave_observation(data))
 
     attempt = attempts[-1]
     if not isinstance(attempt, dict):
@@ -1820,10 +1870,18 @@ def validate_original_inconclusive_runtime(
                 f"same-witness inconclusive render has invalid {key}"
             )
     diagnostics = attempt.get("diagnostics")
+    process_exited = attempt.get("process_exited")
+    process_exit_code = attempt.get("process_exit_code")
+    exited_validly = (
+        process_exited is True
+        and isinstance(process_exit_code, int)
+        and not isinstance(process_exit_code, bool)
+        and process_exit_code != 0
+    )
+    alive_validly = process_exited is False and process_exit_code is None
     if (
         attempt.get("outcome") != "inconclusive"
-        or attempt.get("process_exited") is not False
-        or attempt.get("process_exit_code") is not None
+        or not (alive_validly or exited_validly)
         or attempt.get("output") is not None
         or not isinstance(diagnostics, list)
         or not diagnostics
@@ -1851,6 +1909,7 @@ def validate_original_inconclusive_runtime(
         "inconclusive_reason": inconclusive_reason,
         "binding_error": binding_error,
         "diagnostics": diagnostics,
+        "process_exit_code": process_exit_code,
         "observed_output": observed_binding,
         "retained_renders": retained_renders,
         "retained_render_analyses": retained_analyses,
@@ -1904,7 +1963,7 @@ def validate_original_process_exit_runtime(
                 "same-witness process-exit retained render binding mismatch"
             )
         retained_renders.append(binding)
-        retained_analyses.append(base.analyze_wave(data))
+        retained_analyses.append(analyze_wave_observation(data))
 
     attempt = attempts[-1]
     if not isinstance(attempt, dict):
@@ -2185,6 +2244,7 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "fresh_render_event_binding_error": quarantine["binding_error"],
             "observed_output": quarantine["observed_output"],
             "diagnostics": quarantine["diagnostics"],
+            "process_exit_code": quarantine.get("process_exit_code"),
             "timing_interpretation": "deferred",
             "parity_status": "UNKNOWN",
         }
@@ -2216,6 +2276,7 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                 "fresh_render_event_binding": binding_status,
                 "fresh_render_event_binding_error": quarantine["binding_error"],
                 "observed_output": quarantine["observed_output"],
+                "process_exit_code": quarantine.get("process_exit_code"),
             },
             "command_bearing_runtime_pair_observed": False,
             "exact_onset_timing_interpretation": "deferred",
