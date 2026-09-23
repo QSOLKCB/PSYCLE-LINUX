@@ -7,9 +7,11 @@ import hashlib
 import importlib.util
 import json
 import math
+import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -377,6 +379,19 @@ def validate_playback_graph(
         raise ValueError(
             "same-witness fixture does not route sampler slot 0 directly to Master slot 128"
         )
+
+    active_gains = (
+        sampler_outputs[0]["wire_multiplier"],
+        master_inputs[0]["input_volume"],
+    )
+    if any(
+        not math.isfinite(float(value))
+        or not math.isclose(float(value), 1.0, rel_tol=0.0, abs_tol=1e-7)
+        for value in active_gains
+    ):
+        raise ValueError(
+            "same-witness fixture lacks canonical audible sampler-to-Master gain"
+        )
     return {
         "sequence": sequence,
         "sampler_slot": 0,
@@ -510,6 +525,78 @@ def validate_eins_payload(payload: bytes) -> dict:
     }
 
 
+def decompress_beerz77_v2(data: bytes, expected_size: int) -> bytes:
+    """Decode the exact legacy PATD stream consumed by r12005 LoadPATDv0."""
+    if len(data) < 5 or data[0] != 0x04:
+        raise ValueError("same-witness legacy PATD compression header is invalid")
+    declared_size = int.from_bytes(data[1:5], "little")
+    if declared_size != expected_size:
+        raise ValueError("same-witness legacy PATD decompressed size mismatch")
+
+    source = 5
+    output = bytearray()
+    while len(output) < declared_size:
+        if source >= len(data):
+            raise ValueError("same-witness legacy PATD compressed stream is truncated")
+        length = data[source]
+        source += 1
+        if length:
+            if (
+                source + length > len(data)
+                or len(output) + length > declared_size
+            ):
+                raise ValueError("same-witness legacy PATD literal run is invalid")
+            output += data[source : source + length]
+            source += length
+            continue
+
+        if source + 2 > len(data):
+            raise ValueError("same-witness legacy PATD back-reference is truncated")
+        length = data[source] + 3
+        offset = data[source + 1]
+        source += 2
+        start = len(output) - offset - length
+        if (
+            start < 0
+            or start + length > len(output)
+            or len(output) + length > declared_size
+        ):
+            raise ValueError("same-witness legacy PATD back-reference is invalid")
+        output += output[start : start + length]
+
+    if source != len(data):
+        raise ValueError("same-witness legacy PATD compressed stream has trailing bytes")
+    return bytes(output)
+
+
+def expected_legacy_pattern_bytes(pattern_lines: int, pattern_tracks: int) -> bytes:
+    if (pattern_lines, pattern_tracks) != (32, 16):
+        raise ValueError("same-witness fixture legacy pattern geometry mismatch")
+    empty = bytes((255, 255, 255, 0, 0))
+    grid = bytearray(empty * (pattern_lines * pattern_tracks))
+    ticks_per_line = 480 // 8
+    for (
+        track,
+        offset_ticks,
+        note,
+        inst,
+        mach,
+        _volume,
+        command,
+        parameter,
+    ) in EXPECTED_FIXTURE_EVENTS:
+        if offset_ticks % ticks_per_line != 0:
+            raise ValueError("same-witness command is not representable in legacy PATD")
+        row = offset_ticks // ticks_per_line
+        if not 0 <= track < pattern_tracks or not 0 <= row < pattern_lines:
+            raise ValueError("same-witness command lies outside legacy PATD")
+        position = (row * pattern_tracks + track) * 5
+        grid[position : position + 5] = bytes(
+            (note & 0xFF, inst & 0xFF, mach & 0xFF, command & 0xFF, parameter & 0xFF)
+        )
+    return bytes(grid)
+
+
 def validate_fixture_identity(data: bytes) -> dict:
     chunks = parse_psy3_chunks(data)
     playback_graph = validate_playback_graph(chunks)
@@ -573,8 +660,16 @@ def validate_fixture_identity(data: bytes) -> dict:
         raise ValueError("same-witness fixture pattern compression header is truncated")
     compressed_size = struct.unpack_from("<I", payload, position)[0]
     position += 4
-    if position + compressed_size > len(payload):
+    if compressed_size <= 0 or position + compressed_size > len(payload):
         raise ValueError("same-witness fixture pattern compression payload is truncated")
+    compressed_pattern = payload[position : position + compressed_size]
+    legacy_pattern = decompress_beerz77_v2(
+        compressed_pattern, pattern_lines * pattern_tracks * 5
+    )
+    if legacy_pattern != expected_legacy_pattern_bytes(pattern_lines, pattern_tracks):
+        raise ValueError(
+            "same-witness fixture legacy PATD playback grid does not match command witness"
+        )
     position += compressed_size
     if position + 20 > len(payload):
         raise ValueError("same-witness fixture extended pattern header is truncated")
@@ -855,6 +950,88 @@ def validate_renderer_code_identity(root: Path) -> dict:
     }
 
 
+def elf_text_sha256(path: Path, work: Path, label: str) -> str:
+    dumped = work / (label + ".text")
+    try:
+        subprocess.check_output(
+            ["objcopy", "--dump-section", f".text={dumped}", str(path)],
+            stderr=subprocess.STDOUT,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError("same-witness renderer .text inspection failed") from exc
+    if not dumped.is_file() or dumped.stat().st_size == 0:
+        raise ValueError("same-witness renderer .text section is missing")
+    return digest(dumped.read_bytes())
+
+
+def validate_reproducible_renderer_build(root: Path) -> None:
+    """Rebuild reviewed renderer code and bind the retained ELF to its .text."""
+    if not sys.platform.startswith("linux"):
+        return
+
+    retained = child(
+        root, f"{NAME}/phase6c-delayed-retrigger-sampulse-render"
+    )
+    player_root = ROOT / "psycle-cpp-r12005-sanitized" / "psycle-player"
+    staging = Path(
+        tempfile.mkdtemp(prefix="phase6c-sampulse-verify-", dir=player_root)
+    )
+    try:
+        with tempfile.TemporaryDirectory(prefix="phase6c-sampulse-build-") as temporary:
+            build = Path(temporary)
+            (build / "phase6c-render-provenance.hpp").write_bytes(
+                expected_build_header()
+            )
+            project = staging / "render.pro"
+            project.write_bytes(reviewed_repository_bytes(REVIEWED_RENDERER_PROJECT))
+            qmake = subprocess.run(
+                [
+                    "qmake",
+                    "CONFIG-=shared",
+                    "CONFIG+=release",
+                    f"PROBE_BUILD_DIR={build}",
+                    f"REPO_ROOT={ROOT}",
+                    "-o",
+                    str(build / "Makefile"),
+                    str(project),
+                ],
+                cwd=staging,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            if qmake.returncode != 0:
+                raise ValueError(
+                    "same-witness renderer reproducible build qmake failed"
+                )
+            make = subprocess.run(
+                [
+                    "make",
+                    "-C",
+                    str(build),
+                    "-f",
+                    str(build / "Makefile"),
+                    "-j2",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            rebuilt = build / "phase6c-delayed-retrigger-sampulse-render"
+            if make.returncode != 0 or not rebuilt.is_file():
+                raise ValueError(
+                    "same-witness renderer reproducible build failed"
+                )
+            retained_text = elf_text_sha256(retained, build, "retained")
+            rebuilt_text = elf_text_sha256(rebuilt, build, "rebuilt")
+            if retained_text != rebuilt_text:
+                raise ValueError(
+                    "same-witness renderer reproducible build code identity mismatch"
+                )
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
 def validate_renderer_build_provenance(
     root: Path, observations: list[dict]
 ) -> dict:
@@ -918,6 +1095,7 @@ def validate_renderer_build_provenance(
     provenance_bytes = child(root, provenance_relative).read_bytes()
     validate_compiled_provenance_output(provenance_bytes)
     code_identity = validate_renderer_code_identity(root)
+    validate_reproducible_renderer_build(root)
     if (
         attestation.get("schema_version") != 3
         or attestation.get("reviewed_inputs") != expected_inputs
@@ -1633,6 +1811,12 @@ def validate_original_inconclusive_runtime(
         "retained_render_analyses": retained_analyses,
     }
 
+def inconclusive_render_binding_status(quarantine: dict) -> str:
+    if quarantine.get("inconclusive_reason") == "pre-render-load-not-accepted":
+        return "not-attempted"
+    return "accepted" if quarantine.get("binding_error") is None else "rejected"
+
+
 def validate_original_process_exit_runtime(
     original_root: Path, runtime: object, receipt: dict
 ) -> dict:
@@ -1935,9 +2119,7 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         quarantine = validate_original_inconclusive_runtime(
             original_root, runtime
         )
-        binding_status = (
-            "accepted" if quarantine["binding_error"] is None else "rejected"
-        )
+        binding_status = inconclusive_render_binding_status(quarantine)
         original_analysis = {
             "schema_version": 1,
             "phase": "6C",
