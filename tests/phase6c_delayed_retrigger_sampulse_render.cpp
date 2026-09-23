@@ -10,6 +10,7 @@
 #include <psycle/audiodrivers/audiodriver.h>
 #include <universalis/os/loggers.hpp>
 #include <universalis/os/thread_name.hpp>
+#include "phase6c-render-provenance.hpp"
 
 #include <cmath>
 #include <cstdlib>
@@ -129,6 +130,10 @@ int main(int argc, char** argv) {
                             << ",\"threads\":1"
                             << ",\"sequencer_work_calls\":1"
                             << ",\"player_work_direct\":false"
+                            << ",\"renderer_source_sha256\":\""
+                            << PHASE6C_RENDER_SOURCE_SHA256 << "\""
+                            << ",\"renderer_project_sha256\":\""
+                            << PHASE6C_RENDER_PROJECT_SHA256 << "\""
                             << ",\"master_buffer_float_count\":"
                             << master_output.size()
                             << ",\"final_play_beat\":" << final_beat
