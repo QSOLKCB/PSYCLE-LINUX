@@ -488,9 +488,9 @@ def validate_original_inconclusive_runtime(
         or runtime.get("settings") != ORIGINAL_RENDER_SETTINGS
         or not isinstance(attempts, list)
         or not isinstance(renders, list)
-        or len(renders) > 1
-        or len(attempts) != len(renders) + 1
         or len(attempts) not in (1, 2)
+        or len(renders) > 2
+        or len(renders) > len(attempts)
         or not isinstance(pre, dict)
         or pre.get("schema_version") != 1
         or pre.get("clean_accepted_load") is not True
@@ -505,6 +505,78 @@ def validate_original_inconclusive_runtime(
 
     retained_renders: list[dict] = []
     retained_analyses: list[dict] = []
+
+    # Both renders may complete yet disagree byte-for-byte. That is valid
+    # nondeterminism evidence, not a malformed receipt and not a runtime pair.
+    if len(renders) == 2:
+        if len(attempts) != 2:
+            raise ValueError(
+                "same-witness nondeterministic render-pair shape mismatch"
+            )
+        for index in (0, 1):
+            binding, data = validate_original_attempt(
+                original_root, attempts[index], index + 1
+            )
+            if renders[index] != binding:
+                raise ValueError(
+                    "same-witness nondeterministic render binding mismatch"
+                )
+            retained_renders.append(binding)
+            retained_analyses.append(base.analyze_wave(data))
+        if retained_renders[0]["sha256"] == retained_renders[1]["sha256"]:
+            raise ValueError(
+                "same-witness inconclusive pair is actually byte-identical"
+            )
+        return {
+            "inconclusive_reason": "nondeterministic-completed-render-pair",
+            "binding_error": None,
+            "diagnostics": [],
+            "observed_output": None,
+            "retained_renders": retained_renders,
+            "retained_render_analyses": retained_analyses,
+        }
+
+    # A finalized first render with failed dialog teardown must not trigger a
+    # second modal render. Retain the completed render and stop at UNKNOWN.
+    if len(renders) == 1 and len(attempts) == 1:
+        binding, data = validate_original_attempt(
+            original_root, attempts[0], 1
+        )
+        if renders[0] != binding:
+            raise ValueError(
+                "same-witness teardown-failure render binding mismatch"
+            )
+        teardown_diagnostic = (
+            "render output finalized and Close control was verified, "
+            "but dialog teardown did not complete"
+        )
+        if (
+            attempts[0].get("dialog_closed") is not False
+            or attempts[0].get("diagnostics") != [teardown_diagnostic]
+        ):
+            raise ValueError(
+                "same-witness one-render inconclusive state lacks teardown failure"
+            )
+        retained_renders.append(binding)
+        retained_analyses.append(base.analyze_wave(data))
+        observed_binding = None
+        if attempts[0].get("observed_output") is not None:
+            observed_binding = validate_original_observed_output(
+                original_root, attempts[0], 1
+            )
+        return {
+            "inconclusive_reason": "first-render-dialog-teardown-failure",
+            "binding_error": None,
+            "diagnostics": attempts[0].get("diagnostics"),
+            "observed_output": observed_binding,
+            "retained_renders": retained_renders,
+            "retained_render_analyses": retained_analyses,
+        }
+
+    # Otherwise the last attempt is a non-evidentiary interruption after zero
+    # or one completed render and must prove ambiguous event binding.
+    if len(renders) > 1 or len(attempts) != len(renders) + 1:
+        raise ValueError("same-witness interrupted original runtime mismatch")
     for index in range(len(renders)):
         binding, data = validate_original_attempt(
             original_root, attempts[index], index + 1
@@ -555,13 +627,13 @@ def validate_original_inconclusive_runtime(
     )
 
     return {
+        "inconclusive_reason": "ambiguous-final-render-attempt",
         "binding_error": binding_error,
         "diagnostics": diagnostics,
         "observed_output": observed_binding,
         "retained_renders": retained_renders,
         "retained_render_analyses": retained_analyses,
     }
-
 
 def validate_original_process_exit_runtime(
     original_root: Path, runtime: object, receipt: dict
@@ -865,6 +937,9 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         quarantine = validate_original_inconclusive_runtime(
             original_root, runtime
         )
+        binding_status = (
+            "accepted" if quarantine["binding_error"] is None else "rejected"
+        )
         original_analysis = {
             "schema_version": 1,
             "phase": "6C",
@@ -875,12 +950,13 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "fixture_sha256": candidate["fixture_sha256"],
             "machine_substrate": "XMSampler/Sampulse",
             "outcome": "inconclusive",
+            "inconclusive_reason": quarantine["inconclusive_reason"],
             "renders": quarantine["retained_renders"],
             "retained_render_analyses": quarantine["retained_render_analyses"],
             "render_sha256": None,
             "analysis": None,
             "runtime_command_execution_observed": False,
-            "fresh_render_event_binding": "rejected",
+            "fresh_render_event_binding": binding_status,
             "fresh_render_event_binding_error": quarantine["binding_error"],
             "observed_output": quarantine["observed_output"],
             "diagnostics": quarantine["diagnostics"],
@@ -906,12 +982,13 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "original": {
                 "reference_build": REFERENCE_BUILD,
                 "outcome": "inconclusive",
+                "inconclusive_reason": quarantine["inconclusive_reason"],
                 "retained_renders": quarantine["retained_renders"],
                 "retained_render_analyses": quarantine["retained_render_analyses"],
                 "render_sha256": None,
                 "analysis": None,
                 "runtime_command_execution_observed": False,
-                "fresh_render_event_binding": "rejected",
+                "fresh_render_event_binding": binding_status,
                 "fresh_render_event_binding_error": quarantine["binding_error"],
                 "observed_output": quarantine["observed_output"],
             },
@@ -921,11 +998,11 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "parity_status": "UNKNOWN",
             "interpretation_boundary": (
                 "The candidate rendered the exact four-beat Sampulse/XMSampler "
-                "witness, but the pinned original did not complete the required "
-                "deterministic repeated-render pair. Any completed first render "
-                "and final ambiguous-attempt evidence are retained diagnostically; "
-                "no cross-side runtime pair is claimed and delayed/retrigger "
-                "parity remains unclassified."
+                "witness, but the pinned original did not complete a deterministic "
+                "repeated-render pair. Completed original renders and any terminal "
+                "teardown or ambiguity evidence are retained diagnostically; no "
+                "cross-side runtime pair is claimed and delayed/retrigger parity "
+                "remains unclassified."
             ),
         }
         write_new(original_root / COMPARISON, comparison)
