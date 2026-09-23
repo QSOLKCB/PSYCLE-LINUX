@@ -134,11 +134,13 @@ def candidate_fixture_bytes(
     include_legacy_pattern: bool = True,
     master_input_volume: float = 1.0,
     include_xmsampler_state: bool = True,
+    include_master_state: bool = True,
 ) -> bytes:
     def chunk(fourcc: bytes, version: int, payload: bytes) -> bytes:
         return fourcc + struct.pack("<II", version, len(payload)) + payload
 
-    info = m.TITLE.encode("utf-8") + b"\0"
+    info = m.EXPECTED_INFO_PAYLOAD
+    assert m.digest(info) == m.EXPECTED_INFO_PAYLOAD_SHA256
     sngi = bytes.fromhex(
         "10000000890000000800000004000000ffffffffffffffff80000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000018000000000000003e00000000000000"
     )
@@ -167,11 +169,21 @@ def candidate_fixture_bytes(
     for track, offset, note, inst, mach, volume, command, parameter in m.EXPECTED_FIXTURE_EVENTS:
         patd += struct.pack("<iii", track, offset, 1)
         patd += struct.pack("<iiiiii", note, inst, mach, volume, command, parameter)
+
+    auxiliary_patd = base64.b64decode(
+        "/v//f4AAAAAQAAAAVW50aXRsZWQAoAAAAAQAKAAACv///wAA9wAABAQAAgUAAgoABgEACwEAGgEAOAEAdAEA7AEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEA+wEAXp4CAAAAAAAAAAAAAOABAAAAHgAAAQAAAAEAAAAAAAAAAQAAAPcAAAAAAAAAAAAAAAAAAAAEAAAABAAAAA=="
+    )
+    assert len(auxiliary_patd) == 241
+    assert m.digest(auxiliary_patd) == (
+        "86eca6f4a9ac89fc1325a25f4c9507d4bcf4829b01f9c1b70372f59706bf973e"
+    )
+
     chunks = [
         chunk(b"INFO", 0, info),
         chunk(b"SNGI", 4, sngi),
         chunk(b"SEQD", 2, seqd),
         chunk(b"PATD", 2, bytes(patd)),
+        chunk(b"PATD", 0x00010002, auxiliary_patd),
         chunk(
             b"MACD",
             3,
@@ -193,6 +205,11 @@ def candidate_fixture_bytes(
                 input_count=1, output_count=0,
                 edit_name="Psycle Master and Minimixer",
                 input_volume=master_input_volume,
+                machine_state=(
+                    m.expected_master_macd_state_bytes()
+                    if include_master_state
+                    else b""
+                ),
             ),
         ),
         chunk(b"EINS", 0x00010000, synthetic_eins_payload()),
@@ -259,6 +276,12 @@ expect_value_error(
     ),
     "machine-specific MACD state",
 )
+expect_value_error(
+    lambda: m.validate_fixture_identity(
+        candidate_fixture_bytes(include_master_state=False)
+    ),
+    "Master machine-specific MACD state",
+)
 
 state_mutated_chunks = []
 for fourcc, version, payload in m.parse_psy3_chunks(valid_fixture):
@@ -306,6 +329,19 @@ expect_value_error(
     "does not route sampler slot 0 directly to Master slot 128",
 )
 
+master_silent_chunks = []
+for fourcc, version, payload in m.parse_psy3_chunks(valid_fixture):
+    if fourcc == b"MACD" and struct.unpack_from("<i", payload, 0)[0] == 128:
+        changed = bytearray(payload)
+        parsed = m.parse_machine_routing(payload)
+        struct.pack_into("<i", changed, parsed["state_offset"] + 4, 0)
+        payload = bytes(changed)
+    master_silent_chunks.append((fourcc, version, payload))
+expect_value_error(
+    lambda: m.validate_fixture_identity(repack_chunks(master_silent_chunks)),
+    "Master machine-specific MACD state",
+)
+
 embedded_sngi = bytearray(
     next(
         payload
@@ -323,12 +359,32 @@ unknown_chunks = list(m.parse_psy3_chunks(valid_fixture))
 unknown_chunks.append((b"JUNK", 0, hidden_loader_visible))
 expect_value_error(
     lambda: m.validate_fixture_identity(repack_chunks(unknown_chunks)),
-    "unknown top-level chunk",
+    "top-level chunk layout",
+)
+
+info_mutated_chunks = []
+for fourcc, version, payload in m.parse_psy3_chunks(valid_fixture):
+    if fourcc == b"INFO":
+        payload = payload + hidden_loader_visible
+    info_mutated_chunks.append((fourcc, version, payload))
+expect_value_error(
+    lambda: m.validate_fixture_identity(repack_chunks(info_mutated_chunks)),
+    "INFO payload",
+)
+
+reordered_chunks = list(m.parse_psy3_chunks(valid_fixture))
+reordered_chunks[0], reordered_chunks[1] = reordered_chunks[1], reordered_chunks[0]
+expect_value_error(
+    lambda: m.validate_fixture_identity(repack_chunks(reordered_chunks)),
+    "top-level chunk layout",
 )
 
 
-def candidate_render_summary(index: int, output_path: Path) -> dict:
+def candidate_render_summary(
+    index: int, input_path: Path, output_path: Path
+) -> dict:
     compiled = m.expected_compiled_provenance()
+    input_bytes = input_path.read_bytes()
     return {
         "schema_version": 1,
         "fixed_frame_render": True,
@@ -347,6 +403,9 @@ def candidate_render_summary(index: int, output_path: Path) -> dict:
         "engine_xmsampler_sha256": compiled["engine_xmsampler_sha256"],
         "master_buffer_float_count": 2 * m.CANDIDATE_TARGET_FRAMES,
         "final_play_beat": m.CANDIDATE_TARGET_FRAMES / m.CANDIDATE_BEAT_FRAMES,
+        "input_path": str(input_path),
+        "input_size_bytes": len(input_bytes),
+        "input_sha256": m.digest(input_bytes),
         "output_path": str(output_path),
         "output_size_bytes": len(valid_wave),
         "output_sha256": m.digest(valid_wave),
@@ -490,6 +549,7 @@ def write_provenance(root: Path) -> None:
         encoding="utf-8",
     )
     (delayed / "sampulse-eins-compat.log").write_text("EINS PASS\n")
+    input_path = root / m.FIXTURE
     for index in (1, 2):
         output_path = (
             runtime
@@ -497,7 +557,7 @@ def write_provenance(root: Path) -> None:
         )
         (delayed / f"sampulse-candidate-render-{index}.log").write_text(
             json.dumps(
-                candidate_render_summary(index, output_path),
+                candidate_render_summary(index, input_path, output_path),
                 sort_keys=True,
             ) + "\n",
             encoding="utf-8",
@@ -540,6 +600,16 @@ with tempfile.TemporaryDirectory() as temporary:
                 "channel_count"
             ]
             == 64
+        )
+        assert (
+            collected["fixture_identity"]["playback_graph"]["master_state"]["out_dry"]
+            == 256
+        )
+        assert (
+            collected["fixture_identity"]["playback_graph"]["master_state"][
+                "decrease_on_clip"
+            ]
+            == 0
         )
         assert m.validate_candidate(root)["parity_status"] == "UNKNOWN"
     finally:
@@ -808,6 +878,34 @@ with tempfile.TemporaryDirectory() as temporary:
     expect_value_error(
         lambda: m.collect_candidate(root),
         "renderer output identity does not match retained WAV",
+    )
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    fixture = root / m.FIXTURE
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(valid_fixture)
+    render_dir = root / m.NAME
+    write_provenance(root)
+    for index in (1, 2):
+        (
+            render_dir
+            / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+        ).write_bytes(valid_wave)
+    mutated_chunks = list(m.parse_psy3_chunks(valid_fixture))
+    changed = bytearray(mutated_chunks[4][2])
+    changed[-1] ^= 0x01
+    mutated_chunks[4] = (
+        mutated_chunks[4][0],
+        mutated_chunks[4][1],
+        bytes(changed),
+    )
+    substituted_fixture = repack_chunks(mutated_chunks)
+    assert m.validate_fixture_identity(substituted_fixture)["bpm"] == 137
+    fixture.write_bytes(substituted_fixture)
+    expect_value_error(
+        lambda: m.collect_candidate(root),
+        "renderer input identity does not match retained fixture",
     )
 
 with tempfile.TemporaryDirectory() as temporary:
