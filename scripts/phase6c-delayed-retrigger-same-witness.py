@@ -432,21 +432,65 @@ def validate_original_ambiguous_event_binding(attempt: dict) -> None:
         )
 
 
+def validate_original_observed_output(
+    original_root: Path, attempt: dict, index: int
+) -> dict | None:
+    expected_name = f"original-delayed-retrigger-sampulse-runtime-{index}.wav"
+    expected_relative = f"{NAME}/{expected_name}"
+    expected_path = child(original_root, expected_relative)
+    observed = attempt.get("observed_output")
+    if observed is None:
+        if expected_path.exists():
+            raise ValueError(
+                "same-witness inconclusive render created an unbound output file"
+            )
+        return None
+    if (
+        not isinstance(observed, dict)
+        or set(observed) != {"path", "size_bytes", "sha256"}
+        or observed.get("path") != expected_name
+        or not isinstance(observed.get("size_bytes"), int)
+        or isinstance(observed.get("size_bytes"), bool)
+        or observed["size_bytes"] < 0
+        or not isinstance(observed.get("sha256"), str)
+        or len(observed["sha256"]) != 64
+    ):
+        raise ValueError(
+            "same-witness inconclusive observed output binding is invalid"
+        )
+    data = expected_path.read_bytes()
+    if (
+        len(data) != observed["size_bytes"]
+        or digest(data) != observed["sha256"]
+    ):
+        raise ValueError(
+            "same-witness inconclusive observed output binding mismatch"
+        )
+    return {
+        "path": expected_relative,
+        "size_bytes": observed["size_bytes"],
+        "sha256": observed["sha256"],
+    }
+
+
 def validate_original_inconclusive_runtime(
     original_root: Path, runtime: object
 ) -> dict:
     if not isinstance(runtime, dict):
         raise ValueError("same-witness original runtime receipt is missing")
     attempts = runtime.get("attempts")
+    renders = runtime.get("renders")
     pre = runtime.get("pre_render_load")
     if (
         runtime.get("schema_version") != 1
         or runtime.get("outcome") != "inconclusive"
         or runtime.get("deterministic") is not False
         or runtime.get("settings") != ORIGINAL_RENDER_SETTINGS
-        or runtime.get("renders") != []
         or not isinstance(attempts, list)
-        or len(attempts) != 1
+        or not isinstance(renders, list)
+        or len(renders) > 1
+        or len(attempts) != len(renders) + 1
+        or len(attempts) not in (1, 2)
         or not isinstance(pre, dict)
         or pre.get("schema_version") != 1
         or pre.get("clean_accepted_load") is not True
@@ -459,7 +503,20 @@ def validate_original_inconclusive_runtime(
     ):
         raise ValueError("same-witness inconclusive original runtime mismatch")
 
-    attempt = attempts[0]
+    retained_renders: list[dict] = []
+    retained_analyses: list[dict] = []
+    for index in range(len(renders)):
+        binding, data = validate_original_attempt(
+            original_root, attempts[index], index + 1
+        )
+        if renders[index] != binding:
+            raise ValueError(
+                "same-witness inconclusive retained render binding mismatch"
+            )
+        retained_renders.append(binding)
+        retained_analyses.append(base.analyze_wave(data))
+
+    attempt = attempts[-1]
     if not isinstance(attempt, dict):
         raise ValueError("same-witness inconclusive render attempt is not an object")
     for key in ("command_verified", "command_dispatched"):
@@ -492,57 +549,114 @@ def validate_original_inconclusive_runtime(
             "same-witness inconclusive render has valid post-dispatch dialog binding"
         )
 
-    # Ambiguity can be discovered immediately after dialog discovery, before
-    # later UI/render flags have had any opportunity to become true. Only an
-    # invalid full binding that is independently proven ambiguous is quarantined.
     validate_original_ambiguous_event_binding(attempt)
-
-    expected_name = "original-delayed-retrigger-sampulse-runtime-1.wav"
-    expected_relative = f"{NAME}/{expected_name}"
-    expected_path = child(original_root, expected_relative)
-    observed = attempt.get("observed_output")
-    if observed is None:
-        if expected_path.exists():
-            raise ValueError(
-                "same-witness inconclusive render created an unbound output file"
-            )
-        observed_binding = None
-    else:
-        if (
-            not isinstance(observed, dict)
-            or set(observed) != {"path", "size_bytes", "sha256"}
-            or observed.get("path") != expected_name
-            or not isinstance(observed.get("size_bytes"), int)
-            or isinstance(observed.get("size_bytes"), bool)
-            or observed["size_bytes"] < 0
-            or not isinstance(observed.get("sha256"), str)
-            or len(observed["sha256"]) != 64
-        ):
-            raise ValueError(
-                "same-witness inconclusive observed output binding is invalid"
-            )
-        data = expected_path.read_bytes()
-        if (
-            len(data) != observed["size_bytes"]
-            or digest(data) != observed["sha256"]
-        ):
-            raise ValueError(
-                "same-witness inconclusive observed output binding mismatch"
-            )
-        observed_binding = {
-            "path": expected_relative,
-            "size_bytes": observed["size_bytes"],
-            "sha256": observed["sha256"],
-        }
+    observed_binding = validate_original_observed_output(
+        original_root, attempt, len(attempts)
+    )
 
     return {
         "binding_error": binding_error,
         "diagnostics": diagnostics,
         "observed_output": observed_binding,
+        "retained_renders": retained_renders,
+        "retained_render_analyses": retained_analyses,
     }
 
 
-def validate_original_runtime_procedure(runtime: object) -> list[dict]:
+def validate_original_process_exit_runtime(
+    original_root: Path, runtime: object, receipt: dict
+) -> dict:
+    if not isinstance(runtime, dict):
+        raise ValueError("same-witness original runtime receipt is missing")
+    attempts = runtime.get("attempts")
+    renders = runtime.get("renders")
+    pre = runtime.get("pre_render_load")
+    if (
+        runtime.get("schema_version") != 1
+        or runtime.get("outcome")
+        != "reference-process-exited-during-render"
+        or runtime.get("deterministic") is not False
+        or runtime.get("settings") != ORIGINAL_RENDER_SETTINGS
+        or not isinstance(attempts, list)
+        or not isinstance(renders, list)
+        or len(renders) > 1
+        or len(attempts) != len(renders) + 1
+        or len(attempts) not in (1, 2)
+        or not isinstance(pre, dict)
+        or pre.get("schema_version") != 1
+        or pre.get("clean_accepted_load") is not True
+        or pre.get("load_warning_dismissed") is not True
+        or pre.get("process_running_before_render") is not True
+        or pre.get("matched_marker") != Path(FIXTURE).name
+        or not isinstance(pre.get("stable_marker_polls"), int)
+        or isinstance(pre.get("stable_marker_polls"), bool)
+        or pre["stable_marker_polls"] < 4
+    ):
+        raise ValueError("same-witness process-exit runtime mismatch")
+
+    retained_renders: list[dict] = []
+    retained_analyses: list[dict] = []
+    for index in range(len(renders)):
+        binding, data = validate_original_attempt(
+            original_root, attempts[index], index + 1
+        )
+        if renders[index] != binding:
+            raise ValueError(
+                "same-witness process-exit retained render binding mismatch"
+            )
+        retained_renders.append(binding)
+        retained_analyses.append(base.analyze_wave(data))
+
+    attempt = attempts[-1]
+    if not isinstance(attempt, dict):
+        raise ValueError("same-witness process-exit attempt is not an object")
+    for key in (
+        "command_verified",
+        "command_dispatched",
+        "dialog_verified",
+        "controls_configured",
+        "save_invoked",
+    ):
+        if attempt.get(key) is not True:
+            raise ValueError(
+                f"same-witness process-exit render did not verify {key}"
+            )
+    exit_code = attempt.get("process_exit_code")
+    diagnostics = attempt.get("diagnostics")
+    if (
+        attempt.get("outcome") != "inconclusive"
+        or attempt.get("process_exited") is not True
+        or not isinstance(exit_code, int)
+        or isinstance(exit_code, bool)
+        or attempt.get("output") is not None
+        or not isinstance(diagnostics, list)
+        or "reference exited during offline render" not in diagnostics
+        or receipt.get("exit_code_before_termination") != exit_code
+    ):
+        raise ValueError("same-witness process-exit evidence mismatch")
+
+    try:
+        validate_original_event_binding(attempt)
+    except ValueError as exc:
+        binding_error = str(exc)
+        validate_original_ambiguous_event_binding(attempt)
+    else:
+        binding_error = None
+
+    observed_binding = validate_original_observed_output(
+        original_root, attempt, len(attempts)
+    )
+    return {
+        "binding_error": binding_error,
+        "diagnostics": diagnostics,
+        "observed_output": observed_binding,
+        "process_exit_code": exit_code,
+        "retained_renders": retained_renders,
+        "retained_render_analyses": retained_analyses,
+    }
+
+
+def validate_original_runtime_procedure(def validate_original_runtime_procedure(runtime: object) -> list[dict]:
     if not isinstance(runtime, dict):
         raise ValueError("same-witness original runtime receipt is missing")
     attempts = runtime.get("attempts")
@@ -634,10 +748,12 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         NAME, CONTRACT, candidate_root, original_root
     )
     receipt = read_json(original_root / ORIGINAL_RECEIPT)
+    runtime = receipt.get("runtime_execution")
+    runtime_outcome = (
+        runtime.get("outcome") if isinstance(runtime, dict) else None
+    )
     if (
-        generic_result != "accepted"
-        or receipt.get("load_result") != "accepted"
-        or receipt.get("schema_version") != 1
+        receipt.get("schema_version") != 1
         or receipt.get("phase") != "6C"
         or receipt.get("contract") != CONTRACT
         or receipt.get("evidence_role") != "original"
@@ -648,7 +764,103 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
     ):
         raise ValueError("same-witness original receipt identity mismatch")
 
-    runtime = receipt.get("runtime_execution")
+    if runtime_outcome == "rendered-twice":
+        if (
+            generic_result != "accepted"
+            or receipt.get("load_result") != "accepted"
+        ):
+            raise ValueError(
+                "same-witness completed original load-result mismatch"
+            )
+    elif runtime_outcome == "reference-process-exited-during-render":
+        if (
+            generic_result != "inconclusive"
+            or receipt.get("load_result") != "inconclusive"
+            or receipt.get("observation")
+            != "reference-process-exited-before-harness-termination"
+        ):
+            raise ValueError(
+                "same-witness process-exit original load-result mismatch"
+            )
+    elif runtime_outcome == "inconclusive":
+        if (
+            generic_result != receipt.get("load_result")
+            or generic_result not in {"accepted", "inconclusive"}
+        ):
+            raise ValueError(
+                "same-witness inconclusive original load-result mismatch"
+            )
+
+    if runtime_outcome == "reference-process-exited-during-render":
+        crash = validate_original_process_exit_runtime(
+            original_root, runtime, receipt
+        )
+        original_analysis = {
+            "schema_version": 1,
+            "phase": "6C",
+            "contract": CONTRACT,
+            "evidence_role": "original-runtime",
+            "reference_build": REFERENCE_BUILD,
+            "fixture": candidate["fixture"],
+            "fixture_sha256": candidate["fixture_sha256"],
+            "machine_substrate": "XMSampler/Sampulse",
+            "outcome": "reference-process-exited-during-render",
+            "renders": crash["retained_renders"],
+            "retained_render_analyses": crash["retained_render_analyses"],
+            "render_sha256": None,
+            "analysis": None,
+            "runtime_command_execution_observed": False,
+            "process_exit_code": crash["process_exit_code"],
+            "fresh_render_event_binding": (
+                "accepted" if crash["binding_error"] is None else "rejected"
+            ),
+            "fresh_render_event_binding_error": crash["binding_error"],
+            "observed_output": crash["observed_output"],
+            "diagnostics": crash["diagnostics"],
+            "timing_interpretation": "deferred",
+            "parity_status": "UNKNOWN",
+        }
+        write_new(original_root / ORIGINAL_ANALYSIS, original_analysis)
+
+        comparison = {
+            "schema_version": 1,
+            "phase": "6C",
+            "contract": CONTRACT,
+            "fixture_sha256": candidate["fixture_sha256"],
+            "same_fixture_bytes": True,
+            "same_onset_analyzer": (
+                "phase6c-delayed-retrigger-render-evidence.py::analyze_wave"
+            ),
+            "candidate": {
+                "render_sha256": candidate["render_sha256"],
+                "analysis": candidate["analysis"],
+                "runtime_command_execution_observed": True,
+            },
+            "original": {
+                "reference_build": REFERENCE_BUILD,
+                "outcome": "reference-process-exited-during-render",
+                "retained_renders": crash["retained_renders"],
+                "retained_render_analyses": crash["retained_render_analyses"],
+                "render_sha256": None,
+                "analysis": None,
+                "runtime_command_execution_observed": False,
+                "process_exit_code": crash["process_exit_code"],
+                "observed_output": crash["observed_output"],
+            },
+            "command_bearing_runtime_pair_observed": False,
+            "exact_onset_timing_interpretation": "deferred",
+            "classification_allowed": False,
+            "parity_status": "UNKNOWN",
+            "interpretation_boundary": (
+                "The pinned original exited during the source-pinned Save Wave "
+                "procedure. Exact exit and any partial-output evidence are "
+                "retained diagnostically, but no deterministic original runtime "
+                "render pair or delayed/retrigger parity is claimed."
+            ),
+        }
+        write_new(original_root / COMPARISON, comparison)
+        return comparison
+
     if isinstance(runtime, dict) and runtime.get("outcome") == "inconclusive":
         quarantine = validate_original_inconclusive_runtime(
             original_root, runtime
@@ -663,7 +875,8 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "fixture_sha256": candidate["fixture_sha256"],
             "machine_substrate": "XMSampler/Sampulse",
             "outcome": "inconclusive",
-            "renders": [],
+            "renders": quarantine["retained_renders"],
+            "retained_render_analyses": quarantine["retained_render_analyses"],
             "render_sha256": None,
             "analysis": None,
             "runtime_command_execution_observed": False,
@@ -693,6 +906,8 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "original": {
                 "reference_build": REFERENCE_BUILD,
                 "outcome": "inconclusive",
+                "retained_renders": quarantine["retained_renders"],
+                "retained_render_analyses": quarantine["retained_render_analyses"],
                 "render_sha256": None,
                 "analysis": None,
                 "runtime_command_execution_observed": False,
@@ -706,11 +921,11 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "parity_status": "UNKNOWN",
             "interpretation_boundary": (
                 "The candidate rendered the exact four-beat Sampulse/XMSampler "
-                "witness, but the fresh pinned-original render attempt was "
-                "quarantined because its post-dispatch dialog evidence was "
-                "ambiguous. No original command-bearing runtime execution or "
-                "cross-side runtime pair is claimed from this attempt, and "
-                "delayed/retrigger parity remains unclassified."
+                "witness, but the pinned original did not complete the required "
+                "deterministic repeated-render pair. Any completed first render "
+                "and final ambiguous-attempt evidence are retained diagnostically; "
+                "no cross-side runtime pair is claimed and delayed/retrigger "
+                "parity remains unclassified."
             ),
         }
         write_new(original_root / COMPARISON, comparison)
