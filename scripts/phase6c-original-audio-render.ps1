@@ -21,8 +21,9 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
     private const int OBJID_WINDOW = 0;
     private const int CHILDID_SELF = 0;
     private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
-    private const uint WM_QUIT = 0x0012;
     private const uint WM_APP_FLUSH = 0x8031;
+    private const uint WM_APP_STOP = 0x8032;
+    private const uint WM_APP_DRAINED = 0x8033;
     private const uint PM_NOREMOVE = 0x0000;
     private const uint GA_ROOT = 2;
 
@@ -142,6 +143,7 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
     private int postDispatchObservedWindowEventCount;
     private int unresolvedPostDispatchEventCount;
     private int hookError;
+    private int stopError;
     private bool dispatchBoundarySet;
     private bool disposed;
 
@@ -215,6 +217,38 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
                     flushed.Set();
                     continue;
                 }
+                if (message.message == WM_APP_STOP)
+                {
+                    // Stop new WinEvent delivery on the pump thread itself.
+                    // Then append a private drain marker behind every callback
+                    // already queued before UnhookWinEvent completed. Keep
+                    // pumping until that marker is reached so no queued event
+                    // can be stranded behind a quit message.
+                    IntPtr current = hook;
+                    if (current != IntPtr.Zero)
+                    {
+                        if (!UnhookWinEvent(current))
+                        {
+                            stopError = Marshal.GetLastWin32Error();
+                            return;
+                        }
+                        hook = IntPtr.Zero;
+                    }
+                    if (!PostThreadMessage(
+                        pumpThreadId,
+                        WM_APP_DRAINED,
+                        IntPtr.Zero,
+                        IntPtr.Zero
+                    ))
+                    {
+                        stopError = Marshal.GetLastWin32Error();
+                        return;
+                    }
+                    continue;
+                }
+                if (message.message == WM_APP_DRAINED)
+                    return;
+
                 TranslateMessage(ref message);
                 DispatchMessage(ref message);
             }
@@ -230,8 +264,8 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
         {
             IntPtr current = hook;
             hook = IntPtr.Zero;
-            if (current != IntPtr.Zero)
-                UnhookWinEvent(current);
+            if (current != IntPtr.Zero && !UnhookWinEvent(current))
+                stopError = Marshal.GetLastWin32Error();
             stopped.Set();
         }
     }
@@ -493,23 +527,27 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
             threadId = pumpThreadId;
         }
 
-        // Keep callbacks live until the pump exits and its finally block has
-        // removed the native hook. Disposing first could drop a real event in
-        // the shutdown window instead of sealing it into the evidence.
+        // Ask the pump thread to unhook first, then drain every callback that
+        // was already queued before the unhook completed. Only after that drain
+        // marker is reached may the snapshot be sealed.
         if (threadId != 0)
         {
             if (!PostThreadMessage(
                 threadId,
-                WM_QUIT,
+                WM_APP_STOP,
                 IntPtr.Zero,
                 IntPtr.Zero
             ))
                 throw new InvalidOperationException(
-                    "could not stop render WinEvent message pump"
+                    "could not request render WinEvent pump stop"
                 );
             if (!stopped.Wait(5000))
                 throw new InvalidOperationException(
                     "render WinEvent message pump did not stop"
+                );
+            if (stopError != 0)
+                throw new InvalidOperationException(
+                    "render WinEvent message pump stop failed: " + stopError
                 );
         }
 
