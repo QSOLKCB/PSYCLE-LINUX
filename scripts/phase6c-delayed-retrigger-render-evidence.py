@@ -560,10 +560,10 @@ def validate_inconclusive_runtime(
         if observed_output["path"] != "delayed-retrigger-execution/" + expected_name:
             raise ValueError("inconclusive primary render observed-output path mismatch")
 
-    if exited and receipt.get("exit_code_before_termination") not in {
-        None,
-        process_exit_code,
-    }:
+    if (
+        exited
+        and receipt.get("exit_code_before_termination") != process_exit_code
+    ):
         raise ValueError("inconclusive primary process-exit code is inconsistent")
 
     return {
