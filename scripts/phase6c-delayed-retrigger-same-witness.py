@@ -1561,7 +1561,6 @@ def collect_candidate(root: Path) -> dict:
     raw = fixture.read_bytes()
     fixture_identity = validate_fixture_identity(raw)
 
-    render_observations = validate_candidate_render_logs(root)
     renders, wave, analysis = validate_pair_of_waves(
         root,
         "candidate-delayed-retrigger-sampulse-runtime",
@@ -1569,6 +1568,7 @@ def collect_candidate(root: Path) -> dict:
         expected_frame_count=CANDIDATE_TARGET_FRAMES,
         require_all_command_windows=True,
     )
+    render_observations = validate_candidate_render_logs(root)
     if any(
         observation["target_frames"] != analysis["frame_count"]
         for observation in render_observations
