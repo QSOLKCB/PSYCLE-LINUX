@@ -483,11 +483,12 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
                     unresolvedPostDispatchEventCount,
                     postDispatchEventCount
                 };
-            disposed = true;
-            dispatchBoundarySet = false;
             threadId = pumpThreadId;
         }
 
+        // Keep callbacks live until the pump exits and its finally block has
+        // removed the native hook. Disposing first could drop a real event in
+        // the shutdown window instead of sealing it into the evidence.
         if (threadId != 0)
         {
             if (!PostThreadMessage(
@@ -504,8 +505,11 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
                     "render WinEvent message pump did not stop"
                 );
         }
+
         lock (gate)
         {
+            disposed = true;
+            dispatchBoundarySet = false;
             return new int[] {
                 postDispatchObservedWindowEventCount,
                 unresolvedPostDispatchEventCount,
