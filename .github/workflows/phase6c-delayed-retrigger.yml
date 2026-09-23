@@ -258,6 +258,22 @@ jobs:
           name: phase6c-delayed-retrigger-candidate
           path: phase6c-command-candidate
 
+      - name: Download frozen work-boundary candidate projection artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: phase6c-delayed-retrigger-candidate
+          path: phase6c-work-boundary-historical-candidate
+          github-token: ${{ github.token }}
+          run-id: 35752301481
+
+      - name: Download frozen work-boundary original projection artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: phase6c-delayed-retrigger-original
+          path: phase6c-work-boundary-historical-original
+          github-token: ${{ github.token }}
+          run-id: 35752301481
+
       - name: Install pinned Microsoft VC90 x86 runtime
         shell: pwsh
         run: |
@@ -380,6 +396,10 @@ jobs:
           python scripts/phase6c-sampler-work-boundary.py source-check `
             phase6c-command-candidate
           if ($LASTEXITCODE -ne 0) { throw "Sampler work-boundary source validation failed" }
+          python scripts/phase6c-sampler-work-boundary.py projection-check `
+            phase6c-work-boundary-historical-candidate `
+            phase6c-work-boundary-historical-original
+          if ($LASTEXITCODE -ne 0) { throw "frozen Sampler work-boundary projection validation failed" }
           python scripts/phase6c-sampler-work-boundary.py original-rerun `
             phase6c-command-candidate phase6c-command-original
           if ($LASTEXITCODE -ne 0) { throw "fresh Sampler work-boundary rerun validation failed" }
