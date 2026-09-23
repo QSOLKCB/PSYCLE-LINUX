@@ -1001,6 +1001,33 @@ binding_error = work_boundary.validate_fresh_render_event_binding_or_quarantine(
 )
 assert binding_error is not None
 assert "fresh render lacks bound post-dispatch dialog evidence" in binding_error
+
+early_fresh_ambiguous_attempt = dict(fresh_ambiguous_attempt)
+early_fresh_ambiguous_attempt.update(
+    {
+        "dialog_verified": False,
+        "controls_configured": False,
+        "save_invoked": False,
+        "selected_render_dialog_native_handle": None,
+        "selected_render_dialog_runtime_id": [],
+        "dialog_discovery": None,
+    }
+)
+work_boundary.require_attempt_dispatch_prefix(
+    early_fresh_ambiguous_attempt,
+    "release-no-active-voice",
+)
+early_binding_error = (
+    work_boundary.validate_fresh_render_event_binding_or_quarantine(
+        early_fresh_ambiguous_attempt,
+        "release-no-active-voice",
+        "inconclusive",
+        [],
+    )
+)
+assert early_binding_error is not None
+assert "fresh render lacks bound post-dispatch dialog evidence" in early_binding_error
+
 assert work_boundary.diagnose({
     "release-no-active-voice": "inconclusive",
     "delayed-note-short": "reference-process-exited-during-render",
