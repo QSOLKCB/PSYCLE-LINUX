@@ -136,7 +136,11 @@ def candidate_fixture_bytes(
         return fourcc + struct.pack("<II", version, len(payload)) + payload
 
     info = m.TITLE.encode("utf-8") + b"\0"
-    sngi = struct.pack("<iii", 16, 137, 8)
+    sngi = bytes.fromhex(
+        "10000000890000000800000004000000ffffffffffffffff80000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000018000000000000003e00000000000000"
+    )
+    assert len(sngi) == 109
+    assert m.digest(sngi) == m.EXPECTED_SNGI_PAYLOAD_SHA256
     seqd = (
         struct.pack("<ii", 0, 1)
         + b"seq\0"
@@ -240,6 +244,27 @@ expect_value_error(
         candidate_fixture_bytes(master_input_volume=0.0)
     ),
     "canonical audible sampler-to-Master gain",
+)
+
+sngi_mutated_chunks = []
+for fourcc, version, payload in m.parse_psy3_chunks(valid_fixture):
+    if fourcc == b"SNGI":
+        payload = payload[:-1]
+    sngi_mutated_chunks.append((fourcc, version, payload))
+def repack_chunks(chunks):
+    return (
+        b"PSY3SONG"
+        + struct.pack("<I", 0x11)
+        + struct.pack("<I", 4)
+        + struct.pack("<I", len(chunks))
+        + b"".join(
+            fourcc + struct.pack("<II", version, len(payload)) + payload
+            for fourcc, version, payload in chunks
+        )
+    )
+expect_value_error(
+    lambda: m.validate_fixture_identity(repack_chunks(sngi_mutated_chunks)),
+    "SNGI payload",
 )
 
 
@@ -1065,6 +1090,63 @@ with tempfile.TemporaryDirectory() as temporary:
     assert valid_binding_quarantine["observed_output"] is None
     assert valid_binding_quarantine["retained_renders"] == []
     assert m.inconclusive_render_binding_status(valid_binding_quarantine) == "accepted"
+
+    # A real process exit before Save Wave is still retained as UNKNOWN.
+    pre_save_exit_attempt = dict(valid_binding_attempt)
+    pre_save_exit_attempt.update(
+        {
+            "dialog_verified": True,
+            "controls_configured": False,
+            "save_invoked": False,
+            "process_exited": True,
+            "process_exit_code": -1073741819,
+            "diagnostics": ["reference exited before Save Wave invocation"],
+            "observed_output": None,
+        }
+    )
+    pre_save_exit_runtime = dict(inconclusive_runtime)
+    pre_save_exit_runtime["attempts"] = [pre_save_exit_attempt]
+    pre_save_root = root / "pre-save-exit"
+    pre_save_root.mkdir()
+    pre_save = m.validate_original_inconclusive_runtime(
+        pre_save_root, pre_save_exit_runtime
+    )
+    assert pre_save["process_exit_code"] == -1073741819
+    assert pre_save["inconclusive_reason"] == "post-binding-render-automation-failure"
+    assert pre_save["retained_renders"] == []
+
+    # Diagnostic retained renders use the relaxed PCM observer, including silence.
+    silent_one = pcm_wave([], frames=m.CANDIDATE_TARGET_FRAMES)
+    silent_two = bytearray(silent_one)
+    silent_two[-2:] = struct.pack("<h", 1)
+    silent_two = bytes(silent_two)
+    low_root = root / "low-onset-nondeterminism"
+    low_render_dir = low_root / m.NAME
+    low_render_dir.mkdir(parents=True)
+    low_first = low_render_dir / "original-delayed-retrigger-sampulse-runtime-1.wav"
+    low_second = low_render_dir / "original-delayed-retrigger-sampulse-runtime-2.wav"
+    low_first.write_bytes(silent_one)
+    low_second.write_bytes(silent_two)
+    low_attempt_one = dict(closed_first_attempt)
+    low_attempt_one["output"] = {
+        "path": low_first.name,
+        "sha256": m.digest(silent_one),
+    }
+    low_attempt_two = dict(closed_first_attempt)
+    low_attempt_two["output"] = {
+        "path": low_second.name,
+        "sha256": m.digest(silent_two),
+    }
+    low_runtime = dict(inconclusive_runtime)
+    low_runtime["renders"] = [
+        {"path": f"{m.NAME}/{low_first.name}", "sha256": m.digest(silent_one)},
+        {"path": f"{m.NAME}/{low_second.name}", "sha256": m.digest(silent_two)},
+    ]
+    low_runtime["attempts"] = [low_attempt_one, low_attempt_two]
+    low = m.validate_original_inconclusive_runtime(low_root, low_runtime)
+    assert low["inconclusive_reason"] == "nondeterministic-completed-render-pair"
+    assert len(low["retained_render_analyses"]) == 2
+    assert low["retained_render_analyses"][0]["onset_frames"] == []
 
 valid_original_runtime = {
     "schema_version": 1,
