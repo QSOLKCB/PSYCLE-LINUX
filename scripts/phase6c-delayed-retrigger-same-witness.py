@@ -656,7 +656,7 @@ def validate_original_process_exit_runtime(
     }
 
 
-def validate_original_runtime_procedure(def validate_original_runtime_procedure(runtime: object) -> list[dict]:
+def validate_original_runtime_procedure(runtime: object) -> list[dict]:
     if not isinstance(runtime, dict):
         raise ValueError("same-witness original runtime receipt is missing")
     attempts = runtime.get("attempts")
