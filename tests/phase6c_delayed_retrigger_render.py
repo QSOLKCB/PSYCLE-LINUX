@@ -325,6 +325,14 @@ assert "SetWinEventHook(" in pump_source
 assert "GetMessage(" in pump_source
 assert "DispatchMessage(" in pump_source
 
+seal_start = render_helper_source.index("public int[] Seal()")
+seal_end = render_helper_source.index("public void Dispose()", seal_start)
+seal_source = render_helper_source[seal_start:seal_end]
+stop_wait_index = seal_source.index("if (!stopped.Wait(5000))")
+disposed_assignment_index = seal_source.index("disposed = true;")
+boundary_cancel_index = seal_source.index("dispatchBoundarySet = false;")
+assert stop_wait_index < disposed_assignment_index < boundary_cancel_index
+
 invoke_start = render_helper_source.index("public static bool Invoke(")
 invoke_end = render_helper_source.index("public static string SetText(", invoke_start)
 invoke_source = render_helper_source[invoke_start:invoke_end]
