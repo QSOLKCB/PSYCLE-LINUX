@@ -362,6 +362,10 @@ class GeneratedObserver(unittest.TestCase):
             self.assertIn(
                 'expected_contract = "sequencer-delayed-retrigger"', text
             )
+            self.assertIn(
+                'if (-not $process.HasExited -and [bool]$renderOne.dialog_closed) {',
+                text,
+            )
 
     def test_builder_accepts_crlf_checkout_of_pinned_base(self):
         with tempfile.TemporaryDirectory() as temp:
