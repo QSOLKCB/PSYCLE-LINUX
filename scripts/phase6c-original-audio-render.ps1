@@ -243,6 +243,25 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
         return unchecked((int)(value - boundary)) > 0;
     }
 
+    private bool RecordQualifiedObservedWindow(
+        uint eventTime,
+        bool unresolved
+    )
+    {
+        lock (gate)
+        {
+            if (disposed ||
+                !dispatchBoundarySet ||
+                !TickStrictlyAfter(eventTime, dispatchBoundaryTick))
+                return false;
+
+            postDispatchObservedWindowEventCount += 1;
+            if (unresolved)
+                unresolvedPostDispatchEventCount += 1;
+            return true;
+        }
+    }
+
     private void OnWinEvent(
         IntPtr ignoredHook,
         uint eventType,
@@ -259,41 +278,29 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
             window == IntPtr.Zero)
             return;
 
-        lock (gate)
-        {
-            if (disposed ||
-                !dispatchBoundarySet ||
-                !TickStrictlyAfter(eventTime, dispatchBoundaryTick))
-                return;
-
-            // Count first. The process-filtered WinEvent hook already bound this
-            // event to the observed Psycle process at generation time. A HWND
-            // may be gone or reused before this out-of-context callback runs;
-            // liveness must not erase evidence that another window was shown.
-            postDispatchObservedWindowEventCount += 1;
-        }
-
+        // The hook is process-filtered at event generation time. If the HWND
+        // disappears or is reused before this out-of-context callback runs,
+        // retain it as unresolved evidence. But when the HWND is still live,
+        // establish that it is top-level before counting it: child controls may
+        // also emit EVENT_OBJECT_SHOW/OBJID_WINDOW/CHILDID_SELF.
         uint owner;
         if (GetWindowThreadProcessId(window, out owner) == 0 ||
             owner != processId)
         {
-            lock (gate)
-            {
-                unresolvedPostDispatchEventCount += 1;
-            }
+            RecordQualifiedObservedWindow(eventTime, true);
             return;
         }
 
         IntPtr root = GetAncestor(window, GA_ROOT);
         if (root == IntPtr.Zero)
         {
-            lock (gate)
-            {
-                unresolvedPostDispatchEventCount += 1;
-            }
+            RecordQualifiedObservedWindow(eventTime, true);
             return;
         }
         if (root != window)
+            return;
+
+        if (!RecordQualifiedObservedWindow(eventTime, false))
             return;
 
         var title = new StringBuilder(256);
