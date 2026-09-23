@@ -59,6 +59,23 @@ onsets = [
 valid_wave = pcm_wave(onsets)
 
 
+def candidate_render_summary() -> dict:
+    return {
+        "schema_version": 1,
+        "fixed_frame_render": True,
+        "sample_rate": 44100,
+        "channels": 1,
+        "bits_per_sample": 16,
+        "target_beats": m.CANDIDATE_TARGET_BEATS,
+        "target_frames": m.CANDIDATE_TARGET_FRAMES,
+        "threads": 1,
+        "sequencer_work_calls": 1,
+        "player_work_direct": False,
+        "master_buffer_float_count": 2 * m.CANDIDATE_TARGET_FRAMES,
+        "final_play_beat": m.CANDIDATE_TARGET_FRAMES / m.CANDIDATE_BEAT_FRAMES,
+    }
+
+
 def write_provenance(root: Path) -> None:
     runtime = root / m.NAME
     runtime.mkdir(exist_ok=True)
@@ -75,7 +92,8 @@ def write_provenance(root: Path) -> None:
     (delayed / "sampulse-eins-compat.log").write_text("EINS PASS\n")
     for index in (1, 2):
         (delayed / f"sampulse-candidate-render-{index}.log").write_text(
-            f"render {index} PASS\n"
+            json.dumps(candidate_render_summary(), sort_keys=True) + "\n",
+            encoding="utf-8",
         )
 
 
@@ -94,6 +112,8 @@ with tempfile.TemporaryDirectory() as temporary:
 
     collected = m.collect_candidate(root)
     assert collected["runtime_command_execution_observed"] is True
+    assert len(collected["render_observations"]) == 2
+    assert collected["render_observations"][0]["threads"] == 1
     assert collected["timing_interpretation"] == "deferred"
     assert collected["analysis"]["window_onset_counts"]["retrigger_beat_1"] == 3
     assert collected["analysis"]["window_onset_counts"]["retr_cont_beat_2"] == 2
@@ -106,6 +126,26 @@ with tempfile.TemporaryDirectory() as temporary:
     expect_value_error(
         lambda: m.validate_candidate(root),
         "candidate receipt identity mismatch",
+    )
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    fixture = root / m.FIXTURE
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(b"PSY3SONG" + b"same-witness-sampulse")
+    render_dir = root / m.NAME
+    write_provenance(root)
+    for index in (1, 2):
+        (
+            render_dir
+            / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+        ).write_bytes(valid_wave)
+    (
+        root / "delayed-retrigger" / "sampulse-candidate-render-1.log"
+    ).write_text("render 1 PASS\n", encoding="utf-8")
+    expect_value_error(
+        lambda: m.collect_candidate(root),
+        "renderer JSON summary",
     )
 
 with tempfile.TemporaryDirectory() as temporary:
@@ -298,6 +338,28 @@ with tempfile.TemporaryDirectory() as temporary:
     assert "post-dispatch dialog evidence" in quarantine["binding_error"]
     assert quarantine["observed_output"]["path"].endswith(original_path.name)
     assert quarantine["observed_output"]["sha256"] == m.digest(valid_wave)
+
+    early_ambiguous_attempt = dict(ambiguous_attempt)
+    early_ambiguous_attempt.update(
+        {
+            "dialog_verified": False,
+            "controls_configured": False,
+            "save_invoked": False,
+            "selected_render_dialog_native_handle": None,
+            "selected_render_dialog_runtime_id": [],
+            "dialog_discovery": None,
+            "observed_output": None,
+        }
+    )
+    early_runtime = dict(inconclusive_runtime)
+    early_runtime["attempts"] = [early_ambiguous_attempt]
+    early_root = root / "early-ambiguity"
+    early_root.mkdir()
+    early_quarantine = m.validate_original_inconclusive_runtime(
+        early_root, early_runtime
+    )
+    assert "post-dispatch dialog evidence" in early_quarantine["binding_error"]
+    assert early_quarantine["observed_output"] is None
 
     valid_binding_attempt = dict(ambiguous_attempt)
     valid_binding_attempt[
