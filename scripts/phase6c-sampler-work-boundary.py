@@ -23,6 +23,18 @@ PROJECTION = (
     / "sequencer-sampler-work-boundary"
     / "observation.json"
 )
+FROZEN_PROJECTION_RUN_ID = 35752301481
+FROZEN_PROJECTION_HEAD_SHA = "4cf71eba6f7b5f6ba14be6089cf37422b16b5ca6"
+FROZEN_CANDIDATE_ARTIFACT = {
+    "id": 10706755598,
+    "name": "phase6c-delayed-retrigger-candidate",
+    "digest": "sha256:ce4016b1a64ce67cca97079711c4852a55b9a7b47a3bb96c3bf8589741f16919",
+}
+FROZEN_ORIGINAL_ARTIFACT = {
+    "id": 10706732946,
+    "name": "phase6c-delayed-retrigger-original",
+    "digest": "sha256:0865e2a07dcfd9ea72b1069db284e55dbd36c58d74fd5140b21ae0ba8705546d",
+}
 QUALIFIED_DIAGNOSIS = "enabled-note-startup-pre-controller-work-associated-exit"
 HISTORICAL_DIAGNOSIS = "voice-tick-initialization-associated-exit"
 EXPECTED_ACCESS_VIOLATION_EXIT_CODE = -1073741819  # Windows 0xC0000005
@@ -657,6 +669,89 @@ def validate_projection(
     return str(PROJECTION.relative_to(ROOT))
 
 
+def validate_frozen_projection(
+    candidate_root: Path, original_root: Path
+) -> dict:
+    candidate_root = candidate_root.resolve()
+    original_root = original_root.resolve()
+    validate_candidate(candidate_root)
+    candidate_source = validate_source(candidate_root)
+    original_source = validate_source(original_root)
+    if candidate_source != original_source:
+        raise ValueError(
+            "Sampler work-boundary frozen source receipts differ between artifacts"
+        )
+
+    projection = read_json(PROJECTION)
+    evidence_run = projection.get("evidence_run")
+    if (
+        not isinstance(evidence_run, dict)
+        or evidence_run.get("workflow_run_id") != FROZEN_PROJECTION_RUN_ID
+        or evidence_run.get("head_sha") != FROZEN_PROJECTION_HEAD_SHA
+        or evidence_run.get("candidate_artifact") != FROZEN_CANDIDATE_ARTIFACT
+        or evidence_run.get("original_artifact") != FROZEN_ORIGINAL_ARTIFACT
+    ):
+        raise ValueError(
+            "Sampler work-boundary frozen artifact identity mismatch"
+        )
+
+    source = projection.get("source_identity")
+    source_bytes = (candidate_root / SOURCE_RECEIPT).read_bytes()
+    source_sha256 = digest(source_bytes)
+    if (
+        not isinstance(source, dict)
+        or source.get("source_receipt_sha256") != source_sha256
+        or digest((original_root / SOURCE_RECEIPT).read_bytes()) != source_sha256
+    ):
+        raise ValueError(
+            "Sampler work-boundary frozen source-receipt binding mismatch"
+        )
+
+    historical = projection.get("historical_receipt")
+    if (
+        not isinstance(historical, dict)
+        or historical.get("path")
+        != "original-sampler-work-boundary-isolation.json"
+        or not isinstance(historical.get("sha256"), str)
+    ):
+        raise ValueError(
+            "Sampler work-boundary historical receipt identity mismatch"
+        )
+    summary_path = child(original_root, historical["path"])
+    summary_bytes = summary_path.read_bytes()
+    if digest(summary_bytes) != historical["sha256"]:
+        raise ValueError(
+            "Sampler work-boundary historical receipt hash mismatch"
+        )
+    summary = read_json(summary_path)
+    if (
+        summary.get("diagnosis") != historical.get("diagnosis")
+        or summary.get("interpretation_boundary")
+        != historical.get("interpretation_boundary")
+    ):
+        raise ValueError(
+            "Sampler work-boundary historical receipt semantics mismatch"
+        )
+
+    projection_path = validate_projection(
+        candidate_root, original_root, summary
+    )
+    return {
+        "schema_version": 1,
+        "phase": "6C",
+        "contract": CONTRACT,
+        "projection": projection_path,
+        "workflow_run_id": FROZEN_PROJECTION_RUN_ID,
+        "head_sha": FROZEN_PROJECTION_HEAD_SHA,
+        "candidate_artifact": dict(FROZEN_CANDIDATE_ARTIFACT),
+        "original_artifact": dict(FROZEN_ORIGINAL_ARTIFACT),
+        "historical_receipt_sha256": historical["sha256"],
+        "source_receipt_sha256": source_sha256,
+        "validation": "frozen-artifact-byte-replay",
+        "parity_status": "UNKNOWN",
+    }
+
+
 def projection_for_run(
     candidate_root: Path,
     original_root: Path,
@@ -921,6 +1016,10 @@ def main() -> int:
     rerun.add_argument("candidate_root", type=Path)
     rerun.add_argument("original_root", type=Path)
 
+    projection_check = sub.add_parser("projection-check")
+    projection_check.add_argument("candidate_root", type=Path)
+    projection_check.add_argument("original_root", type=Path)
+
     args = parser.parse_args()
     if args.command == "candidate":
         result = collect_candidate(args.root)
@@ -937,6 +1036,11 @@ def main() -> int:
             args.candidate_root,
             args.original_root,
             replay_historical_projection=False,
+        )
+    elif args.command == "projection-check":
+        result = validate_frozen_projection(
+            args.candidate_root,
+            args.original_root,
         )
     else:
         result = validate_original(
