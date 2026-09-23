@@ -368,6 +368,34 @@ def validate_completed_render_attempt(
     if validated.get("process_exit_code") is not None:
         raise ValueError("successful render unexpectedly recorded a process exit code")
 
+    stable_output_polls = validated.get("stable_output_polls")
+    diagnostics = validated.get("diagnostics")
+    teardown_diagnostic = (
+        "render output finalized and Close control was verified, "
+        "but dialog teardown did not complete"
+    )
+    completed_and_closed = (
+        validated.get("dialog_closed") is True
+        and validated.get("close_control_seen") is True
+        and validated.get("close_uia_invoked") is True
+        and diagnostics == []
+    )
+    completed_with_teardown_failure = (
+        validated.get("dialog_closed") is False
+        and validated.get("close_control_seen") is True
+        and validated.get("close_uia_invoked") is True
+        and diagnostics == [teardown_diagnostic]
+    )
+    if (
+        not isinstance(stable_output_polls, int)
+        or isinstance(stable_output_polls, bool)
+        or stable_output_polls < 4
+        or not (completed_and_closed or completed_with_teardown_failure)
+    ):
+        raise ValueError(
+            "successful render lacks terminal completion evidence"
+        )
+
     output = validated.get("output")
     expected_name = f"original-delayed-retrigger-execution-{attempt_number}.wav"
     if (
@@ -474,12 +502,15 @@ def validate_inconclusive_runtime(
 
     completed = []
     completed_analyses = []
+    completed_diagnostics = []
     for index, value in enumerate(renders, start=1):
+        completed_attempt = attempts[index - 1]
         data = validate_completed_render_attempt(
-            original_root, attempts[index - 1], value, index
+            original_root, completed_attempt, value, index
         )
         completed.append(value)
         completed_analyses.append(analyze_wave_observation(data))
+        completed_diagnostics.extend(completed_attempt.get("diagnostics", []))
 
     # Two completed, byte-different renders are valid nondeterminism evidence.
     if len(renders) == 2:
@@ -490,7 +521,7 @@ def validate_inconclusive_runtime(
             "completed_renders": completed,
             "completed_render_analyses": completed_analyses,
             "binding_error": None,
-            "diagnostics": [],
+            "diagnostics": completed_diagnostics,
             "process_exit_code": None,
             "observed_output": None,
         }
@@ -503,7 +534,7 @@ def validate_inconclusive_runtime(
             "completed_renders": completed,
             "completed_render_analyses": completed_analyses,
             "binding_error": None,
-            "diagnostics": [],
+            "diagnostics": completed_diagnostics,
             "process_exit_code": None,
             "observed_output": None,
         }
