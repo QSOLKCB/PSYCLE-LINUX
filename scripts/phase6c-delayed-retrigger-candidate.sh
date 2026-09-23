@@ -273,6 +273,14 @@ run_logged "$OUT/candidate-collect.log" \
 run_logged "$OUT/candidate-validation.log" \
     python3 "$ROOT/scripts/phase6c-delayed-retrigger-evidence.py" candidate "$ARTIFACT"
 
+RENDER_SOURCE_SHA256="$(sha256sum "$ROOT/tests/phase6c_delayed_retrigger_sampulse_render.cpp" | awk '{print $1}')"
+RENDER_PROJECT_SHA256="$(sha256sum "$ROOT/tests/phase6c_delayed_retrigger_sampulse_render.pro" | awk '{print $1}')"
+cat >"$BUILD/phase6c-render-provenance.hpp" <<EOF
+#pragma once
+#define PHASE6C_RENDER_SOURCE_SHA256 "$RENDER_SOURCE_SHA256"
+#define PHASE6C_RENDER_PROJECT_SHA256 "$RENDER_PROJECT_SHA256"
+EOF
+
 cp "$ROOT/tests/phase6c_delayed_retrigger_sampulse_render.pro" "$RENDER_STAGING/render.pro"
 set +e
 (
@@ -303,6 +311,59 @@ cp "$ROOT/tests/phase6c_delayed_retrigger_sampulse_execution_fixture.c" \
     "$SAMPULSE_RUNTIME_OUT/fixture-generator.c"
 cp "$ROOT/scripts/phase6c-sampulse-eins-compat.py" \
     "$SAMPULSE_RUNTIME_OUT/eins-compat.py"
+cp "$BUILD/phase6c-render-provenance.hpp" \
+    "$SAMPULSE_RUNTIME_OUT/renderer-build-provenance.hpp"
+
+python3 - \
+    "$ROOT" \
+    "$BUILD/phase6c-delayed-retrigger-sampulse-render" \
+    "$OUT/sampulse-render-qmake.log" \
+    "$OUT/sampulse-render-build.log" \
+    "$SAMPULSE_RUNTIME_OUT/renderer-build-provenance.json" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+binary = Path(sys.argv[2])
+qmake_log = Path(sys.argv[3])
+build_log = Path(sys.argv[4])
+output = Path(sys.argv[5])
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+reviewed = {
+    "renderer_source": root / "tests/phase6c_delayed_retrigger_sampulse_render.cpp",
+    "renderer_project": root / "tests/phase6c_delayed_retrigger_sampulse_render.pro",
+    "fixture_generator": root / "tests/phase6c_delayed_retrigger_sampulse_execution_fixture.c",
+    "eins_converter": root / "scripts/phase6c-sampulse-eins-compat.py",
+}
+value = {
+    "schema_version": 1,
+    "reviewed_inputs": {
+        name: {
+            "path": path.relative_to(root).as_posix(),
+            "sha256": sha256(path),
+        }
+        for name, path in reviewed.items()
+    },
+    "binary": {
+        "path": "delayed-retrigger-sampulse-runtime/phase6c-delayed-retrigger-sampulse-render",
+        "sha256": sha256(binary),
+    },
+    "qmake_log": {
+        "path": "delayed-retrigger/sampulse-render-qmake.log",
+        "sha256": sha256(qmake_log),
+    },
+    "build_log": {
+        "path": "delayed-retrigger/sampulse-render-build.log",
+        "sha256": sha256(build_log),
+    },
+}
+output.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
 for attempt in 1 2; do
     run_logged "$OUT/sampulse-candidate-render-${attempt}.log" \
         env PSYCLE_THREADS=1 \
