@@ -2231,6 +2231,14 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         quarantine = validate_original_inconclusive_runtime(
             original_root, runtime
         )
+        if (
+            quarantine.get("process_exit_code") is not None
+            and receipt.get("exit_code_before_termination")
+            != quarantine["process_exit_code"]
+        ):
+            raise ValueError(
+                "same-witness inconclusive process-exit code is inconsistent"
+            )
         binding_status = inconclusive_render_binding_status(quarantine)
         original_analysis = {
             "schema_version": 1,
