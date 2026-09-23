@@ -252,6 +252,66 @@ with tempfile.TemporaryDirectory() as temporary:
         "post-dispatch dialog evidence",
     )
 
+    ambiguous_attempt = dict(completed_attempt)
+    ambiguous_attempt.update(
+        {
+            "outcome": "inconclusive",
+            "process_exited": False,
+            "process_exit_code": None,
+            "output": None,
+            "dialog_closed": False,
+            "close_control_seen": False,
+            "close_uia_invoked": False,
+            "stable_output_polls": 0,
+            "render_dialog_post_dispatch_observed_window_event_count": 2,
+            "render_dialog_unresolved_post_dispatch_event_count": 0,
+            "render_dialog_post_dispatch_event_count": 1,
+            "diagnostics": [
+                "multiple post-dispatch Psycle window-show events observed"
+            ],
+            "observed_output": {
+                "path": original_path.name,
+                "size_bytes": len(valid_wave),
+                "sha256": m.digest(valid_wave),
+            },
+        }
+    )
+    inconclusive_runtime = {
+        "schema_version": 1,
+        "outcome": "inconclusive",
+        "deterministic": False,
+        "settings": dict(m.ORIGINAL_RENDER_SETTINGS),
+        "pre_render_load": {
+            "schema_version": 1,
+            "clean_accepted_load": True,
+            "stable_marker_polls": 4,
+            "matched_marker": Path(m.FIXTURE).name,
+            "load_warning_dismissed": True,
+            "process_running_before_render": True,
+        },
+        "renders": [],
+        "attempts": [ambiguous_attempt],
+    }
+    quarantine = m.validate_original_inconclusive_runtime(
+        root, inconclusive_runtime
+    )
+    assert "post-dispatch dialog evidence" in quarantine["binding_error"]
+    assert quarantine["observed_output"]["path"].endswith(original_path.name)
+    assert quarantine["observed_output"]["sha256"] == m.digest(valid_wave)
+
+    valid_binding_attempt = dict(ambiguous_attempt)
+    valid_binding_attempt[
+        "render_dialog_post_dispatch_observed_window_event_count"
+    ] = 1
+    valid_binding_runtime = dict(inconclusive_runtime)
+    valid_binding_runtime["attempts"] = [valid_binding_attempt]
+    expect_value_error(
+        lambda: m.validate_original_inconclusive_runtime(
+            root, valid_binding_runtime
+        ),
+        "valid post-dispatch dialog binding",
+    )
+
 valid_original_runtime = {
     "schema_version": 1,
     "outcome": "rendered-twice",
