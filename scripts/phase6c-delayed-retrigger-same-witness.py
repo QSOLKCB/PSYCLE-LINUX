@@ -7,11 +7,22 @@ import hashlib
 import importlib.util
 import json
 import math
+import struct
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_ANALYZER = ROOT / "scripts" / "phase6c-delayed-retrigger-render-evidence.py"
 ORIGINAL_GATE = ROOT / "scripts" / "phase6c-delayed-retrigger-original.py"
+REVIEWED_RENDERER_SOURCE = (
+    ROOT / "tests" / "phase6c_delayed_retrigger_sampulse_render.cpp"
+)
+REVIEWED_RENDERER_PROJECT = (
+    ROOT / "tests" / "phase6c_delayed_retrigger_sampulse_render.pro"
+)
+REVIEWED_FIXTURE_GENERATOR = (
+    ROOT / "tests" / "phase6c_delayed_retrigger_sampulse_execution_fixture.c"
+)
+REVIEWED_EINS_CONVERTER = ROOT / "scripts" / "phase6c-sampulse-eins-compat.py"
 
 CONTRACT = "sequencer-delayed-retrigger-same-witness-render"
 NAME = "delayed-retrigger-sampulse-runtime"
@@ -97,6 +108,343 @@ def child(root: Path, relative: str) -> Path:
     return result
 
 
+
+def read_cstring(data: bytes, offset: int, label: str) -> tuple[str, int]:
+    try:
+        end = data.index(b"\0", offset)
+    except ValueError as exc:
+        raise ValueError(f"same-witness fixture lacks terminated {label}") from exc
+    try:
+        value = data[offset:end].decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"same-witness fixture has invalid {label}") from exc
+    return value, end + 1
+
+
+def parse_psy3_chunks(data: bytes) -> list[tuple[bytes, int, bytes]]:
+    if len(data) < 20 or data[:8] != b"PSY3SONG":
+        raise ValueError("same-witness Sampulse fixture is not PSY3")
+    song_size = struct.unpack_from("<I", data, 12)[0]
+    chunk_count = struct.unpack_from("<I", data, 16)[0]
+    chunk_start = 16 + song_size
+    if song_size < 4 or chunk_start > len(data):
+        raise ValueError("same-witness Sampulse fixture has invalid SONG header")
+    chunks: list[tuple[bytes, int, bytes]] = []
+    offset = chunk_start
+    for _ in range(chunk_count):
+        if offset + 12 > len(data):
+            raise ValueError("same-witness Sampulse fixture has truncated chunk header")
+        fourcc = data[offset : offset + 4]
+        version, size = struct.unpack_from("<II", data, offset + 4)
+        end = offset + 12 + size
+        if end > len(data):
+            raise ValueError("same-witness Sampulse fixture has truncated chunk payload")
+        chunks.append((fourcc, version, data[offset + 12 : end]))
+        offset = end
+    if offset != len(data):
+        raise ValueError("same-witness Sampulse fixture has trailing bytes")
+    return chunks
+
+
+EXPECTED_FIXTURE_EVENTS = [
+    (0, 0, 60, 0, 0, 255, 0xFD, 0x7F),
+    (0, 480, 60, 0, 0, 255, 0xFB, 0x3F),
+    (0, 960, 60, 0, 0, 255, 0xFA, 0x42),
+    (0, 1440, 255, 0, 0, 255, 0xFE, 0x04),
+    (0, 1500, 60, 0, 0, 255, 0x00, 0x00),
+]
+
+
+def validate_fixture_identity(data: bytes) -> dict:
+    chunks = parse_psy3_chunks(data)
+
+    info = [payload for fourcc, _version, payload in chunks if fourcc == b"INFO"]
+    if len(info) != 1:
+        raise ValueError("same-witness fixture must contain exactly one INFO chunk")
+    title, _ = read_cstring(info[0], 0, "song title")
+    if title != TITLE:
+        raise ValueError("same-witness fixture song title mismatch")
+
+    sngi = [payload for fourcc, _version, payload in chunks if fourcc == b"SNGI"]
+    if len(sngi) != 1 or len(sngi[0]) < 12:
+        raise ValueError("same-witness fixture SNGI identity is invalid")
+    song_tracks, bpm, lpb = struct.unpack_from("<iii", sngi[0], 0)
+    if (song_tracks, bpm, lpb) != (16, 137, 8):
+        raise ValueError("same-witness fixture tempo/track geometry mismatch")
+
+    machine_matches = []
+    for fourcc, _version, payload in chunks:
+        if fourcc != b"MACD" or len(payload) < 8:
+            continue
+        slot, machine_type = struct.unpack_from("<ii", payload, 0)
+        if slot == 0:
+            machine_matches.append(machine_type)
+    if machine_matches != [12]:
+        raise ValueError("same-witness fixture lacks XMSampler at machine slot 0")
+
+    eins = [
+        version
+        for fourcc, version, _payload in chunks
+        if fourcc == b"EINS"
+    ]
+    if eins != [0x00010000] or any(
+        fourcc in {b"SMID", b"SMSB"} for fourcc, _version, _payload in chunks
+    ):
+        raise ValueError("same-witness fixture historical Sampulse state mismatch")
+
+    patterns = [
+        (version, payload)
+        for fourcc, version, payload in chunks
+        if fourcc == b"PATD"
+        and len(payload) >= 4
+        and struct.unpack_from("<i", payload, 0)[0] == 0
+    ]
+    if len(patterns) != 1 or patterns[0][0] != 2:
+        raise ValueError("same-witness fixture pattern-0 identity mismatch")
+    payload = patterns[0][1]
+    if len(payload) < 16:
+        raise ValueError("same-witness fixture pattern-0 payload is truncated")
+    index, pattern_lines, pattern_tracks = struct.unpack_from("<iii", payload, 0)
+    position = 12
+    pattern_name, position = read_cstring(payload, position, "pattern name")
+    if position + 4 > len(payload):
+        raise ValueError("same-witness fixture pattern compression header is truncated")
+    compressed_size = struct.unpack_from("<I", payload, position)[0]
+    position += 4
+    if position + compressed_size > len(payload):
+        raise ValueError("same-witness fixture pattern compression payload is truncated")
+    position += compressed_size
+    if position + 20 > len(payload):
+        raise ValueError("same-witness fixture extended pattern header is truncated")
+    timesig_cmd, timesig_param, ppq, length_ticks, entry_count = struct.unpack_from(
+        "<IIiii", payload, position
+    )
+    position += 20
+    if (
+        index != 0
+        or pattern_lines != 32
+        or pattern_tracks != 16
+        or pattern_name != "Execution Witness"
+        or timesig_cmd != 0
+        or timesig_param != 0
+        or ppq != 480
+        or length_ticks != 1920
+        or entry_count != len(EXPECTED_FIXTURE_EVENTS)
+    ):
+        raise ValueError("same-witness fixture pattern geometry mismatch")
+
+    observed_events: list[tuple[int, int, int, int, int, int, int, int]] = []
+    for _ in range(entry_count):
+        if position + 12 > len(payload):
+            raise ValueError("same-witness fixture pattern entry is truncated")
+        track, offset_ticks, event_count = struct.unpack_from("<iii", payload, position)
+        position += 12
+        if event_count != 1 or position + 24 > len(payload):
+            raise ValueError("same-witness fixture pattern event shape mismatch")
+        note, inst, mach, volume, command, parameter = struct.unpack_from(
+            "<iiiiii", payload, position
+        )
+        position += 24
+        observed_events.append(
+            (track, offset_ticks, note, inst, mach, volume, command, parameter)
+        )
+    if position != len(payload) or observed_events != EXPECTED_FIXTURE_EVENTS:
+        raise ValueError("same-witness fixture command geometry mismatch")
+
+    return {
+        "song_title": title,
+        "song_tracks": song_tracks,
+        "bpm": bpm,
+        "lpb": lpb,
+        "machine_slot": 0,
+        "machine_type": 12,
+        "machine_substrate": "XMSampler/Sampulse",
+        "eins_version": 0x00010000,
+        "pattern_name": pattern_name,
+        "pattern_lines": pattern_lines,
+        "pattern_tracks": pattern_tracks,
+        "pattern_ppq": ppq,
+        "pattern_length_ticks": length_ticks,
+        "command_events": [
+            {
+                "track": track,
+                "offset_ticks": offset_ticks,
+                "note": note,
+                "instrument": inst,
+                "machine": mach,
+                "volume": volume,
+                "command": command,
+                "parameter": parameter,
+            }
+            for (
+                track,
+                offset_ticks,
+                note,
+                inst,
+                mach,
+                volume,
+                command,
+                parameter,
+            ) in observed_events
+        ],
+    }
+
+
+def validate_same_witness_analysis(
+    analysis: dict,
+    role: str,
+    *,
+    expected_frame_count: int | None = None,
+    require_all_command_windows: bool = False,
+) -> dict:
+    if expected_frame_count is not None and analysis.get("frame_count") != expected_frame_count:
+        raise ValueError(
+            f"{role} render frame count does not match fixed-frame target"
+        )
+    if require_all_command_windows:
+        counts = analysis.get("window_onset_counts")
+        required = (
+            "note_delay_beat_0",
+            "retrigger_beat_1",
+            "retr_cont_beat_2",
+            "extended_marker_beat_3",
+        )
+        if (
+            not isinstance(counts, dict)
+            or any(
+                not isinstance(counts.get(key), int)
+                or isinstance(counts.get(key), bool)
+                or counts[key] <= 0
+                for key in required
+            )
+        ):
+            raise ValueError(
+                f"{role} render does not expose every command-bearing window"
+            )
+    return analysis
+
+
+def reviewed_digest(path: Path) -> str:
+    return digest(path.read_bytes())
+
+
+def validate_retained_reviewed_copy(
+    root: Path, retained_relative: str, reviewed_path: Path, label: str
+) -> dict:
+    retained = child(root, retained_relative).read_bytes()
+    reviewed = reviewed_path.read_bytes()
+    if retained != reviewed:
+        raise ValueError(f"same-witness retained {label} differs from reviewed repository input")
+    return {"path": retained_relative, "sha256": digest(retained)}
+
+
+def expected_build_header() -> bytes:
+    return (
+        "#pragma once\n"
+        f"#define PHASE6C_RENDER_SOURCE_SHA256 \"{reviewed_digest(REVIEWED_RENDERER_SOURCE)}\"\n"
+        f"#define PHASE6C_RENDER_PROJECT_SHA256 \"{reviewed_digest(REVIEWED_RENDERER_PROJECT)}\"\n"
+    ).encode("utf-8")
+
+
+def validate_renderer_build_provenance(
+    root: Path, observations: list[dict]
+) -> dict:
+    source_relative = f"{NAME}/render-probe.cpp"
+    project_relative = f"{NAME}/render-probe.pro"
+    generator_relative = f"{NAME}/fixture-generator.c"
+    converter_relative = f"{NAME}/eins-compat.py"
+    binary_relative = f"{NAME}/phase6c-delayed-retrigger-sampulse-render"
+    header_relative = f"{NAME}/renderer-build-provenance.hpp"
+    attestation_relative = f"{NAME}/renderer-build-provenance.json"
+    qmake_relative = "delayed-retrigger/sampulse-render-qmake.log"
+    build_relative = "delayed-retrigger/sampulse-render-build.log"
+
+    source_binding = validate_retained_reviewed_copy(
+        root, source_relative, REVIEWED_RENDERER_SOURCE, "renderer source"
+    )
+    project_binding = validate_retained_reviewed_copy(
+        root, project_relative, REVIEWED_RENDERER_PROJECT, "renderer project"
+    )
+    generator_binding = validate_retained_reviewed_copy(
+        root, generator_relative, REVIEWED_FIXTURE_GENERATOR, "fixture generator"
+    )
+    converter_binding = validate_retained_reviewed_copy(
+        root, converter_relative, REVIEWED_EINS_CONVERTER, "EINS converter"
+    )
+
+    binary = child(root, binary_relative).read_bytes()
+    if not binary.startswith(b"\x7fELF"):
+        raise ValueError("same-witness retained renderer is not an ELF executable")
+    binary_binding = {"path": binary_relative, "sha256": digest(binary)}
+
+    header = child(root, header_relative).read_bytes()
+    if header != expected_build_header():
+        raise ValueError("same-witness renderer build header identity mismatch")
+    header_binding = {"path": header_relative, "sha256": digest(header)}
+
+    attestation = read_json(child(root, attestation_relative))
+    expected_inputs = {
+        "renderer_source": {
+            "path": "tests/phase6c_delayed_retrigger_sampulse_render.cpp",
+            "sha256": source_binding["sha256"],
+        },
+        "renderer_project": {
+            "path": "tests/phase6c_delayed_retrigger_sampulse_render.pro",
+            "sha256": project_binding["sha256"],
+        },
+        "fixture_generator": {
+            "path": "tests/phase6c_delayed_retrigger_sampulse_execution_fixture.c",
+            "sha256": generator_binding["sha256"],
+        },
+        "eins_converter": {
+            "path": "scripts/phase6c-sampulse-eins-compat.py",
+            "sha256": converter_binding["sha256"],
+        },
+    }
+    if (
+        attestation.get("schema_version") != 1
+        or attestation.get("reviewed_inputs") != expected_inputs
+        or attestation.get("binary")
+        != {"path": binary_relative, "sha256": binary_binding["sha256"]}
+    ):
+        raise ValueError("same-witness renderer build attestation mismatch")
+
+    qmake_binding = artifact_binding(root, qmake_relative)
+    build_binding = artifact_binding(root, build_relative)
+    if (
+        attestation.get("qmake_log") != qmake_binding
+        or attestation.get("build_log") != build_binding
+    ):
+        raise ValueError("same-witness renderer build-log attestation mismatch")
+    build_text = child(root, build_relative).read_text(encoding="utf-8", errors="replace")
+    if (
+        "phase6c_delayed_retrigger_sampulse_render.cpp" not in build_text
+        or "phase6c-delayed-retrigger-sampulse-render" not in build_text
+    ):
+        raise ValueError("same-witness renderer build log lacks reviewed build path")
+
+    for observation in observations:
+        if (
+            observation.get("renderer_source_sha256") != source_binding["sha256"]
+            or observation.get("renderer_project_sha256") != project_binding["sha256"]
+        ):
+            raise ValueError(
+                "same-witness renderer runtime identity does not match reviewed inputs"
+            )
+
+    return {
+        "binary": binary_binding,
+        "source": source_binding,
+        "project": project_binding,
+        "fixture_generator_source": generator_binding,
+        "eins_converter_source": converter_binding,
+        "build_header": header_binding,
+        "build_attestation": artifact_binding(root, attestation_relative),
+        "qmake_log": qmake_binding,
+        "build_log": build_binding,
+    }
+
+
 def render_binding(root: Path, relative: str) -> tuple[dict, bytes]:
     path = child(root, relative)
     data = path.read_bytes()
@@ -124,7 +472,12 @@ def validate_artifact_binding(root: Path, value: object, expected_path: str) -> 
 
 
 def validate_pair_of_waves(
-    root: Path, prefix: str, role: str
+    root: Path,
+    prefix: str,
+    role: str,
+    *,
+    expected_frame_count: int | None = None,
+    require_all_command_windows: bool = False,
 ) -> tuple[list[dict], bytes, dict]:
     bindings: list[dict] = []
     waves: list[bytes] = []
@@ -132,7 +485,12 @@ def validate_pair_of_waves(
     for index in (1, 2):
         relative = f"{NAME}/{prefix}-{index}.wav"
         binding, data = render_binding(root, relative)
-        analysis = base.analyze_wave(data)
+        analysis = validate_same_witness_analysis(
+            base.analyze_wave(data),
+            role,
+            expected_frame_count=expected_frame_count,
+            require_all_command_windows=require_all_command_windows,
+        )
         bindings.append(binding)
         waves.append(data)
         analyses.append(analysis)
@@ -177,6 +535,10 @@ def validate_candidate_render_log(root: Path, index: int) -> dict:
         or summary.get("threads") != 1
         or summary.get("sequencer_work_calls") != 1
         or summary.get("player_work_direct") is not False
+        or not isinstance(summary.get("renderer_source_sha256"), str)
+        or len(summary["renderer_source_sha256"]) != 64
+        or not isinstance(summary.get("renderer_project_sha256"), str)
+        or len(summary["renderer_project_sha256"]) != 64
         or summary.get("master_buffer_float_count")
         != 2 * CANDIDATE_TARGET_FRAMES
         or not isinstance(final_play_beat, (int, float))
@@ -207,13 +569,26 @@ def collect_candidate(root: Path) -> dict:
     root = root.resolve()
     fixture = child(root, FIXTURE)
     raw = fixture.read_bytes()
-    if not raw.startswith(b"PSY3SONG"):
-        raise ValueError("same-witness Sampulse fixture is not PSY3")
+    fixture_identity = validate_fixture_identity(raw)
 
-    renders, wave, analysis = validate_pair_of_waves(
-        root, "candidate-delayed-retrigger-sampulse-runtime", "candidate"
-    )
     render_observations = validate_candidate_render_logs(root)
+    renders, wave, analysis = validate_pair_of_waves(
+        root,
+        "candidate-delayed-retrigger-sampulse-runtime",
+        "candidate",
+        expected_frame_count=CANDIDATE_TARGET_FRAMES,
+        require_all_command_windows=True,
+    )
+    if any(
+        observation["target_frames"] != analysis["frame_count"]
+        for observation in render_observations
+    ):
+        raise ValueError(
+            "candidate renderer summary target does not match WAV frame count"
+        )
+    reviewed_provenance = validate_renderer_build_provenance(
+        root, render_observations
+    )
     receipt = {
         "schema_version": 1,
         "phase": "6C",
@@ -222,22 +597,14 @@ def collect_candidate(root: Path) -> dict:
         "evidence_role": "candidate",
         "fixture": FIXTURE,
         "fixture_sha256": digest(raw),
+        "fixture_identity": fixture_identity,
         "song_title": TITLE,
         "machine_substrate": "XMSampler/Sampulse",
         "command_layout": base.EXPECTED_LAYOUT["commands"],
         "render_procedure": CANDIDATE_RENDER_PROCEDURE,
         "render_observations": render_observations,
         "renderer_provenance": {
-            "binary": artifact_binding(
-                root,
-                f"{NAME}/phase6c-delayed-retrigger-sampulse-render",
-            ),
-            "source": artifact_binding(root, f"{NAME}/render-probe.cpp"),
-            "project": artifact_binding(root, f"{NAME}/render-probe.pro"),
-            "fixture_generator_source": artifact_binding(
-                root, f"{NAME}/fixture-generator.c"
-            ),
-            "eins_converter_source": artifact_binding(root, f"{NAME}/eins-compat.py"),
+            **reviewed_provenance,
             "eins_converter_log": artifact_binding(
                 root, "delayed-retrigger/sampulse-eins-compat.log"
             ),
@@ -265,6 +632,7 @@ def validate_candidate(root: Path) -> dict:
     root = root.resolve()
     receipt = read_json(root / CANDIDATE_RECEIPT)
     fixture = child(root, FIXTURE)
+    fixture_identity = validate_fixture_identity(fixture.read_bytes())
     if (
         receipt.get("schema_version") != 1
         or receipt.get("phase") != "6C"
@@ -272,6 +640,7 @@ def validate_candidate(root: Path) -> dict:
         or receipt.get("evidence_role") != "candidate"
         or receipt.get("fixture") != FIXTURE
         or receipt.get("fixture_sha256") != digest(fixture.read_bytes())
+        or receipt.get("fixture_identity") != fixture_identity
         or receipt.get("song_title") != TITLE
         or receipt.get("machine_substrate") != "XMSampler/Sampulse"
         or receipt.get("command_layout") != base.EXPECTED_LAYOUT["commands"]
@@ -290,6 +659,10 @@ def validate_candidate(root: Path) -> dict:
         "project": f"{NAME}/render-probe.pro",
         "fixture_generator_source": f"{NAME}/fixture-generator.c",
         "eins_converter_source": f"{NAME}/eins-compat.py",
+        "build_header": f"{NAME}/renderer-build-provenance.hpp",
+        "build_attestation": f"{NAME}/renderer-build-provenance.json",
+        "qmake_log": "delayed-retrigger/sampulse-render-qmake.log",
+        "build_log": "delayed-retrigger/sampulse-render-build.log",
         "eins_converter_log": "delayed-retrigger/sampulse-eins-compat.log",
     }
     for key, expected_path in expected_single.items():
@@ -304,14 +677,33 @@ def validate_candidate(root: Path) -> dict:
             f"delayed-retrigger/sampulse-candidate-render-{index}.log",
         )
     render_observations = validate_candidate_render_logs(root)
+    reviewed_provenance = validate_renderer_build_provenance(
+        root, render_observations
+    )
+    for key, value in reviewed_provenance.items():
+        if provenance.get(key) != value:
+            raise ValueError(
+                "same-witness candidate reviewed renderer provenance mismatch"
+            )
     if receipt.get("render_observations") != render_observations:
         raise ValueError(
             "same-witness candidate renderer observation binding mismatch"
         )
 
     renders, wave, analysis = validate_pair_of_waves(
-        root, "candidate-delayed-retrigger-sampulse-runtime", "candidate"
+        root,
+        "candidate-delayed-retrigger-sampulse-runtime",
+        "candidate",
+        expected_frame_count=CANDIDATE_TARGET_FRAMES,
+        require_all_command_windows=True,
     )
+    if any(
+        observation["target_frames"] != analysis["frame_count"]
+        for observation in render_observations
+    ):
+        raise ValueError(
+            "candidate renderer summary target does not match WAV frame count"
+        )
     if (
         receipt.get("renders") != renders
         or receipt.get("render_sha256") != digest(wave)
@@ -1017,8 +1409,17 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
     expected_runtime_renders = [first_binding, second_binding]
     if runtime.get("renders") != expected_runtime_renders:
         raise ValueError("same-witness original runtime render bindings mismatch")
-    analysis = base.analyze_wave(first)
-    if analysis != base.analyze_wave(second):
+    analysis = validate_same_witness_analysis(
+        base.analyze_wave(first),
+        "original",
+        require_all_command_windows=True,
+    )
+    second_analysis = validate_same_witness_analysis(
+        base.analyze_wave(second),
+        "original",
+        require_all_command_windows=True,
+    )
+    if analysis != second_analysis:
         raise ValueError("same-witness original onset analyses differ")
 
     original_analysis = {
