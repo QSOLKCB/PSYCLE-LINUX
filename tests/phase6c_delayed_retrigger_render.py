@@ -306,13 +306,25 @@ assert (
     in render_helper_source
 )
 
+record_start = render_helper_source.index(
+    "private bool RecordQualifiedObservedWindow("
+)
 observer_start = render_helper_source.index("private void OnWinEvent(")
 observer_end = render_helper_source.index("private void FlushPump()", observer_start)
+record_source = render_helper_source[record_start:observer_start]
 observer_source = render_helper_source[observer_start:observer_end]
-count_index = observer_source.index("postDispatchObservedWindowEventCount += 1;")
-liveness_index = observer_source.index("GetWindowThreadProcessId(window, out owner)")
-assert count_index < liveness_index
-assert "unresolvedPostDispatchEventCount += 1;" in observer_source
+assert "postDispatchObservedWindowEventCount += 1;" in record_source
+assert "unresolvedPostDispatchEventCount += 1;" in record_source
+owner_index = observer_source.index("GetWindowThreadProcessId(window, out owner)")
+root_index = observer_source.index("IntPtr root = GetAncestor(window, GA_ROOT)")
+child_filter_index = observer_source.index("if (root != window)")
+top_level_count_index = observer_source.index(
+    "RecordQualifiedObservedWindow(eventTime, false)"
+)
+assert owner_index < root_index < child_filter_index < top_level_count_index
+assert observer_source.count(
+    "RecordQualifiedObservedWindow(eventTime, true)"
+) == 2
 assert "postDispatchObservedWindowEventCount > 1" in render_helper_source
 
 pump_start = render_helper_source.index("private void Pump()")
