@@ -442,7 +442,9 @@ def validate_original_attempt(
         if attempt.get(key) is not True:
             raise ValueError(f"same-witness original render did not verify {key}")
 
-    validate_original_event_binding(attempt)\n\n    diagnostics = attempt.get("diagnostics")
+    validate_original_event_binding(attempt)
+
+    diagnostics = attempt.get("diagnostics")
     teardown_diagnostic = (
         "render output finalized and Close control was verified, "
         "but dialog teardown did not complete"
