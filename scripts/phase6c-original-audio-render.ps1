@@ -2,9 +2,12 @@
 # It invokes only source-pinned Psycle 1.12.0 UI identities and returns evidence.
 # It does not classify behavioral parity.
 
+$phase6cRuntimeDirectory = [System.IO.Path]::GetDirectoryName([object].Assembly.Location)
 $phase6cAutomationReferences = @(
     [System.Windows.Automation.AutomationElement].Assembly.Location
     [System.Windows.Automation.ControlType].Assembly.Location
+    (Join-Path $phase6cRuntimeDirectory 'System.Threading.dll')
+    (Join-Path $phase6cRuntimeDirectory 'System.Threading.Thread.dll')
 ) | Select-Object -Unique
 
 Add-Type -ReferencedAssemblies $phase6cAutomationReferences -TypeDefinition @"
