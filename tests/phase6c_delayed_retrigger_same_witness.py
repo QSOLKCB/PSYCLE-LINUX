@@ -427,7 +427,7 @@ with tempfile.TemporaryDirectory() as temporary:
             / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
         ).write_bytes(valid_wave)
     binary = render_dir / "phase6c-delayed-retrigger-sampulse-render"
-    binary.write_bytes(b"\\x7fELFphase6c-test-renderer")
+    binary.write_bytes(b"\x7fELFphase6c-test-renderer")
     attestation_path = render_dir / "renderer-build-provenance.json"
     attestation = json.loads(attestation_path.read_text(encoding="utf-8"))
     attestation["binary"]["sha256"] = m.digest(binary.read_bytes())
