@@ -308,8 +308,34 @@ with tempfile.TemporaryDirectory() as temporary:
         "save_invoked": True,
         "process_exited": False,
         "process_exit_code": None,
+        "stable_output_polls": 4,
+        "dialog_closed": True,
+        "close_control_seen": True,
+        "close_uia_invoked": True,
+        "diagnostics": [],
         "output": {"path": first_name, "sha256": first_hash},
     }
+
+    incomplete_terminal_attempt = dict(first_attempt)
+    incomplete_terminal_attempt.update(
+        {
+            "stable_output_polls": 0,
+            "dialog_closed": False,
+            "close_control_seen": False,
+            "close_uia_invoked": False,
+            "diagnostics": ["offline render did not reach a stable completed output"],
+        }
+    )
+    try:
+        module.validate_completed_render_attempt(
+            root, incomplete_terminal_attempt, first_binding, 1
+        )
+    except ValueError as exc:
+        assert "terminal completion evidence" in str(exc)
+    else:
+        raise AssertionError(
+            "expected incomplete primary render terminal-evidence rejection"
+        )
 
     second_name = "original-delayed-retrigger-execution-2.wav"
     second_path = output_dir / second_name
