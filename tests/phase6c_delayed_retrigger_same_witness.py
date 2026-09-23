@@ -498,8 +498,16 @@ with tempfile.TemporaryDirectory() as temporary:
         assert collected["analysis"]["window_onset_counts"]["extended_marker_beat_3"] > 0
         assert collected["analysis"]["frame_count"] == m.CANDIDATE_TARGET_FRAMES
         assert collected["fixture_identity"]["machine_type"] == 12
-    assert collected["fixture_identity"]["playback_graph"]["sampler_state"]["voices"] == 64
-    assert collected["fixture_identity"]["playback_graph"]["sampler_state"]["channel_count"] == 64
+        assert (
+            collected["fixture_identity"]["playback_graph"]["sampler_state"]["voices"]
+            == 64
+        )
+        assert (
+            collected["fixture_identity"]["playback_graph"]["sampler_state"][
+                "channel_count"
+            ]
+            == 64
+        )
         assert m.validate_candidate(root)["parity_status"] == "UNKNOWN"
     finally:
         m.validate_reproducible_renderer_build = original_rebuild_check
