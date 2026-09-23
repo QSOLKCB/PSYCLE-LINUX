@@ -337,6 +337,20 @@ with tempfile.TemporaryDirectory() as temporary:
             "expected incomplete primary render terminal-evidence rejection"
         )
 
+    try:
+        module.validate_inconclusive_runtime(
+            root,
+            {},
+            {"deterministic": False, "renders": [first_binding]},
+            [incomplete_terminal_attempt],
+        )
+    except ValueError as exc:
+        assert "terminal completion evidence" in str(exc)
+    else:
+        raise AssertionError(
+            "expected inconclusive path to reject incomplete retained render"
+        )
+
     second_name = "original-delayed-retrigger-execution-2.wav"
     second_path = output_dir / second_name
     second_path.write_bytes(b"")
