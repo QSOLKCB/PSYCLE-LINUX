@@ -337,6 +337,46 @@ def require_fresh_render_event_binding(attempt: dict, name: str) -> None:
         )
 
 
+def require_attempt_dispatch_prefix(attempt: object, name: str) -> dict:
+    if not isinstance(attempt, dict):
+        raise ValueError(f"{name}: render attempt must be an object")
+    for key in ("command_verified", "command_dispatched"):
+        if attempt.get(key) is not True:
+            raise ValueError(
+                f"{name}: render attempt did not verify command dispatch: {key}"
+            )
+    for key in ("dialog_verified", "controls_configured", "save_invoked"):
+        if not isinstance(attempt.get(key), bool):
+            raise ValueError(
+                f"{name}: render attempt has invalid boolean field: {key}"
+            )
+    return attempt
+
+
+def validate_fresh_render_event_binding_or_quarantine(
+    attempt: dict,
+    name: str,
+    outcome: object,
+    renders: object,
+) -> str | None:
+    """Reject bad fresh binding unless the attempt is already non-evidentiary."""
+    try:
+        require_fresh_render_event_binding(attempt, name)
+    except ValueError as exc:
+        diagnostics = attempt.get("diagnostics")
+        if (
+            outcome == "inconclusive"
+            and renders == []
+            and attempt.get("outcome") == "inconclusive"
+            and attempt.get("output") is None
+            and isinstance(diagnostics, list)
+            and diagnostics
+        ):
+            return str(exc)
+        raise
+    return None
+
+
 def require_attempt_prefix(attempt: object, name: str) -> dict:
     if not isinstance(attempt, dict):
         raise ValueError(f"{name}: render attempt must be an object")
@@ -568,9 +608,23 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             continue
         if len(attempts) != 1:
             raise ValueError(f"{name}: expected one startup render attempt")
-        attempt = require_attempt_prefix(attempts[0], name)
         filename = f"original-sampler-voice-startup-{name}-1.wav"
         outcome = runtime.get("outcome")
+        attempt = require_attempt_dispatch_prefix(attempts[0], name)
+        binding_error = validate_fresh_render_event_binding_or_quarantine(
+            attempt, name, outcome, renders
+        )
+        if binding_error is not None:
+            results[name] = {
+                "outcome": "inconclusive",
+                "load_result": load_result,
+                "process_exit_code": None,
+                "diagnostics": attempt.get("diagnostics"),
+                "fresh_render_event_binding": "rejected",
+                "fresh_render_event_binding_error": binding_error,
+            }
+            continue
+        attempt = require_attempt_prefix(attempt, name)
 
         if outcome == "rendered-once":
             if load_result != "accepted" or len(renders) != 1:
