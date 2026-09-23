@@ -615,13 +615,17 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             attempt, name, outcome, renders
         )
         if binding_error is not None:
+            observed = validate_observed_output(
+                original_root, name, attempt, filename
+            )
             results[name] = {
                 "outcome": "inconclusive",
                 "load_result": load_result,
-                "process_exit_code": None,
+                "process_exit_code": attempt.get("process_exit_code"),
                 "diagnostics": attempt.get("diagnostics"),
                 "fresh_render_event_binding": "rejected",
                 "fresh_render_event_binding_error": binding_error,
+                "observed_output": observed,
             }
             continue
         attempt = require_attempt_prefix(attempt, name)
