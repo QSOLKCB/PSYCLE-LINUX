@@ -6,6 +6,7 @@ import importlib.util
 import json
 from pathlib import Path
 import struct
+import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,7 +47,42 @@ def expect_value_error(fn, phrase: str) -> None:
         raise AssertionError("expected ValueError")
 
 
-def candidate_fixture_bytes() -> bytes:
+
+def synthetic_eins_payload() -> bytes:
+    sample_body = bytearray()
+    sample_body += b"Phase 6C deterministic impulse\0"
+    sample_body += struct.pack("<I", 512)
+    sample_body += struct.pack("<f", 1.0)
+    sample_body += struct.pack("<H", 128)
+    sample_body += struct.pack("<III", 0, 0, 0)
+    sample_body += struct.pack("<III", 0, 0, 0)
+    sample_body += struct.pack("<I", 44100)
+    sample_body += struct.pack("<hh", 0, 0)
+    sample_body += struct.pack("<?", False)
+    sample_body += struct.pack("<?", False)
+    sample_body += struct.pack("<f", 0.5)
+    sample_body += struct.pack("<?", False)
+    sample_body += struct.pack("<BBBB", 0, 0, 0, 0)
+    compressed = bytes(range(1, 17))
+    sample_body += struct.pack("<I", len(compressed))
+    sample_body += compressed
+    sample = (
+        b"SMPD"
+        + struct.pack("<I", 12 + len(sample_body))
+        + struct.pack("<I", 1)
+        + bytes(sample_body)
+    )
+    return (
+        struct.pack("<I", 1)
+        + struct.pack("<i", 0)
+        + m.eins_converter_module.historical_instrument()
+        + struct.pack("<I", 1)
+        + struct.pack("<i", 0)
+        + sample
+    )
+
+
+def candidate_fixture_bytes(eins_payload: bytes | None = None) -> bytes:
     def chunk(fourcc: bytes, version: int, payload: bytes) -> bytes:
         return fourcc + struct.pack("<II", version, len(payload)) + payload
 
@@ -62,12 +98,14 @@ def candidate_fixture_bytes() -> bytes:
         patd += struct.pack(
             "<iiiiii", note, inst, mach, volume, command, parameter
         )
+    if eins_payload is None:
+        eins_payload = synthetic_eins_payload()
     chunks = [
         chunk(b"INFO", 0, info),
         chunk(b"SNGI", 4, sngi),
         chunk(b"PATD", 2, bytes(patd)),
         chunk(b"MACD", 3, struct.pack("<ii", 0, 12)),
-        chunk(b"EINS", 0x00010000, b""),
+        chunk(b"EINS", 0x00010000, eins_payload),
     ]
     return (
         b"PSY3SONG"
@@ -93,6 +131,7 @@ valid_fixture = candidate_fixture_bytes()
 
 
 def candidate_render_summary() -> dict:
+    compiled = m.expected_compiled_provenance()
     return {
         "schema_version": 1,
         "fixed_frame_render": True,
@@ -106,6 +145,9 @@ def candidate_render_summary() -> dict:
         "player_work_direct": False,
         "renderer_source_sha256": m.reviewed_digest(m.REVIEWED_RENDERER_SOURCE),
         "renderer_project_sha256": m.reviewed_digest(m.REVIEWED_RENDERER_PROJECT),
+        "engine_sequencer_sha256": compiled["engine_sequencer_sha256"],
+        "engine_psy3_loader_sha256": compiled["engine_psy3_loader_sha256"],
+        "engine_xmsampler_sha256": compiled["engine_xmsampler_sha256"],
         "master_buffer_float_count": 2 * m.CANDIDATE_TARGET_FRAMES,
         "final_play_beat": m.CANDIDATE_TARGET_FRAMES / m.CANDIDATE_BEAT_FRAMES,
     }
@@ -115,7 +157,25 @@ def write_provenance(root: Path) -> None:
     runtime = root / m.NAME
     runtime.mkdir(exist_ok=True)
     binary = runtime / "phase6c-delayed-retrigger-sampulse-render"
-    binary.write_bytes(b"\x7fELFphase6c-test-renderer")
+    provenance_json = json.dumps(
+        m.expected_compiled_provenance(), sort_keys=True, separators=(",", ":")
+    )
+    escaped = provenance_json.replace("\\", "\\\\").replace('"', '\\"')
+    stub = runtime / "phase6c-provenance-stub.c"
+    stub.write_text(
+        "#include <stdio.h>\n"
+        "#include <string.h>\n"
+        "int main(int argc, char **argv) {\n"
+        "  if (argc == 2 && strcmp(argv[1], \"--phase6c-provenance\") == 0) {\n"
+        f'    puts("{escaped}");\n'
+        "    return 0;\n"
+        "  }\n"
+        "  return 64;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["cc", str(stub), "-O2", "-o", str(binary)], check=True)
+    stub.unlink()
     (runtime / "render-probe.cpp").write_bytes(
         m.REVIEWED_RENDERER_SOURCE.read_bytes()
     )
@@ -141,8 +201,12 @@ def write_provenance(root: Path) -> None:
         "g++ tests/phase6c_delayed_retrigger_sampulse_render.cpp "
         "-o phase6c-delayed-retrigger-sampulse-render\n"
     )
+    provenance_log = delayed / "sampulse-render-provenance.log"
+    provenance_log.write_bytes(
+        subprocess.check_output([str(binary), "--phase6c-provenance"])
+    )
     attestation = {
-        "schema_version": 1,
+        "schema_version": 2,
         "reviewed_inputs": {
             "renderer_source": {
                 "path": "tests/phase6c_delayed_retrigger_sampulse_render.cpp",
@@ -161,6 +225,7 @@ def write_provenance(root: Path) -> None:
                 "sha256": m.reviewed_digest(m.REVIEWED_EINS_CONVERTER),
             },
         },
+        "engine_anchors": m.reviewed_engine_bindings(),
         "binary": {
             "path": f"{m.NAME}/phase6c-delayed-retrigger-sampulse-render",
             "sha256": m.digest(binary.read_bytes()),
@@ -172,6 +237,10 @@ def write_provenance(root: Path) -> None:
         "build_log": {
             "path": "delayed-retrigger/sampulse-render-build.log",
             "sha256": m.digest(build_log.read_bytes()),
+        },
+        "provenance_challenge_log": {
+            "path": "delayed-retrigger/sampulse-render-provenance.log",
+            "sha256": m.digest(provenance_log.read_bytes()),
         },
     }
     (runtime / "renderer-build-provenance.json").write_text(
@@ -219,6 +288,17 @@ with tempfile.TemporaryDirectory() as temporary:
     expect_value_error(
         lambda: m.validate_candidate(root),
         "candidate receipt identity mismatch",
+    )
+
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    fixture = root / m.FIXTURE
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(candidate_fixture_bytes(b""))
+    expect_value_error(
+        lambda: m.validate_fixture_identity(fixture.read_bytes()),
+        "EINS payload",
     )
 
 with tempfile.TemporaryDirectory() as temporary:
@@ -283,6 +363,36 @@ with tempfile.TemporaryDirectory() as temporary:
         "does not expose every command-bearing window",
     )
 
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    fixture = root / m.FIXTURE
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(valid_fixture)
+    render_dir = root / m.NAME
+    write_provenance(root)
+    late_only = pcm_wave(
+        [
+            int(round(0.0625 * beat)),
+            int(round(1.0 * beat)),
+            int(round(1.0625 * beat)),
+            int(round(1.125 * beat)),
+            int(round(2.0 * beat)),
+            int(round(2.0625 * beat)),
+            int(round(4.1 * beat)),
+        ],
+        frames=m.CANDIDATE_TARGET_FRAMES,
+    )
+    for index in (1, 2):
+        (
+            render_dir
+            / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+        ).write_bytes(late_only)
+    expect_value_error(
+        lambda: m.collect_candidate(root),
+        "bounded beat-3 command window",
+    )
+
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     fixture = root / m.FIXTURE
@@ -301,6 +411,32 @@ with tempfile.TemporaryDirectory() as temporary:
     expect_value_error(
         lambda: m.collect_candidate(root),
         "retained renderer source differs",
+    )
+
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    fixture = root / m.FIXTURE
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(valid_fixture)
+    render_dir = root / m.NAME
+    write_provenance(root)
+    for index in (1, 2):
+        (
+            render_dir
+            / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+        ).write_bytes(valid_wave)
+    binary = render_dir / "phase6c-delayed-retrigger-sampulse-render"
+    binary.write_bytes(b"\\x7fELFphase6c-test-renderer")
+    attestation_path = render_dir / "renderer-build-provenance.json"
+    attestation = json.loads(attestation_path.read_text(encoding="utf-8"))
+    attestation["binary"]["sha256"] = m.digest(binary.read_bytes())
+    attestation_path.write_text(
+        json.dumps(attestation, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    expect_value_error(
+        lambda: m.collect_candidate(root),
+        "executable provenance challenge failed",
     )
 
 with tempfile.TemporaryDirectory() as temporary:

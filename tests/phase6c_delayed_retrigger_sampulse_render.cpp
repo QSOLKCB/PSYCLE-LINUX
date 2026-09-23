@@ -19,7 +19,27 @@
 #include <string>
 #include <vector>
 
+static void print_compiled_provenance() {
+    std::cout
+        << "{\"schema_version\":1"
+        << ",\"renderer_source_sha256\":\""
+        << PHASE6C_RENDER_SOURCE_SHA256 << "\""
+        << ",\"renderer_project_sha256\":\""
+        << PHASE6C_RENDER_PROJECT_SHA256 << "\""
+        << ",\"engine_sequencer_sha256\":\""
+        << PHASE6C_ENGINE_SEQUENCER_SHA256 << "\""
+        << ",\"engine_psy3_loader_sha256\":\""
+        << PHASE6C_ENGINE_PSY3_LOADER_SHA256 << "\""
+        << ",\"engine_xmsampler_sha256\":\""
+        << PHASE6C_ENGINE_XMSAMPLER_SHA256 << "\""
+        << "}" << std::endl;
+}
+
 int main(int argc, char** argv) {
+    if (argc == 2 && std::string(argv[1]) == "--phase6c-provenance") {
+        print_compiled_provenance();
+        return 0;
+    }
     if (argc != 3) {
         std::cerr << "usage: " << argv[0] << " FIXTURE OUTPUT_WAV\n";
         return 64;
@@ -134,6 +154,12 @@ int main(int argc, char** argv) {
                             << PHASE6C_RENDER_SOURCE_SHA256 << "\""
                             << ",\"renderer_project_sha256\":\""
                             << PHASE6C_RENDER_PROJECT_SHA256 << "\""
+                            << ",\"engine_sequencer_sha256\":\""
+                            << PHASE6C_ENGINE_SEQUENCER_SHA256 << "\""
+                            << ",\"engine_psy3_loader_sha256\":\""
+                            << PHASE6C_ENGINE_PSY3_LOADER_SHA256 << "\""
+                            << ",\"engine_xmsampler_sha256\":\""
+                            << PHASE6C_ENGINE_XMSAMPLER_SHA256 << "\""
                             << ",\"master_buffer_float_count\":"
                             << master_output.size()
                             << ",\"final_play_beat\":" << final_beat

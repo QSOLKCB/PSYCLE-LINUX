@@ -9,6 +9,7 @@ import json
 import math
 import struct
 import subprocess
+import sys
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,35 @@ REVIEWED_FIXTURE_GENERATOR = (
     ROOT / "tests" / "phase6c_delayed_retrigger_sampulse_execution_fixture.c"
 )
 REVIEWED_EINS_CONVERTER = ROOT / "scripts" / "phase6c-sampulse-eins-compat.py"
+REVIEWED_ENGINE_ANCHORS = {
+    "sequencer": (
+        ROOT
+        / "psycle-cpp-r12005-sanitized"
+        / "psycle-core"
+        / "src"
+        / "psycle"
+        / "core"
+        / "sequencer.cpp"
+    ),
+    "psy3_loader": (
+        ROOT
+        / "psycle-cpp-r12005-sanitized"
+        / "psycle-core"
+        / "src"
+        / "psycle"
+        / "core"
+        / "psy3filter.cpp"
+    ),
+    "xmsampler": (
+        ROOT
+        / "psycle-cpp-r12005-sanitized"
+        / "psycle-core"
+        / "src"
+        / "psycle"
+        / "core"
+        / "xmsampler.cpp"
+    ),
+}
 
 CONTRACT = "sequencer-delayed-retrigger-same-witness-render"
 NAME = "delayed-retrigger-sampulse-runtime"
@@ -80,6 +110,9 @@ def load_module(path: Path, name: str):
 
 base = load_module(BASE_ANALYZER, "phase6c_render_base")
 original_gate_module = load_module(ORIGINAL_GATE, "phase6c_original_gate")
+eins_converter_module = load_module(
+    REVIEWED_EINS_CONVERTER, "phase6c_sampulse_eins_converter"
+)
 
 
 def digest(data: bytes) -> str:
@@ -156,6 +189,111 @@ EXPECTED_FIXTURE_EVENTS = [
 ]
 
 
+
+def validate_eins_payload(payload: bytes) -> dict:
+    position = 0
+
+    def take(fmt: str, label: str):
+        nonlocal position
+        size = struct.calcsize(fmt)
+        if position + size > len(payload):
+            raise ValueError(f"same-witness EINS payload truncates {label}")
+        values = struct.unpack_from(fmt, payload, position)
+        position += size
+        return values[0] if len(values) == 1 else values
+
+    if take("<I", "instrument count") != 1 or take("<i", "instrument index") != 0:
+        raise ValueError("same-witness EINS payload instrument table mismatch")
+
+    expected_instrument = eins_converter_module.historical_instrument()
+    if payload[position : position + len(expected_instrument)] != expected_instrument:
+        raise ValueError("same-witness EINS payload instrument state mismatch")
+    position += len(expected_instrument)
+
+    if take("<I", "sample count") != 1 or take("<i", "sample index") != 0:
+        raise ValueError("same-witness EINS payload sample table mismatch")
+    sample_start = position
+    if position + 12 > len(payload) or payload[position : position + 4] != b"SMPD":
+        raise ValueError("same-witness EINS payload lacks historical SMPD sample")
+    sample_size = struct.unpack_from("<I", payload, position + 4)[0]
+    sample_version = struct.unpack_from("<I", payload, position + 8)[0]
+    if (
+        sample_version != 1
+        or sample_size < 12
+        or sample_start + sample_size != len(payload)
+    ):
+        raise ValueError("same-witness EINS payload sample chunk identity mismatch")
+
+    sample_body = payload[position + 12 : sample_start + sample_size]
+    sample_name, sample_position = read_cstring(sample_body, 0, "EINS sample name")
+
+    def sample_take(fmt: str, label: str):
+        nonlocal sample_position
+        size = struct.calcsize(fmt)
+        if sample_position + size > len(sample_body):
+            raise ValueError(f"same-witness EINS sample truncates {label}")
+        values = struct.unpack_from(fmt, sample_body, sample_position)
+        sample_position += size
+        return values[0] if len(values) == 1 else values
+
+    wave_length = sample_take("<I", "wave length")
+    global_volume = sample_take("<f", "global volume")
+    default_volume = sample_take("<H", "default volume")
+    loop_start, loop_end, loop_type = sample_take("<III", "loop state")
+    sustain_start, sustain_end, sustain_type = sample_take(
+        "<III", "sustain loop state"
+    )
+    sample_rate = sample_take("<I", "sample rate")
+    tune, fine_tune = sample_take("<hh", "sample tuning")
+    stereo = sample_take("<?", "stereo flag")
+    pan_enabled = sample_take("<?", "pan-enabled flag")
+    pan_factor = sample_take("<f", "pan factor")
+    surround = sample_take("<?", "surround flag")
+    vibrato = sample_take("<BBBB", "vibrato state")
+    compressed_size = sample_take("<I", "compressed mono size")
+    if compressed_size <= 0 or sample_position + compressed_size != len(sample_body):
+        raise ValueError("same-witness EINS sample compressed payload mismatch")
+    compressed = sample_body[sample_position : sample_position + compressed_size]
+
+    if (
+        sample_name != "Phase 6C deterministic impulse"
+        or wave_length != 512
+        or sample_rate != 44100
+        or tune != 0
+        or fine_tune != 0
+        or stereo is not False
+        or not math.isfinite(float(global_volume))
+        or not 0.0 < float(global_volume) <= 1.0
+        or not isinstance(default_volume, int)
+        or default_volume <= 0
+        or not math.isfinite(float(pan_factor))
+        or not 0.0 <= float(pan_factor) <= 1.0
+        or loop_type not in (0, 1, 2)
+        or sustain_type not in (0, 1, 2)
+        or not any(compressed)
+    ):
+        raise ValueError("same-witness EINS payload deterministic sample mismatch")
+
+    return {
+        "instrument_count": 1,
+        "instrument_index": 0,
+        "instrument_name": "Phase 6C click instrument",
+        "note_60_sample": 0,
+        "sample_count": 1,
+        "sample_index": 0,
+        "sample_name": sample_name,
+        "sample_frames": wave_length,
+        "sample_rate": sample_rate,
+        "mono": True,
+        "compressed_sample_sha256": digest(compressed),
+        "loop": [loop_start, loop_end, loop_type],
+        "sustain_loop": [sustain_start, sustain_end, sustain_type],
+        "pan_enabled": pan_enabled,
+        "surround": surround,
+        "vibrato": list(vibrato),
+    }
+
+
 def validate_fixture_identity(data: bytes) -> dict:
     chunks = parse_psy3_chunks(data)
 
@@ -184,14 +322,20 @@ def validate_fixture_identity(data: bytes) -> dict:
         raise ValueError("same-witness fixture lacks XMSampler at machine slot 0")
 
     eins = [
-        version
-        for fourcc, version, _payload in chunks
+        (version, payload)
+        for fourcc, version, payload in chunks
         if fourcc == b"EINS"
     ]
-    if eins != [0x00010000] or any(
-        fourcc in {b"SMID", b"SMSB"} for fourcc, _version, _payload in chunks
+    if (
+        len(eins) != 1
+        or eins[0][0] != 0x00010000
+        or any(
+            fourcc in {b"SMID", b"SMSB"}
+            for fourcc, _version, _payload in chunks
+        )
     ):
         raise ValueError("same-witness fixture historical Sampulse state mismatch")
+    eins_identity = validate_eins_payload(eins[0][1])
 
     patterns = [
         (version, payload)
@@ -261,6 +405,7 @@ def validate_fixture_identity(data: bytes) -> dict:
         "machine_type": 12,
         "machine_substrate": "XMSampler/Sampulse",
         "eins_version": 0x00010000,
+        "eins_identity": eins_identity,
         "pattern_name": pattern_name,
         "pattern_lines": pattern_lines,
         "pattern_tracks": pattern_tracks,
@@ -322,6 +467,22 @@ def validate_same_witness_analysis(
             raise ValueError(
                 f"{role} render does not expose every command-bearing window"
             )
+        onset_beats = analysis.get("onset_beats")
+        bounded_beat_3 = False
+        if isinstance(onset_beats, list):
+            for value in onset_beats:
+                if (
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and math.isfinite(float(value))
+                    and 3.0 <= float(value) < 4.0
+                ):
+                    bounded_beat_3 = True
+                    break
+        if not bounded_beat_3:
+            raise ValueError(
+                f"{role} render lacks an onset in the bounded beat-3 command window"
+            )
     return analysis
 
 
@@ -355,12 +516,53 @@ def validate_retained_reviewed_copy(
     return {"path": retained_relative, "sha256": digest(retained)}
 
 
+def reviewed_engine_bindings() -> dict:
+    return {
+        name: {
+            "path": path.resolve().relative_to(ROOT.resolve()).as_posix(),
+            "sha256": reviewed_digest(path),
+        }
+        for name, path in REVIEWED_ENGINE_ANCHORS.items()
+    }
+
+
 def expected_build_header() -> bytes:
+    engines = reviewed_engine_bindings()
     return (
         "#pragma once\n"
         f"#define PHASE6C_RENDER_SOURCE_SHA256 \"{reviewed_digest(REVIEWED_RENDERER_SOURCE)}\"\n"
         f"#define PHASE6C_RENDER_PROJECT_SHA256 \"{reviewed_digest(REVIEWED_RENDERER_PROJECT)}\"\n"
+        f"#define PHASE6C_ENGINE_SEQUENCER_SHA256 \"{engines['sequencer']['sha256']}\"\n"
+        f"#define PHASE6C_ENGINE_PSY3_LOADER_SHA256 \"{engines['psy3_loader']['sha256']}\"\n"
+        f"#define PHASE6C_ENGINE_XMSAMPLER_SHA256 \"{engines['xmsampler']['sha256']}\"\n"
     ).encode("utf-8")
+
+
+def expected_compiled_provenance() -> dict:
+    engines = reviewed_engine_bindings()
+    return {
+        "schema_version": 1,
+        "renderer_source_sha256": reviewed_digest(REVIEWED_RENDERER_SOURCE),
+        "renderer_project_sha256": reviewed_digest(REVIEWED_RENDERER_PROJECT),
+        "engine_sequencer_sha256": engines["sequencer"]["sha256"],
+        "engine_psy3_loader_sha256": engines["psy3_loader"]["sha256"],
+        "engine_xmsampler_sha256": engines["xmsampler"]["sha256"],
+    }
+
+
+def validate_compiled_provenance_output(data: bytes) -> dict:
+    lines = [line.strip() for line in data.splitlines() if line.strip()]
+    if len(lines) != 1:
+        raise ValueError("same-witness renderer provenance challenge output is invalid")
+    try:
+        value = json.loads(lines[0].decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            "same-witness renderer provenance challenge output is invalid"
+        ) from exc
+    if value != expected_compiled_provenance():
+        raise ValueError("same-witness renderer compiled provenance mismatch")
+    return value
 
 
 def validate_renderer_build_provenance(
@@ -375,6 +577,7 @@ def validate_renderer_build_provenance(
     attestation_relative = f"{NAME}/renderer-build-provenance.json"
     qmake_relative = "delayed-retrigger/sampulse-render-qmake.log"
     build_relative = "delayed-retrigger/sampulse-render-build.log"
+    provenance_relative = "delayed-retrigger/sampulse-render-provenance.log"
 
     source_binding = validate_retained_reviewed_copy(
         root, source_relative, REVIEWED_RENDERER_SOURCE, "renderer source"
@@ -418,21 +621,23 @@ def validate_renderer_build_provenance(
             "sha256": converter_binding["sha256"],
         },
     }
-    if (
-        attestation.get("schema_version") != 1
-        or attestation.get("reviewed_inputs") != expected_inputs
-        or attestation.get("binary")
-        != {"path": binary_relative, "sha256": binary_binding["sha256"]}
-    ):
-        raise ValueError("same-witness renderer build attestation mismatch")
-
+    engine_bindings = reviewed_engine_bindings()
     qmake_binding = artifact_binding(root, qmake_relative)
     build_binding = artifact_binding(root, build_relative)
+    provenance_binding = artifact_binding(root, provenance_relative)
+    provenance_bytes = child(root, provenance_relative).read_bytes()
+    validate_compiled_provenance_output(provenance_bytes)
     if (
-        attestation.get("qmake_log") != qmake_binding
+        attestation.get("schema_version") != 2
+        or attestation.get("reviewed_inputs") != expected_inputs
+        or attestation.get("engine_anchors") != engine_bindings
+        or attestation.get("binary")
+        != {"path": binary_relative, "sha256": binary_binding["sha256"]}
+        or attestation.get("qmake_log") != qmake_binding
         or attestation.get("build_log") != build_binding
+        or attestation.get("provenance_challenge_log") != provenance_binding
     ):
-        raise ValueError("same-witness renderer build-log attestation mismatch")
+        raise ValueError("same-witness renderer build attestation mismatch")
     build_text = child(root, build_relative).read_text(encoding="utf-8", errors="replace")
     if (
         "phase6c_delayed_retrigger_sampulse_render.cpp" not in build_text
@@ -440,14 +645,46 @@ def validate_renderer_build_provenance(
     ):
         raise ValueError("same-witness renderer build log lacks reviewed build path")
 
+    expected_compiled = expected_compiled_provenance()
     for observation in observations:
         if (
             observation.get("renderer_source_sha256") != source_binding["sha256"]
             or observation.get("renderer_project_sha256") != project_binding["sha256"]
+            or observation.get("engine_sequencer_sha256")
+            != expected_compiled["engine_sequencer_sha256"]
+            or observation.get("engine_psy3_loader_sha256")
+            != expected_compiled["engine_psy3_loader_sha256"]
+            or observation.get("engine_xmsampler_sha256")
+            != expected_compiled["engine_xmsampler_sha256"]
         ):
             raise ValueError(
                 "same-witness renderer runtime identity does not match reviewed inputs"
             )
+
+    if sys.platform.startswith("linux"):
+        binary_path = child(root, binary_relative)
+        try:
+            completed = subprocess.run(
+                [str(binary_path), "--phase6c-provenance"],
+                cwd=root,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise ValueError(
+                "same-witness renderer executable provenance challenge failed"
+            ) from exc
+        if (
+            completed.returncode != 0
+            or completed.stderr
+            or completed.stdout != provenance_bytes
+        ):
+            raise ValueError(
+                "same-witness renderer executable provenance challenge failed"
+            )
+        validate_compiled_provenance_output(completed.stdout)
 
     return {
         "binary": binary_binding,
@@ -459,6 +696,7 @@ def validate_renderer_build_provenance(
         "build_attestation": artifact_binding(root, attestation_relative),
         "qmake_log": qmake_binding,
         "build_log": build_binding,
+        "provenance_challenge_log": provenance_binding,
     }
 
 
@@ -556,6 +794,12 @@ def validate_candidate_render_log(root: Path, index: int) -> dict:
         or len(summary["renderer_source_sha256"]) != 64
         or not isinstance(summary.get("renderer_project_sha256"), str)
         or len(summary["renderer_project_sha256"]) != 64
+        or not isinstance(summary.get("engine_sequencer_sha256"), str)
+        or len(summary["engine_sequencer_sha256"]) != 64
+        or not isinstance(summary.get("engine_psy3_loader_sha256"), str)
+        or len(summary["engine_psy3_loader_sha256"]) != 64
+        or not isinstance(summary.get("engine_xmsampler_sha256"), str)
+        or len(summary["engine_xmsampler_sha256"]) != 64
         or summary.get("master_buffer_float_count")
         != 2 * CANDIDATE_TARGET_FRAMES
         or not isinstance(final_play_beat, (int, float))
@@ -680,6 +924,7 @@ def validate_candidate(root: Path) -> dict:
         "build_attestation": f"{NAME}/renderer-build-provenance.json",
         "qmake_log": "delayed-retrigger/sampulse-render-qmake.log",
         "build_log": "delayed-retrigger/sampulse-render-build.log",
+        "provenance_challenge_log": "delayed-retrigger/sampulse-render-provenance.log",
         "eins_converter_log": "delayed-retrigger/sampulse-eins-compat.log",
     }
     for key, expected_path in expected_single.items():

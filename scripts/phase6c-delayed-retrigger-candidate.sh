@@ -273,12 +273,22 @@ run_logged "$OUT/candidate-collect.log" \
 run_logged "$OUT/candidate-validation.log" \
     python3 "$ROOT/scripts/phase6c-delayed-retrigger-evidence.py" candidate "$ARTIFACT"
 
-RENDER_SOURCE_SHA256="$(sha256sum "$ROOT/tests/phase6c_delayed_retrigger_sampulse_render.cpp" | awk '{print $1}')"
-RENDER_PROJECT_SHA256="$(sha256sum "$ROOT/tests/phase6c_delayed_retrigger_sampulse_render.pro" | awk '{print $1}')"
+git_blob_sha256() {
+    git -C "$ROOT" cat-file blob "HEAD:$1" | sha256sum | awk '{print $1}'
+}
+
+RENDER_SOURCE_SHA256="$(git_blob_sha256 tests/phase6c_delayed_retrigger_sampulse_render.cpp)"
+RENDER_PROJECT_SHA256="$(git_blob_sha256 tests/phase6c_delayed_retrigger_sampulse_render.pro)"
+ENGINE_SEQUENCER_SHA256="$(git_blob_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sequencer.cpp)"
+ENGINE_PSY3_LOADER_SHA256="$(git_blob_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.cpp)"
+ENGINE_XMSAMPLER_SHA256="$(git_blob_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/xmsampler.cpp)"
 cat >"$BUILD/phase6c-render-provenance.hpp" <<EOF
 #pragma once
 #define PHASE6C_RENDER_SOURCE_SHA256 "$RENDER_SOURCE_SHA256"
 #define PHASE6C_RENDER_PROJECT_SHA256 "$RENDER_PROJECT_SHA256"
+#define PHASE6C_ENGINE_SEQUENCER_SHA256 "$ENGINE_SEQUENCER_SHA256"
+#define PHASE6C_ENGINE_PSY3_LOADER_SHA256 "$ENGINE_PSY3_LOADER_SHA256"
+#define PHASE6C_ENGINE_XMSAMPLER_SHA256 "$ENGINE_XMSAMPLER_SHA256"
 EOF
 
 cp "$ROOT/tests/phase6c_delayed_retrigger_sampulse_render.pro" "$RENDER_STAGING/render.pro"
@@ -314,11 +324,16 @@ cp "$ROOT/scripts/phase6c-sampulse-eins-compat.py" \
 cp "$BUILD/phase6c-render-provenance.hpp" \
     "$SAMPULSE_RUNTIME_OUT/renderer-build-provenance.hpp"
 
+run_logged "$OUT/sampulse-render-provenance.log" \
+    "$SAMPULSE_RUNTIME_OUT/phase6c-delayed-retrigger-sampulse-render" \
+    --phase6c-provenance
+
 python3 - \
     "$ROOT" \
     "$BUILD/phase6c-delayed-retrigger-sampulse-render" \
     "$OUT/sampulse-render-qmake.log" \
     "$OUT/sampulse-render-build.log" \
+    "$OUT/sampulse-render-provenance.log" \
     "$SAMPULSE_RUNTIME_OUT/renderer-build-provenance.json" <<'PY'
 import hashlib
 import json
@@ -329,7 +344,8 @@ root = Path(sys.argv[1])
 binary = Path(sys.argv[2])
 qmake_log = Path(sys.argv[3])
 build_log = Path(sys.argv[4])
-output = Path(sys.argv[5])
+provenance_log = Path(sys.argv[5])
+output = Path(sys.argv[6])
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -340,14 +356,26 @@ reviewed = {
     "fixture_generator": root / "tests/phase6c_delayed_retrigger_sampulse_execution_fixture.c",
     "eins_converter": root / "scripts/phase6c-sampulse-eins-compat.py",
 }
+engine_anchors = {
+    "sequencer": root / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sequencer.cpp",
+    "psy3_loader": root / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.cpp",
+    "xmsampler": root / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/xmsampler.cpp",
+}
 value = {
-    "schema_version": 1,
+    "schema_version": 2,
     "reviewed_inputs": {
         name: {
             "path": path.relative_to(root).as_posix(),
             "sha256": sha256(path),
         }
         for name, path in reviewed.items()
+    },
+    "engine_anchors": {
+        name: {
+            "path": path.relative_to(root).as_posix(),
+            "sha256": sha256(path),
+        }
+        for name, path in engine_anchors.items()
     },
     "binary": {
         "path": "delayed-retrigger-sampulse-runtime/phase6c-delayed-retrigger-sampulse-render",
@@ -360,6 +388,10 @@ value = {
     "build_log": {
         "path": "delayed-retrigger/sampulse-render-build.log",
         "sha256": sha256(build_log),
+    },
+    "provenance_challenge_log": {
+        "path": "delayed-retrigger/sampulse-render-provenance.log",
+        "sha256": sha256(provenance_log),
     },
 }
 output.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
