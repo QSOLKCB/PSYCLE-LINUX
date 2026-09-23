@@ -1112,7 +1112,7 @@ with tempfile.TemporaryDirectory() as temporary:
         pre_save_root, pre_save_exit_runtime
     )
     assert pre_save["process_exit_code"] == -1073741819
-    assert pre_save["inconclusive_reason"] == "post-binding-render-automation-failure"
+    assert pre_save["inconclusive_reason"] == "process-exit-before-save-wave"
     assert pre_save["retained_renders"] == []
 
     # Diagnostic retained renders use the relaxed PCM observer, including silence.
