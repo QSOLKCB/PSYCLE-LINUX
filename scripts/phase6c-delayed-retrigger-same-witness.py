@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +29,12 @@ ORIGINAL_RENDER_SETTINGS = {
     "dither": False,
     "range": "entire-song",
 }
+CANDIDATE_TARGET_BEATS = 4.25
+CANDIDATE_BEAT_FRAMES = 44100.0 * 60.0 / 137.0
+CANDIDATE_TARGET_FRAMES = math.ceil(
+    CANDIDATE_TARGET_BEATS * CANDIDATE_BEAT_FRAMES
+)
+
 CANDIDATE_RENDER_PROCEDURE = {
     "engine": "frozen SourceForge SVN r12005 C++ candidate",
     "sample_rate": 44100,
@@ -35,7 +42,7 @@ CANDIDATE_RENDER_PROCEDURE = {
     "channels": "mono-mix",
     "dither": False,
     "fixed_frame_render": True,
-    "target_beats": 4.25,
+    "target_beats": CANDIDATE_TARGET_BEATS,
     "threads": 1,
     "repeat_count": 2,
     "sequencer_single_work": True,
@@ -136,6 +143,65 @@ def validate_pair_of_waves(
     return bindings, waves[0], analyses[0]
 
 
+def validate_candidate_render_log(root: Path, index: int) -> dict:
+    relative = f"delayed-retrigger/sampulse-candidate-render-{index}.log"
+    path = child(root, relative)
+    lines = [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    summaries: list[dict] = []
+    for line in lines:
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict) and value.get("schema_version") == 1:
+            summaries.append(value)
+    if len(summaries) != 1:
+        raise ValueError(
+            "same-witness candidate render log lacks one renderer JSON summary"
+        )
+
+    summary = summaries[0]
+    final_play_beat = summary.get("final_play_beat")
+    if (
+        summary.get("fixed_frame_render") is not True
+        or summary.get("sample_rate") != 44100
+        or summary.get("channels") != 1
+        or summary.get("bits_per_sample") != 16
+        or summary.get("target_beats") != CANDIDATE_TARGET_BEATS
+        or summary.get("target_frames") != CANDIDATE_TARGET_FRAMES
+        or summary.get("threads") != 1
+        or summary.get("sequencer_work_calls") != 1
+        or summary.get("player_work_direct") is not False
+        or summary.get("master_buffer_float_count")
+        != 2 * CANDIDATE_TARGET_FRAMES
+        or not isinstance(final_play_beat, (int, float))
+        or isinstance(final_play_beat, bool)
+        or not math.isfinite(float(final_play_beat))
+        or abs(float(final_play_beat) - CANDIDATE_TARGET_BEATS) > 0.001
+    ):
+        raise ValueError(
+            "same-witness candidate render log does not substantiate "
+            "the fixed-frame single-thread procedure"
+        )
+    return summary
+
+
+def validate_candidate_render_logs(root: Path) -> list[dict]:
+    observations = [
+        validate_candidate_render_log(root, index)
+        for index in (1, 2)
+    ]
+    if observations[0] != observations[1]:
+        raise ValueError(
+            "same-witness candidate renderer procedure observations differ"
+        )
+    return observations
+
+
 def collect_candidate(root: Path) -> dict:
     root = root.resolve()
     fixture = child(root, FIXTURE)
@@ -146,6 +212,7 @@ def collect_candidate(root: Path) -> dict:
     renders, wave, analysis = validate_pair_of_waves(
         root, "candidate-delayed-retrigger-sampulse-runtime", "candidate"
     )
+    render_observations = validate_candidate_render_logs(root)
     receipt = {
         "schema_version": 1,
         "phase": "6C",
@@ -158,6 +225,7 @@ def collect_candidate(root: Path) -> dict:
         "machine_substrate": "XMSampler/Sampulse",
         "command_layout": base.EXPECTED_LAYOUT["commands"],
         "render_procedure": CANDIDATE_RENDER_PROCEDURE,
+        "render_observations": render_observations,
         "renderer_provenance": {
             "binary": artifact_binding(
                 root,
@@ -234,6 +302,11 @@ def validate_candidate(root: Path) -> dict:
             value,
             f"delayed-retrigger/sampulse-candidate-render-{index}.log",
         )
+    render_observations = validate_candidate_render_logs(root)
+    if receipt.get("render_observations") != render_observations:
+        raise ValueError(
+            "same-witness candidate renderer observation binding mismatch"
+        )
 
     renders, wave, analysis = validate_pair_of_waves(
         root, "candidate-delayed-retrigger-sampulse-runtime", "candidate"
@@ -295,6 +368,69 @@ def validate_original_event_binding(attempt: dict) -> None:
             "same-witness original render lacks bound post-dispatch dialog evidence"
         )
 
+AMBIGUITY_DIAGNOSTICS = (
+    "unresolved post-dispatch Psycle window-show event observed",
+    "multiple post-dispatch Psycle window-show events observed",
+    "multiple post-dispatch Render as Wav File windows observed",
+)
+
+
+def validate_original_ambiguous_event_binding(attempt: dict) -> None:
+    observed_window_count = attempt.get(
+        "render_dialog_post_dispatch_observed_window_event_count"
+    )
+    unresolved_event_count = attempt.get(
+        "render_dialog_unresolved_post_dispatch_event_count"
+    )
+    post_dispatch_count = attempt.get("render_dialog_post_dispatch_event_count")
+    boundary_tick = attempt.get("render_dialog_dispatch_boundary_tick")
+    preexisting_count = attempt.get("preexisting_render_dialog_count")
+    diagnostics = attempt.get("diagnostics")
+    if (
+        attempt.get("render_dialog_native_event_hook_armed") is not True
+        or attempt.get("render_dialog_event_message_pump_started") is not True
+        or attempt.get("render_dialog_dispatch_boundary_set") is not True
+        or not isinstance(boundary_tick, int)
+        or isinstance(boundary_tick, bool)
+        or boundary_tick < 0
+        or boundary_tick > 0xFFFFFFFF
+        or not isinstance(preexisting_count, int)
+        or isinstance(preexisting_count, bool)
+        or preexisting_count < 0
+        or not isinstance(observed_window_count, int)
+        or isinstance(observed_window_count, bool)
+        or observed_window_count < 0
+        or not isinstance(unresolved_event_count, int)
+        or isinstance(unresolved_event_count, bool)
+        or unresolved_event_count < 0
+        or not isinstance(post_dispatch_count, int)
+        or isinstance(post_dispatch_count, bool)
+        or post_dispatch_count < 0
+        or not isinstance(diagnostics, list)
+        or not diagnostics
+        or any(not isinstance(value, str) for value in diagnostics)
+    ):
+        raise ValueError(
+            "same-witness inconclusive render lacks ambiguity evidence"
+        )
+
+    ambiguous = (
+        observed_window_count > 1
+        or unresolved_event_count > 0
+        or post_dispatch_count > 1
+    )
+    diagnostic_matches = any(
+        marker in diagnostic
+        for diagnostic in diagnostics
+        for marker in AMBIGUITY_DIAGNOSTICS
+    )
+    if not ambiguous or not diagnostic_matches:
+        raise ValueError(
+            "same-witness inconclusive render does not prove "
+            "ambiguous post-dispatch event binding"
+        )
+
+
 def validate_original_inconclusive_runtime(
     original_root: Path, runtime: object
 ) -> dict:
@@ -325,16 +461,15 @@ def validate_original_inconclusive_runtime(
     attempt = attempts[0]
     if not isinstance(attempt, dict):
         raise ValueError("same-witness inconclusive render attempt is not an object")
-    for key in (
-        "command_verified",
-        "command_dispatched",
-        "dialog_verified",
-        "controls_configured",
-        "save_invoked",
-    ):
+    for key in ("command_verified", "command_dispatched"):
         if attempt.get(key) is not True:
             raise ValueError(
                 f"same-witness inconclusive render did not verify {key}"
+            )
+    for key in ("dialog_verified", "controls_configured", "save_invoked"):
+        if not isinstance(attempt.get(key), bool):
+            raise ValueError(
+                f"same-witness inconclusive render has invalid {key}"
             )
     diagnostics = attempt.get("diagnostics")
     if (
@@ -346,6 +481,10 @@ def validate_original_inconclusive_runtime(
         or not diagnostics
     ):
         raise ValueError("same-witness inconclusive render shape mismatch")
+
+    # Ambiguity can be discovered immediately after dialog discovery, before
+    # later UI/render flags have had any opportunity to become true.
+    validate_original_ambiguous_event_binding(attempt)
 
     try:
         validate_original_event_binding(attempt)
