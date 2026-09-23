@@ -508,7 +508,7 @@ def validate_master_macd_state(payload: bytes, position: int) -> dict:
         "extension_sha256": digest(extension),
         "out_dry": out_dry,
         "decrease_on_clip": decrease_on_clip,
-        "wire_mapping": pairs,
+        "wire_mapping": [list(pair) for pair in pairs],
         "macd_state_sha256": digest(state),
     }
 
