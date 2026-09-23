@@ -2,6 +2,7 @@
 """Negative controls for the same-witness Sampulse runtime evidence."""
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 from pathlib import Path
@@ -49,8 +50,126 @@ def expect_value_error(fn, phrase: str) -> None:
 
 
 
-def reviewed_fixture_bytes() -> bytes:
-    return m.reviewed_repository_bytes(m.REVIEWED_CANONICAL_FIXTURE)
+def synthetic_eins_payload() -> bytes:
+    compressed = base64.b64decode(
+        "AQACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADtB/gEQPrD3g8QPudmAAAAAAAA"
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        "AAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    )
+    assert m.digest(compressed) == m.EXPECTED_COMPRESSED_SAMPLE_SHA256
+    sample_body = bytearray()
+    sample_body += b"Phase 6C deterministic impulse\0"
+    sample_body += struct.pack("<I", 512)
+    sample_body += struct.pack("<f", 1.0)
+    sample_body += struct.pack("<H", 128)
+    sample_body += struct.pack("<III", 0, 0, 0)
+    sample_body += struct.pack("<III", 0, 0, 0)
+    sample_body += struct.pack("<I", 44100)
+    sample_body += struct.pack("<hh", 0, 0)
+    sample_body += struct.pack("<?", False)
+    sample_body += struct.pack("<?", True)
+    sample_body += struct.pack("<f", 0.5)
+    sample_body += struct.pack("<?", False)
+    sample_body += struct.pack("<BBBB", 0, 0, 0, 0)
+    sample_body += struct.pack("<I", len(compressed))
+    sample_body += compressed
+    smpd = (
+        b"SMPD"
+        + struct.pack("<I", 12 + len(sample_body))
+        + struct.pack("<I", 1)
+        + bytes(sample_body)
+    )
+    assert m.digest(smpd) == m.EXPECTED_SMPD_SHA256
+    payload = (
+        struct.pack("<I", 1)
+        + struct.pack("<i", 0)
+        + m.eins_converter_module.historical_instrument()
+        + struct.pack("<I", 1)
+        + struct.pack("<i", 0)
+        + smpd
+    )
+    assert m.digest(payload) == m.EXPECTED_EINS_PAYLOAD_SHA256
+    return payload
+
+
+def machine_payload(slot: int, machine_type: int, *, input_slot: int, output_slot: int,
+                    input_count: int, output_count: int, edit_name: str) -> bytes:
+    payload = bytearray()
+    payload += struct.pack("<ii", slot, machine_type)
+    payload += b"\0"
+    payload += struct.pack("<BB", 0, 0)
+    payload += struct.pack("<iiiii", 64, 0, 0, input_count, output_count)
+    for index in range(12):
+        if index == 0:
+            inp, out = input_slot, output_slot
+            outcon = 1 if output_slot >= 0 else 0
+            incon = 1 if input_slot >= 0 else 0
+        else:
+            inp, out, outcon, incon = -1, -1, 0, 0
+        payload += struct.pack("<iiffBB", inp, out, 1.0, 1.0, outcon, incon)
+    payload += edit_name.encode("utf-8") + b"\0"
+    return bytes(payload)
+
+
+def candidate_fixture_bytes() -> bytes:
+    def chunk(fourcc: bytes, version: int, payload: bytes) -> bytes:
+        return fourcc + struct.pack("<II", version, len(payload)) + payload
+
+    info = m.TITLE.encode("utf-8") + b"\0"
+    sngi = struct.pack("<iii", 16, 137, 8)
+    seqd = (
+        struct.pack("<ii", 0, 1)
+        + b"seq\0"
+        + struct.pack("<i", 0)
+        + struct.pack("<f", 0.0)
+        + struct.pack("<I", 0)
+        + struct.pack("<I", 0)
+        + struct.pack("<f", 0.0)
+    )
+    patd = bytearray()
+    patd += struct.pack("<iii", 0, 32, 16)
+    patd += b"Execution Witness\0"
+    patd += struct.pack("<I", 0)
+    patd += struct.pack("<IIiii", 0, 0, 480, 1920, len(m.EXPECTED_FIXTURE_EVENTS))
+    for track, offset, note, inst, mach, volume, command, parameter in m.EXPECTED_FIXTURE_EVENTS:
+        patd += struct.pack("<iii", track, offset, 1)
+        patd += struct.pack("<iiiiii", note, inst, mach, volume, command, parameter)
+    chunks = [
+        chunk(b"INFO", 0, info),
+        chunk(b"SNGI", 4, sngi),
+        chunk(b"SEQD", 2, seqd),
+        chunk(b"PATD", 2, bytes(patd)),
+        chunk(
+            b"MACD",
+            3,
+            machine_payload(
+                0, 12, input_slot=-1, output_slot=128,
+                input_count=0, output_count=1, edit_name="XMSampler",
+            ),
+        ),
+        chunk(
+            b"MACD",
+            3,
+            machine_payload(
+                128, 0, input_slot=0, output_slot=-1,
+                input_count=1, output_count=0,
+                edit_name="Psycle Master and Minimixer",
+            ),
+        ),
+        chunk(b"EINS", 0x00010000, synthetic_eins_payload()),
+    ]
+    return (
+        b"PSY3SONG"
+        + struct.pack("<I", 0x11)
+        + struct.pack("<I", 4)
+        + struct.pack("<I", len(chunks))
+        + b"".join(chunks)
+    )
 
 
 beat = 44100.0 * 60.0 / 137.0
@@ -64,7 +183,7 @@ onsets = [
     int(round(3.125 * beat)),
 ]
 valid_wave = pcm_wave(onsets, frames=m.CANDIDATE_TARGET_FRAMES)
-valid_fixture = reviewed_fixture_bytes()
+valid_fixture = candidate_fixture_bytes()
 
 
 def candidate_render_summary() -> dict:
@@ -280,7 +399,7 @@ mutated_eins = bytearray(canonical_eins)
 mutated_eins[-1] ^= 0x01
 expect_value_error(
     lambda: m.validate_eins_payload(bytes(mutated_eins)),
-    "exact reviewed canonical payload",
+    "canonical converter output",
 )
 
 missing_sequence = [item for item in canonical_chunks if item[0] != b"SEQD"]

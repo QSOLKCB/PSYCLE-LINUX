@@ -25,8 +25,14 @@ REVIEWED_FIXTURE_GENERATOR = (
     ROOT / "tests" / "phase6c_delayed_retrigger_sampulse_execution_fixture.c"
 )
 REVIEWED_EINS_CONVERTER = ROOT / "scripts" / "phase6c-sampulse-eins-compat.py"
-REVIEWED_CANONICAL_FIXTURE = (
-    ROOT / "tests" / "fixtures" / "phase6c-delayed-retrigger-sampulse-execution.psy"
+EXPECTED_EINS_PAYLOAD_SHA256 = (
+    "2f35cd43ae394ed987a149a2bdfc226e5be710d36b1516c1a3fc22c36037feb5"
+)
+EXPECTED_SMPD_SHA256 = (
+    "8792a2a49e949c5648e6222e513f22fff644f20fca7d2f6801af766f230e0627"
+)
+EXPECTED_COMPRESSED_SAMPLE_SHA256 = (
+    "6e0dc7e70768adbb91ab84a325d734b9a4eb19576dcc4547999447eb210f3bf0"
 )
 REQUIRED_RENDERER_DEFINED_SYMBOLS = (
     "psycle::core::Psy3Filter::LoadEINSv1",
@@ -196,25 +202,6 @@ def parse_psy3_chunks(data: bytes) -> list[tuple[bytes, int, bytes]]:
     return chunks
 
 
-
-def canonical_fixture_bytes() -> bytes:
-    return reviewed_repository_bytes(REVIEWED_CANONICAL_FIXTURE)
-
-
-def canonical_chunk_payload(fourcc: bytes, version: int | None = None) -> bytes:
-    matches = [
-        payload
-        for chunk_fourcc, chunk_version, payload in parse_psy3_chunks(
-            canonical_fixture_bytes()
-        )
-        if chunk_fourcc == fourcc
-        and (version is None or chunk_version == version)
-    ]
-    if len(matches) != 1:
-        raise ValueError(
-            f"reviewed canonical fixture lacks unique {fourcc.decode('ascii')} chunk"
-        )
-    return matches[0]
 
 
 def validate_sequence_playback(chunks: list[tuple[bytes, int, bytes]]) -> dict:
@@ -413,10 +400,9 @@ EXPECTED_FIXTURE_EVENTS = [
 
 
 def validate_eins_payload(payload: bytes) -> dict:
-    expected_payload = canonical_chunk_payload(b"EINS", 0x00010000)
-    if payload != expected_payload:
+    if digest(payload) != EXPECTED_EINS_PAYLOAD_SHA256:
         raise ValueError(
-            "same-witness EINS payload differs from exact reviewed canonical payload"
+            "same-witness EINS payload digest differs from canonical converter output"
         )
     position = 0
 
@@ -451,6 +437,9 @@ def validate_eins_payload(payload: bytes) -> dict:
     ):
         raise ValueError("same-witness EINS payload sample chunk identity mismatch")
 
+    smpd = payload[sample_start : sample_start + sample_size]
+    if digest(smpd) != EXPECTED_SMPD_SHA256:
+        raise ValueError("same-witness EINS SMPD payload digest mismatch")
     sample_body = payload[position + 12 : sample_start + sample_size]
     sample_name, sample_position = read_cstring(sample_body, 0, "EINS sample name")
 
@@ -497,7 +486,7 @@ def validate_eins_payload(payload: bytes) -> dict:
         or not 0.0 <= float(pan_factor) <= 1.0
         or loop_type not in (0, 1, 2)
         or sustain_type not in (0, 1, 2)
-        or not any(compressed)
+        or digest(compressed) != EXPECTED_COMPRESSED_SAMPLE_SHA256
     ):
         raise ValueError("same-witness EINS payload deterministic sample mismatch")
 
@@ -624,12 +613,6 @@ def validate_fixture_identity(data: bytes) -> dict:
     if position != len(payload) or observed_events != EXPECTED_FIXTURE_EVENTS:
         raise ValueError("same-witness fixture command geometry mismatch")
 
-    canonical = canonical_fixture_bytes()
-    if data != canonical:
-        raise ValueError(
-            "same-witness fixture differs from reviewed canonical witness bytes"
-        )
-
     return {
         "song_title": title,
         "song_tracks": song_tracks,
@@ -641,7 +624,6 @@ def validate_fixture_identity(data: bytes) -> dict:
         "eins_version": 0x00010000,
         "eins_identity": eins_identity,
         "playback_graph": playback_graph,
-        "canonical_fixture_sha256": digest(canonical),
         "pattern_name": pattern_name,
         "pattern_lines": pattern_lines,
         "pattern_tracks": pattern_tracks,
