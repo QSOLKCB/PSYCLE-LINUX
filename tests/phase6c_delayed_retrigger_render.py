@@ -1225,6 +1225,45 @@ early_startup_binding_error = (
 assert early_startup_binding_error is not None
 assert "fresh render lacks bound post-dispatch dialog evidence" in early_startup_binding_error
 
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+
+    startup_name = "note-sample-default-inst"
+    startup_filename = (
+        "original-sampler-voice-startup-note-sample-default-inst-1.wav"
+    )
+    startup_dir = root / f"sampler-voice-startup-{startup_name}"
+    startup_dir.mkdir()
+    startup_bytes = b"voice-startup-partial"
+    (startup_dir / startup_filename).write_bytes(startup_bytes)
+    startup_attempt = dict(fresh_ambiguous_attempt)
+    startup_attempt["observed_output"] = {
+        "path": startup_filename,
+        "size_bytes": len(startup_bytes),
+        "sha256": hashlib.sha256(startup_bytes).hexdigest(),
+    }
+    startup_observed = startup.validate_observed_output(
+        root, startup_name, startup_attempt, startup_filename
+    )
+    assert startup_observed["sha256"] == hashlib.sha256(startup_bytes).hexdigest()
+
+    work_name = "release-no-active-voice"
+    work_filename = "original-sampler-work-boundary-release-no-active-voice-1.wav"
+    work_dir = root / f"sampler-work-boundary-{work_name}"
+    work_dir.mkdir()
+    work_bytes = b"work-boundary-partial"
+    (work_dir / work_filename).write_bytes(work_bytes)
+    work_attempt = dict(fresh_ambiguous_attempt)
+    work_attempt["observed_output"] = {
+        "path": work_filename,
+        "size_bytes": len(work_bytes),
+        "sha256": hashlib.sha256(work_bytes).hexdigest(),
+    }
+    work_observed = work_boundary.validate_observed_output(
+        root, work_name, work_attempt, work_filename
+    )
+    assert work_observed["sha256"] == hashlib.sha256(work_bytes).hexdigest()
+
 assert work_boundary.diagnose({
     "release-no-active-voice": "inconclusive",
     "delayed-note-short": "reference-process-exited-during-render",
