@@ -1520,13 +1520,6 @@ def validate_candidate_render_log(root: Path, index: int) -> dict:
         or len(summary["engine_xmsampler_sha256"]) != 64
         or summary.get("master_buffer_float_count")
         != 2 * CANDIDATE_TARGET_FRAMES
-        or not isinstance(normalized_output_path, str)
-        or not normalized_output_path.endswith("/" + expected_relative)
-        or not isinstance(output_size, int)
-        or isinstance(output_size, bool)
-        or output_size != len(retained)
-        or not isinstance(output_sha256, str)
-        or output_sha256 != digest(retained)
         or not isinstance(final_play_beat, (int, float))
         or isinstance(final_play_beat, bool)
         or not math.isfinite(float(final_play_beat))
@@ -1536,6 +1529,19 @@ def validate_candidate_render_log(root: Path, index: int) -> dict:
             "same-witness candidate render log does not substantiate "
             "the fixed-frame single-thread procedure"
         )
+    if (
+        not isinstance(normalized_output_path, str)
+        or not normalized_output_path.endswith("/" + expected_relative)
+        or not isinstance(output_size, int)
+        or isinstance(output_size, bool)
+        or output_size != len(retained)
+        or not isinstance(output_sha256, str)
+        or output_sha256 != digest(retained)
+    ):
+        raise ValueError(
+            "same-witness candidate renderer output identity does not match retained WAV"
+        )
+
     normalized = dict(summary)
     normalized["output_path"] = expected_relative
     return normalized
