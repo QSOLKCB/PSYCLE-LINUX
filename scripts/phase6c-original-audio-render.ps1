@@ -5,12 +5,10 @@
 $phase6cAutomationReferences = @(
     [System.Windows.Automation.AutomationElement].Assembly.Location
     [System.Windows.Automation.ControlType].Assembly.Location
-    [System.Collections.Generic.Queue[IntPtr]].Assembly.Location
 ) | Select-Object -Unique
 
 Add-Type -ReferencedAssemblies $phase6cAutomationReferences -TypeDefinition @"
 using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Automation;
@@ -124,7 +122,8 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
 
     private readonly uint processId;
     private readonly object gate = new object();
-    private readonly Queue<IntPtr> opened = new Queue<IntPtr>();
+    private IntPtr[] opened = new IntPtr[4];
+    private int openedCount;
     private readonly System.Threading.ManualResetEventSlim ready =
         new System.Threading.ManualResetEventSlim(false);
     private readonly System.Threading.ManualResetEventSlim stopped =
@@ -308,7 +307,9 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
         {
             if (disposed)
                 return;
-            opened.Enqueue(window);
+            if (openedCount == opened.Length)
+                Array.Resize(ref opened, opened.Length * 2);
+            opened[openedCount++] = window;
             postDispatchEventCount += 1;
         }
     }
@@ -345,7 +346,7 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
                 throw new ObjectDisposedException(
                     "Phase6cRenderWindowOpenedObserver"
                 );
-            opened.Clear();
+            openedCount = 0;
             postDispatchEventCount = 0;
             postDispatchObservedWindowEventCount = 0;
             unresolvedPostDispatchEventCount = 0;
@@ -359,7 +360,7 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
         lock (gate)
         {
             dispatchBoundarySet = false;
-            opened.Clear();
+            openedCount = 0;
             postDispatchEventCount = 0;
             postDispatchObservedWindowEventCount = 0;
             unresolvedPostDispatchEventCount = 0;
@@ -416,9 +417,10 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
         FlushPump();
         lock (gate)
         {
-            while (opened.Count > 0)
+            while (openedCount > 0)
             {
-                IntPtr window = opened.Dequeue();
+                IntPtr window = opened[0];
+                Array.Copy(opened, 1, opened, 0, --openedCount);
                 uint owner;
                 if (window != IntPtr.Zero &&
                     GetWindowThreadProcessId(window, out owner) != 0 &&
