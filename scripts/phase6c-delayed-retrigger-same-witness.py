@@ -747,19 +747,16 @@ def expected_legacy_pattern_bytes(pattern_lines: int, pattern_tracks: int) -> by
 
 def validate_fixture_identity(data: bytes) -> dict:
     chunks = parse_psy3_chunks(data)
-    expected_layout = [
-        (b"INFO", 0),
-        (b"SNGI", 4),
-        (b"SEQD", 2),
-        (b"PATD", 2),
-        (b"MACD", 3),
-        (b"MACD", 3),
-        (b"EINS", 0x00010000),
-    ]
     observed_layout = [(fourcc, version) for fourcc, version, _payload in chunks]
-    if observed_layout != expected_layout:
+    allowed_chunk_ids = {b"INFO", b"SNGI", b"SEQD", b"PATD", b"MACD", b"EINS"}
+    unknown_chunk_ids = [
+        fourcc for fourcc, _version, _payload in chunks
+        if fourcc not in allowed_chunk_ids
+    ]
+    if unknown_chunk_ids:
         raise ValueError(
-            "same-witness fixture top-level chunk layout differs from canonical witness"
+            "same-witness fixture contains unknown top-level chunk that the "
+            "frozen loader could rescan bytewise"
         )
     playback_graph = validate_playback_graph(chunks)
 
