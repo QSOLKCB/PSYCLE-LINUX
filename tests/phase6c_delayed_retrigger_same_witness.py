@@ -48,72 +48,9 @@ def expect_value_error(fn, phrase: str) -> None:
 
 
 
-def synthetic_eins_payload() -> bytes:
-    sample_body = bytearray()
-    sample_body += b"Phase 6C deterministic impulse\0"
-    sample_body += struct.pack("<I", 512)
-    sample_body += struct.pack("<f", 1.0)
-    sample_body += struct.pack("<H", 128)
-    sample_body += struct.pack("<III", 0, 0, 0)
-    sample_body += struct.pack("<III", 0, 0, 0)
-    sample_body += struct.pack("<I", 44100)
-    sample_body += struct.pack("<hh", 0, 0)
-    sample_body += struct.pack("<?", False)
-    sample_body += struct.pack("<?", False)
-    sample_body += struct.pack("<f", 0.5)
-    sample_body += struct.pack("<?", False)
-    sample_body += struct.pack("<BBBB", 0, 0, 0, 0)
-    compressed = bytes(range(1, 17))
-    sample_body += struct.pack("<I", len(compressed))
-    sample_body += compressed
-    sample = (
-        b"SMPD"
-        + struct.pack("<I", 12 + len(sample_body))
-        + struct.pack("<I", 1)
-        + bytes(sample_body)
-    )
-    return (
-        struct.pack("<I", 1)
-        + struct.pack("<i", 0)
-        + m.eins_converter_module.historical_instrument()
-        + struct.pack("<I", 1)
-        + struct.pack("<i", 0)
-        + sample
-    )
 
-
-def candidate_fixture_bytes(eins_payload: bytes | None = None) -> bytes:
-    def chunk(fourcc: bytes, version: int, payload: bytes) -> bytes:
-        return fourcc + struct.pack("<II", version, len(payload)) + payload
-
-    info = m.TITLE.encode("utf-8") + b"\0"
-    sngi = struct.pack("<iii", 16, 137, 8)
-    patd = bytearray()
-    patd += struct.pack("<iii", 0, 32, 16)
-    patd += b"Execution Witness\0"
-    patd += struct.pack("<I", 0)
-    patd += struct.pack("<IIiii", 0, 0, 480, 1920, len(m.EXPECTED_FIXTURE_EVENTS))
-    for track, offset, note, inst, mach, volume, command, parameter in m.EXPECTED_FIXTURE_EVENTS:
-        patd += struct.pack("<iii", track, offset, 1)
-        patd += struct.pack(
-            "<iiiiii", note, inst, mach, volume, command, parameter
-        )
-    if eins_payload is None:
-        eins_payload = synthetic_eins_payload()
-    chunks = [
-        chunk(b"INFO", 0, info),
-        chunk(b"SNGI", 4, sngi),
-        chunk(b"PATD", 2, bytes(patd)),
-        chunk(b"MACD", 3, struct.pack("<ii", 0, 12)),
-        chunk(b"EINS", 0x00010000, eins_payload),
-    ]
-    return (
-        b"PSY3SONG"
-        + struct.pack("<I", 0x11)
-        + struct.pack("<I", 4)
-        + struct.pack("<I", len(chunks))
-        + b"".join(chunks)
-    )
+def reviewed_fixture_bytes() -> bytes:
+    return m.reviewed_repository_bytes(m.REVIEWED_CANONICAL_FIXTURE)
 
 
 beat = 44100.0 * 60.0 / 137.0
@@ -127,7 +64,7 @@ onsets = [
     int(round(3.125 * beat)),
 ]
 valid_wave = pcm_wave(onsets, frames=m.CANDIDATE_TARGET_FRAMES)
-valid_fixture = candidate_fixture_bytes()
+valid_fixture = reviewed_fixture_bytes()
 
 
 def candidate_render_summary() -> dict:
@@ -161,20 +98,42 @@ def write_provenance(root: Path) -> None:
         m.expected_compiled_provenance(), sort_keys=True, separators=(",", ":")
     )
     escaped = provenance_json.replace("\\", "\\\\").replace('"', '\\"')
-    stub = runtime / "phase6c-provenance-stub.c"
+    stub = runtime / "phase6c-provenance-structural-mock.cpp"
     stub.write_text(
-        "#include <stdio.h>\n"
-        "#include <string.h>\n"
+        "#include <iostream>\n"
+        "#include <string>\n"
+        "namespace psycle { namespace core {\n"
+        "struct Psy3Filter { __attribute__((noinline)) bool LoadEINSv1(void*, void*, int, unsigned int); };\n"
+        "bool Psy3Filter::LoadEINSv1(void*, void*, int, unsigned int) { return true; }\n"
+        "struct Sequencer { __attribute__((noinline)) void Work(unsigned int); };\n"
+        "void Sequencer::Work(unsigned int) {}\n"
+        "struct XMSampler { struct Channel { __attribute__((noinline)) void DelayedNote(int); }; struct Voice { __attribute__((noinline)) void Retrig(); }; };\n"
+        "void XMSampler::Channel::DelayedNote(int) {}\n"
+        "void XMSampler::Voice::Retrig() {}\n"
+        "struct Player { __attribute__((noinline)) void startRecording(bool, int, int); };\n"
+        "void Player::startRecording(bool, int, int) {}\n"
+        "struct CoreSong { __attribute__((noinline)) bool load(const std::string&); };\n"
+        "bool CoreSong::load(const std::string&) { return true; }\n"
+        "} }\n"
         "int main(int argc, char **argv) {\n"
-        "  if (argc == 2 && strcmp(argv[1], \"--phase6c-provenance\") == 0) {\n"
-        f'    puts("{escaped}");\n'
+        "  psycle::core::Psy3Filter filter; psycle::core::Sequencer sequencer;\n"
+        "  psycle::core::XMSampler::Channel channel; psycle::core::XMSampler::Voice voice;\n"
+        "  psycle::core::Player player; psycle::core::CoreSong song;\n"
+        "  filter.LoadEINSv1(nullptr, nullptr, 0, 0); sequencer.Work(1);\n"
+        "  channel.DelayedNote(0); voice.Retrig(); player.startRecording(false, 0, 0);\n"
+        "  song.load(std::string());\n"
+        "  if (argc == 2 && std::string(argv[1]) == \"--phase6c-provenance\") {\n"
+        f'    std::cout << "{escaped}\\n";\n'
         "    return 0;\n"
         "  }\n"
         "  return 64;\n"
         "}\n",
         encoding="utf-8",
     )
-    subprocess.run(["cc", str(stub), "-O2", "-o", str(binary)], check=True)
+    subprocess.run(
+        ["c++", "-O0", "-fno-inline", str(stub), "-o", str(binary)],
+        check=True,
+    )
     stub.unlink()
     (runtime / "render-probe.cpp").write_bytes(
         m.REVIEWED_RENDERER_SOURCE.read_bytes()
@@ -205,8 +164,18 @@ def write_provenance(root: Path) -> None:
     provenance_log.write_bytes(
         subprocess.check_output([str(binary), "--phase6c-provenance"])
     )
+    symbols_log = delayed / "sampulse-render-symbols.log"
+    symbols_log.write_bytes(
+        subprocess.check_output(["nm", "-C", "--defined-only", str(binary)])
+    )
+    main_log = delayed / "sampulse-render-main-disassembly.log"
+    main_log.write_bytes(
+        subprocess.check_output(
+            ["objdump", "-d", "-C", "--disassemble=main", str(binary)]
+        )
+    )
     attestation = {
-        "schema_version": 2,
+        "schema_version": 3,
         "reviewed_inputs": {
             "renderer_source": {
                 "path": "tests/phase6c_delayed_retrigger_sampulse_render.cpp",
@@ -241,6 +210,16 @@ def write_provenance(root: Path) -> None:
         "provenance_challenge_log": {
             "path": "delayed-retrigger/sampulse-render-provenance.log",
             "sha256": m.digest(provenance_log.read_bytes()),
+        },
+        "code_identity": {
+            "symbols_log": {
+                "path": "delayed-retrigger/sampulse-render-symbols.log",
+                "sha256": m.digest(symbols_log.read_bytes()),
+            },
+            "main_disassembly_log": {
+                "path": "delayed-retrigger/sampulse-render-main-disassembly.log",
+                "sha256": m.digest(main_log.read_bytes()),
+            },
         },
     }
     (runtime / "renderer-build-provenance.json").write_text(
@@ -291,15 +270,42 @@ with tempfile.TemporaryDirectory() as temporary:
     )
 
 
-with tempfile.TemporaryDirectory() as temporary:
-    root = Path(temporary)
-    fixture = root / m.FIXTURE
-    fixture.parent.mkdir(parents=True)
-    fixture.write_bytes(candidate_fixture_bytes(b""))
-    expect_value_error(
-        lambda: m.validate_fixture_identity(fixture.read_bytes()),
-        "EINS payload",
-    )
+canonical_chunks = m.parse_psy3_chunks(valid_fixture)
+canonical_eins = next(
+    payload
+    for fourcc, version, payload in canonical_chunks
+    if fourcc == b"EINS" and version == 0x00010000
+)
+mutated_eins = bytearray(canonical_eins)
+mutated_eins[-1] ^= 0x01
+expect_value_error(
+    lambda: m.validate_eins_payload(bytes(mutated_eins)),
+    "exact reviewed canonical payload",
+)
+
+missing_sequence = [item for item in canonical_chunks if item[0] != b"SEQD"]
+expect_value_error(
+    lambda: m.validate_playback_graph(missing_sequence),
+    "exactly one SEQD",
+)
+
+misrouted_chunks = []
+for fourcc, version, payload in canonical_chunks:
+    if (
+        fourcc == b"MACD"
+        and len(payload) >= 8
+        and struct.unpack_from("<i", payload, 0)[0] == 0
+    ):
+        changed = bytearray(payload)
+        position = changed.index(0, 8) + 1
+        position += 2 + 20
+        struct.pack_into("<i", changed, position + 4, 127)
+        payload = bytes(changed)
+    misrouted_chunks.append((fourcc, version, payload))
+expect_value_error(
+    lambda: m.validate_playback_graph(misrouted_chunks),
+    "route sampler slot 0 directly to Master slot 128",
+)
 
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
@@ -427,18 +433,58 @@ with tempfile.TemporaryDirectory() as temporary:
             / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
         ).write_bytes(valid_wave)
     binary = render_dir / "phase6c-delayed-retrigger-sampulse-render"
-    binary.write_bytes(b"\x7fELFphase6c-test-renderer")
+    provenance_json = json.dumps(
+        m.expected_compiled_provenance(), sort_keys=True, separators=(",", ":")
+    )
+    escaped = provenance_json.replace("\\", "\\\\").replace('"', '\\"')
+    stub = render_dir / "phase6c-constants-only-stub.cpp"
+    stub.write_text(
+        "#include <iostream>\n#include <string>\n"
+        "int main(int argc, char **argv) {\n"
+        "  if (argc == 2 && std::string(argv[1]) == \"--phase6c-provenance\") {\n"
+        f'    std::cout << "{escaped}\\n";\n'
+        "    return 0;\n"
+        "  }\n"
+        "  return 64;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["c++", "-O0", str(stub), "-o", str(binary)], check=True)
+    stub.unlink()
+    delayed = root / "delayed-retrigger"
+    provenance_log = delayed / "sampulse-render-provenance.log"
+    provenance_log.write_bytes(
+        subprocess.check_output([str(binary), "--phase6c-provenance"])
+    )
+    symbols_log = delayed / "sampulse-render-symbols.log"
+    symbols_log.write_bytes(
+        subprocess.check_output(["nm", "-C", "--defined-only", str(binary)])
+    )
+    main_log = delayed / "sampulse-render-main-disassembly.log"
+    main_log.write_bytes(
+        subprocess.check_output(
+            ["objdump", "-d", "-C", "--disassemble=main", str(binary)]
+        )
+    )
     attestation_path = render_dir / "renderer-build-provenance.json"
     attestation = json.loads(attestation_path.read_text(encoding="utf-8"))
     attestation["binary"]["sha256"] = m.digest(binary.read_bytes())
+    attestation["provenance_challenge_log"]["sha256"] = m.digest(
+        provenance_log.read_bytes()
+    )
+    attestation["code_identity"]["symbols_log"]["sha256"] = m.digest(
+        symbols_log.read_bytes()
+    )
+    attestation["code_identity"]["main_disassembly_log"]["sha256"] = m.digest(
+        main_log.read_bytes()
+    )
     attestation_path.write_text(
         json.dumps(attestation, sort_keys=True) + "\n", encoding="utf-8"
     )
     expect_value_error(
         lambda: m.collect_candidate(root),
-        "executable provenance challenge failed",
+        "lacks required reviewed renderer symbol",
     )
-
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     fixture = root / m.FIXTURE
@@ -477,6 +523,41 @@ with tempfile.TemporaryDirectory() as temporary:
     expect_value_error(
         lambda: m.collect_candidate(root),
         "not byte-identical",
+    )
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    runtime = {
+        "schema_version": 1,
+        "outcome": "inconclusive",
+        "deterministic": False,
+        "settings": dict(m.ORIGINAL_RENDER_SETTINGS),
+        "pre_render_load": {
+            "schema_version": 1,
+            "clean_accepted_load": False,
+            "stable_marker_polls": 0,
+            "matched_marker": None,
+            "load_warning_dismissed": False,
+            "process_running_before_render": False,
+        },
+        "renders": [],
+        "attempts": [],
+        "diagnostics": [
+            "clean accepted load and dismissed Load Warning are required before "
+            "same-witness Sampulse rendering"
+        ],
+    }
+    retained = m.validate_original_inconclusive_runtime(root, runtime)
+    assert retained["inconclusive_reason"] == "pre-render-load-not-accepted"
+    assert retained["retained_renders"] == []
+    assert retained["pre_render_load"]["clean_accepted_load"] is False
+
+    promoted = json.loads(json.dumps(runtime))
+    promoted["pre_render_load"]["clean_accepted_load"] = True
+    promoted["pre_render_load"]["load_warning_dismissed"] = True
+    expect_value_error(
+        lambda: m.validate_original_inconclusive_runtime(root, promoted),
+        "inconclusive original runtime mismatch",
     )
 
 with tempfile.TemporaryDirectory() as temporary:

@@ -301,6 +301,42 @@ def materialize_source_receipt(
     return SOURCE_RECEIPT
 
 
+
+def require_fresh_render_event_binding(attempt: dict, name: str) -> None:
+    tick = attempt.get("render_dialog_dispatch_boundary_tick")
+    preexisting = attempt.get("preexisting_render_dialog_count")
+    handle = attempt.get("selected_render_dialog_native_handle")
+    runtime_id = attempt.get("selected_render_dialog_runtime_id")
+    if (
+        attempt.get("render_dialog_native_event_hook_armed") is not True
+        or attempt.get("render_dialog_event_message_pump_started") is not True
+        or attempt.get("render_dialog_dispatch_boundary_set") is not True
+        or not isinstance(tick, int)
+        or isinstance(tick, bool)
+        or not 0 <= tick <= 0xFFFFFFFF
+        or attempt.get("dialog_discovery")
+        != "pumped-win-event-object-show-strictly-after-dispatch-tick"
+        or not isinstance(preexisting, int)
+        or isinstance(preexisting, bool)
+        or preexisting < 0
+        or attempt.get("render_dialog_post_dispatch_observed_window_event_count") != 1
+        or type(attempt.get("render_dialog_post_dispatch_observed_window_event_count")) is not int
+        or attempt.get("render_dialog_unresolved_post_dispatch_event_count") != 0
+        or type(attempt.get("render_dialog_unresolved_post_dispatch_event_count")) is not int
+        or attempt.get("render_dialog_post_dispatch_event_count") != 1
+        or type(attempt.get("render_dialog_post_dispatch_event_count")) is not int
+        or not isinstance(handle, int)
+        or isinstance(handle, bool)
+        or handle <= 0
+        or not isinstance(runtime_id, list)
+        or not runtime_id
+        or any(type(value) is not int for value in runtime_id)
+    ):
+        raise ValueError(
+            f"{name}: fresh render lacks bound post-dispatch dialog evidence"
+        )
+
+
 def require_attempt_prefix(attempt: object, name: str) -> dict:
     if not isinstance(attempt, dict):
         raise ValueError(f"{name}: render attempt must be an object")
@@ -315,6 +351,7 @@ def require_attempt_prefix(attempt: object, name: str) -> dict:
             raise ValueError(
                 f"{name}: render attempt did not reach verified Save Wave: {key}"
             )
+    require_fresh_render_event_binding(attempt, name)
     return attempt
 
 
@@ -337,6 +374,7 @@ def validate_expected_access_violation(
 
 
 def validate_completed_render_attempt(attempt: dict, name: str) -> None:
+    require_fresh_render_event_binding(attempt, name)
     diagnostics = attempt.get("diagnostics")
     teardown_diagnostic = (
         "render output finalized and Close control was verified, "

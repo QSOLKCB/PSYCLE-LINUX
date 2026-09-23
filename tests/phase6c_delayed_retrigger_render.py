@@ -649,6 +649,7 @@ with tempfile.TemporaryDirectory() as temporary:
         raise AssertionError("expected startup stable-output binding failure")
 
 valid_completed_attempt = {
+    **valid_render_event_binding(),
     "outcome": "rendered",
     "process_exited": False,
     "process_exit_code": None,
@@ -702,6 +703,7 @@ fresh_attempt = {
     "save_invoked": True,
 }
 work_boundary.require_attempt_prefix(fresh_attempt, "release-no-active-voice")
+startup.require_attempt_prefix(fresh_attempt, "note-sample-default-inst")
 for altered in (
     {
         "render_dialog_native_event_hook_armed": False,
@@ -714,16 +716,18 @@ for altered in (
     {"selected_render_dialog_native_handle": None},
 ):
     unbound = {**fresh_attempt, **altered}
-    for check in (
-        work_boundary.require_attempt_prefix,
-        work_boundary.validate_completed_render_attempt,
+    for check, name in (
+        (work_boundary.require_attempt_prefix, "release-no-active-voice"),
+        (work_boundary.validate_completed_render_attempt, "release-no-active-voice"),
+        (startup.require_attempt_prefix, "note-sample-default-inst"),
+        (startup.validate_completed_render_attempt, "note-sample-default-inst"),
     ):
         try:
-            check(unbound, "release-no-active-voice")
+            check(unbound, name)
         except ValueError as exc:
             assert "bound post-dispatch dialog evidence" in str(exc)
         else:
-            raise AssertionError("expected unbound fresh work-boundary attempt rejection")
+            raise AssertionError("expected unbound fresh render attempt rejection")
 
 invalid_teardown_completed_attempt = dict(teardown_only_completed_attempt)
 invalid_teardown_completed_attempt["close_control_seen"] = False

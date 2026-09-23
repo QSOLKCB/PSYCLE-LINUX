@@ -327,6 +327,12 @@ cp "$BUILD/phase6c-render-provenance.hpp" \
 run_logged "$OUT/sampulse-render-provenance.log" \
     "$SAMPULSE_RUNTIME_OUT/phase6c-delayed-retrigger-sampulse-render" \
     --phase6c-provenance
+run_logged "$OUT/sampulse-render-symbols.log" \
+    nm -C --defined-only \
+    "$SAMPULSE_RUNTIME_OUT/phase6c-delayed-retrigger-sampulse-render"
+run_logged "$OUT/sampulse-render-main-disassembly.log" \
+    objdump -d -C --disassemble=main \
+    "$SAMPULSE_RUNTIME_OUT/phase6c-delayed-retrigger-sampulse-render"
 
 python3 - \
     "$ROOT" \
@@ -334,6 +340,8 @@ python3 - \
     "$OUT/sampulse-render-qmake.log" \
     "$OUT/sampulse-render-build.log" \
     "$OUT/sampulse-render-provenance.log" \
+    "$OUT/sampulse-render-symbols.log" \
+    "$OUT/sampulse-render-main-disassembly.log" \
     "$SAMPULSE_RUNTIME_OUT/renderer-build-provenance.json" <<'PY'
 import hashlib
 import json
@@ -345,7 +353,9 @@ binary = Path(sys.argv[2])
 qmake_log = Path(sys.argv[3])
 build_log = Path(sys.argv[4])
 provenance_log = Path(sys.argv[5])
-output = Path(sys.argv[6])
+symbols_log = Path(sys.argv[6])
+main_disassembly_log = Path(sys.argv[7])
+output = Path(sys.argv[8])
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -362,7 +372,7 @@ engine_anchors = {
     "xmsampler": root / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/xmsampler.cpp",
 }
 value = {
-    "schema_version": 2,
+    "schema_version": 3,
     "reviewed_inputs": {
         name: {
             "path": path.relative_to(root).as_posix(),
@@ -392,6 +402,16 @@ value = {
     "provenance_challenge_log": {
         "path": "delayed-retrigger/sampulse-render-provenance.log",
         "sha256": sha256(provenance_log),
+    },
+    "code_identity": {
+        "symbols_log": {
+            "path": "delayed-retrigger/sampulse-render-symbols.log",
+            "sha256": sha256(symbols_log),
+        },
+        "main_disassembly_log": {
+            "path": "delayed-retrigger/sampulse-render-main-disassembly.log",
+            "sha256": sha256(main_disassembly_log),
+        },
     },
 }
 output.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")

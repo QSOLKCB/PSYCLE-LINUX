@@ -25,6 +25,18 @@ REVIEWED_FIXTURE_GENERATOR = (
     ROOT / "tests" / "phase6c_delayed_retrigger_sampulse_execution_fixture.c"
 )
 REVIEWED_EINS_CONVERTER = ROOT / "scripts" / "phase6c-sampulse-eins-compat.py"
+REVIEWED_CANONICAL_FIXTURE = (
+    ROOT / "tests" / "fixtures" / "phase6c-delayed-retrigger-sampulse-execution.psy"
+)
+REQUIRED_RENDERER_DEFINED_SYMBOLS = (
+    "psycle::core::Psy3Filter::LoadEINSv1",
+    "psycle::core::Sequencer::Work(unsigned int)",
+    "psycle::core::XMSampler::Channel::DelayedNote",
+    "psycle::core::XMSampler::Voice::Retrig()",
+    "psycle::core::Player::startRecording",
+    "psycle::core::CoreSong::load",
+)
+REQUIRED_RENDERER_MAIN_CALLS = REQUIRED_RENDERER_DEFINED_SYMBOLS
 REVIEWED_ENGINE_ANCHORS = {
     "sequencer": (
         ROOT
@@ -180,6 +192,212 @@ def parse_psy3_chunks(data: bytes) -> list[tuple[bytes, int, bytes]]:
     return chunks
 
 
+
+def canonical_fixture_bytes() -> bytes:
+    return reviewed_repository_bytes(REVIEWED_CANONICAL_FIXTURE)
+
+
+def canonical_chunk_payload(fourcc: bytes, version: int | None = None) -> bytes:
+    matches = [
+        payload
+        for chunk_fourcc, chunk_version, payload in parse_psy3_chunks(
+            canonical_fixture_bytes()
+        )
+        if chunk_fourcc == fourcc
+        and (version is None or chunk_version == version)
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"reviewed canonical fixture lacks unique {fourcc.decode('ascii')} chunk"
+        )
+    return matches[0]
+
+
+def validate_sequence_playback(chunks: list[tuple[bytes, int, bytes]]) -> dict:
+    seqd = [
+        (version, payload)
+        for fourcc, version, payload in chunks
+        if fourcc == b"SEQD"
+    ]
+    if len(seqd) != 1 or seqd[0][0] != 2:
+        raise ValueError("same-witness fixture must contain exactly one SEQD v2 chunk")
+    payload = seqd[0][1]
+    if len(payload) < 8:
+        raise ValueError("same-witness fixture SEQD payload is truncated")
+    sequence_index, play_length = struct.unpack_from("<ii", payload, 0)
+    position = 8
+    sequence_name, position = read_cstring(payload, position, "sequence name")
+    if play_length < 0 or position + (4 * play_length) > len(payload):
+        raise ValueError("same-witness fixture SEQD play order is invalid")
+    pattern_slots = list(
+        struct.unpack_from("<" + ("i" * play_length), payload, position)
+    ) if play_length else []
+    position += 4 * play_length
+    if position + (4 * play_length) > len(payload):
+        raise ValueError("same-witness fixture SEQD reposition data is truncated")
+    reposition_offsets = list(
+        struct.unpack_from("<" + ("f" * play_length), payload, position)
+    ) if play_length else []
+    position += 4 * play_length
+    if position + 8 > len(payload):
+        raise ValueError("same-witness fixture SEQD extension is truncated")
+    marker_count = struct.unpack_from("<I", payload, position)[0]
+    position += 4
+    if marker_count != 0:
+        raise ValueError("same-witness fixture SEQD unexpectedly schedules markers")
+    sample_count = struct.unpack_from("<I", payload, position)[0]
+    position += 4
+    if sample_count != 0:
+        raise ValueError("same-witness fixture SEQD unexpectedly schedules samples")
+    if position + 4 != len(payload):
+        raise ValueError("same-witness fixture SEQD trailing data mismatch")
+    track_height = struct.unpack_from("<f", payload, position)[0]
+    if (
+        sequence_index != 0
+        or play_length != 1
+        or sequence_name != "seq"
+        or pattern_slots != [0]
+        or reposition_offsets != [0.0]
+        or not math.isfinite(track_height)
+    ):
+        raise ValueError(
+            "same-witness fixture does not schedule command pattern 0 for playback"
+        )
+    return {
+        "sequence_index": sequence_index,
+        "sequence_name": sequence_name,
+        "play_length": play_length,
+        "pattern_slots": pattern_slots,
+        "reposition_offsets": reposition_offsets,
+        "sha256": digest(payload),
+    }
+
+
+def parse_machine_routing(payload: bytes) -> dict:
+    if len(payload) < 8:
+        raise ValueError("same-witness fixture MACD payload is truncated")
+    slot, machine_type = struct.unpack_from("<ii", payload, 0)
+    position = 8
+    module_name, position = read_cstring(
+        payload, position, f"MACD slot {slot} module name"
+    )
+    if position + 22 > len(payload):
+        raise ValueError("same-witness fixture MACD routing header is truncated")
+    bypassed, muted = struct.unpack_from("<BB", payload, position)
+    position += 2
+    panning, x, y, input_count, output_count = struct.unpack_from(
+        "<iiiii", payload, position
+    )
+    position += 20
+    connections = []
+    for connection_index in range(12):
+        if position + 18 > len(payload):
+            raise ValueError("same-witness fixture MACD wire table is truncated")
+        input_slot, output_slot, input_volume, wire_multiplier = struct.unpack_from(
+            "<iiff", payload, position
+        )
+        position += 16
+        output_connected, input_connected = struct.unpack_from(
+            "<BB", payload, position
+        )
+        position += 2
+        connections.append(
+            {
+                "index": connection_index,
+                "input_slot": input_slot,
+                "output_slot": output_slot,
+                "input_volume": input_volume,
+                "wire_multiplier": wire_multiplier,
+                "output_connected": output_connected,
+                "input_connected": input_connected,
+            }
+        )
+    edit_name, _ = read_cstring(
+        payload, position, f"MACD slot {slot} edit name"
+    )
+    return {
+        "slot": slot,
+        "machine_type": machine_type,
+        "module_name": module_name,
+        "bypassed": bypassed,
+        "muted": muted,
+        "panning": panning,
+        "position": [x, y],
+        "input_count": input_count,
+        "output_count": output_count,
+        "connections": connections,
+        "edit_name": edit_name,
+        "sha256": digest(payload),
+    }
+
+
+def validate_playback_graph(
+    chunks: list[tuple[bytes, int, bytes]]
+) -> dict:
+    sequence = validate_sequence_playback(chunks)
+    machine_chunks = [
+        (version, payload)
+        for fourcc, version, payload in chunks
+        if fourcc == b"MACD"
+    ]
+    if len(machine_chunks) != 2 or any(
+        version != 3 for version, _payload in machine_chunks
+    ):
+        raise ValueError(
+            "same-witness fixture must contain exactly sampler and Master MACD v3 chunks"
+        )
+    machines = {
+        parsed["slot"]: parsed
+        for parsed in (
+            parse_machine_routing(payload)
+            for _version, payload in machine_chunks
+        )
+    }
+    if set(machines) != {0, 128}:
+        raise ValueError("same-witness fixture playback machine set mismatch")
+    sampler = machines[0]
+    master = machines[128]
+    sampler_outputs = [
+        item
+        for item in sampler["connections"]
+        if item["output_connected"] == 1
+    ]
+    master_inputs = [
+        item
+        for item in master["connections"]
+        if item["input_connected"] == 1
+    ]
+    if (
+        sampler["machine_type"] != 12
+        or sampler["bypassed"] != 0
+        or sampler["muted"] != 0
+        or sampler["input_count"] != 0
+        or sampler["output_count"] != 1
+        or len(sampler_outputs) != 1
+        or sampler_outputs[0]["output_slot"] != 128
+        or sampler_outputs[0]["input_slot"] != -1
+        or master["machine_type"] != 0
+        or master["input_count"] != 1
+        or master["output_count"] != 0
+        or len(master_inputs) != 1
+        or master_inputs[0]["input_slot"] != 0
+        or master_inputs[0]["output_slot"] != -1
+    ):
+        raise ValueError(
+            "same-witness fixture does not route sampler slot 0 directly to Master slot 128"
+        )
+    return {
+        "sequence": sequence,
+        "sampler_slot": 0,
+        "sampler_type": sampler["machine_type"],
+        "sampler_macd_sha256": sampler["sha256"],
+        "master_slot": 128,
+        "master_type": master["machine_type"],
+        "master_macd_sha256": master["sha256"],
+        "route": [0, 128],
+    }
+
+
 EXPECTED_FIXTURE_EVENTS = [
     (0, 0, 60, 0, 0, 255, 0xFD, 0x7F),
     (0, 480, 60, 0, 0, 255, 0xFB, 0x3F),
@@ -191,6 +409,11 @@ EXPECTED_FIXTURE_EVENTS = [
 
 
 def validate_eins_payload(payload: bytes) -> dict:
+    expected_payload = canonical_chunk_payload(b"EINS", 0x00010000)
+    if payload != expected_payload:
+        raise ValueError(
+            "same-witness EINS payload differs from exact reviewed canonical payload"
+        )
     position = 0
 
     def take(fmt: str, label: str):
@@ -296,6 +519,7 @@ def validate_eins_payload(payload: bytes) -> dict:
 
 def validate_fixture_identity(data: bytes) -> dict:
     chunks = parse_psy3_chunks(data)
+    playback_graph = validate_playback_graph(chunks)
 
     info = [payload for fourcc, _version, payload in chunks if fourcc == b"INFO"]
     if len(info) != 1:
@@ -396,6 +620,12 @@ def validate_fixture_identity(data: bytes) -> dict:
     if position != len(payload) or observed_events != EXPECTED_FIXTURE_EVENTS:
         raise ValueError("same-witness fixture command geometry mismatch")
 
+    canonical = canonical_fixture_bytes()
+    if data != canonical:
+        raise ValueError(
+            "same-witness fixture differs from reviewed canonical witness bytes"
+        )
+
     return {
         "song_title": title,
         "song_tracks": song_tracks,
@@ -406,6 +636,8 @@ def validate_fixture_identity(data: bytes) -> dict:
         "machine_substrate": "XMSampler/Sampulse",
         "eins_version": 0x00010000,
         "eins_identity": eins_identity,
+        "playback_graph": playback_graph,
+        "canonical_fixture_sha256": digest(canonical),
         "pattern_name": pattern_name,
         "pattern_lines": pattern_lines,
         "pattern_tracks": pattern_tracks,
@@ -565,6 +797,78 @@ def validate_compiled_provenance_output(data: bytes) -> dict:
     return value
 
 
+
+def validate_renderer_code_identity(root: Path) -> dict:
+    binary_relative = f"{NAME}/phase6c-delayed-retrigger-sampulse-render"
+    symbols_relative = "delayed-retrigger/sampulse-render-symbols.log"
+    main_relative = "delayed-retrigger/sampulse-render-main-disassembly.log"
+    binary_path = child(root, binary_relative)
+    symbols_path = child(root, symbols_relative)
+    main_path = child(root, main_relative)
+    symbols = symbols_path.read_bytes()
+    main_disassembly = main_path.read_bytes()
+    try:
+        symbols_text = symbols.decode("utf-8")
+        main_text = main_disassembly.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(
+            "same-witness renderer code-identity evidence is not UTF-8"
+        ) from exc
+
+    missing_symbols = [
+        marker
+        for marker in REQUIRED_RENDERER_DEFINED_SYMBOLS
+        if marker not in symbols_text
+    ]
+    if missing_symbols:
+        raise ValueError(
+            "same-witness renderer lacks required reviewed renderer symbol: "
+            + missing_symbols[0]
+        )
+    missing_calls = [
+        marker
+        for marker in REQUIRED_RENDERER_MAIN_CALLS
+        if marker not in main_text
+    ]
+    if missing_calls:
+        raise ValueError(
+            "same-witness renderer main does not call reviewed render path: "
+            + missing_calls[0]
+        )
+
+    if sys.platform.startswith("linux"):
+        try:
+            actual_symbols = subprocess.check_output(
+                ["nm", "-C", "--defined-only", str(binary_path)],
+                cwd=root,
+                stderr=subprocess.STDOUT,
+            )
+            actual_main = subprocess.check_output(
+                [
+                    "objdump",
+                    "-d",
+                    "-C",
+                    "--disassemble=main",
+                    str(binary_path),
+                ],
+                cwd=root,
+                stderr=subprocess.STDOUT,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise ValueError(
+                "same-witness renderer code-identity inspection failed"
+            ) from exc
+        if actual_symbols != symbols or actual_main != main_disassembly:
+            raise ValueError(
+                "same-witness renderer code-identity evidence does not match exact ELF"
+            )
+
+    return {
+        "symbols_log": artifact_binding(root, symbols_relative),
+        "main_disassembly_log": artifact_binding(root, main_relative),
+    }
+
+
 def validate_renderer_build_provenance(
     root: Path, observations: list[dict]
 ) -> dict:
@@ -627,8 +931,9 @@ def validate_renderer_build_provenance(
     provenance_binding = artifact_binding(root, provenance_relative)
     provenance_bytes = child(root, provenance_relative).read_bytes()
     validate_compiled_provenance_output(provenance_bytes)
+    code_identity = validate_renderer_code_identity(root)
     if (
-        attestation.get("schema_version") != 2
+        attestation.get("schema_version") != 3
         or attestation.get("reviewed_inputs") != expected_inputs
         or attestation.get("engine_anchors") != engine_bindings
         or attestation.get("binary")
@@ -636,6 +941,7 @@ def validate_renderer_build_provenance(
         or attestation.get("qmake_log") != qmake_binding
         or attestation.get("build_log") != build_binding
         or attestation.get("provenance_challenge_log") != provenance_binding
+        or attestation.get("code_identity") != code_identity
     ):
         raise ValueError("same-witness renderer build attestation mismatch")
     build_text = child(root, build_relative).read_text(encoding="utf-8", errors="replace")
@@ -697,6 +1003,8 @@ def validate_renderer_build_provenance(
         "qmake_log": qmake_binding,
         "build_log": build_binding,
         "provenance_challenge_log": provenance_binding,
+        "renderer_symbols": code_identity["symbols_log"],
+        "renderer_main_disassembly": code_identity["main_disassembly_log"],
     }
 
 
@@ -925,6 +1233,8 @@ def validate_candidate(root: Path) -> dict:
         "qmake_log": "delayed-retrigger/sampulse-render-qmake.log",
         "build_log": "delayed-retrigger/sampulse-render-build.log",
         "provenance_challenge_log": "delayed-retrigger/sampulse-render-provenance.log",
+        "renderer_symbols": "delayed-retrigger/sampulse-render-symbols.log",
+        "renderer_main_disassembly": "delayed-retrigger/sampulse-render-main-disassembly.log",
         "eins_converter_log": "delayed-retrigger/sampulse-eins-compat.log",
     }
     for key, expected_path in expected_single.items():
@@ -1135,6 +1445,54 @@ def validate_original_inconclusive_runtime(
     attempts = runtime.get("attempts")
     renders = runtime.get("renders")
     pre = runtime.get("pre_render_load")
+    diagnostics = runtime.get("diagnostics")
+    pre_render_failure_diagnostic = (
+        "clean accepted load and dismissed Load Warning are required before "
+        "same-witness Sampulse rendering"
+    )
+    if (
+        runtime.get("schema_version") == 1
+        and runtime.get("outcome") == "inconclusive"
+        and runtime.get("deterministic") is False
+        and runtime.get("settings") == ORIGINAL_RENDER_SETTINGS
+        and attempts == []
+        and renders == []
+        and diagnostics == [pre_render_failure_diagnostic]
+        and isinstance(pre, dict)
+        and pre.get("schema_version") == 1
+        and isinstance(pre.get("clean_accepted_load"), bool)
+        and isinstance(pre.get("load_warning_dismissed"), bool)
+        and isinstance(pre.get("process_running_before_render"), bool)
+        and isinstance(pre.get("stable_marker_polls"), int)
+        and not isinstance(pre.get("stable_marker_polls"), bool)
+        and pre["stable_marker_polls"] >= 0
+        and (
+            pre.get("matched_marker") is None
+            or isinstance(pre.get("matched_marker"), str)
+        )
+        and not (
+            pre.get("clean_accepted_load") is True
+            and pre.get("load_warning_dismissed") is True
+        )
+    ):
+        for index in (1, 2):
+            unexpected = child(
+                original_root,
+                f"{NAME}/original-delayed-retrigger-sampulse-runtime-{index}.wav",
+            )
+            if unexpected.exists():
+                raise ValueError(
+                    "same-witness failed pre-render load created unexpected output"
+                )
+        return {
+            "inconclusive_reason": "pre-render-load-not-accepted",
+            "binding_error": None,
+            "diagnostics": diagnostics,
+            "pre_render_load": pre,
+            "observed_output": None,
+            "retained_renders": [],
+            "retained_render_analyses": [],
+        }
     if (
         runtime.get("schema_version") != 1
         or runtime.get("outcome") != "inconclusive"
