@@ -339,23 +339,79 @@ with tempfile.TemporaryDirectory() as temporary:
     assert quarantine["observed_output"]["path"].endswith(original_path.name)
     assert quarantine["observed_output"]["sha256"] == m.digest(valid_wave)
     assert quarantine["retained_renders"] == []
+    assert quarantine["inconclusive_reason"] == "ambiguous-final-render-attempt"
+
+    first_binding = {
+        "path": f"{m.NAME}/{original_path.name}",
+        "sha256": m.digest(valid_wave),
+    }
+
+    teardown_runtime = dict(inconclusive_runtime)
+    teardown_runtime["renders"] = [first_binding]
+    teardown_runtime["attempts"] = [completed_attempt]
+    teardown = m.validate_original_inconclusive_runtime(
+        root, teardown_runtime
+    )
+    assert teardown["inconclusive_reason"] == (
+        "first-render-dialog-teardown-failure"
+    )
+    assert teardown["binding_error"] is None
+    assert teardown["retained_renders"] == [first_binding]
+    assert len(teardown["retained_render_analyses"]) == 1
+
+    closed_first_attempt = dict(completed_attempt)
+    closed_first_attempt["dialog_closed"] = True
+    closed_first_attempt["diagnostics"] = []
 
     partial_second_attempt = dict(ambiguous_attempt)
     partial_second_attempt["observed_output"] = None
     partial_runtime = dict(inconclusive_runtime)
-    partial_runtime["renders"] = [
-        {
-            "path": f"{m.NAME}/{original_path.name}",
-            "sha256": m.digest(valid_wave),
-        }
-    ]
-    partial_runtime["attempts"] = [completed_attempt, partial_second_attempt]
+    partial_runtime["renders"] = [first_binding]
+    partial_runtime["attempts"] = [closed_first_attempt, partial_second_attempt]
     partial_quarantine = m.validate_original_inconclusive_runtime(
         root, partial_runtime
     )
     assert partial_quarantine["retained_renders"] == partial_runtime["renders"]
     assert len(partial_quarantine["retained_render_analyses"]) == 1
     assert "post-dispatch dialog evidence" in partial_quarantine["binding_error"]
+
+    second_path = (
+        render_dir / "original-delayed-retrigger-sampulse-runtime-2.wav"
+    )
+    different_wave = bytearray(valid_wave)
+    different_wave[-2:] = struct.pack("<h", 1)
+    different_wave = bytes(different_wave)
+    second_path.write_bytes(different_wave)
+    closed_second_attempt = dict(closed_first_attempt)
+    closed_second_attempt["output"] = {
+        "path": second_path.name,
+        "sha256": m.digest(different_wave),
+    }
+    nondeterministic_runtime = dict(inconclusive_runtime)
+    nondeterministic_runtime["renders"] = [
+        first_binding,
+        {
+            "path": f"{m.NAME}/{second_path.name}",
+            "sha256": m.digest(different_wave),
+        },
+    ]
+    nondeterministic_runtime["attempts"] = [
+        closed_first_attempt,
+        closed_second_attempt,
+    ]
+    nondeterministic = m.validate_original_inconclusive_runtime(
+        root, nondeterministic_runtime
+    )
+    assert nondeterministic["inconclusive_reason"] == (
+        "nondeterministic-completed-render-pair"
+    )
+    assert nondeterministic["binding_error"] is None
+    assert len(nondeterministic["retained_renders"]) == 2
+    assert len(nondeterministic["retained_render_analyses"]) == 2
+    assert (
+        nondeterministic["retained_renders"][0]["sha256"]
+        != nondeterministic["retained_renders"][1]["sha256"]
+    )
 
     crash_attempt = dict(completed_attempt)
     crash_attempt.update(
