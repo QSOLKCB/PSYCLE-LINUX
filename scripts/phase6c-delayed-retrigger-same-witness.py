@@ -482,10 +482,6 @@ def validate_original_inconclusive_runtime(
     ):
         raise ValueError("same-witness inconclusive render shape mismatch")
 
-    # Ambiguity can be discovered immediately after dialog discovery, before
-    # later UI/render flags have had any opportunity to become true.
-    validate_original_ambiguous_event_binding(attempt)
-
     try:
         validate_original_event_binding(attempt)
     except ValueError as exc:
@@ -494,6 +490,11 @@ def validate_original_inconclusive_runtime(
         raise ValueError(
             "same-witness inconclusive render has valid post-dispatch dialog binding"
         )
+
+    # Ambiguity can be discovered immediately after dialog discovery, before
+    # later UI/render flags have had any opportunity to become true. Only an
+    # invalid full binding that is independently proven ambiguous is quarantined.
+    validate_original_ambiguous_event_binding(attempt)
 
     expected_name = "original-delayed-retrigger-sampulse-runtime-1.wav"
     expected_relative = f"{NAME}/{expected_name}"
