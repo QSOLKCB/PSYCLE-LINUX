@@ -4,6 +4,7 @@
 
 $phase6cRuntimeDirectory = [System.IO.Path]::GetDirectoryName([object].Assembly.Location)
 $phase6cAutomationReferences = @(
+    [object].Assembly.Location
     [System.Windows.Automation.AutomationElement].Assembly.Location
     [System.Windows.Automation.ControlType].Assembly.Location
     (Join-Path $phase6cRuntimeDirectory 'System.Threading.dll')
