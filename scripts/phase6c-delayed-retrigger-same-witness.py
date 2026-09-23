@@ -747,6 +747,20 @@ def expected_legacy_pattern_bytes(pattern_lines: int, pattern_tracks: int) -> by
 
 def validate_fixture_identity(data: bytes) -> dict:
     chunks = parse_psy3_chunks(data)
+    expected_layout = [
+        (b"INFO", 0),
+        (b"SNGI", 4),
+        (b"SEQD", 2),
+        (b"PATD", 2),
+        (b"MACD", 3),
+        (b"MACD", 3),
+        (b"EINS", 0x00010000),
+    ]
+    observed_layout = [(fourcc, version) for fourcc, version, _payload in chunks]
+    if observed_layout != expected_layout:
+        raise ValueError(
+            "same-witness fixture top-level chunk layout differs from canonical witness"
+        )
     playback_graph = validate_playback_graph(chunks)
 
     info = [payload for fourcc, _version, payload in chunks if fourcc == b"INFO"]
@@ -893,6 +907,10 @@ def validate_fixture_identity(data: bytes) -> dict:
         raise ValueError("same-witness fixture command geometry mismatch")
 
     return {
+        "top_level_chunk_layout": [
+            {"fourcc": fourcc.decode("ascii"), "version": version}
+            for fourcc, version in observed_layout
+        ],
         "song_title": title,
         "song_tracks": song_tracks,
         "bpm": bpm,
