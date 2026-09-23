@@ -513,6 +513,7 @@ def validate_playback_graph(
         or sampler_outputs[0]["output_slot"] != 128
         or sampler_outputs[0]["input_slot"] != -1
         or master["machine_type"] != 0
+        or master["muted"] != 0
         or master["input_count"] != 1
         or master["output_count"] != 0
         or len(master_inputs) != 1
@@ -2262,7 +2263,10 @@ def validate_original_attempt(
         "but dialog teardown did not complete"
     )
     completed_and_closed = (
-        attempt.get("dialog_closed") is True and diagnostics == []
+        attempt.get("dialog_closed") is True
+        and attempt.get("close_control_seen") is True
+        and attempt.get("close_uia_invoked") is True
+        and diagnostics == []
     )
     completed_with_teardown_failure = (
         attempt.get("dialog_closed") is False
