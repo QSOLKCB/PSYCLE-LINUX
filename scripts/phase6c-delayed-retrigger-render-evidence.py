@@ -237,6 +237,34 @@ def analyze_wave(data: bytes) -> dict:
     }
 
 
+def analyze_wave_observation(data: bytes) -> dict:
+    """Describe a valid PCM render without claiming command-bearing execution."""
+    parsed = parse_pcm16_wave(data)
+    onsets = onset_frames(parsed["frames"])
+    beat_frames = parsed["sample_rate"] * 60.0 / EXPECTED_LAYOUT["bpm"]
+    counts = [0, 0, 0, 0]
+    beat_positions = []
+    for frame in onsets:
+        beat = frame / beat_frames
+        beat_positions.append(beat)
+        bucket = min(3, max(0, int(math.floor(beat + 1e-9))))
+        counts[bucket] += 1
+    return {
+        "sample_rate": parsed["sample_rate"],
+        "channels": parsed["channels"],
+        "bits_per_sample": parsed["bits_per_sample"],
+        "frame_count": len(parsed["frames"]),
+        "onset_frames": onsets,
+        "onset_beats": [round(value, 9) for value in beat_positions],
+        "window_onset_counts": {
+            "note_delay_beat_0": counts[0],
+            "retrigger_beat_1": counts[1],
+            "retr_cont_beat_2": counts[2],
+            "extended_marker_beat_3": counts[3],
+        },
+    }
+
+
 def validate_render_event_binding(attempt: dict) -> None:
     runtime_id = attempt.get("selected_render_dialog_runtime_id")
     preexisting_count = attempt.get("preexisting_render_dialog_count")
@@ -426,6 +454,137 @@ def validate_process_exit_runtime(
     }
 
 
+def validate_inconclusive_runtime(
+    original_root: Path,
+    receipt: dict,
+    runtime: dict,
+    attempts: list[object],
+) -> dict:
+    """Retain non-evidentiary primary render uncertainty without promotion."""
+    if runtime.get("deterministic") is not False:
+        raise ValueError("inconclusive primary runtime cannot be deterministic")
+    renders = runtime.get("renders")
+    if (
+        not isinstance(renders, list)
+        or len(renders) > 2
+        or len(attempts) not in {1, 2}
+        or len(renders) > len(attempts)
+    ):
+        raise ValueError("inconclusive primary render shape is invalid")
+
+    completed = []
+    completed_analyses = []
+    for index, value in enumerate(renders, start=1):
+        data = validate_completed_render_attempt(
+            original_root, attempts[index - 1], value, index
+        )
+        completed.append(value)
+        completed_analyses.append(analyze_wave_observation(data))
+
+    # Two completed, byte-different renders are valid nondeterminism evidence.
+    if len(renders) == 2:
+        if len(attempts) != 2 or renders[0].get("sha256") == renders[1].get("sha256"):
+            raise ValueError("inconclusive primary render-pair identity is invalid")
+        return {
+            "inconclusive_reason": "nondeterministic-completed-render-pair",
+            "completed_renders": completed,
+            "completed_render_analyses": completed_analyses,
+            "binding_error": None,
+            "diagnostics": [],
+            "process_exit_code": None,
+            "observed_output": None,
+        }
+
+    if len(attempts) == len(renders):
+        # A completed render may be retained even if no further modal attempt
+        # could safely be started.
+        return {
+            "inconclusive_reason": "incomplete-repeated-render-procedure",
+            "completed_renders": completed,
+            "completed_render_analyses": completed_analyses,
+            "binding_error": None,
+            "diagnostics": [],
+            "process_exit_code": None,
+            "observed_output": None,
+        }
+
+    attempt_number = len(attempts)
+    attempt = attempts[-1]
+    if not isinstance(attempt, dict):
+        raise ValueError("inconclusive primary render attempt is not an object")
+    for key in ("command_verified", "command_dispatched"):
+        if attempt.get(key) is not True:
+            raise ValueError(
+                "inconclusive primary render did not verify command dispatch: " + key
+            )
+    for key in ("dialog_verified", "controls_configured", "save_invoked"):
+        if not isinstance(attempt.get(key), bool):
+            raise ValueError("inconclusive primary render has invalid boolean: " + key)
+    diagnostics = attempt.get("diagnostics")
+    process_exited = attempt.get("process_exited")
+    process_exit_code = attempt.get("process_exit_code")
+    alive = process_exited is False and process_exit_code is None
+    exited = (
+        process_exited is True
+        and isinstance(process_exit_code, int)
+        and not isinstance(process_exit_code, bool)
+        and process_exit_code != 0
+    )
+    if (
+        attempt.get("outcome") != "inconclusive"
+        or attempt.get("output") is not None
+        or not (alive or exited)
+        or not isinstance(diagnostics, list)
+        or not diagnostics
+    ):
+        raise ValueError("inconclusive primary render attempt shape is invalid")
+
+    try:
+        validate_render_event_binding(attempt)
+    except ValueError as exc:
+        binding_error = str(exc)
+    else:
+        binding_error = None
+
+    expected_name = f"original-delayed-retrigger-execution-{attempt_number}.wav"
+    expected_path = child(
+        original_root, "delayed-retrigger-execution/" + expected_name
+    )
+    observed = attempt.get("observed_output")
+    if observed is None:
+        if expected_path.exists():
+            raise ValueError("inconclusive primary render created unbound output")
+        observed_output = None
+    else:
+        observed_output = validate_observed_output(original_root, observed)
+        if observed_output["path"] != "delayed-retrigger-execution/" + expected_name:
+            raise ValueError("inconclusive primary render observed-output path mismatch")
+
+    if exited and receipt.get("exit_code_before_termination") not in {
+        None,
+        process_exit_code,
+    }:
+        raise ValueError("inconclusive primary process-exit code is inconsistent")
+
+    return {
+        "inconclusive_reason": (
+            "process-exit-before-completed-save"
+            if exited
+            else (
+                "ambiguous-render-dialog-binding"
+                if binding_error is not None
+                else "post-binding-render-automation-failure"
+            )
+        ),
+        "completed_renders": completed,
+        "completed_render_analyses": completed_analyses,
+        "binding_error": binding_error,
+        "diagnostics": diagnostics,
+        "process_exit_code": process_exit_code,
+        "observed_output": observed_output,
+    }
+
+
 def validate_original(candidate_root: Path, original_root: Path) -> dict:
     candidate_root = candidate_root.resolve()
     original_root = original_root.resolve()
@@ -568,8 +727,43 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             ),
             "parity_status": "UNKNOWN",
         }
+    elif outcome == "inconclusive":
+        uncertainty = validate_inconclusive_runtime(
+            original_root, receipt, runtime, attempts
+        )
+        result = {
+            "schema_version": 1,
+            "phase": "6C",
+            "scope": "original-runtime-execution-observation",
+            "contract": CONTRACT,
+            "evidence_role": "original-runtime",
+            "reference_build": REFERENCE_BUILD,
+            "fixture": receipt["fixture"],
+            "fixture_sha256": receipt["fixture_sha256"],
+            "runtime_execution_trace": "inconclusive-offline-render",
+            "runtime_command_execution_observed": False,
+            "offline_renderer": "Psycle 1.12.0 Render as Wav File",
+            "inconclusive_reason": uncertainty["inconclusive_reason"],
+            "completed_renders": uncertainty["completed_renders"],
+            "completed_render_analyses": uncertainty["completed_render_analyses"],
+            "fresh_render_event_binding": (
+                "accepted" if uncertainty["binding_error"] is None else "rejected"
+            ),
+            "fresh_render_event_binding_error": uncertainty["binding_error"],
+            "process_exit_code": uncertainty["process_exit_code"],
+            "observed_output": uncertainty["observed_output"],
+            "diagnostics": uncertainty["diagnostics"],
+            "interpretation_boundary": (
+                "the exact fixture reached the clean accepted-load gate, but the "
+                "pinned original did not yield a complete deterministic command-bearing "
+                "render observation. Any completed WAVs, process exit, dialog-binding "
+                "uncertainty, diagnostics and observed output are retained without "
+                "promoting command execution; parity remains UNKNOWN"
+            ),
+            "parity_status": "UNKNOWN",
+        }
     else:
-        raise ValueError("original runtime execution observation remains inconclusive")
+        raise ValueError("unexpected original runtime execution outcome")
 
     target = original_root / RUNTIME_RECEIPT
     if target.exists():
