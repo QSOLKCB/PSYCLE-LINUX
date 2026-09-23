@@ -352,7 +352,21 @@ assert "$Observer.ThrowIfAmbiguous()" in wait_source
 assert "TakeNextHandle" in wait_source
 
 assert render_helper_source.count("$dialogObserver.ThrowIfAmbiguous()") >= 3
-assert "$dialogObserver.Seal()" in render_helper_source
+assert "$eventSnapshot = $dialogObserver.Seal()" in render_helper_source
+assert (
+    "$result.render_dialog_post_dispatch_observed_window_event_count = "
+    "[int]$eventSnapshot[0]"
+    in render_helper_source
+)
+assert (
+    "$result.render_dialog_unresolved_post_dispatch_event_count = "
+    "[int]$eventSnapshot[1]"
+    in render_helper_source
+)
+assert (
+    "$result.render_dialog_post_dispatch_event_count = [int]$eventSnapshot[2]"
+    in render_helper_source
+)
 assert (
     'render_dialog_unresolved_post_dispatch_event_count -ne 0'
     in render_helper_source
@@ -937,6 +951,56 @@ with tempfile.TemporaryDirectory() as candidate_temp, tempfile.TemporaryDirector
         assert "canonical semantics" in str(exc)
     else:
         raise AssertionError("expected work-boundary source semantic rejection")
+
+fresh_ambiguous_attempt = {
+    "outcome": "inconclusive",
+    "command_verified": True,
+    "command_dispatched": True,
+    "dialog_verified": True,
+    "controls_configured": True,
+    "save_invoked": True,
+    "render_dialog_native_event_hook_armed": True,
+    "render_dialog_event_message_pump_started": True,
+    "render_dialog_dispatch_boundary_set": True,
+    "render_dialog_dispatch_boundary_tick": 1234,
+    "dialog_discovery": "pumped-win-event-object-show-strictly-after-dispatch-tick",
+    "preexisting_render_dialog_count": 0,
+    "render_dialog_post_dispatch_observed_window_event_count": 2,
+    "render_dialog_unresolved_post_dispatch_event_count": 0,
+    "render_dialog_post_dispatch_event_count": 1,
+    "selected_render_dialog_native_handle": 12345,
+    "selected_render_dialog_runtime_id": [42, 12345],
+    "output": None,
+    "diagnostics": ["multiple post-dispatch Psycle window-show events observed"],
+}
+binding_error = work_boundary.validate_fresh_render_event_binding_or_quarantine(
+    fresh_ambiguous_attempt,
+    "release-no-active-voice",
+    "inconclusive",
+    [],
+)
+assert binding_error is not None
+assert "fresh render lacks bound post-dispatch dialog evidence" in binding_error
+assert work_boundary.diagnose({
+    "release-no-active-voice": "inconclusive",
+    "delayed-note-short": "reference-process-exited-during-render",
+    "delayed-note-long": "reference-process-exited-during-render",
+    "ordinary-note-short": "reference-process-exited-during-render",
+}) == "inconclusive"
+
+promoted_ambiguous_attempt = dict(fresh_ambiguous_attempt)
+promoted_ambiguous_attempt["outcome"] = "rendered"
+try:
+    work_boundary.validate_fresh_render_event_binding_or_quarantine(
+        promoted_ambiguous_attempt,
+        "release-no-active-voice",
+        "rendered-once",
+        [{"path": "x.wav", "sha256": "0" * 64}],
+    )
+except ValueError as exc:
+    assert "fresh render lacks bound post-dispatch dialog evidence" in str(exc)
+else:
+    raise AssertionError("expected promoted ambiguous render evidence rejection")
 
 bad_work_exit_receipt = {"exit_code_before_termination": 1}
 bad_work_exit_attempt = {
