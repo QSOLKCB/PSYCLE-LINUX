@@ -36,7 +36,11 @@ REQUIRED_RENDERER_DEFINED_SYMBOLS = (
     "psycle::core::Player::startRecording",
     "psycle::core::CoreSong::load",
 )
-REQUIRED_RENDERER_MAIN_CALLS = REQUIRED_RENDERER_DEFINED_SYMBOLS
+REQUIRED_RENDERER_MAIN_CALLS = (
+    "psycle::core::CoreSong::load",
+    "psycle::core::Player::startRecording",
+    "psycle::core::Sequencer::Work(unsigned int)",
+)
 REVIEWED_ENGINE_ANCHORS = {
     "sequencer": (
         ROOT
