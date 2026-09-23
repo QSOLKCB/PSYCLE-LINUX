@@ -361,6 +361,22 @@ def require_fresh_render_event_binding(attempt: dict, name: str) -> None:
         raise ValueError(f"{name}: fresh render lacks bound post-dispatch dialog evidence")
 
 
+def require_attempt_dispatch_prefix(attempt: object, name: str) -> dict:
+    if not isinstance(attempt, dict):
+        raise ValueError(f"{name}: render attempt must be an object")
+    for key in ("command_verified", "command_dispatched"):
+        if attempt.get(key) is not True:
+            raise ValueError(
+                f"{name}: render attempt did not verify command dispatch: {key}"
+            )
+    for key in ("dialog_verified", "controls_configured", "save_invoked"):
+        if not isinstance(attempt.get(key), bool):
+            raise ValueError(
+                f"{name}: render attempt has invalid boolean field: {key}"
+            )
+    return attempt
+
+
 def require_attempt_prefix(
     attempt: object, name: str, *, historical: bool = False
 ) -> dict:
@@ -726,13 +742,11 @@ def validate_original(
 
         if len(attempts) != 1:
             raise ValueError(f"{name}: expected one work-boundary render attempt")
-        attempt = require_attempt_prefix(
-            attempts[0], name, historical=True
-        )
         filename = f"original-sampler-work-boundary-{name}-1.wav"
         outcome = runtime.get("outcome")
 
         if not replay_historical_projection:
+            attempt = require_attempt_dispatch_prefix(attempts[0], name)
             binding_error = validate_fresh_render_event_binding_or_quarantine(
                 attempt, name, outcome, renders
             )
@@ -746,6 +760,13 @@ def validate_original(
                     "fresh_render_event_binding_error": binding_error,
                 }
                 continue
+            attempt = require_attempt_prefix(
+                attempt, name, historical=True
+            )
+        else:
+            attempt = require_attempt_prefix(
+                attempts[0], name, historical=True
+            )
 
         if outcome == "rendered-once":
             if load_result != "accepted" or len(renders) != 1:
