@@ -103,6 +103,25 @@ assert analysis["window_onset_counts"]["retrigger_beat_1"] == 3
 assert analysis["window_onset_counts"]["retr_cont_beat_2"] == 2
 assert len(analysis["onset_frames"]) == 7
 
+
+def valid_render_event_binding() -> dict:
+    return {
+        "render_dialog_native_event_hook_armed": True,
+        "render_dialog_event_message_pump_started": True,
+        "render_dialog_dispatch_boundary_set": True,
+        "render_dialog_dispatch_boundary_tick": 123456,
+        "dialog_discovery": (
+            "pumped-win-event-object-show-strictly-after-dispatch-tick"
+        ),
+        "preexisting_render_dialog_count": 0,
+        "render_dialog_post_dispatch_observed_window_event_count": 1,
+        "render_dialog_unresolved_post_dispatch_event_count": 0,
+        "render_dialog_post_dispatch_event_count": 1,
+        "selected_render_dialog_native_handle": 12345,
+        "selected_render_dialog_runtime_id": [1, 2, 3],
+    }
+
+
 expect_failure(
     wave_pcm16(witness_frames([0.0625, 1.0, 2.0, 3.125])),
     "fewer than five",
@@ -120,6 +139,7 @@ expect_failure(
 )
 
 verified_exit_attempt = {
+    **valid_render_event_binding(),
     "outcome": "inconclusive",
     "command_verified": True,
     "command_dispatched": True,
@@ -128,6 +148,23 @@ verified_exit_attempt = {
     "save_invoked": True,
 }
 module.validate_render_attempt(verified_exit_attempt, "inconclusive")
+
+unbound_primary_attempt = dict(verified_exit_attempt)
+unbound_primary_attempt.update(
+    {
+        "render_dialog_native_event_hook_armed": False,
+        "render_dialog_event_message_pump_started": False,
+        "dialog_discovery": "window-opened-event-after-successful-command-dispatch",
+        "render_dialog_post_dispatch_observed_window_event_count": 0,
+        "render_dialog_post_dispatch_event_count": 0,
+    }
+)
+try:
+    module.validate_render_attempt(unbound_primary_attempt, "inconclusive")
+except ValueError as exc:
+    assert "bound post-dispatch dialog evidence" in str(exc)
+else:
+    raise AssertionError("expected primary render event-binding rejection")
 
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
@@ -167,6 +204,7 @@ with tempfile.TemporaryDirectory() as temporary:
         "sha256": first_hash,
     }
     first_attempt = {
+        **valid_render_event_binding(),
         "outcome": "rendered",
         "command_verified": True,
         "command_dispatched": True,
@@ -183,6 +221,7 @@ with tempfile.TemporaryDirectory() as temporary:
     second_path.write_bytes(b"")
     second_hash = hashlib.sha256(b"").hexdigest()
     second_attempt = {
+        **valid_render_event_binding(),
         "outcome": "inconclusive",
         "command_verified": True,
         "command_dispatched": True,
