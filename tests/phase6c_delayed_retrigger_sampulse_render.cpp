@@ -169,6 +169,22 @@ int main(int argc, char** argv) {
             return 69;
         }
 
+        std::ifstream input_fixture(argv[1], std::ios::binary | std::ios::ate);
+        std::streamoff input_size = static_cast<std::streamoff>(-1);
+        if (input_fixture) {
+            input_size = static_cast<std::streamoff>(input_fixture.tellg());
+        }
+        if (!input_fixture || input_size <= 20) {
+            std::cerr << "candidate fixture input missing or empty\n";
+            return 72;
+        }
+        input_fixture.close();
+        const std::string input_sha256 = sha256_file(argv[1]);
+        if (input_sha256.size() != 64u) {
+            std::cerr << "candidate fixture SHA-256 failed\n";
+            return 72;
+        }
+
         psycle::core::Player& player = psycle::core::Player::singleton();
         psycle::core::MachineFactory& factory =
             psycle::core::MachineFactory::getInstance();
@@ -192,6 +208,9 @@ int main(int argc, char** argv) {
             if (!song.load(argv[1])) {
                 std::cerr << "shared Sampulse witness load failed\n";
                 result = 65;
+            } else if (sha256_file(argv[1]) != input_sha256) {
+                std::cerr << "shared Sampulse witness changed during load\n";
+                result = 73;
             } else if (
                 !song.rInstrument(0).IsEnabled()
                 || song.SampleData(0).WaveLength() != 512
@@ -284,6 +303,12 @@ int main(int argc, char** argv) {
                             << ",\"master_buffer_float_count\":"
                             << master_output.size()
                             << ",\"final_play_beat\":" << final_beat
+                            << ",\"input_path\":\""
+                            << json_escape(argv[1]) << "\""
+                            << ",\"input_size_bytes\":"
+                            << static_cast<long long>(input_size)
+                            << ",\"input_sha256\":\""
+                            << input_sha256 << "\""
                             << ",\"output_path\":\""
                             << json_escape(argv[2]) << "\""
                             << ",\"output_size_bytes\":"
