@@ -74,7 +74,7 @@ FROZEN_FIXTURE_IDENTITIES = {
         "candidate_receipt_sha256": "3947bfa36f834c2abcaef8dffd338c179b820618f22e62e3557c2e0216108fc3",
         "original_receipt_sha256": "bcb6ce918df078e70e5b9ef99cf2a62f9ed81bf01330bb9577627c28245ff24a",
         "outcome": "reference-process-exited-during-render",
-        "process_exit_code": EXPECTED_ACCESS_VIOLATION_EXIT_CODE,
+        "process_exit_code": -1073741819,
         "observed_output": {
             "path": "sampler-work-boundary-delayed-note-short/original-sampler-work-boundary-delayed-note-short-1.wav",
             "size_bytes": 0,
@@ -86,7 +86,7 @@ FROZEN_FIXTURE_IDENTITIES = {
         "candidate_receipt_sha256": "b385e263a3818e98f2ddd74a5dced790e23c39105b84d6b9a6aac31d57b6dee2",
         "original_receipt_sha256": "041362cfa7e2f4e03397bb2957c947d40311ea3a3b15a715df4a10da87028d7d",
         "outcome": "reference-process-exited-during-render",
-        "process_exit_code": EXPECTED_ACCESS_VIOLATION_EXIT_CODE,
+        "process_exit_code": -1073741819,
         "observed_output": {
             "path": "sampler-work-boundary-delayed-note-long/original-sampler-work-boundary-delayed-note-long-1.wav",
             "size_bytes": 0,
@@ -98,7 +98,7 @@ FROZEN_FIXTURE_IDENTITIES = {
         "candidate_receipt_sha256": "4f19b1966322b98f65eb2f467d13771a1bb55c4a3e48860e8421c69083ad01d5",
         "original_receipt_sha256": "04bf960dabb83f5b0a3a54c367f686cd351a5606c2e65fc53570625a73ffca1f",
         "outcome": "reference-process-exited-during-render",
-        "process_exit_code": EXPECTED_ACCESS_VIOLATION_EXIT_CODE,
+        "process_exit_code": -1073741819,
         "observed_output": {
             "path": "sampler-work-boundary-ordinary-note-short/original-sampler-work-boundary-ordinary-note-short-1.wav",
             "size_bytes": 0,
