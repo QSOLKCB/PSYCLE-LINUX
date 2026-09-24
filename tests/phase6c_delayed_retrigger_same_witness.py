@@ -1313,6 +1313,29 @@ with tempfile.TemporaryDirectory() as temporary:
     closed_first_attempt["dialog_closed"] = True
     closed_first_attempt["diagnostics"] = []
 
+    inspection_failure_attempt = dict(closed_first_attempt)
+    inspection_failure_attempt["diagnostics"] = [
+        "could not inspect reference process after render attempt: synthetic refresh failure"
+    ]
+    inspection_failure_attempt["observed_output"] = {
+        "path": original_path.name,
+        "size_bytes": len(valid_wave),
+        "sha256": m.digest(valid_wave),
+    }
+    inspection_failure_runtime = dict(inconclusive_runtime)
+    inspection_failure_runtime["renders"] = [first_binding]
+    inspection_failure_runtime["attempts"] = [inspection_failure_attempt]
+    inspection_failure = m.validate_original_inconclusive_runtime(
+        root, inspection_failure_runtime
+    )
+    assert inspection_failure["inconclusive_reason"] == (
+        "post-render-process-inspection-failure"
+    )
+    assert inspection_failure["retained_renders"] == [first_binding]
+    assert inspection_failure["process_exit_code"] is None
+    assert inspection_failure["observed_output"]["sha256"] == m.digest(valid_wave)
+    assert inspection_failure["diagnostics"] == inspection_failure_attempt["diagnostics"]
+
     second_init_failure = {
         "outcome": "inconclusive",
         "command_verified": True,
@@ -1464,6 +1487,25 @@ with tempfile.TemporaryDirectory() as temporary:
     )
     assert "post-dispatch dialog evidence" in early_quarantine["binding_error"]
     assert early_quarantine["observed_output"] is None
+
+    presave_sealing_attempt = dict(early_ambiguous_attempt)
+    presave_sealing_attempt["diagnostics"] = [
+        *early_ambiguous_attempt["diagnostics"],
+        "could not seal render-dialog observer: synthetic pre-Save seal failure",
+    ]
+    presave_sealing_runtime = dict(inconclusive_runtime)
+    presave_sealing_runtime["attempts"] = [presave_sealing_attempt]
+    presave_sealing_root = root / "pre-save-sealing"
+    presave_sealing_root.mkdir()
+    presave_sealing = m.validate_original_inconclusive_runtime(
+        presave_sealing_root, presave_sealing_runtime
+    )
+    assert presave_sealing["inconclusive_reason"] == (
+        "render-observer-sealing-failure"
+    )
+    assert presave_sealing["diagnostics"] == presave_sealing_attempt["diagnostics"]
+    assert presave_sealing["observed_output"] is None
+    assert "post-dispatch dialog evidence" in presave_sealing["binding_error"]
 
     valid_binding_attempt = dict(ambiguous_attempt)
     valid_binding_attempt.update(
