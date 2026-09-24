@@ -392,7 +392,7 @@ class GeneratedObserver(unittest.TestCase):
             self.assertEqual(text.count("$postCompletionExit = ("), 5)
             self.assertEqual(
                 text.count('} elseif ($postCompletionExit) {\n                    "inconclusive"'),
-                2,
+                5,
             )
             self.assertEqual(
                 text.count('$renderOne.process_exited = $true'),
