@@ -631,7 +631,24 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             raise ValueError(f"{name}: expected one startup render attempt")
         filename = f"original-sampler-voice-startup-{name}-1.wav"
         outcome = runtime.get("outcome")
-        attempt = require_attempt_dispatch_prefix(attempts[0], name)
+        raw_attempt = attempts[0]
+        if outcome == "inconclusive" and renders == []:
+            try:
+                predispatch = render.validate_predispatch_observer_failure(
+                    raw_attempt
+                )
+            except ValueError:
+                pass
+            else:
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": predispatch["inconclusive_reason"],
+                    "load_result": load_result,
+                    "process_exit_code": None,
+                    "diagnostics": predispatch["diagnostics"],
+                }
+                continue
+        attempt = require_attempt_dispatch_prefix(raw_attempt, name)
         binding_error = validate_fresh_render_event_binding_or_quarantine(
             attempt, name, outcome, renders
         )
