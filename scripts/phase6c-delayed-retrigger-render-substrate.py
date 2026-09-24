@@ -597,6 +597,9 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             validate_completed_render_attempt(
                 attempt,
                 name,
+                allow_post_completion_exit=(
+                    attempt.get("process_exited") is True
+                ),
                 allow_process_inspection_failure=True,
             )
             output = attempt.get("output")
@@ -624,6 +627,17 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                 raise ValueError(
                     f"{name}: process-inspection failure lacks bound finalized output"
                 )
+            if attempt.get("process_exited") is True:
+                if (
+                    load_result != "inconclusive"
+                    or receipt.get("observation")
+                    != "reference-process-exited-before-harness-termination"
+                    or receipt.get("exit_code_before_termination")
+                    != attempt.get("process_exit_code")
+                ):
+                    raise ValueError(
+                        f"{name}: process-inspection exit receipt mismatch"
+                    )
             results[name] = {
                 "outcome": "inconclusive",
                 "inconclusive_reason": "post-render-process-inspection-failure",
@@ -679,7 +693,6 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             if (
                 not isinstance(exit_code, int)
                 or isinstance(exit_code, bool)
-                or exit_code == 0
                 or receipt.get("exit_code_before_termination") != exit_code
                 or attempt.get("diagnostics")
                 != ["reference exited during offline render"]
@@ -688,13 +701,24 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             observed = validate_failed_observed_output(
                 original_root, name, attempt, expected_filename
             )
-            results[name] = {
-                "outcome": "reference-process-exited-during-render",
-                "load_result": load_result,
-                "process_exit_code": exit_code,
-                "output_created": observed is not None,
-                "observed_output": observed,
-            }
+            if exit_code == 0:
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": "clean-process-exit-during-render",
+                    "load_result": load_result,
+                    "process_exit_code": exit_code,
+                    "output_created": observed is not None,
+                    "observed_output": observed,
+                    "diagnostics": attempt.get("diagnostics"),
+                }
+            else:
+                results[name] = {
+                    "outcome": "reference-process-exited-during-render",
+                    "load_result": load_result,
+                    "process_exit_code": exit_code,
+                    "output_created": observed is not None,
+                    "observed_output": observed,
+                }
         elif outcome == "inconclusive":
             post_completion_exit = (
                 len(renders) == 1
