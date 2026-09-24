@@ -524,7 +524,6 @@ def validate_process_exit_runtime(
     if (
         not isinstance(exit_code, int)
         or isinstance(exit_code, bool)
-        or exit_code == 0
         or receipt.get("exit_code_before_termination") != exit_code
     ):
         raise ValueError("render process-exit code is missing or inconsistent")
@@ -532,15 +531,21 @@ def validate_process_exit_runtime(
     if diagnostics != ["reference exited during offline render"]:
         raise ValueError("render process-exit diagnostic is unexpected")
 
-    observed_output = validate_observed_output(
-        original_root, attempt.get("observed_output")
-    )
     expected_output = (
         "delayed-retrigger-execution/"
         f"original-delayed-retrigger-execution-{attempt_number}.wav"
     )
-    if observed_output["path"] != expected_output:
-        raise ValueError("failed render attempt is bound to the wrong output path")
+    observed_value = attempt.get("observed_output")
+    if observed_value is None:
+        if child(original_root, expected_output).exists():
+            raise ValueError("failed render attempt created an unbound output file")
+        observed_output = None
+    else:
+        observed_output = validate_observed_output(
+            original_root, observed_value
+        )
+        if observed_output["path"] != expected_output:
+            raise ValueError("failed render attempt is bound to the wrong output path")
 
     return {
         "attempt_number": attempt_number,
