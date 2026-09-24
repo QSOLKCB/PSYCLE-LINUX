@@ -276,6 +276,10 @@ def main() -> None:
                         sha256 = [string]$renderOne.output.sha256
                     }
                     $process.Refresh()
+                    if ($process.HasExited -and -not [bool]$renderOne.process_exited) {
+                        $renderOne.process_exited = $true
+                        $renderOne.process_exit_code = [int64]$process.ExitCode
+                    }
                     if (-not $process.HasExited -and [bool]$renderOne.dialog_closed) {
                         $renderTwo = Invoke-Phase6cAudioRender $process $windowTitle $renderTwoPath
                         $attempts += $renderTwo
@@ -365,6 +369,10 @@ def main() -> None:
                         sha256 = [string]$renderOne.output.sha256
                     }
                     $process.Refresh()
+                    if ($process.HasExited -and -not [bool]$renderOne.process_exited) {
+                        $renderOne.process_exited = $true
+                        $renderOne.process_exit_code = [int64]$process.ExitCode
+                    }
                     if (-not $process.HasExited -and [bool]$renderOne.dialog_closed) {
                         $renderTwo = Invoke-Phase6cAudioRender $process $windowTitle $renderTwoPath
                         $attempts += $renderTwo
@@ -453,7 +461,14 @@ def main() -> None:
                         sha256 = [string]$renderOne.output.sha256
                     }
                 }
-                $runtimeOutcome = if ($renderBindings.Count -eq 1) {
+                $postCompletionExit = (
+                    $renderBindings.Count -eq 1 -and
+                    [string]$renderOne.outcome -ceq "rendered" -and
+                    [bool]$renderOne.process_exited
+                )
+                $runtimeOutcome = if ($postCompletionExit) {
+                    "inconclusive"
+                } elseif ($renderBindings.Count -eq 1) {
                     "rendered-once"
                 } elseif ([bool]$renderOne.save_invoked -and [bool]$renderOne.process_exited) {
                     "reference-process-exited-during-render"
@@ -516,7 +531,14 @@ def main() -> None:
                         sha256 = [string]$renderOne.output.sha256
                     }
                 }
-                $runtimeOutcome = if ($renderBindings.Count -eq 1) {
+                $postCompletionExit = (
+                    $renderBindings.Count -eq 1 -and
+                    [string]$renderOne.outcome -ceq "rendered" -and
+                    [bool]$renderOne.process_exited
+                )
+                $runtimeOutcome = if ($postCompletionExit) {
+                    "inconclusive"
+                } elseif ($renderBindings.Count -eq 1) {
                     "rendered-once"
                 } elseif ([bool]$renderOne.save_invoked -and [bool]$renderOne.process_exited) {
                     "reference-process-exited-during-render"
@@ -581,7 +603,14 @@ def main() -> None:
                         sha256 = [string]$renderOne.output.sha256
                     }
                 }
-                $runtimeOutcome = if ($renderBindings.Count -eq 1) {
+                $postCompletionExit = (
+                    $renderBindings.Count -eq 1 -and
+                    [string]$renderOne.outcome -ceq "rendered" -and
+                    [bool]$renderOne.process_exited
+                )
+                $runtimeOutcome = if ($postCompletionExit) {
+                    "inconclusive"
+                } elseif ($renderBindings.Count -eq 1) {
                     "rendered-once"
                 } elseif ([bool]$renderOne.save_invoked -and [bool]$renderOne.process_exited) {
                     "reference-process-exited-during-render"
