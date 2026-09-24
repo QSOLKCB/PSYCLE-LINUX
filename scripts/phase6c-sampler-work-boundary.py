@@ -1087,6 +1087,9 @@ def validate_original(
                 attempt,
                 name,
                 historical=False,
+                allow_post_completion_exit=(
+                    attempt.get("process_exited") is True
+                ),
                 allow_process_inspection_failure=True,
             )
             expected_relative = f"sampler-work-boundary-{name}/" + filename
@@ -1112,6 +1115,17 @@ def validate_original(
                 raise ValueError(
                     f"{name}: process-inspection failure lacks bound finalized output"
                 )
+            if attempt.get("process_exited") is True:
+                if (
+                    load_result != "inconclusive"
+                    or receipt.get("observation")
+                    != "reference-process-exited-before-harness-termination"
+                    or receipt.get("exit_code_before_termination")
+                    != attempt.get("process_exit_code")
+                ):
+                    raise ValueError(
+                        f"{name}: process-inspection exit receipt mismatch"
+                    )
             results[name] = {
                 "outcome": "inconclusive",
                 "inconclusive_reason": "post-render-process-inspection-failure",
