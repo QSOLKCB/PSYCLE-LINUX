@@ -178,6 +178,37 @@ predispatch = module.validate_inconclusive_runtime(
 assert predispatch["inconclusive_reason"] == "render-observer-initialization-failure"
 assert predispatch["completed_renders"] == []
 
+presave_automation_failure = {
+    **valid_render_event_binding(),
+    "outcome": "inconclusive",
+    "command_verified": True,
+    "command_dispatched": True,
+    "dialog_verified": True,
+    "controls_configured": False,
+    "save_invoked": False,
+    "output": None,
+    "observed_output": None,
+    "process_exited": False,
+    "process_exit_code": None,
+    "diagnostics": ["Render as Wav File controls were not found"],
+}
+presave = module.validate_presave_render_quarantine(
+    presave_automation_failure
+)
+assert presave["inconclusive_reason"] == "pre-save-render-automation-failure"
+assert presave["diagnostics"] == presave_automation_failure["diagnostics"]
+
+presave_sealing_failure = dict(presave_automation_failure)
+presave_sealing_failure["diagnostics"] = [
+    "post-dispatch Render as Wav File EVENT_OBJECT_SHOW not observed",
+    "could not seal render-dialog observer: synthetic pre-Save seal failure",
+]
+presave_sealing = module.validate_presave_render_quarantine(
+    presave_sealing_failure
+)
+assert presave_sealing["inconclusive_reason"] == "render-observer-sealing-failure"
+assert presave_sealing["diagnostics"] == presave_sealing_failure["diagnostics"]
+
 verified_exit_attempt = {
     **valid_render_event_binding(),
     "outcome": "inconclusive",
@@ -499,6 +530,29 @@ with tempfile.TemporaryDirectory() as temporary:
     clean_attempt = dict(teardown_attempt)
     clean_attempt["dialog_closed"] = True
     clean_attempt["diagnostics"] = []
+
+    inspection_failure_attempt = dict(clean_attempt)
+    inspection_failure_attempt["diagnostics"] = [
+        "could not inspect reference process after render attempt: synthetic refresh failure"
+    ]
+    inspection_failure_attempt["observed_output"] = {
+        "path": first_name,
+        "size_bytes": len(first_data),
+        "sha256": first_hash,
+    }
+    inspection_failure = module.validate_inconclusive_runtime(
+        root,
+        {},
+        {"deterministic": False, "renders": [first_binding]},
+        [inspection_failure_attempt],
+    )
+    assert inspection_failure["inconclusive_reason"] == (
+        "post-render-process-inspection-failure"
+    )
+    assert inspection_failure["completed_renders"] == [first_binding]
+    assert inspection_failure["process_exit_code"] is None
+    assert inspection_failure["observed_output"]["sha256"] == first_hash
+
     second_init_failure = {
         "outcome": "inconclusive",
         "command_verified": True,
