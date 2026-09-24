@@ -726,7 +726,6 @@ def validate_inconclusive_runtime(
         process_exited is True
         and isinstance(process_exit_code, int)
         and not isinstance(process_exit_code, bool)
-        and process_exit_code != 0
     )
     if (
         attempt.get("outcome") != "inconclusive"
