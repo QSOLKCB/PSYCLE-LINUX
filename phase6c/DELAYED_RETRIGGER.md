@@ -165,11 +165,16 @@ by the pinned original resource definitions. Each render is forced to:
 - separated track/wire/generator outputs off.
 
 The first render attempt records the exact process and output state after Save
-Wave is dispatched. If that render succeeds and the reference remains alive,
-the observer repeats the render in the same process. Only two byte-identical
-WAV files that pass RIFF/PCM validation and expose multiple distinct impulse
-onsets in both the `FB` and `FA` beat windows are allowed to set
-`runtime_command_execution_observed: true`.
+Wave is dispatched. If that render succeeds, the reference remains alive, and
+the verified render dialog was actually torn down, the observer repeats the
+render in the same process. A finalized first WAV whose dialog could not close
+is retained as a one-render `UNKNOWN` observation instead of opening another
+modal render. Only two byte-identical WAV files that pass RIFF/PCM validation
+and expose multiple distinct impulse onsets in both the `FB` and `FA` beat
+windows are allowed to set `runtime_command_execution_observed: true`. That
+claim is explicitly scoped to the `FB 3F` retrigger and `FA 42`
+retrigger-continue effects; this waveform criterion does **not** establish the
+`FD 7F` note-delay effect or the `FE 04` extended-command effect.
 
 If the reference process exits during the verified render attempt, the observer
 instead retains the pre-render clean-load predicate, non-zero process exit code,
