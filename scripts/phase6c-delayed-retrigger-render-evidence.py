@@ -905,7 +905,14 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "completed_renders": uncertainty["completed_renders"],
             "completed_render_analyses": uncertainty["completed_render_analyses"],
             "fresh_render_event_binding": (
-                "accepted" if uncertainty["binding_error"] is None else "rejected"
+                "not-dispatched"
+                if uncertainty["inconclusive_reason"]
+                == "render-observer-initialization-failure"
+                else (
+                    "accepted"
+                    if uncertainty["binding_error"] is None
+                    else "rejected"
+                )
             ),
             "fresh_render_event_binding_error": uncertainty["binding_error"],
             "process_exit_code": uncertainty["process_exit_code"],
