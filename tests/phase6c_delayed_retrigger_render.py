@@ -484,6 +484,37 @@ with tempfile.TemporaryDirectory() as temporary:
     assert retained["diagnostics"] == teardown_attempt["diagnostics"]
     assert retained["completed_render_analyses"][0]["frame_count"] == 64
 
+    clean_attempt = dict(teardown_attempt)
+    clean_attempt["dialog_closed"] = True
+    clean_attempt["diagnostics"] = []
+    second_init_failure = {
+        "outcome": "inconclusive",
+        "command_verified": True,
+        "command_dispatched": False,
+        "dialog_verified": False,
+        "controls_configured": False,
+        "save_invoked": False,
+        "output": None,
+        "observed_output": None,
+        "process_exited": False,
+        "process_exit_code": None,
+        "diagnostics": [
+            "could not initialize render-dialog observer: synthetic second-attempt failure"
+        ],
+    }
+    second_init = module.validate_inconclusive_runtime(
+        root,
+        {},
+        {"deterministic": False, "renders": [first_binding]},
+        [clean_attempt, second_init_failure],
+    )
+    assert second_init["inconclusive_reason"] == (
+        "render-observer-initialization-failure"
+    )
+    assert second_init["completed_renders"] == [first_binding]
+    assert second_init["completed_render_analyses"][0]["frame_count"] == 64
+    assert second_init["diagnostics"] == second_init_failure["diagnostics"]
+
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     output_dir = root / "delayed-retrigger-execution"
@@ -1221,6 +1252,35 @@ with tempfile.TemporaryDirectory() as manifest_temp:
     finally:
         work_boundary.FROZEN_MANIFEST = saved_manifest
 
+with tempfile.TemporaryDirectory() as semantic_temp:
+    semantic_root = Path(semantic_temp)
+    saved_projection = work_boundary.PROJECTION
+    try:
+        for field, value in (
+            ("parity_status", "PASS"),
+            ("historical_diagnosis", "corrupted-diagnosis"),
+        ):
+            corrupted_projection = json.loads(
+                saved_projection.read_text(encoding="utf-8")
+            )
+            corrupted_projection[field] = value
+            corrupted_path = semantic_root / f"{field}.json"
+            corrupted_path.write_text(
+                json.dumps(corrupted_projection, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            work_boundary.PROJECTION = corrupted_path
+            try:
+                work_boundary.validate_frozen_projection()
+            except ValueError as exc:
+                assert "projection identity mismatch" in str(exc)
+            else:
+                raise AssertionError(
+                    f"expected frozen projection {field} corruption rejection"
+                )
+    finally:
+        work_boundary.PROJECTION = saved_projection
+
 with tempfile.TemporaryDirectory() as projection_temp:
     projection_root = Path(projection_temp)
     candidate_root = projection_root / "candidate"
@@ -1276,6 +1336,8 @@ with tempfile.TemporaryDirectory() as projection_temp:
         "parity_status": "UNKNOWN",
         "historical_diagnosis": work_boundary.HISTORICAL_DIAGNOSIS,
         "qualified_diagnosis": work_boundary.QUALIFIED_DIAGNOSIS,
+        "evidence_run": {},
+        "historical_receipt": {},
         "source_identity": {
             "source_commit": work_boundary.SOURCE_COMMIT,
             "Sampler.cpp": work_boundary.SAMPLER_CPP_BLOB,
