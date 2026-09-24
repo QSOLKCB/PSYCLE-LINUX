@@ -223,7 +223,7 @@ def candidate_fixture_bytes(
     ]
     return (
         b"PSY3SONG"
-        + struct.pack("<I", 0x11)
+        + struct.pack("<I", m.EXPECTED_PSY3_FILE_VERSION)
         + struct.pack("<I", 4)
         + struct.pack("<I", len(chunks))
         + b"".join(chunks)
@@ -264,6 +264,13 @@ assert silent_analysis["window_onset_counts"] == {
     "retr_cont_beat_2": 0,
     "extended_marker_beat_3": 0,
 }
+
+wrong_file_version = bytearray(valid_fixture)
+struct.pack_into("<I", wrong_file_version, 8, 0)
+expect_value_error(
+    lambda: m.validate_fixture_identity(bytes(wrong_file_version)),
+    "noncanonical PSY3 file version",
+)
 
 expect_value_error(
     lambda: m.validate_fixture_identity(
@@ -306,7 +313,7 @@ for fourcc, version, payload in m.parse_psy3_chunks(valid_fixture):
 def repack_chunks(chunks):
     return (
         b"PSY3SONG"
-        + struct.pack("<I", 0x11)
+        + struct.pack("<I", m.EXPECTED_PSY3_FILE_VERSION)
         + struct.pack("<I", 4)
         + struct.pack("<I", len(chunks))
         + b"".join(
@@ -1506,6 +1513,19 @@ with tempfile.TemporaryDirectory() as temporary:
     assert pre_save["process_exit_code"] == -1073741819
     assert pre_save["inconclusive_reason"] == "process-exit-before-save-wave"
     assert pre_save["retained_renders"] == []
+
+    clean_pre_save_exit_attempt = dict(pre_save_exit_attempt)
+    clean_pre_save_exit_attempt["process_exit_code"] = 0
+    clean_pre_save_exit_runtime = dict(inconclusive_runtime)
+    clean_pre_save_exit_runtime["attempts"] = [clean_pre_save_exit_attempt]
+    clean_pre_save_root = root / "pre-save-zero-exit"
+    clean_pre_save_root.mkdir()
+    clean_pre_save = m.validate_original_inconclusive_runtime(
+        clean_pre_save_root, clean_pre_save_exit_runtime
+    )
+    assert clean_pre_save["process_exit_code"] == 0
+    assert clean_pre_save["inconclusive_reason"] == "process-exit-before-save-wave"
+    assert clean_pre_save["retained_renders"] == []
 
     # Diagnostic retained renders use the relaxed PCM observer, including silence.
     silent_one = pcm_wave([], frames=m.CANDIDATE_TARGET_FRAMES)
