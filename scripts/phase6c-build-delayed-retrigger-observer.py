@@ -287,13 +287,22 @@ def main() -> None:
                         }
                     }
                 }
+                $lastAttempt = $attempts[-1]
+                $postCompletionExit = (
+                    $renderBindings.Count -gt 0 -and
+                    $renderBindings.Count -eq $attempts.Count -and
+                    [string]$lastAttempt.outcome -ceq "rendered" -and
+                    [bool]$lastAttempt.process_exited
+                )
                 $deterministic = (
+                    -not $postCompletionExit -and
                     $renderBindings.Count -eq 2 -and
                     [string]$renderBindings[0].sha256 -ceq [string]$renderBindings[1].sha256
                 )
-                $lastAttempt = $attempts[-1]
                 $runtimeOutcome = if ($deterministic) {
                     "rendered-twice"
+                } elseif ($postCompletionExit) {
+                    "inconclusive"
                 } elseif ([bool]$lastAttempt.save_invoked -and [bool]$lastAttempt.process_exited) {
                     "reference-process-exited-during-render"
                 } else {
@@ -367,13 +376,22 @@ def main() -> None:
                         }
                     }
                 }
+                $lastAttempt = $attempts[-1]
+                $postCompletionExit = (
+                    $renderBindings.Count -gt 0 -and
+                    $renderBindings.Count -eq $attempts.Count -and
+                    [string]$lastAttempt.outcome -ceq "rendered" -and
+                    [bool]$lastAttempt.process_exited
+                )
                 $deterministic = (
+                    -not $postCompletionExit -and
                     $renderBindings.Count -eq 2 -and
                     [string]$renderBindings[0].sha256 -ceq [string]$renderBindings[1].sha256
                 )
-                $lastAttempt = $attempts[-1]
                 $runtimeOutcome = if ($deterministic) {
                     "rendered-twice"
+                } elseif ($postCompletionExit) {
+                    "inconclusive"
                 } elseif ([bool]$lastAttempt.save_invoked -and [bool]$lastAttempt.process_exited) {
                     "reference-process-exited-during-render"
                 } else {
