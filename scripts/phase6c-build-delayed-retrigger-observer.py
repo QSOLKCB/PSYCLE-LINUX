@@ -292,6 +292,11 @@ def main() -> None:
                     }
                 }
                 $lastAttempt = $attempts[-1]
+                $process.Refresh()
+                if ($process.HasExited -and -not [bool]$lastAttempt.process_exited) {
+                    $lastAttempt.process_exited = $true
+                    $lastAttempt.process_exit_code = [int64]$process.ExitCode
+                }
                 $postCompletionExit = (
                     $renderBindings.Count -gt 0 -and
                     $renderBindings.Count -eq $attempts.Count -and
@@ -385,6 +390,11 @@ def main() -> None:
                     }
                 }
                 $lastAttempt = $attempts[-1]
+                $process.Refresh()
+                if ($process.HasExited -and -not [bool]$lastAttempt.process_exited) {
+                    $lastAttempt.process_exited = $true
+                    $lastAttempt.process_exit_code = [int64]$process.ExitCode
+                }
                 $postCompletionExit = (
                     $renderBindings.Count -gt 0 -and
                     $renderBindings.Count -eq $attempts.Count -and
@@ -461,6 +471,11 @@ def main() -> None:
                         sha256 = [string]$renderOne.output.sha256
                     }
                 }
+                $process.Refresh()
+                if ($process.HasExited -and -not [bool]$renderOne.process_exited) {
+                    $renderOne.process_exited = $true
+                    $renderOne.process_exit_code = [int64]$process.ExitCode
+                }
                 $postCompletionExit = (
                     $renderBindings.Count -eq 1 -and
                     [string]$renderOne.outcome -ceq "rendered" -and
@@ -530,6 +545,11 @@ def main() -> None:
                         path = "$($spec.name)/$($renderOne.output.path)"
                         sha256 = [string]$renderOne.output.sha256
                     }
+                }
+                $process.Refresh()
+                if ($process.HasExited -and -not [bool]$renderOne.process_exited) {
+                    $renderOne.process_exited = $true
+                    $renderOne.process_exit_code = [int64]$process.ExitCode
                 }
                 $postCompletionExit = (
                     $renderBindings.Count -eq 1 -and
@@ -602,6 +622,11 @@ def main() -> None:
                         path = "$($spec.name)/$($renderOne.output.path)"
                         sha256 = [string]$renderOne.output.sha256
                     }
+                }
+                $process.Refresh()
+                if ($process.HasExited -and -not [bool]$renderOne.process_exited) {
+                    $renderOne.process_exited = $true
+                    $renderOne.process_exit_code = [int64]$process.ExitCode
                 }
                 $postCompletionExit = (
                     $renderBindings.Count -eq 1 -and
