@@ -573,19 +573,6 @@ def validate_inconclusive_runtime(
     ):
         raise ValueError("inconclusive primary render shape is invalid")
 
-    if len(renders) == 0 and len(attempts) == 1:
-        attempt = attempts[0]
-        diagnostics = attempt.get("diagnostics") if isinstance(attempt, dict) else None
-        if (
-            isinstance(diagnostics, list)
-            and len(diagnostics) == 1
-            and isinstance(diagnostics[0], str)
-            and diagnostics[0].startswith(
-                OBSERVER_INITIALIZATION_FAILURE_PREFIX
-            )
-        ):
-            return validate_predispatch_observer_failure(attempt)
-
     completed = []
     completed_analyses = []
     completed_diagnostics = []
@@ -627,6 +614,42 @@ def validate_inconclusive_runtime(
                 raise ValueError(
                     "post-completion primary render observed-output path mismatch"
                 )
+
+    if len(attempts) == len(renders) + 1:
+        final_attempt = attempts[-1]
+        final_diagnostics = (
+            final_attempt.get("diagnostics")
+            if isinstance(final_attempt, dict)
+            else None
+        )
+        if (
+            isinstance(final_diagnostics, list)
+            and len(final_diagnostics) == 1
+            and isinstance(final_diagnostics[0], str)
+            and final_diagnostics[0].startswith(
+                OBSERVER_INITIALIZATION_FAILURE_PREFIX
+            )
+        ):
+            quarantine = validate_predispatch_observer_failure(
+                final_attempt
+            )
+            if completed:
+                previous_attempt = attempts[len(renders) - 1]
+                if (
+                    not isinstance(previous_attempt, dict)
+                    or previous_attempt.get("dialog_closed") is not True
+                    or previous_attempt.get("diagnostics") != []
+                ):
+                    raise ValueError(
+                        "pre-dispatch second-render failure follows "
+                        "a non-clean first render"
+                    )
+            quarantine["completed_renders"] = completed
+            quarantine["completed_render_analyses"] = completed_analyses
+            quarantine["diagnostics"] = (
+                completed_diagnostics + quarantine["diagnostics"]
+            )
+            return quarantine
 
     if post_completion_exit_code is not None:
         return {
