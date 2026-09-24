@@ -981,6 +981,49 @@ with tempfile.TemporaryDirectory() as temporary:
 
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
+    predispatch_runtime = {
+        "schema_version": 1,
+        "outcome": "inconclusive",
+        "deterministic": False,
+        "settings": dict(m.ORIGINAL_RENDER_SETTINGS),
+        "pre_render_load": {
+            "schema_version": 1,
+            "clean_accepted_load": True,
+            "stable_marker_polls": 4,
+            "matched_marker": Path(m.FIXTURE).name,
+            "load_warning_dismissed": True,
+            "process_running_before_render": True,
+        },
+        "renders": [],
+        "attempts": [
+            {
+                "outcome": "inconclusive",
+                "command_verified": True,
+                "command_dispatched": False,
+                "dialog_verified": False,
+                "controls_configured": False,
+                "save_invoked": False,
+                "output": None,
+                "observed_output": None,
+                "process_exited": False,
+                "process_exit_code": None,
+                "diagnostics": [
+                    "could not initialize render-dialog observer: synthetic hook failure"
+                ],
+            }
+        ],
+    }
+    predispatch = m.validate_original_inconclusive_runtime(
+        root, predispatch_runtime
+    )
+    assert predispatch["inconclusive_reason"] == (
+        "render-observer-initialization-failure"
+    )
+    assert m.inconclusive_render_binding_status(predispatch) == "not-dispatched"
+    assert predispatch["retained_renders"] == []
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
     render_dir = root / m.NAME
     render_dir.mkdir(parents=True)
     original_path = render_dir / "original-delayed-retrigger-sampulse-runtime-1.wav"
