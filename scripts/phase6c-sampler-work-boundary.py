@@ -511,10 +511,36 @@ def validate_completed_render_attempt(
     *,
     historical: bool = False,
     allow_post_completion_exit: bool = False,
+    allow_process_inspection_failure: bool = False,
 ) -> None:
     if not historical:
         require_fresh_render_event_binding(attempt, name)
     diagnostics = attempt.get("diagnostics")
+    if not isinstance(diagnostics, list) or any(
+        not isinstance(value, str) for value in diagnostics
+    ):
+        raise ValueError(f"{name}: completed render diagnostics are malformed")
+    inspection_diagnostics = [
+        value
+        for value in diagnostics
+        if value.startswith("could not inspect reference process after render attempt:")
+    ]
+    if allow_process_inspection_failure:
+        if len(inspection_diagnostics) != 1:
+            raise ValueError(
+                f"{name}: post-render process-inspection failure evidence is missing"
+            )
+    elif inspection_diagnostics:
+        raise ValueError(
+            f"{name}: completed render unexpectedly contains process-inspection failure"
+        )
+    terminal_diagnostics = [
+        value
+        for value in diagnostics
+        if not value.startswith(
+            "could not inspect reference process after render attempt:"
+        )
+    ]
     teardown_diagnostic = (
         "render output finalized and Close control was verified, "
         "but dialog teardown did not complete"
@@ -523,13 +549,13 @@ def validate_completed_render_attempt(
         attempt.get("dialog_closed") is True
         and attempt.get("close_control_seen") is True
         and attempt.get("close_uia_invoked") is True
-        and diagnostics == []
+        and terminal_diagnostics == []
     )
     completed_with_teardown_failure = (
         attempt.get("dialog_closed") is False
         and attempt.get("close_control_seen") is True
         and attempt.get("close_uia_invoked") is True
-        and diagnostics == [teardown_diagnostic]
+        and terminal_diagnostics == [teardown_diagnostic]
     )
     exit_code = attempt.get("process_exit_code")
     process_state_valid = (
@@ -983,6 +1009,31 @@ def validate_original(
                 }
                 continue
             try:
+                precommand = render.validate_precommand_process_exit(
+                    raw_attempt
+                )
+            except ValueError:
+                pass
+            else:
+                if (
+                    load_result != "inconclusive"
+                    or receipt.get("observation")
+                    != "reference-process-exited-before-harness-termination"
+                    or receipt.get("exit_code_before_termination")
+                    != precommand["process_exit_code"]
+                ):
+                    raise ValueError(
+                        f"{name}: pre-command process-exit receipt mismatch"
+                    )
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": precommand["inconclusive_reason"],
+                    "load_result": load_result,
+                    "process_exit_code": precommand["process_exit_code"],
+                    "diagnostics": precommand["diagnostics"],
+                }
+                continue
+            try:
                 presave = render.validate_presave_render_quarantine(raw_attempt)
             except ValueError:
                 pass
@@ -1022,6 +1073,55 @@ def validate_original(
             attempt = require_attempt_prefix(
                 attempts[0], name, historical=True
             )
+
+        process_inspection_failure = (
+            not replay_historical_projection
+            and len(renders) == 1
+            and attempt.get("outcome") == "rendered"
+            and render.has_diagnostic_prefix(
+                attempt, render.PROCESS_INSPECTION_FAILURE_PREFIX
+            )
+        )
+        if process_inspection_failure:
+            validate_completed_render_attempt(
+                attempt,
+                name,
+                historical=False,
+                allow_process_inspection_failure=True,
+            )
+            expected_relative = f"sampler-work-boundary-{name}/" + filename
+            output = attempt.get("output")
+            if (
+                not isinstance(output, dict)
+                or output.get("path") != filename
+                or renders[0].get("path") != expected_relative
+                or renders[0].get("sha256") != output.get("sha256")
+            ):
+                raise ValueError(
+                    f"{name}: process-inspection render binding mismatch"
+                )
+            data = child(original_root, expected_relative).read_bytes()
+            if digest(data) != renders[0]["sha256"]:
+                raise ValueError(
+                    f"{name}: process-inspection render hash mismatch"
+                )
+            observed = validate_observed_output(
+                original_root, name, attempt, filename
+            )
+            if observed is None:
+                raise ValueError(
+                    f"{name}: process-inspection failure lacks bound finalized output"
+                )
+            results[name] = {
+                "outcome": "inconclusive",
+                "inconclusive_reason": "post-render-process-inspection-failure",
+                "load_result": load_result,
+                "render_sha256": digest(data),
+                "process_exit_code": attempt.get("process_exit_code"),
+                "observed_output": observed,
+                "diagnostics": attempt.get("diagnostics"),
+            }
+            continue
 
         if outcome == "rendered-once":
             if load_result != "accepted" or len(renders) != 1:

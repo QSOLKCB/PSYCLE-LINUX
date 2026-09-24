@@ -787,7 +787,25 @@ with tempfile.TemporaryDirectory() as temporary:
     assert bound["size_bytes"] == 0
     assert bound["path"].endswith(output.name)
 
+for consumer_path in (
+    ROOT / "scripts" / "phase6c-delayed-retrigger-render-isolation.py",
+    ROOT / "scripts" / "phase6c-delayed-retrigger-render-substrate.py",
+    ROOT / "scripts" / "phase6c-sampler-voice-startup.py",
+    ROOT / "scripts" / "phase6c-sampler-work-boundary.py",
+):
+    consumer_source = consumer_path.read_text(encoding="utf-8")
+    assert "validate_precommand_process_exit(" in consumer_source
+    assert "post-render-process-inspection-failure" in consumer_source
+
 render_helper_source = ORIGINAL_AUDIO_RENDER_SCRIPT.read_text(encoding="utf-8")
+observer_builder_source = (
+    ROOT / "scripts" / "phase6c-build-delayed-retrigger-observer.py"
+).read_text(encoding="utf-8")
+assert observer_builder_source.count("$postRenderInspectionFailure = @(") >= 5
+assert observer_builder_source.count(
+    '$runtimeOutcome = if ($postRenderInspectionFailure) {'
+) >= 5
+
 assert "$preexistingRenderDialogHandles" not in render_helper_source
 assert "Test-Phase6cSameAutomationElement" not in render_helper_source
 assert "[System.Windows.Automation.Automation]::Compare" not in render_helper_source
@@ -978,6 +996,32 @@ isolation.validate_completed_render_attempt(
     "control",
     allow_post_completion_exit=True,
 )
+inspection_failure_completed = {
+    **valid_substrate_completed,
+    "diagnostics": [
+        "could not inspect reference process after render attempt: synthetic refresh failure"
+    ],
+}
+for check, name in (
+    (isolation.validate_completed_render_attempt, "control"),
+    (substrate.validate_completed_render_attempt, "master-only"),
+    (startup.validate_completed_render_attempt, "note-sample-default-inst"),
+    (work_boundary.validate_completed_render_attempt, "release-no-active-voice"),
+):
+    try:
+        check(inspection_failure_completed, name)
+    except ValueError as exc:
+        assert "process-inspection failure" in str(exc)
+    else:
+        raise AssertionError(
+            "expected unquarantined process-inspection diagnostic rejection"
+        )
+    check(
+        inspection_failure_completed,
+        name,
+        allow_process_inspection_failure=True,
+    )
+
 clean_post_exit_completed = {
     **valid_substrate_completed,
     "process_exited": True,

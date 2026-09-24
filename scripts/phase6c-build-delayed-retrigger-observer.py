@@ -511,7 +511,14 @@ def main() -> None:
                     [string]$renderOne.outcome -ceq "rendered" -and
                     [bool]$renderOne.process_exited
                 )
-                $runtimeOutcome = if ($postCompletionExit) {
+                $postRenderInspectionFailure = @(
+                    @($renderOne.diagnostics) | Where-Object {
+                        [string]$_ -clike "could not inspect reference process after render attempt:*"
+                    }
+                ).Count -gt 0
+                $runtimeOutcome = if ($postRenderInspectionFailure) {
+                    "inconclusive"
+                } elseif ($postCompletionExit) {
                     "inconclusive"
                 } elseif ($renderBindings.Count -eq 1) {
                     "rendered-once"
@@ -586,7 +593,14 @@ def main() -> None:
                     [string]$renderOne.outcome -ceq "rendered" -and
                     [bool]$renderOne.process_exited
                 )
-                $runtimeOutcome = if ($postCompletionExit) {
+                $postRenderInspectionFailure = @(
+                    @($renderOne.diagnostics) | Where-Object {
+                        [string]$_ -clike "could not inspect reference process after render attempt:*"
+                    }
+                ).Count -gt 0
+                $runtimeOutcome = if ($postRenderInspectionFailure) {
+                    "inconclusive"
+                } elseif ($postCompletionExit) {
                     "inconclusive"
                 } elseif ($renderBindings.Count -eq 1) {
                     "rendered-once"
@@ -663,7 +677,14 @@ def main() -> None:
                     [string]$renderOne.outcome -ceq "rendered" -and
                     [bool]$renderOne.process_exited
                 )
-                $runtimeOutcome = if ($postCompletionExit) {
+                $postRenderInspectionFailure = @(
+                    @($renderOne.diagnostics) | Where-Object {
+                        [string]$_ -clike "could not inspect reference process after render attempt:*"
+                    }
+                ).Count -gt 0
+                $runtimeOutcome = if ($postRenderInspectionFailure) {
+                    "inconclusive"
+                } elseif ($postCompletionExit) {
                     "inconclusive"
                 } elseif ($renderBindings.Count -eq 1) {
                     "rendered-once"
