@@ -2311,6 +2311,54 @@ def validate_original_inconclusive_runtime(
     retained_renders: list[dict] = []
     retained_analyses: list[dict] = []
 
+    # A render can be fully finalized and bound before the reference exits
+    # during the helper's final process refresh. Retain that output and exact
+    # exit diagnostically instead of forcing the shape through the
+    # "failed extra attempt" process-exit path.
+    last_attempt = attempts[-1] if attempts else None
+    post_completion_exit = (
+        len(renders) == len(attempts)
+        and len(renders) in (1, 2)
+        and isinstance(last_attempt, dict)
+        and last_attempt.get("outcome") == "rendered"
+        and last_attempt.get("process_exited") is True
+    )
+    if post_completion_exit:
+        retained_diagnostics = []
+        for index, value in enumerate(renders, start=1):
+            attempt = attempts[index - 1]
+            binding, data = validate_original_attempt(
+                original_root,
+                attempt,
+                index,
+                allow_post_completion_exit=(index == len(renders)),
+            )
+            if value != binding:
+                raise ValueError(
+                    "same-witness post-completion-exit render binding mismatch"
+                )
+            retained_renders.append(binding)
+            retained_analyses.append(analyze_wave_observation(data))
+            retained_diagnostics.extend(attempt.get("diagnostics", []))
+
+        exit_code = last_attempt.get("process_exit_code")
+        observed_binding = validate_original_observed_output(
+            original_root, last_attempt, len(attempts)
+        )
+        if observed_binding is None:
+            raise ValueError(
+                "same-witness post-completion exit lacks bound finalized output"
+            )
+        return {
+            "inconclusive_reason": "process-exit-after-completed-render",
+            "binding_error": None,
+            "diagnostics": retained_diagnostics,
+            "process_exit_code": exit_code,
+            "observed_output": observed_binding,
+            "retained_renders": retained_renders,
+            "retained_render_analyses": retained_analyses,
+        }
+
     # Both renders may complete yet disagree byte-for-byte. That is valid
     # nondeterminism evidence, not a malformed receipt and not a runtime pair.
     if len(renders) == 2:
@@ -2591,7 +2639,11 @@ def validate_original_runtime_procedure(runtime: object) -> list[dict]:
 
 
 def validate_original_attempt(
-    original_root: Path, attempt: object, index: int
+    original_root: Path,
+    attempt: object,
+    index: int,
+    *,
+    allow_post_completion_exit: bool = False,
 ) -> tuple[dict, bytes]:
     if not isinstance(attempt, dict):
         raise ValueError("same-witness original render attempt is not an object")
@@ -2624,10 +2676,23 @@ def validate_original_attempt(
         and attempt.get("close_uia_invoked") is True
         and diagnostics == [teardown_diagnostic]
     )
+    exit_code = attempt.get("process_exit_code")
+    process_state_valid = (
+        (
+            attempt.get("process_exited") is True
+            and isinstance(exit_code, int)
+            and not isinstance(exit_code, bool)
+            and exit_code != 0
+        )
+        if allow_post_completion_exit
+        else (
+            attempt.get("process_exited") is False
+            and exit_code is None
+        )
+    )
     if (
         attempt.get("outcome") != "rendered"
-        or attempt.get("process_exited") is not False
-        or attempt.get("process_exit_code") is not None
+        or not process_state_valid
         or not isinstance(attempt.get("stable_output_polls"), int)
         or isinstance(attempt.get("stable_output_polls"), bool)
         or attempt["stable_output_polls"] < 4
