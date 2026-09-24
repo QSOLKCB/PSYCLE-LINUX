@@ -982,6 +982,19 @@ def validate_original(
                     "diagnostics": predispatch["diagnostics"],
                 }
                 continue
+            try:
+                presave = render.validate_presave_render_quarantine(raw_attempt)
+            except ValueError:
+                pass
+            else:
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": presave["inconclusive_reason"],
+                    "load_result": load_result,
+                    "process_exit_code": presave["process_exit_code"],
+                    "diagnostics": presave["diagnostics"],
+                }
+                continue
 
         if not replay_historical_projection:
             attempt = require_attempt_dispatch_prefix(raw_attempt, name)
