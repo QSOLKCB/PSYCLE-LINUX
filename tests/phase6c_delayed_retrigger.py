@@ -362,8 +362,19 @@ class GeneratedObserver(unittest.TestCase):
             self.assertIn(
                 'expected_contract = "sequencer-delayed-retrigger"', text
             )
-            self.assertIn(
-                'if (-not $process.HasExited -and [bool]$renderOne.dialog_closed) {',
+            guarded_repeat = (
+                '$process.Refresh()\n'
+                '                    if (-not $process.HasExited -and '
+                '[bool]$renderOne.dialog_closed) {\n'
+                '                        $renderTwo = Invoke-Phase6cAudioRender '
+                '$process $windowTitle $renderTwoPath'
+            )
+            self.assertIn(guarded_repeat, text)
+            self.assertNotIn(
+                '$process.Refresh()\n'
+                '                    if (-not $process.HasExited) {\n'
+                '                        $renderTwo = Invoke-Phase6cAudioRender '
+                '$process $windowTitle $renderTwoPath',
                 text,
             )
 
