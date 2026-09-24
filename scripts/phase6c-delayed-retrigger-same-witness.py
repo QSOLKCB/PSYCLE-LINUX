@@ -2240,6 +2240,108 @@ def validate_original_predispatch_observer_failure(attempt: object) -> list[str]
     return diagnostics
 
 
+PRECOMMAND_EXIT_DIAGNOSTIC = "reference exited before offline render observation"
+NO_EVENT_RENDER_DIALOG_DIAGNOSTIC = (
+    "post-dispatch Render as Wav File EVENT_OBJECT_SHOW not observed"
+)
+
+
+def validate_original_precommand_exit(attempt: object) -> list[str]:
+    if not isinstance(attempt, dict):
+        raise ValueError("same-witness pre-command exit attempt is not an object")
+    diagnostics = attempt.get("diagnostics")
+    exit_code = attempt.get("process_exit_code")
+    if (
+        attempt.get("outcome") != "inconclusive"
+        or attempt.get("command_verified") is not False
+        or attempt.get("command_dispatched") is not False
+        or attempt.get("dialog_verified") is not False
+        or attempt.get("controls_configured") is not False
+        or attempt.get("save_invoked") is not False
+        or attempt.get("render_dialog_native_event_hook_armed") is not False
+        or attempt.get("render_dialog_event_message_pump_started") is not False
+        or attempt.get("render_dialog_dispatch_boundary_set") is not False
+        or attempt.get("render_dialog_dispatch_boundary_tick") is not None
+        or attempt.get("preexisting_render_dialog_count") != 0
+        or attempt.get("render_dialog_post_dispatch_observed_window_event_count") != 0
+        or attempt.get("render_dialog_unresolved_post_dispatch_event_count") != 0
+        or attempt.get("render_dialog_post_dispatch_event_count") != 0
+        or attempt.get("selected_render_dialog_native_handle") is not None
+        or attempt.get("selected_render_dialog_runtime_id") != []
+        or attempt.get("dialog_discovery") is not None
+        or attempt.get("output") is not None
+        or attempt.get("observed_output") is not None
+        or attempt.get("process_exited") is not True
+        or not isinstance(exit_code, int)
+        or isinstance(exit_code, bool)
+        or diagnostics != [PRECOMMAND_EXIT_DIAGNOSTIC]
+    ):
+        raise ValueError("same-witness pre-command process-exit shape is invalid")
+    return diagnostics
+
+
+def validate_original_no_event_render_dialog_failure(
+    attempt: object,
+) -> list[str]:
+    if not isinstance(attempt, dict):
+        raise ValueError("same-witness no-event render attempt is not an object")
+    diagnostics = attempt.get("diagnostics")
+    exit_code = attempt.get("process_exit_code")
+    process_state_valid = (
+        (attempt.get("process_exited") is False and exit_code is None)
+        or (
+            attempt.get("process_exited") is True
+            and isinstance(exit_code, int)
+            and not isinstance(exit_code, bool)
+        )
+    )
+    diagnostics_valid = (
+        isinstance(diagnostics, list)
+        and len(diagnostics) in (1, 2)
+        and all(isinstance(value, str) for value in diagnostics)
+        and diagnostics[0] == NO_EVENT_RENDER_DIALOG_DIAGNOSTIC
+        and (
+            len(diagnostics) == 1
+            or diagnostics[1].startswith(
+                base.PROCESS_INSPECTION_FAILURE_PREFIX
+            )
+        )
+    )
+    boundary_tick = attempt.get("render_dialog_dispatch_boundary_tick")
+    preexisting_count = attempt.get("preexisting_render_dialog_count")
+    if (
+        attempt.get("outcome") != "inconclusive"
+        or attempt.get("command_verified") is not True
+        or attempt.get("command_dispatched") is not True
+        or attempt.get("dialog_verified") is not False
+        or attempt.get("controls_configured") is not False
+        or attempt.get("save_invoked") is not False
+        or attempt.get("render_dialog_native_event_hook_armed") is not True
+        or attempt.get("render_dialog_event_message_pump_started") is not True
+        or attempt.get("render_dialog_dispatch_boundary_set") is not True
+        or not isinstance(boundary_tick, int)
+        or isinstance(boundary_tick, bool)
+        or not 0 <= boundary_tick <= 0xFFFFFFFF
+        or not isinstance(preexisting_count, int)
+        or isinstance(preexisting_count, bool)
+        or preexisting_count < 0
+        or attempt.get("render_dialog_post_dispatch_observed_window_event_count") != 0
+        or attempt.get("render_dialog_unresolved_post_dispatch_event_count") != 0
+        or attempt.get("render_dialog_post_dispatch_event_count") != 0
+        or attempt.get("selected_render_dialog_native_handle") is not None
+        or attempt.get("selected_render_dialog_runtime_id") != []
+        or attempt.get("dialog_discovery") is not None
+        or attempt.get("output") is not None
+        or attempt.get("observed_output") is not None
+        or not process_state_valid
+        or not diagnostics_valid
+    ):
+        raise ValueError(
+            "same-witness no-event render-dialog failure shape is invalid"
+        )
+    return diagnostics
+
+
 def validate_original_observer_sealing_failure(attempt: dict) -> None:
     diagnostics = attempt.get("diagnostics")
     boundary_tick = attempt.get("render_dialog_dispatch_boundary_tick")
@@ -2664,6 +2766,26 @@ def validate_original_inconclusive_runtime(
     attempt = attempts[-1]
     if not isinstance(attempt, dict):
         raise ValueError("same-witness inconclusive render attempt is not an object")
+
+    attempt_diagnostics = attempt.get("diagnostics")
+    if (
+        isinstance(attempt_diagnostics, list)
+        and attempt_diagnostics == [PRECOMMAND_EXIT_DIAGNOSTIC]
+    ):
+        validate_original_precommand_exit(attempt)
+        observed_binding = validate_original_observed_output(
+            original_root, attempt, len(attempts)
+        )
+        return {
+            "inconclusive_reason": "process-exit-before-render-command-verification",
+            "binding_error": None,
+            "diagnostics": attempt_diagnostics,
+            "process_exit_code": attempt.get("process_exit_code"),
+            "observed_output": observed_binding,
+            "retained_renders": retained_renders,
+            "retained_render_analyses": retained_analyses,
+        }
+
     for key in ("command_verified", "command_dispatched"):
         if attempt.get(key) is not True:
             raise ValueError(
@@ -2706,6 +2828,14 @@ def validate_original_inconclusive_runtime(
             else:
                 base.validate_presave_render_quarantine(attempt)
             inconclusive_reason = "render-observer-sealing-failure"
+        elif any(
+            value == NO_EVENT_RENDER_DIALOG_DIAGNOSTIC
+            for value in diagnostics
+            if isinstance(value, str)
+        ):
+            validate_original_no_event_render_dialog_failure(attempt)
+            base.validate_presave_render_quarantine(attempt)
+            inconclusive_reason = "render-dialog-event-not-observed"
         else:
             validate_original_ambiguous_event_binding(attempt)
             inconclusive_reason = (
@@ -2752,7 +2882,10 @@ def validate_original_inconclusive_runtime(
 def inconclusive_render_binding_status(quarantine: dict) -> str:
     if quarantine.get("inconclusive_reason") == "pre-render-load-not-accepted":
         return "not-attempted"
-    if quarantine.get("inconclusive_reason") == "render-observer-initialization-failure":
+    if quarantine.get("inconclusive_reason") in {
+        "render-observer-initialization-failure",
+        "process-exit-before-render-command-verification",
+    }:
         return "not-dispatched"
     return "accepted" if quarantine.get("binding_error") is None else "rejected"
 

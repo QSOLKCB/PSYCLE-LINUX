@@ -237,12 +237,21 @@ jobs:
           python3 scripts/phase6c-sampler-fault-location.py candidate-check \
             phase6c-command-evidence
 
+      - name: Pack candidate command evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          # upload-artifact normalizes file modes. Keep the retained Linux
+          # renderer's executable bit inside a tar archive for replay.
+          tar -C phase6c-command-evidence -cf phase6c-command-evidence.tar .
+          tar -tf phase6c-command-evidence.tar >/dev/null
+
       - name: Upload candidate command evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: phase6c-delayed-retrigger-candidate
-          path: phase6c-command-evidence/
+          path: phase6c-command-evidence.tar
           if-no-files-found: warn
 
   original-command-observation:
@@ -258,7 +267,15 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: phase6c-delayed-retrigger-candidate
-          path: phase6c-command-candidate
+          path: phase6c-command-candidate-artifact
+
+      - name: Extract exact candidate command artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path phase6c-command-candidate -Force | Out-Null
+          & tar.exe -xf phase6c-command-candidate-artifact/phase6c-command-evidence.tar -C phase6c-command-candidate
+          if ($LASTEXITCODE -ne 0) { throw "candidate command evidence extraction failed" }
 
       - name: Install pinned Microsoft VC90 x86 runtime
         shell: pwsh

@@ -178,6 +178,34 @@ predispatch = module.validate_inconclusive_runtime(
 assert predispatch["inconclusive_reason"] == "render-observer-initialization-failure"
 assert predispatch["completed_renders"] == []
 
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    precommand_exit = {
+        "outcome": "inconclusive",
+        "command_verified": False,
+        "command_dispatched": False,
+        "dialog_verified": False,
+        "controls_configured": False,
+        "save_invoked": False,
+        "output": None,
+        "observed_output": None,
+        "process_exited": True,
+        "process_exit_code": -1073741819,
+        "diagnostics": [module.PRECOMMAND_EXIT_DIAGNOSTIC],
+    }
+    precommand = module.validate_inconclusive_runtime(
+        root,
+        {"exit_code_before_termination": -1073741819},
+        {"deterministic": False, "renders": []},
+        [precommand_exit],
+    )
+    assert precommand["inconclusive_reason"] == (
+        "process-exit-before-render-command-verification"
+    )
+    assert precommand["process_exit_code"] == -1073741819
+    assert precommand["completed_renders"] == []
+    assert precommand["binding_error"] is None
+
 presave_automation_failure = {
     **valid_render_event_binding(),
     "outcome": "inconclusive",

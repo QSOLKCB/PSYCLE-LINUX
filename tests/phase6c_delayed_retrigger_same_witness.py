@@ -1214,6 +1214,73 @@ with tempfile.TemporaryDirectory() as temporary:
     assert quarantine["retained_renders"] == []
     assert quarantine["inconclusive_reason"] == "ambiguous-final-render-attempt"
 
+    precommand_root = root / "precommand-exit"
+    precommand_root.mkdir()
+    precommand_attempt = {
+        "outcome": "inconclusive",
+        "command_verified": False,
+        "command_dispatched": False,
+        "dialog_verified": False,
+        "controls_configured": False,
+        "save_invoked": False,
+        "render_dialog_native_event_hook_armed": False,
+        "render_dialog_event_message_pump_started": False,
+        "render_dialog_dispatch_boundary_set": False,
+        "render_dialog_dispatch_boundary_tick": None,
+        "preexisting_render_dialog_count": 0,
+        "render_dialog_post_dispatch_observed_window_event_count": 0,
+        "render_dialog_unresolved_post_dispatch_event_count": 0,
+        "render_dialog_post_dispatch_event_count": 0,
+        "selected_render_dialog_native_handle": None,
+        "selected_render_dialog_runtime_id": [],
+        "dialog_discovery": None,
+        "output": None,
+        "observed_output": None,
+        "process_exited": True,
+        "process_exit_code": -1073741819,
+        "diagnostics": [m.PRECOMMAND_EXIT_DIAGNOSTIC],
+    }
+    precommand_runtime = dict(inconclusive_runtime)
+    precommand_runtime["attempts"] = [precommand_attempt]
+    precommand = m.validate_original_inconclusive_runtime(
+        precommand_root, precommand_runtime
+    )
+    assert precommand["inconclusive_reason"] == (
+        "process-exit-before-render-command-verification"
+    )
+    assert precommand["process_exit_code"] == -1073741819
+    assert precommand["observed_output"] is None
+    assert precommand["retained_renders"] == []
+    assert m.inconclusive_render_binding_status(precommand) == "not-dispatched"
+
+    no_event_root = root / "no-event-render-dialog"
+    no_event_root.mkdir()
+    no_event_attempt = dict(ambiguous_attempt)
+    no_event_attempt.update(
+        {
+            "dialog_verified": False,
+            "controls_configured": False,
+            "save_invoked": False,
+            "render_dialog_post_dispatch_observed_window_event_count": 0,
+            "render_dialog_unresolved_post_dispatch_event_count": 0,
+            "render_dialog_post_dispatch_event_count": 0,
+            "selected_render_dialog_native_handle": None,
+            "selected_render_dialog_runtime_id": [],
+            "dialog_discovery": None,
+            "diagnostics": [m.NO_EVENT_RENDER_DIALOG_DIAGNOSTIC],
+            "observed_output": None,
+        }
+    )
+    no_event_runtime = dict(inconclusive_runtime)
+    no_event_runtime["attempts"] = [no_event_attempt]
+    no_event = m.validate_original_inconclusive_runtime(
+        no_event_root, no_event_runtime
+    )
+    assert no_event["inconclusive_reason"] == "render-dialog-event-not-observed"
+    assert "post-dispatch dialog evidence" in no_event["binding_error"]
+    assert no_event["observed_output"] is None
+    assert no_event["retained_renders"] == []
+
     first_binding = {
         "path": f"{m.NAME}/{original_path.name}",
         "sha256": m.digest(valid_wave),
@@ -1661,5 +1728,16 @@ expect_value_error(
     lambda: m.validate_original_runtime_procedure(wrong_range_runtime),
     "render procedure mismatch",
 )
+
+workflow_source = (
+    ROOT / ".github" / "workflows" / "phase6c-delayed-retrigger.yml"
+).read_text(encoding="utf-8")
+assert "tar -C phase6c-command-evidence -cf phase6c-command-evidence.tar ." in workflow_source
+assert "path: phase6c-command-evidence.tar" in workflow_source
+assert "path: phase6c-command-candidate-artifact" in workflow_source
+assert (
+    "& tar.exe -xf phase6c-command-candidate-artifact/phase6c-command-evidence.tar "
+    "-C phase6c-command-candidate"
+) in workflow_source
 
 print("phase6c-delayed-retrigger-same-witness: PASS")
