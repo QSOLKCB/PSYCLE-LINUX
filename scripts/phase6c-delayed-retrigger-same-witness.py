@@ -2251,6 +2251,18 @@ def validate_original_precommand_exit(attempt: object) -> list[str]:
         raise ValueError("same-witness pre-command exit attempt is not an object")
     diagnostics = attempt.get("diagnostics")
     exit_code = attempt.get("process_exit_code")
+    diagnostics_valid = (
+        isinstance(diagnostics, list)
+        and len(diagnostics) in (1, 2)
+        and all(isinstance(value, str) for value in diagnostics)
+        and diagnostics[0] == PRECOMMAND_EXIT_DIAGNOSTIC
+        and (
+            len(diagnostics) == 1
+            or diagnostics[1].startswith(
+                base.PROCESS_INSPECTION_FAILURE_PREFIX
+            )
+        )
+    )
     if (
         attempt.get("outcome") != "inconclusive"
         or attempt.get("command_verified") is not False
@@ -2274,7 +2286,7 @@ def validate_original_precommand_exit(attempt: object) -> list[str]:
         or attempt.get("process_exited") is not True
         or not isinstance(exit_code, int)
         or isinstance(exit_code, bool)
-        or diagnostics != [PRECOMMAND_EXIT_DIAGNOSTIC]
+        or not diagnostics_valid
     ):
         raise ValueError("same-witness pre-command process-exit shape is invalid")
     return diagnostics
@@ -2770,7 +2782,9 @@ def validate_original_inconclusive_runtime(
     attempt_diagnostics = attempt.get("diagnostics")
     if (
         isinstance(attempt_diagnostics, list)
-        and attempt_diagnostics == [PRECOMMAND_EXIT_DIAGNOSTIC]
+        and len(attempt_diagnostics) in (1, 2)
+        and attempt_diagnostics
+        and attempt_diagnostics[0] == PRECOMMAND_EXIT_DIAGNOSTIC
     ):
         validate_original_precommand_exit(attempt)
         observed_binding = validate_original_observed_output(
