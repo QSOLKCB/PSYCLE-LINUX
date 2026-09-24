@@ -606,6 +606,18 @@ with tempfile.TemporaryDirectory() as temporary:
     try:
         collected = m.collect_candidate(root)
         assert collected["runtime_command_execution_observed"] is True
+        assert (
+            collected["runtime_command_execution_scope"]
+            == m.RUNTIME_COMMAND_EXECUTION_SCOPE
+        )
+        assert collected["runtime_command_execution_scope"]["established_effects"] == [
+            "FB 3F retrigger",
+            "FA 42 retrigger-continue",
+        ]
+        assert collected["runtime_command_execution_scope"]["not_established"] == [
+            "FD 7F note-delay effect",
+            "FE 04 extended-command effect",
+        ]
         assert len(collected["render_observations"]) == 2
         assert collected["render_observations"][0]["threads"] == 1
         assert collected["timing_interpretation"] == "deferred"
@@ -721,62 +733,41 @@ with tempfile.TemporaryDirectory() as temporary:
         "frame count does not match fixed-frame target",
     )
 
-with tempfile.TemporaryDirectory() as temporary:
-    root = Path(temporary)
-    fixture = root / m.FIXTURE
-    fixture.parent.mkdir(parents=True)
-    fixture.write_bytes(valid_fixture)
-    render_dir = root / m.NAME
-    write_provenance(root)
-    missing_windows = pcm_wave(
-        [
-            int(round(1.0 * beat)),
-            int(round(1.0625 * beat)),
-            int(round(1.125 * beat)),
-            int(round(2.0 * beat)),
-            int(round(2.0625 * beat)),
-        ],
-        frames=m.CANDIDATE_TARGET_FRAMES,
-    )
-    for index in (1, 2):
-        (
-            render_dir
-            / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
-        ).write_bytes(missing_windows)
-    expect_value_error(
-        lambda: m.collect_candidate(root),
-        "does not expose every command-bearing window",
-    )
+fb_fa_only_wave = pcm_wave(
+    [
+        int(round(1.0 * beat)),
+        int(round(1.0625 * beat)),
+        int(round(1.125 * beat)),
+        int(round(2.0 * beat)),
+        int(round(2.0625 * beat)),
+    ],
+    frames=m.CANDIDATE_TARGET_FRAMES,
+)
+fb_fa_only_analysis = m.validate_same_witness_analysis(
+    m.base.analyze_wave(fb_fa_only_wave),
+    "candidate",
+    expected_frame_count=m.CANDIDATE_TARGET_FRAMES,
+    require_retrigger_effects=True,
+)
+assert fb_fa_only_analysis["window_onset_counts"]["note_delay_beat_0"] == 0
+assert fb_fa_only_analysis["window_onset_counts"]["retrigger_beat_1"] == 3
+assert fb_fa_only_analysis["window_onset_counts"]["retr_cont_beat_2"] == 2
+assert fb_fa_only_analysis["window_onset_counts"]["extended_marker_beat_3"] == 0
 
-
-with tempfile.TemporaryDirectory() as temporary:
-    root = Path(temporary)
-    fixture = root / m.FIXTURE
-    fixture.parent.mkdir(parents=True)
-    fixture.write_bytes(valid_fixture)
-    render_dir = root / m.NAME
-    write_provenance(root)
-    late_only = pcm_wave(
-        [
-            int(round(0.0625 * beat)),
-            int(round(1.0 * beat)),
-            int(round(1.0625 * beat)),
-            int(round(1.125 * beat)),
-            int(round(2.0 * beat)),
-            int(round(2.0625 * beat)),
-            int(round(4.1 * beat)),
-        ],
-        frames=m.CANDIDATE_TARGET_FRAMES,
-    )
-    for index in (1, 2):
-        (
-            render_dir
-            / f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
-        ).write_bytes(late_only)
-    expect_value_error(
-        lambda: m.collect_candidate(root),
-        "bounded beat-3 command window",
-    )
+fake_effect_analysis = dict(fb_fa_only_analysis)
+fake_effect_analysis["window_onset_counts"] = dict(
+    fb_fa_only_analysis["window_onset_counts"]
+)
+fake_effect_analysis["window_onset_counts"]["retr_cont_beat_2"] = 1
+expect_value_error(
+    lambda: m.validate_same_witness_analysis(
+        fake_effect_analysis,
+        "candidate",
+        expected_frame_count=m.CANDIDATE_TARGET_FRAMES,
+        require_retrigger_effects=True,
+    ),
+    "does not prove both FB and FA retrigger-family effects",
+)
 
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
