@@ -369,8 +369,15 @@ class GeneratedObserver(unittest.TestCase):
                 '                        $renderOne.process_exited = $true\n'
                 '                        $renderOne.process_exit_code = [int64]$process.ExitCode\n'
                 '                    }\n'
-                '                    if (-not $process.HasExited -and '
-                '[bool]$renderOne.dialog_closed) {\n'
+                '                    $renderOneInspectionFailure = @(\n'
+                '                        @($renderOne.diagnostics) | Where-Object {\n'
+                '                            [string]$_ -clike '
+                '"could not inspect reference process after render attempt:*"\n'
+                '                        }\n'
+                '                    ).Count -gt 0\n'
+                '                    if (-not $process.HasExited -and\n'
+                '                        [bool]$renderOne.dialog_closed -and\n'
+                '                        -not $renderOneInspectionFailure) {\n'
                 '                        $renderTwo = Invoke-Phase6cAudioRender '
                 '$process $windowTitle $renderTwoPath'
             )
@@ -406,6 +413,18 @@ class GeneratedObserver(unittest.TestCase):
             self.assertEqual(
                 text.count('$runtimeOutcome = if ($postCompletionExit) {'),
                 3,
+            )
+            self.assertEqual(
+                text.count('$renderOneInspectionFailure = @('),
+                2,
+            )
+            self.assertEqual(
+                text.count('$postRenderInspectionFailure = @('),
+                2,
+            )
+            self.assertEqual(
+                text.count('$runtimeOutcome = if ($postRenderInspectionFailure) {'),
+                2,
             )
 
     def test_builder_accepts_crlf_checkout_of_pinned_base(self):
