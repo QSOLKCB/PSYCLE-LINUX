@@ -683,6 +683,18 @@ def validate_precommand_process_exit(attempt: object) -> dict:
         raise ValueError("pre-command process-exit attempt is not an object")
     exit_code = attempt.get("process_exit_code")
     diagnostics = attempt.get("diagnostics")
+    diagnostics_valid = (
+        isinstance(diagnostics, list)
+        and len(diagnostics) in (1, 2)
+        and all(isinstance(value, str) for value in diagnostics)
+        and diagnostics[0] == PRECOMMAND_EXIT_DIAGNOSTIC
+        and (
+            len(diagnostics) == 1
+            or diagnostics[1].startswith(
+                PROCESS_INSPECTION_FAILURE_PREFIX
+            )
+        )
+    )
     if (
         attempt.get("outcome") != "inconclusive"
         or attempt.get("command_verified") is not False
@@ -695,7 +707,7 @@ def validate_precommand_process_exit(attempt: object) -> dict:
         or attempt.get("process_exited") is not True
         or not isinstance(exit_code, int)
         or isinstance(exit_code, bool)
-        or diagnostics != [PRECOMMAND_EXIT_DIAGNOSTIC]
+        or not diagnostics_valid
     ):
         raise ValueError("pre-command process-exit shape is invalid")
     return {
@@ -896,7 +908,14 @@ def validate_inconclusive_runtime(
     if not isinstance(attempt, dict):
         raise ValueError("inconclusive primary render attempt is not an object")
 
-    if attempt.get("diagnostics") == [PRECOMMAND_EXIT_DIAGNOSTIC]:
+    attempt_diagnostics = attempt.get("diagnostics")
+    precommand_exit_candidate = (
+        isinstance(attempt_diagnostics, list)
+        and len(attempt_diagnostics) in (1, 2)
+        and attempt_diagnostics
+        and attempt_diagnostics[0] == PRECOMMAND_EXIT_DIAGNOSTIC
+    )
+    if precommand_exit_candidate:
         quarantine = validate_precommand_process_exit(attempt)
         expected_name = f"original-delayed-retrigger-execution-{attempt_number}.wav"
         expected_path = child(
