@@ -306,7 +306,6 @@ def validate_completed_render_attempt(
             attempt.get("process_exited") is True
             and isinstance(exit_code, int)
             and not isinstance(exit_code, bool)
-            and exit_code != 0
         )
         if allow_post_completion_exit
         else (
