@@ -2409,6 +2409,10 @@ def validate_original_inconclusive_runtime(
                 index,
                 allow_post_completion_exit=(index == len(renders)),
             )
+            if index < len(attempts):
+                require_clean_completed_attempt_before_later_attempt(
+                    attempt, "same-witness later render"
+                )
             if value != binding:
                 raise ValueError(
                     "same-witness post-completion-exit render binding mismatch"
@@ -2498,6 +2502,10 @@ def validate_original_inconclusive_runtime(
             binding, data = validate_original_attempt(
                 original_root, attempts[index], index + 1
             )
+            if index + 1 < len(attempts):
+                require_clean_completed_attempt_before_later_attempt(
+                    attempts[index], "same-witness later render"
+                )
             if renders[index] != binding:
                 raise ValueError(
                     "same-witness nondeterministic render binding mismatch"
@@ -2566,6 +2574,9 @@ def validate_original_inconclusive_runtime(
     for index in range(len(renders)):
         binding, data = validate_original_attempt(
             original_root, attempts[index], index + 1
+        )
+        require_clean_completed_attempt_before_later_attempt(
+            attempts[index], "same-witness interrupted later attempt"
         )
         if renders[index] != binding:
             raise ValueError(
@@ -2693,6 +2704,9 @@ def validate_original_process_exit_runtime(
     for index in range(len(renders)):
         binding, data = validate_original_attempt(
             original_root, attempts[index], index + 1
+        )
+        require_clean_completed_attempt_before_later_attempt(
+            attempts[index], "same-witness process-exit later attempt"
         )
         if renders[index] != binding:
             raise ValueError(
@@ -2827,7 +2841,6 @@ def validate_original_attempt(
             attempt.get("process_exited") is True
             and isinstance(exit_code, int)
             and not isinstance(exit_code, bool)
-            and exit_code != 0
         )
         if allow_post_completion_exit
         else (
@@ -2857,6 +2870,17 @@ def validate_original_attempt(
     if digest(data) != output["sha256"]:
         raise ValueError("same-witness original output hash mismatch")
     return {"path": relative, "sha256": output["sha256"]}, data
+
+
+def require_clean_completed_attempt_before_later_attempt(
+    attempt: object, context: str
+) -> None:
+    if (
+        not isinstance(attempt, dict)
+        or attempt.get("dialog_closed") is not True
+        or attempt.get("diagnostics") != []
+    ):
+        raise ValueError(f"{context} follows a non-clean completed render")
 
 
 def validate_original(candidate_root: Path, original_root: Path) -> dict:
@@ -3071,6 +3095,9 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
     attempts = validate_original_runtime_procedure(runtime)
 
     first_binding, first = validate_original_attempt(original_root, attempts[0], 1)
+    require_clean_completed_attempt_before_later_attempt(
+        attempts[0], "same-witness repeated render"
+    )
     second_binding, second = validate_original_attempt(original_root, attempts[1], 2)
     if first != second or first_binding["sha256"] != second_binding["sha256"]:
         raise ValueError("same-witness original renders are not byte-identical")
