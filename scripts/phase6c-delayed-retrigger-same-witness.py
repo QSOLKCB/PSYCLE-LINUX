@@ -2207,6 +2207,20 @@ def validate_original_predispatch_observer_failure(attempt: object) -> list[str]
             "same-witness pre-dispatch observer failure attempt is not an object"
         )
     diagnostics = attempt.get("diagnostics")
+    diagnostics_valid = (
+        isinstance(diagnostics, list)
+        and len(diagnostics) in (1, 2)
+        and all(isinstance(value, str) for value in diagnostics)
+        and diagnostics[0].startswith(
+            OBSERVER_INITIALIZATION_FAILURE_PREFIX
+        )
+        and (
+            len(diagnostics) == 1
+            or diagnostics[1].startswith(
+                base.PROCESS_INSPECTION_FAILURE_PREFIX
+            )
+        )
+    )
     if (
         attempt.get("outcome") != "inconclusive"
         or attempt.get("command_verified") is not True
@@ -2218,12 +2232,7 @@ def validate_original_predispatch_observer_failure(attempt: object) -> list[str]
         or attempt.get("observed_output") is not None
         or attempt.get("process_exited") is not False
         or attempt.get("process_exit_code") is not None
-        or not isinstance(diagnostics, list)
-        or len(diagnostics) != 1
-        or not isinstance(diagnostics[0], str)
-        or not diagnostics[0].startswith(
-            OBSERVER_INITIALIZATION_FAILURE_PREFIX
-        )
+        or not diagnostics_valid
     ):
         raise ValueError(
             "same-witness pre-dispatch observer failure shape is invalid"
@@ -2509,10 +2518,16 @@ def validate_original_inconclusive_runtime(
         )
         if (
             isinstance(final_diagnostics, list)
-            and len(final_diagnostics) == 1
-            and isinstance(final_diagnostics[0], str)
+            and len(final_diagnostics) in (1, 2)
+            and all(isinstance(value, str) for value in final_diagnostics)
             and final_diagnostics[0].startswith(
                 OBSERVER_INITIALIZATION_FAILURE_PREFIX
+            )
+            and (
+                len(final_diagnostics) == 1
+                or final_diagnostics[1].startswith(
+                    base.PROCESS_INSPECTION_FAILURE_PREFIX
+                )
             )
         ):
             retained_diagnostics = []
