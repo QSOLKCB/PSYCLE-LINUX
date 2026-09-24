@@ -598,6 +598,41 @@ def validate_playback_graph(
         raise ValueError("same-witness fixture playback machine set mismatch")
     sampler = machines[0]
     master = machines[128]
+
+    def expected_connection(
+        index: int,
+        *,
+        input_slot: int = -1,
+        output_slot: int = -1,
+        input_connected: int = 0,
+        output_connected: int = 0,
+    ) -> dict:
+        return {
+            "index": index,
+            "input_slot": input_slot,
+            "output_slot": output_slot,
+            "input_volume": 1.0,
+            "wire_multiplier": 1.0,
+            "output_connected": output_connected,
+            "input_connected": input_connected,
+        }
+
+    expected_sampler_connections = [
+        expected_connection(0, output_slot=128, output_connected=1),
+        *[expected_connection(index) for index in range(1, 12)],
+    ]
+    expected_master_connections = [
+        expected_connection(0, input_slot=0, input_connected=1),
+        *[expected_connection(index) for index in range(1, 12)],
+    ]
+    if (
+        sampler["connections"] != expected_sampler_connections
+        or master["connections"] != expected_master_connections
+    ):
+        raise ValueError(
+            "same-witness fixture MACD connection table differs from canonical route"
+        )
+
     sampler_outputs = [
         item
         for item in sampler["connections"]
