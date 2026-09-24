@@ -1290,6 +1290,38 @@ with tempfile.TemporaryDirectory() as temporary:
     closed_first_attempt["dialog_closed"] = True
     closed_first_attempt["diagnostics"] = []
 
+    second_init_failure = {
+        "outcome": "inconclusive",
+        "command_verified": True,
+        "command_dispatched": False,
+        "dialog_verified": False,
+        "controls_configured": False,
+        "save_invoked": False,
+        "output": None,
+        "observed_output": None,
+        "process_exited": False,
+        "process_exit_code": None,
+        "diagnostics": [
+            "could not initialize render-dialog observer: synthetic second-attempt failure"
+        ],
+    }
+    second_init_runtime = dict(inconclusive_runtime)
+    second_init_runtime["renders"] = [first_binding]
+    second_init_runtime["attempts"] = [
+        closed_first_attempt,
+        second_init_failure,
+    ]
+    second_init = m.validate_original_inconclusive_runtime(
+        root, second_init_runtime
+    )
+    assert second_init["inconclusive_reason"] == (
+        "render-observer-initialization-failure"
+    )
+    assert second_init["retained_renders"] == [first_binding]
+    assert len(second_init["retained_render_analyses"]) == 1
+    assert second_init["diagnostics"] == second_init_failure["diagnostics"]
+    assert m.inconclusive_render_binding_status(second_init) == "not-dispatched"
+
     partial_second_attempt = dict(ambiguous_attempt)
     partial_second_attempt["observed_output"] = None
     partial_runtime = dict(inconclusive_runtime)
