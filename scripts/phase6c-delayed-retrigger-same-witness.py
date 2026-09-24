@@ -2189,6 +2189,9 @@ def validate_original_ambiguous_event_binding(attempt: dict) -> None:
         )
 
 
+OBSERVER_INITIALIZATION_FAILURE_PREFIX = (
+    "could not initialize render-dialog observer:"
+)
 OBSERVER_SEALING_FAILURE_PREFIX = "could not seal render-dialog observer:"
 
 
@@ -2350,6 +2353,38 @@ def validate_original_inconclusive_runtime(
         or pre["stable_marker_polls"] < 4
     ):
         raise ValueError("same-witness inconclusive original runtime mismatch")
+
+    if len(renders) == 0 and len(attempts) == 1:
+        attempt = attempts[0]
+        diagnostics = attempt.get("diagnostics") if isinstance(attempt, dict) else None
+        if (
+            isinstance(attempt, dict)
+            and attempt.get("outcome") == "inconclusive"
+            and attempt.get("command_verified") is True
+            and attempt.get("command_dispatched") is False
+            and attempt.get("dialog_verified") is False
+            and attempt.get("controls_configured") is False
+            and attempt.get("save_invoked") is False
+            and attempt.get("output") is None
+            and attempt.get("observed_output") is None
+            and attempt.get("process_exited") is False
+            and attempt.get("process_exit_code") is None
+            and isinstance(diagnostics, list)
+            and len(diagnostics) == 1
+            and isinstance(diagnostics[0], str)
+            and diagnostics[0].startswith(
+                OBSERVER_INITIALIZATION_FAILURE_PREFIX
+            )
+        ):
+            return {
+                "inconclusive_reason": "render-observer-initialization-failure",
+                "binding_error": None,
+                "diagnostics": diagnostics,
+                "process_exit_code": None,
+                "observed_output": None,
+                "retained_renders": [],
+                "retained_render_analyses": [],
+            }
 
     retained_renders: list[dict] = []
     retained_analyses: list[dict] = []
@@ -2567,6 +2602,8 @@ def validate_original_inconclusive_runtime(
 def inconclusive_render_binding_status(quarantine: dict) -> str:
     if quarantine.get("inconclusive_reason") == "pre-render-load-not-accepted":
         return "not-attempted"
+    if quarantine.get("inconclusive_reason") == "render-observer-initialization-failure":
+        return "not-dispatched"
     return "accepted" if quarantine.get("binding_error") is None else "rejected"
 
 
