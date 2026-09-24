@@ -296,6 +296,18 @@ with tempfile.TemporaryDirectory() as temporary:
     assert exited["process_exit_code"] == -1073741819
     assert exited["binding_error"] is None
 
+    clean_pre_save_exit = dict(pre_save_exit)
+    clean_pre_save_exit["process_exit_code"] = 0
+    clean_exited = module.validate_inconclusive_runtime(
+        root,
+        {"exit_code_before_termination": 0},
+        {"deterministic": False, "renders": []},
+        [clean_pre_save_exit],
+    )
+    assert clean_exited["inconclusive_reason"] == "process-exit-before-completed-save"
+    assert clean_exited["process_exit_code"] == 0
+    assert clean_exited["binding_error"] is None
+
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     (root / "delayed-retrigger-execution").mkdir()
