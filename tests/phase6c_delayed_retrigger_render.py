@@ -996,6 +996,32 @@ assert projection["qualified_diagnosis"] == work_boundary.QUALIFIED_DIAGNOSIS
 assert projection["qualified_interpretation"]["voice_work_entry"] == "unresolved"
 assert projection["qualified_interpretation"]["voice_tick_fault_location"] == "unresolved"
 
+frozen_projection = work_boundary.validate_frozen_projection()
+assert frozen_projection["validation"] == "durable-repository-manifest"
+assert frozen_projection["workflow_run_id"] == work_boundary.FROZEN_PROJECTION_RUN_ID
+
+with tempfile.TemporaryDirectory() as manifest_temp:
+    corrupted_manifest_path = Path(manifest_temp) / "historical-manifest.json"
+    corrupted_manifest = work_boundary.expected_frozen_manifest()
+    corrupted_manifest["fixtures"]["delayed-note-short"][
+        "original_receipt_sha256"
+    ] = "0" * 64
+    corrupted_manifest_path.write_text(
+        json.dumps(corrupted_manifest, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    saved_manifest = work_boundary.FROZEN_MANIFEST
+    work_boundary.FROZEN_MANIFEST = corrupted_manifest_path
+    try:
+        try:
+            work_boundary.validate_frozen_projection()
+        except ValueError as exc:
+            assert "durable historical manifest mismatch" in str(exc)
+        else:
+            raise AssertionError("expected corrupted durable manifest rejection")
+    finally:
+        work_boundary.FROZEN_MANIFEST = saved_manifest
+
 with tempfile.TemporaryDirectory() as projection_temp:
     projection_root = Path(projection_temp)
     candidate_root = projection_root / "candidate"
