@@ -2189,6 +2189,49 @@ def validate_original_ambiguous_event_binding(attempt: dict) -> None:
         )
 
 
+OBSERVER_SEALING_FAILURE_PREFIX = "could not seal render-dialog observer:"
+
+
+def validate_original_observer_sealing_failure(attempt: dict) -> None:
+    diagnostics = attempt.get("diagnostics")
+    boundary_tick = attempt.get("render_dialog_dispatch_boundary_tick")
+    preexisting_count = attempt.get("preexisting_render_dialog_count")
+    selected_handle = attempt.get("selected_render_dialog_native_handle")
+    runtime_id = attempt.get("selected_render_dialog_runtime_id")
+    if (
+        attempt.get("render_dialog_native_event_hook_armed") is not True
+        or attempt.get("render_dialog_event_message_pump_started") is not True
+        or attempt.get("render_dialog_dispatch_boundary_set") is not True
+        or not isinstance(boundary_tick, int)
+        or isinstance(boundary_tick, bool)
+        or not 0 <= boundary_tick <= 0xFFFFFFFF
+        or not isinstance(preexisting_count, int)
+        or isinstance(preexisting_count, bool)
+        or preexisting_count < 0
+        or not isinstance(selected_handle, int)
+        or isinstance(selected_handle, bool)
+        or selected_handle <= 0
+        or not isinstance(runtime_id, list)
+        or not runtime_id
+        or any(type(value) is not int for value in runtime_id)
+        or attempt.get("save_invoked") is not True
+        or not isinstance(attempt.get("stable_output_polls"), int)
+        or isinstance(attempt.get("stable_output_polls"), bool)
+        or attempt["stable_output_polls"] < 4
+        or attempt.get("close_control_seen") is not True
+        or not isinstance(diagnostics, list)
+        or not diagnostics
+        or any(not isinstance(value, str) for value in diagnostics)
+        or not any(
+            value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+            for value in diagnostics
+        )
+    ):
+        raise ValueError(
+            "same-witness inconclusive render lacks observer-sealing failure evidence"
+        )
+
+
 def validate_original_observed_output(
     original_root: Path, attempt: dict, index: int
 ) -> dict | None:
@@ -2482,12 +2525,20 @@ def validate_original_inconclusive_runtime(
         validate_original_event_binding(attempt)
     except ValueError as exc:
         binding_error = str(exc)
-        validate_original_ambiguous_event_binding(attempt)
-        inconclusive_reason = (
-            "process-exit-before-save-wave"
-            if exited_validly
-            else "ambiguous-final-render-attempt"
-        )
+        if any(
+            isinstance(value, str)
+            and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+            for value in diagnostics
+        ):
+            validate_original_observer_sealing_failure(attempt)
+            inconclusive_reason = "render-observer-sealing-failure"
+        else:
+            validate_original_ambiguous_event_binding(attempt)
+            inconclusive_reason = (
+                "process-exit-before-save-wave"
+                if exited_validly
+                else "ambiguous-final-render-attempt"
+            )
     else:
         # The dialog can be bound unambiguously and still fail later in UIA or
         # harness automation. A process exit before Save Wave is likewise
@@ -2595,7 +2646,14 @@ def validate_original_process_exit_runtime(
         validate_original_event_binding(attempt)
     except ValueError as exc:
         binding_error = str(exc)
-        validate_original_ambiguous_event_binding(attempt)
+        if any(
+            isinstance(value, str)
+            and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+            for value in diagnostics
+        ):
+            validate_original_observer_sealing_failure(attempt)
+        else:
+            validate_original_ambiguous_event_binding(attempt)
     else:
         binding_error = None
 
