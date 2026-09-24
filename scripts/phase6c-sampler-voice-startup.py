@@ -421,7 +421,10 @@ def validate_completed_render_attempt(attempt: dict, name: str) -> None:
         "but dialog teardown did not complete"
     )
     completed_and_closed = (
-        attempt.get("dialog_closed") is True and diagnostics == []
+        attempt.get("dialog_closed") is True
+        and attempt.get("close_control_seen") is True
+        and attempt.get("close_uia_invoked") is True
+        and diagnostics == []
     )
     completed_with_teardown_failure = (
         attempt.get("dialog_closed") is False
