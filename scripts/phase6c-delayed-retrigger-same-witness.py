@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import os
 import shutil
 import struct
 import subprocess
@@ -126,6 +127,9 @@ CANDIDATE_RECEIPT = "candidate-delayed-retrigger-sampulse-runtime.json"
 ORIGINAL_RECEIPT = "original-delayed-retrigger-sampulse-runtime.json"
 ORIGINAL_ANALYSIS = "original-delayed-retrigger-sampulse-runtime-analysis.json"
 COMPARISON = "delayed-retrigger-sampulse-runtime-comparison.json"
+RENDER_EXECUTION_REPLAY = (
+    "delayed-retrigger-sampulse-runtime/renderer-execution-replay.json"
+)
 REFERENCE_BUILD = "Psycle 1.12.0 x86"
 ORIGINAL_RENDER_SETTINGS = {
     "sample_rate": 44100,
@@ -1636,11 +1640,9 @@ def validate_pair_of_waves(
     return bindings, waves[0], analyses[0]
 
 
-def validate_candidate_render_log(root: Path, index: int) -> dict:
-    relative = f"delayed-retrigger/sampulse-candidate-render-{index}.log"
-    path = child(root, relative)
+def extract_renderer_summary(data: bytes, label: str) -> dict:
     summaries: list[dict] = []
-    for raw_line in path.read_bytes().splitlines():
+    for raw_line in data.splitlines():
         if not raw_line.strip():
             continue
         try:
@@ -1654,11 +1656,150 @@ def validate_candidate_render_log(root: Path, index: int) -> dict:
         if isinstance(value, dict) and value.get("schema_version") == 1:
             summaries.append(value)
     if len(summaries) != 1:
-        raise ValueError(
-            "same-witness candidate render log lacks one renderer JSON summary"
-        )
+        raise ValueError(label + " lacks one renderer JSON summary")
+    return summaries[0]
 
-    summary = summaries[0]
+
+def expected_renderer_execution_replay_receipt(
+    root: Path, observations: list[dict]
+) -> dict:
+    root = root.resolve()
+    binary_relative = f"{NAME}/phase6c-delayed-retrigger-sampulse-render"
+    binary_bytes = child(root, binary_relative).read_bytes()
+    fixture_bytes = child(root, FIXTURE).read_bytes()
+    renders = []
+    for index, observation in enumerate(observations, start=1):
+        relative = (
+            f"{NAME}/candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+        )
+        data = child(root, relative).read_bytes()
+        renders.append(
+            {
+                "index": index,
+                "path": relative,
+                "sha256": digest(data),
+                "size_bytes": len(data),
+                "summary": observation,
+            }
+        )
+    return {
+        "schema_version": 1,
+        "phase": "6C",
+        "contract": CONTRACT,
+        "validation": "verified-renderer-execution-replay",
+        "binary": {
+            "path": binary_relative,
+            "sha256": digest(binary_bytes),
+        },
+        "fixture": {
+            "path": FIXTURE,
+            "sha256": digest(fixture_bytes),
+            "size_bytes": len(fixture_bytes),
+        },
+        "renders": renders,
+    }
+
+
+def validate_renderer_execution_replay(
+    root: Path, observations: list[dict]
+) -> dict:
+    if not sys.platform.startswith("linux"):
+        raise ValueError(
+            "same-witness renderer execution replay requires the Linux candidate host"
+        )
+    root = root.resolve()
+    binary = child(
+        root, f"{NAME}/phase6c-delayed-retrigger-sampulse-render"
+    )
+    fixture = child(root, FIXTURE)
+    fixture_bytes = fixture.read_bytes()
+    expected = expected_renderer_execution_replay_receipt(root, observations)
+    environment = dict(os.environ)
+    environment["PSYCLE_THREADS"] = "1"
+
+    with tempfile.TemporaryDirectory(
+        prefix="phase6c-render-replay-", dir=root
+    ) as temporary:
+        replay_root = Path(temporary)
+        for index, retained_observation in enumerate(observations, start=1):
+            output = replay_root / f"render-{index}.wav"
+            try:
+                completed = subprocess.run(
+                    [str(binary), str(fixture), str(output)],
+                    cwd=root,
+                    env=environment,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=60,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as exc:
+                raise ValueError(
+                    "same-witness renderer execution replay failed"
+                ) from exc
+            if completed.returncode != 0 or not output.is_file():
+                raise ValueError(
+                    "same-witness renderer execution replay did not complete"
+                )
+
+            replay_summary = extract_renderer_summary(
+                completed.stdout + b"\n" + completed.stderr,
+                f"same-witness renderer replay {index}",
+            )
+            replay_bytes = output.read_bytes()
+            retained_relative = (
+                f"{NAME}/candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
+            )
+            retained_bytes = child(root, retained_relative).read_bytes()
+            if replay_bytes != retained_bytes:
+                raise ValueError(
+                    "same-witness renderer replay WAV differs from retained WAV"
+                )
+
+            input_path = replay_summary.get("input_path")
+            output_path = replay_summary.get("output_path")
+            normalized_input = (
+                input_path.replace("\\", "/")
+                if isinstance(input_path, str)
+                else None
+            )
+            normalized_output = (
+                output_path.replace("\\", "/")
+                if isinstance(output_path, str)
+                else None
+            )
+            if (
+                not isinstance(normalized_input, str)
+                or not normalized_input.endswith("/" + FIXTURE)
+                or replay_summary.get("input_size_bytes") != len(fixture_bytes)
+                or replay_summary.get("input_sha256") != digest(fixture_bytes)
+                or not isinstance(normalized_output, str)
+                or not normalized_output.endswith("/" + output.name)
+                or replay_summary.get("output_size_bytes") != len(replay_bytes)
+                or replay_summary.get("output_sha256") != digest(replay_bytes)
+            ):
+                raise ValueError(
+                    "same-witness renderer replay summary identity mismatch"
+                )
+
+            normalized = dict(replay_summary)
+            normalized["input_path"] = FIXTURE
+            normalized["output_path"] = retained_relative
+            if normalized != retained_observation:
+                raise ValueError(
+                    "same-witness retained renderer summary differs from replay"
+                )
+
+    return expected
+
+
+def validate_candidate_render_log(root: Path, index: int) -> dict:
+    relative = f"delayed-retrigger/sampulse-candidate-render-{index}.log"
+    path = child(root, relative)
+    summary = extract_renderer_summary(
+        path.read_bytes(),
+        "same-witness candidate render log",
+    )
     final_play_beat = summary.get("final_play_beat")
     expected_name = f"candidate-delayed-retrigger-sampulse-runtime-{index}.wav"
     expected_relative = f"{NAME}/{expected_name}"
@@ -1780,6 +1921,10 @@ def collect_candidate(root: Path) -> dict:
     reviewed_provenance = validate_renderer_build_provenance(
         root, render_observations
     )
+    execution_replay = validate_renderer_execution_replay(
+        root, render_observations
+    )
+    write_new(child(root, RENDER_EXECUTION_REPLAY), execution_replay)
     receipt = {
         "schema_version": 1,
         "phase": "6C",
@@ -1807,6 +1952,9 @@ def collect_candidate(root: Path) -> dict:
                     root, "delayed-retrigger/sampulse-candidate-render-2.log"
                 ),
             ],
+            "execution_replay": artifact_binding(
+                root, RENDER_EXECUTION_REPLAY
+            ),
         },
         "renders": renders,
         "render_sha256": digest(wave),
@@ -1858,6 +2006,7 @@ def validate_candidate(root: Path) -> dict:
         "renderer_symbols": "delayed-retrigger/sampulse-render-symbols.log",
         "renderer_main_disassembly": "delayed-retrigger/sampulse-render-main-disassembly.log",
         "eins_converter_log": "delayed-retrigger/sampulse-eins-compat.log",
+        "execution_replay": RENDER_EXECUTION_REPLAY,
     }
     for key, expected_path in expected_single.items():
         validate_artifact_binding(root, provenance.get(key), expected_path)
@@ -1883,6 +2032,23 @@ def validate_candidate(root: Path) -> dict:
         raise ValueError(
             "same-witness candidate renderer observation binding mismatch"
         )
+
+    stored_replay = read_json(child(root, RENDER_EXECUTION_REPLAY))
+    expected_replay = expected_renderer_execution_replay_receipt(
+        root, render_observations
+    )
+    if stored_replay != expected_replay:
+        raise ValueError(
+            "same-witness renderer execution replay receipt mismatch"
+        )
+    if sys.platform.startswith("linux"):
+        replayed = validate_renderer_execution_replay(
+            root, render_observations
+        )
+        if replayed != stored_replay:
+            raise ValueError(
+                "same-witness renderer execution replay validation mismatch"
+            )
 
     renders, wave, analysis = validate_pair_of_waves(
         root,
