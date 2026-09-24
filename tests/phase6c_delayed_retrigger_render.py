@@ -138,6 +138,22 @@ expect_failure(
     "must be mono",
 )
 
+silent_declared = wave_pcm16([0] * len(witness_frames([])))
+appended_impulses = wave_pcm16(
+    witness_frames([0.0625, 1.0, 1.0625, 1.125, 2.0, 2.0625, 3.125])
+)
+appended_data_offset = appended_impulses.index(b"data")
+expect_failure(
+    silent_declared + appended_impulses[appended_data_offset:],
+    "trailing bytes beyond declared RIFF extent",
+)
+
+duplicate_data = bytearray(valid)
+duplicate_payload = struct.pack("<hhhh", 16000, -16000, 8000, -8000)
+duplicate_data += b"data" + struct.pack("<I", len(duplicate_payload)) + duplicate_payload
+struct.pack_into("<I", duplicate_data, 4, len(duplicate_data) - 8)
+expect_failure(bytes(duplicate_data), "duplicate WAV data chunk")
+
 verified_exit_attempt = {
     **valid_render_event_binding(),
     "outcome": "inconclusive",
