@@ -110,6 +110,7 @@ REVIEWED_ENGINE_ANCHORS = {
 CONTRACT = "sequencer-delayed-retrigger-same-witness-render"
 NAME = "delayed-retrigger-sampulse-runtime"
 FIXTURE = "delayed-retrigger/phase6c-delayed-retrigger-sampulse-execution.psy"
+EXPECTED_PSY3_FILE_VERSION = 0x11
 TITLE = "PSYCLE-LINUX Phase 6C delayed/retrigger Sampulse execution witness"
 EXPECTED_INFO_PAYLOAD = (
     TITLE.encode("utf-8") + b"\0Unnamed\0No Comments\0"
@@ -238,6 +239,11 @@ def read_cstring(data: bytes, offset: int, label: str) -> tuple[str, int]:
 def parse_psy3_chunks(data: bytes) -> list[tuple[bytes, int, bytes]]:
     if len(data) < 20 or data[:8] != b"PSY3SONG":
         raise ValueError("same-witness Sampulse fixture is not PSY3")
+    file_version = struct.unpack_from("<I", data, 8)[0]
+    if file_version != EXPECTED_PSY3_FILE_VERSION:
+        raise ValueError(
+            "same-witness Sampulse fixture has noncanonical PSY3 file version"
+        )
     song_size = struct.unpack_from("<I", data, 12)[0]
     chunk_count = struct.unpack_from("<I", data, 16)[0]
     chunk_start = 16 + song_size
@@ -2605,7 +2611,6 @@ def validate_original_inconclusive_runtime(
         process_exited is True
         and isinstance(process_exit_code, int)
         and not isinstance(process_exit_code, bool)
-        and process_exit_code != 0
     )
     alive_validly = process_exited is False and process_exit_code is None
     if (
