@@ -241,6 +241,74 @@ def require_attempt_prefix(attempt: object, name: str) -> dict:
     return attempt
 
 
+def require_fresh_render_event_binding(attempt: dict, name: str) -> None:
+    tick = attempt.get("render_dialog_dispatch_boundary_tick")
+    preexisting = attempt.get("preexisting_render_dialog_count")
+    handle = attempt.get("selected_render_dialog_native_handle")
+    runtime_id = attempt.get("selected_render_dialog_runtime_id")
+    if (
+        attempt.get("render_dialog_native_event_hook_armed") is not True
+        or attempt.get("render_dialog_event_message_pump_started") is not True
+        or attempt.get("render_dialog_dispatch_boundary_set") is not True
+        or not isinstance(tick, int)
+        or isinstance(tick, bool)
+        or not 0 <= tick <= 0xFFFFFFFF
+        or attempt.get("dialog_discovery")
+        != "pumped-win-event-object-show-strictly-after-dispatch-tick"
+        or not isinstance(preexisting, int)
+        or isinstance(preexisting, bool)
+        or preexisting < 0
+        or attempt.get("render_dialog_post_dispatch_observed_window_event_count") != 1
+        or type(attempt.get("render_dialog_post_dispatch_observed_window_event_count")) is not int
+        or attempt.get("render_dialog_unresolved_post_dispatch_event_count") != 0
+        or type(attempt.get("render_dialog_unresolved_post_dispatch_event_count")) is not int
+        or attempt.get("render_dialog_post_dispatch_event_count") != 1
+        or type(attempt.get("render_dialog_post_dispatch_event_count")) is not int
+        or not isinstance(handle, int)
+        or isinstance(handle, bool)
+        or handle <= 0
+        or not isinstance(runtime_id, list)
+        or not runtime_id
+        or any(type(value) is not int for value in runtime_id)
+    ):
+        raise ValueError(
+            f"{name}: fresh render lacks bound post-dispatch dialog evidence"
+        )
+
+
+def validate_completed_render_attempt(attempt: dict, name: str) -> None:
+    require_fresh_render_event_binding(attempt, name)
+    diagnostics = attempt.get("diagnostics")
+    teardown_diagnostic = (
+        "render output finalized and Close control was verified, "
+        "but dialog teardown did not complete"
+    )
+    completed_and_closed = (
+        attempt.get("dialog_closed") is True
+        and attempt.get("close_control_seen") is True
+        and attempt.get("close_uia_invoked") is True
+        and diagnostics == []
+    )
+    completed_with_teardown_failure = (
+        attempt.get("dialog_closed") is False
+        and attempt.get("close_control_seen") is True
+        and attempt.get("close_uia_invoked") is True
+        and diagnostics == [teardown_diagnostic]
+    )
+    if (
+        attempt.get("outcome") != "rendered"
+        or attempt.get("process_exited") is not False
+        or attempt.get("process_exit_code") is not None
+        or not isinstance(attempt.get("stable_output_polls"), int)
+        or isinstance(attempt.get("stable_output_polls"), bool)
+        or attempt["stable_output_polls"] < 4
+        or not (completed_and_closed or completed_with_teardown_failure)
+    ):
+        raise ValueError(
+            f"{name}: completed render lacks terminal completion evidence"
+        )
+
+
 def validate_failed_observed_output(
     original_root: Path,
     name: str,
@@ -423,13 +491,9 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         if outcome == "rendered-once":
             if load_result != "accepted":
                 raise ValueError(f"{name}: completed render requires accepted final load")
-            if (
-                attempt.get("outcome") != "rendered"
-                or attempt.get("process_exited") is not False
-                or attempt.get("process_exit_code") is not None
-                or len(renders) != 1
-            ):
+            if len(renders) != 1:
                 raise ValueError(f"{name}: completed render state is inconsistent")
+            validate_completed_render_attempt(attempt, name)
             output = attempt.get("output")
             expected_relative = (
                 f"delayed-retrigger-substrate-{name}/" + expected_filename
