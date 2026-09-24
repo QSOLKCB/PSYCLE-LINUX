@@ -379,12 +379,26 @@ def validate_completed_render_attempt(
     attempt: object,
     value: object,
     attempt_number: int,
+    *,
+    allow_post_completion_exit: bool = False,
 ) -> bytes:
     validated = validate_render_attempt(attempt, "rendered")
-    if validated.get("process_exited") is not False:
-        raise ValueError("reference exited during a supposedly successful render")
-    if validated.get("process_exit_code") is not None:
-        raise ValueError("successful render unexpectedly recorded a process exit code")
+    exit_code = validated.get("process_exit_code")
+    if allow_post_completion_exit:
+        if (
+            validated.get("process_exited") is not True
+            or not isinstance(exit_code, int)
+            or isinstance(exit_code, bool)
+            or exit_code == 0
+        ):
+            raise ValueError(
+                "post-completion render exit lacks a nonzero process exit code"
+            )
+    else:
+        if validated.get("process_exited") is not False:
+            raise ValueError("reference exited during a supposedly successful render")
+        if exit_code is not None:
+            raise ValueError("successful render unexpectedly recorded a process exit code")
 
     stable_output_polls = validated.get("stable_output_polls")
     diagnostics = validated.get("diagnostics")
@@ -521,14 +535,55 @@ def validate_inconclusive_runtime(
     completed = []
     completed_analyses = []
     completed_diagnostics = []
+    post_completion_exit_code = None
+    post_completion_observed_output = None
     for index, value in enumerate(renders, start=1):
         completed_attempt = attempts[index - 1]
+        allow_post_completion_exit = (
+            index == len(renders)
+            and len(renders) == len(attempts)
+            and isinstance(completed_attempt, dict)
+            and completed_attempt.get("outcome") == "rendered"
+            and completed_attempt.get("process_exited") is True
+        )
         data = validate_completed_render_attempt(
-            original_root, completed_attempt, value, index
+            original_root,
+            completed_attempt,
+            value,
+            index,
+            allow_post_completion_exit=allow_post_completion_exit,
         )
         completed.append(value)
         completed_analyses.append(analyze_wave_observation(data))
         completed_diagnostics.extend(completed_attempt.get("diagnostics", []))
+        if allow_post_completion_exit:
+            post_completion_exit_code = completed_attempt.get("process_exit_code")
+            if receipt.get("exit_code_before_termination") != post_completion_exit_code:
+                raise ValueError(
+                    "post-completion primary process-exit code is inconsistent"
+                )
+            post_completion_observed_output = validate_observed_output(
+                original_root, completed_attempt.get("observed_output")
+            )
+            expected_path = (
+                "delayed-retrigger-execution/"
+                f"original-delayed-retrigger-execution-{index}.wav"
+            )
+            if post_completion_observed_output["path"] != expected_path:
+                raise ValueError(
+                    "post-completion primary render observed-output path mismatch"
+                )
+
+    if post_completion_exit_code is not None:
+        return {
+            "inconclusive_reason": "process-exit-after-completed-render",
+            "completed_renders": completed,
+            "completed_render_analyses": completed_analyses,
+            "binding_error": None,
+            "diagnostics": completed_diagnostics,
+            "process_exit_code": post_completion_exit_code,
+            "observed_output": post_completion_observed_output,
+        }
 
     # Two completed, byte-different renders are valid nondeterminism evidence.
     if len(renders) == 2:
