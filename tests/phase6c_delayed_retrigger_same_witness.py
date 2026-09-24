@@ -1253,6 +1253,25 @@ with tempfile.TemporaryDirectory() as temporary:
     assert precommand["retained_renders"] == []
     assert m.inconclusive_render_binding_status(precommand) == "not-dispatched"
 
+    precommand_with_inspection_attempt = dict(precommand_attempt)
+    precommand_with_inspection_attempt["diagnostics"] = [
+        m.PRECOMMAND_EXIT_DIAGNOSTIC,
+        m.base.PROCESS_INSPECTION_FAILURE_PREFIX + " synthetic refresh failure",
+    ]
+    precommand_with_inspection_runtime = dict(inconclusive_runtime)
+    precommand_with_inspection_runtime["attempts"] = [
+        precommand_with_inspection_attempt
+    ]
+    precommand_with_inspection = m.validate_original_inconclusive_runtime(
+        precommand_root, precommand_with_inspection_runtime
+    )
+    assert precommand_with_inspection["inconclusive_reason"] == (
+        "process-exit-before-render-command-verification"
+    )
+    assert precommand_with_inspection["diagnostics"] == (
+        precommand_with_inspection_attempt["diagnostics"]
+    )
+
     no_event_root = root / "no-event-render-dialog"
     no_event_root.mkdir()
     no_event_attempt = dict(ambiguous_attempt)
