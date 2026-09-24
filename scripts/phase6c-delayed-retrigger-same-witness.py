@@ -2703,11 +2703,22 @@ def validate_original_inconclusive_runtime(
         # harness automation. A process exit before Save Wave is likewise
         # retained as non-evidentiary UNKNOWN.
         binding_error = None
-        inconclusive_reason = (
-            "process-exit-before-save-wave"
-            if exited_validly
-            else "post-binding-render-automation-failure"
-        )
+        if any(
+            isinstance(value, str)
+            and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+            for value in diagnostics
+        ):
+            if attempt.get("save_invoked") is True:
+                validate_original_observer_sealing_failure(attempt)
+            else:
+                base.validate_presave_render_quarantine(attempt)
+            inconclusive_reason = "render-observer-sealing-failure"
+        else:
+            inconclusive_reason = (
+                "process-exit-before-save-wave"
+                if exited_validly
+                else "post-binding-render-automation-failure"
+            )
 
     observed_binding = validate_original_observed_output(
         original_root, attempt, len(attempts)
