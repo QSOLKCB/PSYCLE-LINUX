@@ -17,6 +17,13 @@ assert spec is not None and spec.loader is not None
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
+# Unit fixtures use a structural mock ELF. The workflow's real candidate
+# collection exercises the retained renderer replay; unit tests keep the
+# deterministic replay receipt shape without trying to render through the mock.
+m.validate_renderer_execution_replay = (
+    m.expected_renderer_execution_replay_receipt
+)
+
 
 def pcm_wave(onsets: list[int], frames: int = 90000) -> bytes:
     values = [0] * frames
