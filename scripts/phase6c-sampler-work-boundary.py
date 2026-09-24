@@ -686,12 +686,24 @@ def interpretation_for_outcomes(
     )
 
 
-def validate_projection(
-    candidate_root: Path, original_root: Path, summary: dict
-) -> str:
-    projection = read_json(PROJECTION)
+def validate_projection_semantic_envelope(projection: object) -> dict:
+    expected_keys = {
+        "schema_version",
+        "phase",
+        "contract",
+        "parity_status",
+        "evidence_run",
+        "historical_receipt",
+        "historical_diagnosis",
+        "qualified_diagnosis",
+        "source_identity",
+        "fixtures",
+        "qualified_interpretation",
+    }
     if (
-        projection.get("schema_version") != 1
+        not isinstance(projection, dict)
+        or set(projection) != expected_keys
+        or projection.get("schema_version") != 1
         or projection.get("phase") != "6C"
         or projection.get("contract") != CONTRACT
         or projection.get("parity_status") != "UNKNOWN"
@@ -701,6 +713,15 @@ def validate_projection(
         != QUALIFIED_DIAGNOSIS
     ):
         raise ValueError("Sampler work-boundary projection identity mismatch")
+    return projection
+
+
+def validate_projection(
+    candidate_root: Path, original_root: Path, summary: dict
+) -> str:
+    projection = validate_projection_semantic_envelope(
+        read_json(PROJECTION)
+    )
 
     source = projection.get("source_identity")
     if (
@@ -783,7 +804,9 @@ def validate_frozen_projection() -> dict:
             "Sampler work-boundary durable historical manifest mismatch"
         )
 
-    projection = read_json(PROJECTION)
+    projection = validate_projection_semantic_envelope(
+        read_json(PROJECTION)
+    )
     evidence_run = projection.get("evidence_run")
     if (
         not isinstance(evidence_run, dict)
