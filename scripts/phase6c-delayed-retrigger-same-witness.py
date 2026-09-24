@@ -629,9 +629,20 @@ def validate_playback_graph(
         expected_connection(0, input_slot=0, input_connected=1),
         *[expected_connection(index) for index in range(1, 12)],
     ]
+    sampler_connection_identity = [
+        dict(item) for item in sampler["connections"]
+    ]
+    master_connection_identity = [
+        dict(item) for item in master["connections"]
+    ]
+    # The two active gain values have a dedicated audible-route check below.
+    # Normalize only those fields here so the connection-table gate can focus
+    # on exact slots, booleans, inactive gains, and all unused entries.
+    sampler_connection_identity[0]["wire_multiplier"] = 1.0
+    master_connection_identity[0]["input_volume"] = 1.0
     if (
-        sampler["connections"] != expected_sampler_connections
-        or master["connections"] != expected_master_connections
+        sampler_connection_identity != expected_sampler_connections
+        or master_connection_identity != expected_master_connections
     ):
         raise ValueError(
             "same-witness fixture MACD connection table differs from canonical route"
