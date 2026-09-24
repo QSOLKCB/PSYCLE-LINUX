@@ -51,6 +51,19 @@ EXPECTED_XMSAMPLER_EXTENSION_SHA256 = (
 )
 STRICT_ANALYZER_ID = "phase6c-delayed-retrigger-render-evidence.py::analyze_wave"
 RELAXED_ANALYZER_ID = "phase6c-delayed-retrigger-same-witness.py::analyze_wave_observation"
+RUNTIME_COMMAND_EXECUTION_SCOPE = {
+    "established_effects": [
+        "FB 3F retrigger",
+        "FA 42 retrigger-continue",
+    ],
+    "criterion": (
+        "multiple distinct onsets in both the FB beat-1 and FA beat-2 windows"
+    ),
+    "not_established": [
+        "FD 7F note-delay effect",
+        "FE 04 extended-command effect",
+    ],
+}
 REQUIRED_RENDERER_DEFINED_SYMBOLS = (
     "psycle::core::Psy3Filter::LoadEINSv1",
     "psycle::core::Sequencer::Work(unsigned int)",
@@ -1124,47 +1137,25 @@ def validate_same_witness_analysis(
     role: str,
     *,
     expected_frame_count: int | None = None,
-    require_all_command_windows: bool = False,
+    require_retrigger_effects: bool = False,
 ) -> dict:
     if expected_frame_count is not None and analysis.get("frame_count") != expected_frame_count:
         raise ValueError(
             f"{role} render frame count does not match fixed-frame target"
         )
-    if require_all_command_windows:
+    if require_retrigger_effects:
         counts = analysis.get("window_onset_counts")
-        required = (
-            "note_delay_beat_0",
-            "retrigger_beat_1",
-            "retr_cont_beat_2",
-            "extended_marker_beat_3",
-        )
         if (
             not isinstance(counts, dict)
-            or any(
-                not isinstance(counts.get(key), int)
-                or isinstance(counts.get(key), bool)
-                or counts[key] <= 0
-                for key in required
-            )
+            or not isinstance(counts.get("retrigger_beat_1"), int)
+            or isinstance(counts.get("retrigger_beat_1"), bool)
+            or counts["retrigger_beat_1"] < 2
+            or not isinstance(counts.get("retr_cont_beat_2"), int)
+            or isinstance(counts.get("retr_cont_beat_2"), bool)
+            or counts["retr_cont_beat_2"] < 2
         ):
             raise ValueError(
-                f"{role} render does not expose every command-bearing window"
-            )
-        onset_beats = analysis.get("onset_beats")
-        bounded_beat_3 = False
-        if isinstance(onset_beats, list):
-            for value in onset_beats:
-                if (
-                    isinstance(value, (int, float))
-                    and not isinstance(value, bool)
-                    and math.isfinite(float(value))
-                    and 3.0 <= float(value) < 4.0
-                ):
-                    bounded_beat_3 = True
-                    break
-        if not bounded_beat_3:
-            raise ValueError(
-                f"{role} render lacks an onset in the bounded beat-3 command window"
+                f"{role} render does not prove both FB and FA retrigger-family effects"
             )
     return analysis
 
@@ -1204,7 +1195,7 @@ def analyze_original_command_evidence(data: bytes) -> tuple[dict, bool, str | No
         strict = validate_same_witness_analysis(
             base.analyze_wave(data),
             "original",
-            require_all_command_windows=True,
+            require_retrigger_effects=True,
         )
     except ValueError as exc:
         return observation, False, str(exc)
@@ -1627,7 +1618,7 @@ def validate_pair_of_waves(
     role: str,
     *,
     expected_frame_count: int | None = None,
-    require_all_command_windows: bool = False,
+    require_retrigger_effects: bool = False,
 ) -> tuple[list[dict], bytes, dict]:
     bindings: list[dict] = []
     waves: list[bytes] = []
@@ -1639,7 +1630,7 @@ def validate_pair_of_waves(
             base.analyze_wave(data),
             role,
             expected_frame_count=expected_frame_count,
-            require_all_command_windows=require_all_command_windows,
+            require_retrigger_effects=require_retrigger_effects,
         )
         bindings.append(binding)
         waves.append(data)
@@ -1919,7 +1910,7 @@ def collect_candidate(root: Path) -> dict:
         "candidate-delayed-retrigger-sampulse-runtime",
         "candidate",
         expected_frame_count=CANDIDATE_TARGET_FRAMES,
-        require_all_command_windows=True,
+        require_retrigger_effects=True,
     )
     render_observations = validate_candidate_render_logs(root)
     if any(
@@ -1971,6 +1962,7 @@ def collect_candidate(root: Path) -> dict:
         "render_sha256": digest(wave),
         "analysis": analysis,
         "runtime_command_execution_observed": True,
+        "runtime_command_execution_scope": RUNTIME_COMMAND_EXECUTION_SCOPE,
         "timing_interpretation": "deferred",
         "parity_status": "UNKNOWN",
     }
@@ -1996,6 +1988,8 @@ def validate_candidate(root: Path) -> dict:
         or receipt.get("command_layout") != base.EXPECTED_LAYOUT["commands"]
         or receipt.get("render_procedure") != CANDIDATE_RENDER_PROCEDURE
         or receipt.get("runtime_command_execution_observed") is not True
+        or receipt.get("runtime_command_execution_scope")
+        != RUNTIME_COMMAND_EXECUTION_SCOPE
         or receipt.get("timing_interpretation") != "deferred"
         or receipt.get("parity_status") != "UNKNOWN"
     ):
@@ -2066,7 +2060,7 @@ def validate_candidate(root: Path) -> dict:
         "candidate-delayed-retrigger-sampulse-runtime",
         "candidate",
         expected_frame_count=CANDIDATE_TARGET_FRAMES,
-        require_all_command_windows=True,
+        require_retrigger_effects=True,
     )
     if any(
         observation["target_frames"] != analysis["frame_count"]
@@ -2752,6 +2746,7 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                 "render_sha256": candidate["render_sha256"],
                 "analysis": candidate["analysis"],
                 "runtime_command_execution_observed": True,
+                "runtime_command_execution_scope": RUNTIME_COMMAND_EXECUTION_SCOPE,
             },
             "original": {
                 "reference_build": REFERENCE_BUILD,
@@ -2831,6 +2826,7 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                 "render_sha256": candidate["render_sha256"],
                 "analysis": candidate["analysis"],
                 "runtime_command_execution_observed": True,
+                "runtime_command_execution_scope": RUNTIME_COMMAND_EXECUTION_SCOPE,
             },
             "original": {
                 "reference_build": REFERENCE_BUILD,
@@ -2897,6 +2893,11 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         "render_sha256": digest(first),
         "analysis": analysis,
         "runtime_command_execution_observed": command_execution_observed,
+        "runtime_command_execution_scope": (
+            RUNTIME_COMMAND_EXECUTION_SCOPE
+            if command_execution_observed
+            else None
+        ),
         "command_execution_analysis_error": analysis_error,
         "timing_interpretation": "deferred",
         "parity_status": "UNKNOWN",
@@ -2918,12 +2919,18 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "render_sha256": candidate["render_sha256"],
             "analysis": candidate["analysis"],
             "runtime_command_execution_observed": True,
+            "runtime_command_execution_scope": RUNTIME_COMMAND_EXECUTION_SCOPE,
         },
         "original": {
             "reference_build": REFERENCE_BUILD,
             "render_sha256": original_analysis["render_sha256"],
             "analysis": original_analysis["analysis"],
             "runtime_command_execution_observed": command_execution_observed,
+            "runtime_command_execution_scope": (
+                RUNTIME_COMMAND_EXECUTION_SCOPE
+                if command_execution_observed
+                else None
+            ),
             "command_execution_analysis_error": analysis_error,
         },
         "command_bearing_runtime_pair_observed": command_execution_observed,
@@ -2934,9 +2941,10 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             (
                 "Both sides rendered the exact same four-beat Sampulse/XMSampler "
                 "witness with the same command geometry and the same onset analyzer. "
-                "This completes the command-bearing runtime evidence pair. Exact onset "
-                "timing is retained for the next evidence rung and is not classified "
-                "in this receipt."
+                "The multiple-onset evidence establishes only the FB retrigger and FA "
+                "retrigger-continue effects; FD note-delay and FE extended-command "
+                "effects are explicitly not established here. Exact onset timing is "
+                "retained for the next evidence rung and is not classified in this receipt."
             )
             if command_execution_observed
             else (
