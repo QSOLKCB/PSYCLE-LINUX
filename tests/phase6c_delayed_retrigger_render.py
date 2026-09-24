@@ -515,6 +515,34 @@ with tempfile.TemporaryDirectory() as temporary:
     assert second_init["completed_render_analyses"][0]["frame_count"] == 64
     assert second_init["diagnostics"] == second_init_failure["diagnostics"]
 
+    second_name = "original-delayed-retrigger-execution-2.wav"
+    second_path = output_dir / second_name
+    second_data = wave_pcm16([1] + [0] * 63)
+    second_path.write_bytes(second_data)
+    second_hash = hashlib.sha256(second_data).hexdigest()
+    second_binding = {
+        "path": "delayed-retrigger-execution/" + second_name,
+        "sha256": second_hash,
+    }
+    second_attempt = dict(clean_attempt)
+    second_attempt["output"] = {"path": second_name, "sha256": second_hash}
+    try:
+        module.validate_inconclusive_runtime(
+            root,
+            {},
+            {
+                "deterministic": False,
+                "renders": [first_binding, second_binding],
+            },
+            [teardown_attempt, second_attempt],
+        )
+    except ValueError as exc:
+        assert "primary later render follows a non-clean completed render" in str(exc)
+    else:
+        raise AssertionError(
+            "expected impossible second render after teardown failure rejection"
+        )
+
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     output_dir = root / "delayed-retrigger-execution"
@@ -560,6 +588,20 @@ with tempfile.TemporaryDirectory() as temporary:
     assert retained_exit["completed_renders"] == [binding]
     assert retained_exit["process_exit_code"] == -1073741819
     assert retained_exit["observed_output"]["sha256"] == sha
+
+    clean_exit_attempt = dict(post_completion_exit_attempt)
+    clean_exit_attempt["process_exit_code"] = 0
+    retained_clean_exit = module.validate_inconclusive_runtime(
+        root,
+        {"exit_code_before_termination": 0},
+        {"deterministic": False, "renders": [binding]},
+        [clean_exit_attempt],
+    )
+    assert retained_clean_exit["inconclusive_reason"] == (
+        "process-exit-after-completed-render"
+    )
+    assert retained_clean_exit["completed_renders"] == [binding]
+    assert retained_clean_exit["process_exit_code"] == 0
 
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
@@ -795,6 +837,21 @@ isolation.validate_completed_render_attempt(
     "control",
     allow_post_completion_exit=True,
 )
+clean_post_exit_completed = {
+    **valid_substrate_completed,
+    "process_exited": True,
+    "process_exit_code": 0,
+}
+substrate.validate_completed_render_attempt(
+    clean_post_exit_completed,
+    "master-only",
+    allow_post_completion_exit=True,
+)
+isolation.validate_completed_render_attempt(
+    clean_post_exit_completed,
+    "control",
+    allow_post_completion_exit=True,
+)
 for altered, phrase in (
     ({"stable_output_polls": 0}, "terminal completion evidence"),
     ({"close_control_seen": False}, "terminal completion evidence"),
@@ -1022,6 +1079,21 @@ startup.validate_completed_render_attempt(
 )
 work_boundary.validate_completed_render_attempt(
     post_exit_completed_attempt,
+    "release-no-active-voice",
+    allow_post_completion_exit=True,
+)
+clean_exit_completed_attempt = {
+    **valid_completed_attempt,
+    "process_exited": True,
+    "process_exit_code": 0,
+}
+startup.validate_completed_render_attempt(
+    clean_exit_completed_attempt,
+    "note-sample-default-inst",
+    allow_post_completion_exit=True,
+)
+work_boundary.validate_completed_render_attempt(
+    clean_exit_completed_attempt,
     "release-no-active-voice",
     allow_post_completion_exit=True,
 )
