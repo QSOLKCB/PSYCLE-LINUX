@@ -805,6 +805,8 @@ valid_completed_attempt = {
     "process_exited": False,
     "process_exit_code": None,
     "dialog_closed": True,
+    "close_control_seen": True,
+    "close_uia_invoked": True,
     "stable_output_polls": 4,
     "diagnostics": [],
 }
@@ -844,6 +846,22 @@ startup.validate_completed_render_attempt(
 work_boundary.validate_completed_render_attempt(
     teardown_only_completed_attempt, "release-no-active-voice"
 )
+
+closed_without_close_evidence = dict(valid_completed_attempt)
+closed_without_close_evidence["close_control_seen"] = False
+closed_without_close_evidence["close_uia_invoked"] = False
+for check, name in (
+    (startup.validate_completed_render_attempt, "note-sample-default-inst"),
+    (work_boundary.validate_completed_render_attempt, "release-no-active-voice"),
+):
+    try:
+        check(closed_without_close_evidence, name)
+    except ValueError as exc:
+        assert "terminal completion evidence" in str(exc)
+    else:
+        raise AssertionError(
+            "expected clean-close receipt without verified Close evidence rejection"
+        )
 
 fresh_attempt = {
     **teardown_only_completed_attempt,
