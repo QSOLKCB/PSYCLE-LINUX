@@ -412,7 +412,7 @@ class GeneratedObserver(unittest.TestCase):
             )
             self.assertEqual(
                 text.count('$runtimeOutcome = if ($postCompletionExit) {'),
-                3,
+                0,
             )
             self.assertEqual(
                 text.count('$renderOneInspectionFailure = @('),
@@ -420,11 +420,11 @@ class GeneratedObserver(unittest.TestCase):
             )
             self.assertEqual(
                 text.count('$postRenderInspectionFailure = @('),
-                2,
+                5,
             )
             self.assertEqual(
                 text.count('$runtimeOutcome = if ($postRenderInspectionFailure) {'),
-                2,
+                5,
             )
 
     def test_builder_accepts_crlf_checkout_of_pinned_base(self):
