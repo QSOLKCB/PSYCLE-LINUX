@@ -2195,6 +2195,36 @@ OBSERVER_INITIALIZATION_FAILURE_PREFIX = (
 OBSERVER_SEALING_FAILURE_PREFIX = "could not seal render-dialog observer:"
 
 
+def validate_original_predispatch_observer_failure(attempt: object) -> list[str]:
+    if not isinstance(attempt, dict):
+        raise ValueError(
+            "same-witness pre-dispatch observer failure attempt is not an object"
+        )
+    diagnostics = attempt.get("diagnostics")
+    if (
+        attempt.get("outcome") != "inconclusive"
+        or attempt.get("command_verified") is not True
+        or attempt.get("command_dispatched") is not False
+        or attempt.get("dialog_verified") is not False
+        or attempt.get("controls_configured") is not False
+        or attempt.get("save_invoked") is not False
+        or attempt.get("output") is not None
+        or attempt.get("observed_output") is not None
+        or attempt.get("process_exited") is not False
+        or attempt.get("process_exit_code") is not None
+        or not isinstance(diagnostics, list)
+        or len(diagnostics) != 1
+        or not isinstance(diagnostics[0], str)
+        or not diagnostics[0].startswith(
+            OBSERVER_INITIALIZATION_FAILURE_PREFIX
+        )
+    ):
+        raise ValueError(
+            "same-witness pre-dispatch observer failure shape is invalid"
+        )
+    return diagnostics
+
+
 def validate_original_observer_sealing_failure(attempt: dict) -> None:
     diagnostics = attempt.get("diagnostics")
     boundary_tick = attempt.get("render_dialog_dispatch_boundary_tick")
@@ -2354,38 +2384,6 @@ def validate_original_inconclusive_runtime(
     ):
         raise ValueError("same-witness inconclusive original runtime mismatch")
 
-    if len(renders) == 0 and len(attempts) == 1:
-        attempt = attempts[0]
-        diagnostics = attempt.get("diagnostics") if isinstance(attempt, dict) else None
-        if (
-            isinstance(attempt, dict)
-            and attempt.get("outcome") == "inconclusive"
-            and attempt.get("command_verified") is True
-            and attempt.get("command_dispatched") is False
-            and attempt.get("dialog_verified") is False
-            and attempt.get("controls_configured") is False
-            and attempt.get("save_invoked") is False
-            and attempt.get("output") is None
-            and attempt.get("observed_output") is None
-            and attempt.get("process_exited") is False
-            and attempt.get("process_exit_code") is None
-            and isinstance(diagnostics, list)
-            and len(diagnostics) == 1
-            and isinstance(diagnostics[0], str)
-            and diagnostics[0].startswith(
-                OBSERVER_INITIALIZATION_FAILURE_PREFIX
-            )
-        ):
-            return {
-                "inconclusive_reason": "render-observer-initialization-failure",
-                "binding_error": None,
-                "diagnostics": diagnostics,
-                "process_exit_code": None,
-                "observed_output": None,
-                "retained_renders": [],
-                "retained_render_analyses": [],
-            }
-
     retained_renders: list[dict] = []
     retained_analyses: list[dict] = []
 
@@ -2436,6 +2434,58 @@ def validate_original_inconclusive_runtime(
             "retained_renders": retained_renders,
             "retained_render_analyses": retained_analyses,
         }
+
+    if len(attempts) == len(renders) + 1:
+        final_attempt = attempts[-1]
+        final_diagnostics = (
+            final_attempt.get("diagnostics")
+            if isinstance(final_attempt, dict)
+            else None
+        )
+        if (
+            isinstance(final_diagnostics, list)
+            and len(final_diagnostics) == 1
+            and isinstance(final_diagnostics[0], str)
+            and final_diagnostics[0].startswith(
+                OBSERVER_INITIALIZATION_FAILURE_PREFIX
+            )
+        ):
+            retained_diagnostics = []
+            for index, value in enumerate(renders, start=1):
+                completed_attempt = attempts[index - 1]
+                binding, data = validate_original_attempt(
+                    original_root, completed_attempt, index
+                )
+                if value != binding:
+                    raise ValueError(
+                        "same-witness pre-dispatch failure retained render "
+                        "binding mismatch"
+                    )
+                if (
+                    completed_attempt.get("dialog_closed") is not True
+                    or completed_attempt.get("diagnostics") != []
+                ):
+                    raise ValueError(
+                        "same-witness second-attempt initialization failure "
+                        "follows a non-clean completed render"
+                    )
+                retained_renders.append(binding)
+                retained_analyses.append(analyze_wave_observation(data))
+                retained_diagnostics.extend(
+                    completed_attempt.get("diagnostics", [])
+                )
+            init_diagnostics = validate_original_predispatch_observer_failure(
+                final_attempt
+            )
+            return {
+                "inconclusive_reason": "render-observer-initialization-failure",
+                "binding_error": None,
+                "diagnostics": retained_diagnostics + init_diagnostics,
+                "process_exit_code": None,
+                "observed_output": None,
+                "retained_renders": retained_renders,
+                "retained_render_analyses": retained_analyses,
+            }
 
     # Both renders may complete yet disagree byte-for-byte. That is valid
     # nondeterminism evidence, not a malformed receipt and not a runtime pair.
