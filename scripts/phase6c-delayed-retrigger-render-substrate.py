@@ -276,7 +276,12 @@ def require_fresh_render_event_binding(attempt: dict, name: str) -> None:
         )
 
 
-def validate_completed_render_attempt(attempt: dict, name: str) -> None:
+def validate_completed_render_attempt(
+    attempt: dict,
+    name: str,
+    *,
+    allow_post_completion_exit: bool = False,
+) -> None:
     require_fresh_render_event_binding(attempt, name)
     diagnostics = attempt.get("diagnostics")
     teardown_diagnostic = (
@@ -295,10 +300,23 @@ def validate_completed_render_attempt(attempt: dict, name: str) -> None:
         and attempt.get("close_uia_invoked") is True
         and diagnostics == [teardown_diagnostic]
     )
+    exit_code = attempt.get("process_exit_code")
+    process_state_valid = (
+        (
+            attempt.get("process_exited") is True
+            and isinstance(exit_code, int)
+            and not isinstance(exit_code, bool)
+            and exit_code != 0
+        )
+        if allow_post_completion_exit
+        else (
+            attempt.get("process_exited") is False
+            and exit_code is None
+        )
+    )
     if (
         attempt.get("outcome") != "rendered"
-        or attempt.get("process_exited") is not False
-        or attempt.get("process_exit_code") is not None
+        or not process_state_valid
         or not isinstance(attempt.get("stable_output_polls"), int)
         or isinstance(attempt.get("stable_output_polls"), bool)
         or attempt["stable_output_polls"] < 4
@@ -549,6 +567,51 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                 "observed_output": observed,
             }
         elif outcome == "inconclusive":
+            post_completion_exit = (
+                len(renders) == 1
+                and attempt.get("outcome") == "rendered"
+                and attempt.get("process_exited") is True
+            )
+            if post_completion_exit:
+                validate_completed_render_attempt(
+                    attempt, name, allow_post_completion_exit=True
+                )
+                exit_code = attempt.get("process_exit_code")
+                if receipt.get("exit_code_before_termination") != exit_code:
+                    raise ValueError(
+                        f"{name}: post-completion exit code mismatch"
+                    )
+                output = attempt.get("output")
+                expected_relative = (
+                    f"delayed-retrigger-substrate-{name}/" + expected_filename
+                )
+                if (
+                    not isinstance(output, dict)
+                    or output.get("path") != expected_filename
+                    or renders[0].get("path") != expected_relative
+                    or renders[0].get("sha256") != output.get("sha256")
+                ):
+                    raise ValueError(
+                        f"{name}: post-completion render binding mismatch"
+                    )
+                data = child(original_root, expected_relative).read_bytes()
+                if digest(data) != renders[0]["sha256"]:
+                    raise ValueError(
+                        f"{name}: post-completion render hash mismatch"
+                    )
+                observed = validate_failed_observed_output(
+                    original_root, name, attempt, expected_filename
+                )
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": "process-exit-after-completed-render",
+                    "load_result": load_result,
+                    "render_sha256": digest(data),
+                    "process_exit_code": exit_code,
+                    "observed_output": observed,
+                    "diagnostics": attempt.get("diagnostics"),
+                }
+                continue
             if renders != []:
                 raise ValueError(f"{name}: inconclusive render retained completed output")
             stable_alive = None
