@@ -683,7 +683,7 @@ for fourcc, version, payload in canonical_chunks:
     misrouted_chunks.append((fourcc, version, payload))
 expect_value_error(
     lambda: m.validate_playback_graph(misrouted_chunks),
-    "route sampler slot 0 directly to Master slot 128",
+    "connection table differs from canonical route",
 )
 
 with tempfile.TemporaryDirectory() as temporary:
