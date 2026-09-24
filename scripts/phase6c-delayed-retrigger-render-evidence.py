@@ -381,6 +381,7 @@ def validate_completed_render_attempt(
     attempt_number: int,
     *,
     allow_post_completion_exit: bool = False,
+    allow_process_inspection_failure: bool = False,
 ) -> bytes:
     validated = validate_render_attempt(attempt, "rendered")
     exit_code = validated.get("process_exit_code")
@@ -401,6 +402,29 @@ def validate_completed_render_attempt(
 
     stable_output_polls = validated.get("stable_output_polls")
     diagnostics = validated.get("diagnostics")
+    if not isinstance(diagnostics, list) or any(
+        not isinstance(value, str) for value in diagnostics
+    ):
+        raise ValueError("successful render diagnostics are malformed")
+    inspection_diagnostics = [
+        value
+        for value in diagnostics
+        if value.startswith(PROCESS_INSPECTION_FAILURE_PREFIX)
+    ]
+    if allow_process_inspection_failure:
+        if len(inspection_diagnostics) != 1:
+            raise ValueError(
+                "post-render process-inspection failure evidence is missing"
+            )
+    elif inspection_diagnostics:
+        raise ValueError(
+            "successful render unexpectedly contains process-inspection failure"
+        )
+    terminal_diagnostics = [
+        value
+        for value in diagnostics
+        if not value.startswith(PROCESS_INSPECTION_FAILURE_PREFIX)
+    ]
     teardown_diagnostic = (
         "render output finalized and Close control was verified, "
         "but dialog teardown did not complete"
@@ -409,13 +433,13 @@ def validate_completed_render_attempt(
         validated.get("dialog_closed") is True
         and validated.get("close_control_seen") is True
         and validated.get("close_uia_invoked") is True
-        and diagnostics == []
+        and terminal_diagnostics == []
     )
     completed_with_teardown_failure = (
         validated.get("dialog_closed") is False
         and validated.get("close_control_seen") is True
         and validated.get("close_uia_invoked") is True
-        and diagnostics == [teardown_diagnostic]
+        and terminal_diagnostics == [teardown_diagnostic]
     )
     if (
         not isinstance(stable_output_polls, int)
@@ -530,6 +554,77 @@ def validate_process_exit_runtime(
 OBSERVER_INITIALIZATION_FAILURE_PREFIX = (
     "could not initialize render-dialog observer:"
 )
+OBSERVER_SEALING_FAILURE_PREFIX = "could not seal render-dialog observer:"
+PROCESS_INSPECTION_FAILURE_PREFIX = (
+    "could not inspect reference process after render attempt:"
+)
+
+
+def has_diagnostic_prefix(attempt: object, prefix: str) -> bool:
+    if not isinstance(attempt, dict):
+        return False
+    diagnostics = attempt.get("diagnostics")
+    return (
+        isinstance(diagnostics, list)
+        and any(
+            isinstance(value, str) and value.startswith(prefix)
+            for value in diagnostics
+        )
+    )
+
+
+def validate_presave_render_quarantine(attempt: object) -> dict:
+    if not isinstance(attempt, dict):
+        raise ValueError("pre-Save render quarantine attempt is not an object")
+    diagnostics = attempt.get("diagnostics")
+    exit_code = attempt.get("process_exit_code")
+    process_state_valid = (
+        (attempt.get("process_exited") is False and exit_code is None)
+        or (
+            attempt.get("process_exited") is True
+            and isinstance(exit_code, int)
+            and not isinstance(exit_code, bool)
+        )
+    )
+    sealing_failure = has_diagnostic_prefix(
+        attempt, OBSERVER_SEALING_FAILURE_PREFIX
+    )
+    if (
+        attempt.get("outcome") != "inconclusive"
+        or attempt.get("command_verified") is not True
+        or attempt.get("command_dispatched") is not True
+        or not isinstance(attempt.get("dialog_verified"), bool)
+        or not isinstance(attempt.get("controls_configured"), bool)
+        or attempt.get("save_invoked") is not False
+        or attempt.get("output") is not None
+        or attempt.get("observed_output") is not None
+        or not process_state_valid
+        or not isinstance(diagnostics, list)
+        or not diagnostics
+        or any(not isinstance(value, str) for value in diagnostics)
+        or (
+            sealing_failure
+            and (
+                attempt.get("render_dialog_native_event_hook_armed") is not True
+                or attempt.get("render_dialog_event_message_pump_started") is not True
+                or attempt.get("render_dialog_dispatch_boundary_set") is not True
+            )
+        )
+    ):
+        raise ValueError("pre-Save render quarantine shape is invalid")
+    return {
+        "inconclusive_reason": (
+            "render-observer-sealing-failure"
+            if sealing_failure
+            else "pre-save-render-automation-failure"
+        ),
+        "completed_renders": [],
+        "completed_render_analyses": [],
+        "binding_error": None,
+        "diagnostics": diagnostics,
+        "process_exit_code": exit_code,
+        "observed_output": None,
+    }
 
 
 def validate_predispatch_observer_failure(attempt: object) -> dict:
@@ -591,6 +686,8 @@ def validate_inconclusive_runtime(
     completed_diagnostics = []
     post_completion_exit_code = None
     post_completion_observed_output = None
+    process_inspection_failure = False
+    process_inspection_observed_output = None
     for index, value in enumerate(renders, start=1):
         completed_attempt = attempts[index - 1]
         allow_post_completion_exit = (
@@ -600,12 +697,20 @@ def validate_inconclusive_runtime(
             and completed_attempt.get("outcome") == "rendered"
             and completed_attempt.get("process_exited") is True
         )
+        allow_process_inspection_failure = (
+            index == len(renders)
+            and len(renders) == len(attempts)
+            and has_diagnostic_prefix(
+                completed_attempt, PROCESS_INSPECTION_FAILURE_PREFIX
+            )
+        )
         data = validate_completed_render_attempt(
             original_root,
             completed_attempt,
             value,
             index,
             allow_post_completion_exit=allow_post_completion_exit,
+            allow_process_inspection_failure=allow_process_inspection_failure,
         )
         if index < len(attempts):
             require_clean_completed_attempt_before_later_attempt(
@@ -614,6 +719,19 @@ def validate_inconclusive_runtime(
         completed.append(value)
         completed_analyses.append(analyze_wave_observation(data))
         completed_diagnostics.extend(completed_attempt.get("diagnostics", []))
+        if allow_process_inspection_failure:
+            process_inspection_failure = True
+            process_inspection_observed_output = validate_observed_output(
+                original_root, completed_attempt.get("observed_output")
+            )
+            expected_path = (
+                "delayed-retrigger-execution/"
+                f"original-delayed-retrigger-execution-{index}.wav"
+            )
+            if process_inspection_observed_output["path"] != expected_path:
+                raise ValueError(
+                    "post-render process-inspection observed-output path mismatch"
+                )
         if allow_post_completion_exit:
             post_completion_exit_code = completed_attempt.get("process_exit_code")
             if receipt.get("exit_code_before_termination") != post_completion_exit_code:
@@ -631,6 +749,21 @@ def validate_inconclusive_runtime(
                 raise ValueError(
                     "post-completion primary render observed-output path mismatch"
                 )
+
+    if process_inspection_failure:
+        return {
+            "inconclusive_reason": "post-render-process-inspection-failure",
+            "completed_renders": completed,
+            "completed_render_analyses": completed_analyses,
+            "binding_error": None,
+            "diagnostics": completed_diagnostics,
+            "process_exit_code": (
+                attempts[-1].get("process_exit_code")
+                if isinstance(attempts[-1], dict)
+                else None
+            ),
+            "observed_output": process_inspection_observed_output,
+        }
 
     if len(attempts) == len(renders) + 1:
         final_attempt = attempts[-1]
