@@ -462,6 +462,52 @@ with tempfile.TemporaryDirectory() as temporary:
 
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
+    output_dir = root / "delayed-retrigger-execution"
+    output_dir.mkdir()
+    name = "original-delayed-retrigger-execution-1.wav"
+    path = output_dir / name
+    data = wave_pcm16([0] * 64)
+    path.write_bytes(data)
+    sha = hashlib.sha256(data).hexdigest()
+    binding = {
+        "path": "delayed-retrigger-execution/" + name,
+        "sha256": sha,
+    }
+    post_completion_exit_attempt = {
+        **valid_render_event_binding(),
+        "outcome": "rendered",
+        "command_verified": True,
+        "command_dispatched": True,
+        "dialog_verified": True,
+        "controls_configured": True,
+        "save_invoked": True,
+        "process_exited": True,
+        "process_exit_code": -1073741819,
+        "stable_output_polls": 4,
+        "dialog_closed": True,
+        "close_control_seen": True,
+        "close_uia_invoked": True,
+        "diagnostics": [],
+        "output": {"path": name, "sha256": sha},
+        "observed_output": {
+            "path": name,
+            "size_bytes": len(data),
+            "sha256": sha,
+        },
+    }
+    retained_exit = module.validate_inconclusive_runtime(
+        root,
+        {"exit_code_before_termination": -1073741819},
+        {"deterministic": False, "renders": [binding]},
+        [post_completion_exit_attempt],
+    )
+    assert retained_exit["inconclusive_reason"] == "process-exit-after-completed-render"
+    assert retained_exit["completed_renders"] == [binding]
+    assert retained_exit["process_exit_code"] == -1073741819
+    assert retained_exit["observed_output"]["sha256"] == sha
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
     missing_attempt = {"observed_output": None}
     missing = isolation.validate_failed_observed_output(
         root,
@@ -658,6 +704,41 @@ assert (
     'render_dialog_post_dispatch_event_count -ne 1'
     in render_helper_source
 )
+
+valid_substrate_completed = {
+    **valid_render_event_binding(),
+    "outcome": "rendered",
+    "command_verified": True,
+    "command_dispatched": True,
+    "dialog_verified": True,
+    "controls_configured": True,
+    "save_invoked": True,
+    "process_exited": False,
+    "process_exit_code": None,
+    "stable_output_polls": 4,
+    "dialog_closed": True,
+    "close_control_seen": True,
+    "close_uia_invoked": True,
+    "diagnostics": [],
+}
+substrate.require_attempt_prefix(valid_substrate_completed, "master-only")
+substrate.validate_completed_render_attempt(valid_substrate_completed, "master-only")
+for altered, phrase in (
+    ({"stable_output_polls": 0}, "terminal completion evidence"),
+    ({"close_control_seen": False}, "terminal completion evidence"),
+    ({"close_uia_invoked": False}, "terminal completion evidence"),
+    (
+        {"render_dialog_post_dispatch_event_count": 2},
+        "bound post-dispatch dialog evidence",
+    ),
+):
+    invalid = {**valid_substrate_completed, **altered}
+    try:
+        substrate.validate_completed_render_attempt(invalid, "master-only")
+    except ValueError as exc:
+        assert phrase in str(exc)
+    else:
+        raise AssertionError("expected invalid substrate terminal state rejection")
 
 assert substrate.diagnose({
     "master-only": "reference-process-exited-during-render",
