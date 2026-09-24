@@ -154,6 +154,30 @@ duplicate_data += b"data" + struct.pack("<I", len(duplicate_payload)) + duplicat
 struct.pack_into("<I", duplicate_data, 4, len(duplicate_data) - 8)
 expect_failure(bytes(duplicate_data), "duplicate WAV data chunk")
 
+predispatch_observer_failure = {
+    "outcome": "inconclusive",
+    "command_verified": True,
+    "command_dispatched": False,
+    "dialog_verified": False,
+    "controls_configured": False,
+    "save_invoked": False,
+    "output": None,
+    "observed_output": None,
+    "process_exited": False,
+    "process_exit_code": None,
+    "diagnostics": [
+        "could not initialize render-dialog observer: synthetic hook failure"
+    ],
+}
+predispatch = module.validate_inconclusive_runtime(
+    Path("."),
+    {},
+    {"deterministic": False, "renders": []},
+    [predispatch_observer_failure],
+)
+assert predispatch["inconclusive_reason"] == "render-observer-initialization-failure"
+assert predispatch["completed_renders"] == []
+
 verified_exit_attempt = {
     **valid_render_event_binding(),
     "outcome": "inconclusive",
@@ -573,6 +597,7 @@ assert "GetTickCount" in render_helper_source
 assert "TickStrictlyAfter(eventTime, dispatchBoundaryTick)" in render_helper_source
 assert "return unchecked((int)(value - boundary)) > 0;" in render_helper_source
 assert "Phase6cRenderWindowOpenedObserver" in render_helper_source
+assert "could not initialize render-dialog observer:" in render_helper_source
 assert "BeginDispatchBoundary" in render_helper_source
 assert "CancelDispatchBoundary" in render_helper_source
 assert "render_dialog_native_event_hook_armed" in render_helper_source
@@ -723,6 +748,22 @@ valid_substrate_completed = {
 }
 substrate.require_attempt_prefix(valid_substrate_completed, "master-only")
 substrate.validate_completed_render_attempt(valid_substrate_completed, "master-only")
+isolation.validate_completed_render_attempt(valid_substrate_completed, "control")
+post_exit_completed = {
+    **valid_substrate_completed,
+    "process_exited": True,
+    "process_exit_code": -1073741819,
+}
+substrate.validate_completed_render_attempt(
+    post_exit_completed,
+    "master-only",
+    allow_post_completion_exit=True,
+)
+isolation.validate_completed_render_attempt(
+    post_exit_completed,
+    "control",
+    allow_post_completion_exit=True,
+)
 for altered, phrase in (
     ({"stable_output_polls": 0}, "terminal completion evidence"),
     ({"close_control_seen": False}, "terminal completion evidence"),
@@ -937,6 +978,21 @@ valid_completed_attempt = {
 }
 startup.validate_completed_render_attempt(
     valid_completed_attempt, "note-sample-default-inst"
+)
+post_exit_completed_attempt = {
+    **valid_completed_attempt,
+    "process_exited": True,
+    "process_exit_code": -1073741819,
+}
+startup.validate_completed_render_attempt(
+    post_exit_completed_attempt,
+    "note-sample-default-inst",
+    allow_post_completion_exit=True,
+)
+work_boundary.validate_completed_render_attempt(
+    post_exit_completed_attempt,
+    "release-no-active-voice",
+    allow_post_completion_exit=True,
 )
 
 teardown_only_completed_attempt = {
