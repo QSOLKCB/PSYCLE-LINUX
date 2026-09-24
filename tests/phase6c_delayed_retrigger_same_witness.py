@@ -329,6 +329,23 @@ expect_value_error(
     "does not route sampler slot 0 directly to Master slot 128",
 )
 
+master_noncanonical_boolean_chunks = []
+for fourcc, version, payload in m.parse_psy3_chunks(valid_fixture):
+    if fourcc == b"MACD" and struct.unpack_from("<i", payload, 0)[0] == 128:
+        changed = bytearray(payload)
+        position = payload.index(b"\0", 8) + 1 + 2 + 20
+        second_connection = position + 18
+        struct.pack_into("<i", changed, second_connection, 0)
+        changed[second_connection + 17] = 2
+        payload = bytes(changed)
+    master_noncanonical_boolean_chunks.append((fourcc, version, payload))
+expect_value_error(
+    lambda: m.validate_fixture_identity(
+        repack_chunks(master_noncanonical_boolean_chunks)
+    ),
+    "connection table differs from canonical route",
+)
+
 master_silent_chunks = []
 for fourcc, version, payload in m.parse_psy3_chunks(valid_fixture):
     if fourcc == b"MACD" and struct.unpack_from("<i", payload, 0)[0] == 128:
