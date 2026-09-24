@@ -502,9 +502,26 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
 
         if len(attempts) != 1:
             raise ValueError(f"{name}: expected exactly one substrate render attempt")
-        attempt = require_attempt_prefix(attempts[0], name)
-        expected_filename = f"original-delayed-retrigger-substrate-{name}-1.wav"
         outcome = runtime.get("outcome")
+        raw_attempt = attempts[0]
+        if outcome == "inconclusive" and renders == []:
+            try:
+                predispatch = render.validate_predispatch_observer_failure(
+                    raw_attempt
+                )
+            except ValueError:
+                pass
+            else:
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": predispatch["inconclusive_reason"],
+                    "load_result": load_result,
+                    "process_exit_code": None,
+                    "diagnostics": predispatch["diagnostics"],
+                }
+                continue
+        attempt = require_attempt_prefix(raw_attempt, name)
+        expected_filename = f"original-delayed-retrigger-substrate-{name}-1.wav"
 
         if outcome == "rendered-once":
             if load_result != "accepted":
