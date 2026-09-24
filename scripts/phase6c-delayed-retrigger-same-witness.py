@@ -2393,11 +2393,66 @@ def validate_original_inconclusive_runtime(
     retained_renders: list[dict] = []
     retained_analyses: list[dict] = []
 
+    # A render can be fully finalized while the helper fails only when
+    # inspecting process state. That is infrastructure uncertainty: retain the
+    # finalized output, but never promote it into deterministic evidence.
+    last_attempt = attempts[-1] if attempts else None
+    process_inspection_failure = (
+        len(renders) == len(attempts)
+        and len(renders) in (1, 2)
+        and isinstance(last_attempt, dict)
+        and last_attempt.get("outcome") == "rendered"
+        and base.has_diagnostic_prefix(
+            last_attempt, base.PROCESS_INSPECTION_FAILURE_PREFIX
+        )
+    )
+    if process_inspection_failure:
+        retained_diagnostics = []
+        for index, value in enumerate(renders, start=1):
+            attempt = attempts[index - 1]
+            is_final = index == len(renders)
+            binding, data = validate_original_attempt(
+                original_root,
+                attempt,
+                index,
+                allow_post_completion_exit=(
+                    is_final and attempt.get("process_exited") is True
+                ),
+                allow_process_inspection_failure=is_final,
+            )
+            if index < len(attempts):
+                require_clean_completed_attempt_before_later_attempt(
+                    attempt, "same-witness later render"
+                )
+            if value != binding:
+                raise ValueError(
+                    "same-witness process-inspection render binding mismatch"
+                )
+            retained_renders.append(binding)
+            retained_analyses.append(analyze_wave_observation(data))
+            retained_diagnostics.extend(attempt.get("diagnostics", []))
+
+        observed_binding = validate_original_observed_output(
+            original_root, last_attempt, len(attempts)
+        )
+        if observed_binding is None:
+            raise ValueError(
+                "same-witness process-inspection failure lacks bound finalized output"
+            )
+        return {
+            "inconclusive_reason": "post-render-process-inspection-failure",
+            "binding_error": None,
+            "diagnostics": retained_diagnostics,
+            "process_exit_code": last_attempt.get("process_exit_code"),
+            "observed_output": observed_binding,
+            "retained_renders": retained_renders,
+            "retained_render_analyses": retained_analyses,
+        }
+
     # A render can be fully finalized and bound before the reference exits
     # during the helper's final process refresh. Retain that output and exact
     # exit diagnostically instead of forcing the shape through the
     # "failed extra attempt" process-exit path.
-    last_attempt = attempts[-1] if attempts else None
     post_completion_exit = (
         len(renders) == len(attempts)
         and len(renders) in (1, 2)
@@ -2631,7 +2686,10 @@ def validate_original_inconclusive_runtime(
             and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
             for value in diagnostics
         ):
-            validate_original_observer_sealing_failure(attempt)
+            if attempt.get("save_invoked") is True:
+                validate_original_observer_sealing_failure(attempt)
+            else:
+                base.validate_presave_render_quarantine(attempt)
             inconclusive_reason = "render-observer-sealing-failure"
         else:
             validate_original_ambiguous_event_binding(attempt)
@@ -2808,6 +2866,7 @@ def validate_original_attempt(
     index: int,
     *,
     allow_post_completion_exit: bool = False,
+    allow_process_inspection_failure: bool = False,
 ) -> tuple[dict, bytes]:
     if not isinstance(attempt, dict):
         raise ValueError("same-witness original render attempt is not an object")
@@ -2824,6 +2883,29 @@ def validate_original_attempt(
     validate_original_event_binding(attempt)
 
     diagnostics = attempt.get("diagnostics")
+    if not isinstance(diagnostics, list) or any(
+        not isinstance(value, str) for value in diagnostics
+    ):
+        raise ValueError("same-witness original render diagnostics are malformed")
+    inspection_diagnostics = [
+        value
+        for value in diagnostics
+        if value.startswith(base.PROCESS_INSPECTION_FAILURE_PREFIX)
+    ]
+    if allow_process_inspection_failure:
+        if len(inspection_diagnostics) != 1:
+            raise ValueError(
+                "same-witness post-render process-inspection evidence is missing"
+            )
+    elif inspection_diagnostics:
+        raise ValueError(
+            "same-witness successful render contains process-inspection failure"
+        )
+    terminal_diagnostics = [
+        value
+        for value in diagnostics
+        if not value.startswith(base.PROCESS_INSPECTION_FAILURE_PREFIX)
+    ]
     teardown_diagnostic = (
         "render output finalized and Close control was verified, "
         "but dialog teardown did not complete"
@@ -2832,13 +2914,13 @@ def validate_original_attempt(
         attempt.get("dialog_closed") is True
         and attempt.get("close_control_seen") is True
         and attempt.get("close_uia_invoked") is True
-        and diagnostics == []
+        and terminal_diagnostics == []
     )
     completed_with_teardown_failure = (
         attempt.get("dialog_closed") is False
         and attempt.get("close_control_seen") is True
         and attempt.get("close_uia_invoked") is True
-        and diagnostics == [teardown_diagnostic]
+        and terminal_diagnostics == [teardown_diagnostic]
     )
     exit_code = attempt.get("process_exit_code")
     process_state_valid = (
