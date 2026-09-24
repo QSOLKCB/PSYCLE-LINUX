@@ -591,9 +591,30 @@ with tempfile.TemporaryDirectory() as temporary:
         "process_exited": False,
         "process_exit_code": None,
         "diagnostics": [
-            "could not initialize render-dialog observer: synthetic second-attempt failure"
+            "could not initialize render-dialog observer: synthetic second-attempt failure",
+            "could not inspect reference process after render attempt: synthetic refresh failure",
         ],
     }
+    combined_predispatch = module.validate_predispatch_observer_failure(
+        second_init_failure
+    )
+    assert combined_predispatch["diagnostics"] == second_init_failure["diagnostics"]
+    invalid_second_init_failure = dict(second_init_failure)
+    invalid_second_init_failure["diagnostics"] = [
+        second_init_failure["diagnostics"][0],
+        "unrelated infrastructure diagnostic",
+    ]
+    try:
+        module.validate_predispatch_observer_failure(
+            invalid_second_init_failure
+        )
+    except ValueError as exc:
+        assert "pre-dispatch observer initialization failure shape is invalid" in str(exc)
+    else:
+        raise AssertionError(
+            "expected unrelated secondary pre-dispatch diagnostic rejection"
+        )
+
     second_init = module.validate_inconclusive_runtime(
         root,
         {},
