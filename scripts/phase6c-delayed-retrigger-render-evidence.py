@@ -389,10 +389,9 @@ def validate_completed_render_attempt(
             validated.get("process_exited") is not True
             or not isinstance(exit_code, int)
             or isinstance(exit_code, bool)
-            or exit_code == 0
         ):
             raise ValueError(
-                "post-completion render exit lacks a nonzero process exit code"
+                "post-completion render exit lacks an integer process exit code"
             )
     else:
         if validated.get("process_exited") is not False:
@@ -447,6 +446,17 @@ def validate_completed_render_attempt(
     return data
 
 
+def require_clean_completed_attempt_before_later_attempt(
+    attempt: object, context: str
+) -> None:
+    if (
+        not isinstance(attempt, dict)
+        or attempt.get("dialog_closed") is not True
+        or attempt.get("diagnostics") != []
+    ):
+        raise ValueError(f"{context} follows a non-clean completed render")
+
+
 def validate_process_exit_runtime(
     original_root: Path,
     receipt: dict,
@@ -474,6 +484,9 @@ def validate_process_exit_runtime(
     for index, value in enumerate(renders, start=1):
         data = validate_completed_render_attempt(
             original_root, attempts[index - 1], value, index
+        )
+        require_clean_completed_attempt_before_later_attempt(
+            attempts[index - 1], "primary process-exit later attempt"
         )
         completed_hashes.append(digest(data))
 
@@ -594,6 +607,10 @@ def validate_inconclusive_runtime(
             index,
             allow_post_completion_exit=allow_post_completion_exit,
         )
+        if index < len(attempts):
+            require_clean_completed_attempt_before_later_attempt(
+                completed_attempt, "primary later render"
+            )
         completed.append(value)
         completed_analyses.append(analyze_wave_observation(data))
         completed_diagnostics.extend(completed_attempt.get("diagnostics", []))
@@ -842,6 +859,9 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             raise ValueError("expected exactly two successful original offline renders")
         first = validate_completed_render_attempt(
             original_root, attempts[0], renders[0], 1
+        )
+        require_clean_completed_attempt_before_later_attempt(
+            attempts[0], "primary repeated render"
         )
         second = validate_completed_render_attempt(
             original_root, attempts[1], renders[1], 2
