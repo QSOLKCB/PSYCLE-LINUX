@@ -148,21 +148,39 @@ def validate_candidate(root: Path) -> dict:
 def parse_pcm16_wave(data: bytes) -> dict:
     if len(data) < 44 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
         raise ValueError("render is not a RIFF/WAVE file")
+    riff_size = struct.unpack_from("<I", data, 4)[0]
+    riff_end = 8 + riff_size
+    if riff_end != len(data):
+        if riff_end < len(data):
+            raise ValueError("WAV has trailing bytes beyond declared RIFF extent")
+        raise ValueError("truncated RIFF/WAVE file")
+    if riff_end < 12:
+        raise ValueError("invalid RIFF/WAVE extent")
+
     offset = 12
     fmt = None
     payload = None
-    while offset + 8 <= len(data):
+    while offset < riff_end:
+        if offset + 8 > riff_end:
+            raise ValueError("truncated WAV chunk header")
         chunk = data[offset : offset + 4]
         size = struct.unpack_from("<I", data, offset + 4)[0]
         start = offset + 8
         end = start + size
-        if end > len(data):
+        padded_end = end + (size & 1)
+        if end > riff_end or padded_end > riff_end:
             raise ValueError("truncated WAV chunk")
         if chunk == b"fmt ":
+            if fmt is not None:
+                raise ValueError("duplicate WAV fmt chunk")
             fmt = data[start:end]
         elif chunk == b"data":
+            if payload is not None:
+                raise ValueError("duplicate WAV data chunk")
             payload = data[start:end]
-        offset = end + (size & 1)
+        offset = padded_end
+    if offset != riff_end:
+        raise ValueError("WAV chunk table does not end at declared RIFF extent")
     if fmt is None or len(fmt) < 16 or payload is None:
         raise ValueError("WAV fmt/data chunk missing")
     audio_format, channels, sample_rate, _byte_rate, block_align, bits = struct.unpack_from(
