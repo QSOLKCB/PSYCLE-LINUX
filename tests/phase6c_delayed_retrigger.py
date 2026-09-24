@@ -377,6 +377,11 @@ class GeneratedObserver(unittest.TestCase):
                 '$process $windowTitle $renderTwoPath',
                 text,
             )
+            self.assertEqual(text.count("$postCompletionExit = ("), 2)
+            self.assertEqual(
+                text.count('} elseif ($postCompletionExit) {\n                    "inconclusive"'),
+                2,
+            )
 
     def test_builder_accepts_crlf_checkout_of_pinned_base(self):
         with tempfile.TemporaryDirectory() as temp:
