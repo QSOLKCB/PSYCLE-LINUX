@@ -424,6 +424,19 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                     "diagnostics": predispatch["diagnostics"],
                 }
                 continue
+            try:
+                presave = render.validate_presave_render_quarantine(raw_attempt)
+            except ValueError:
+                pass
+            else:
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": presave["inconclusive_reason"],
+                    "load_result": load_result,
+                    "process_exit_code": presave["process_exit_code"],
+                    "diagnostics": presave["diagnostics"],
+                }
+                continue
         attempt = require_attempt_prefix(raw_attempt, name)
         expected_filename = f"original-delayed-retrigger-isolation-{name}-1.wav"
 
