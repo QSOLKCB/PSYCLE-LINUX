@@ -1182,6 +1182,67 @@ with tempfile.TemporaryDirectory() as temporary:
     assert teardown["retained_renders"] == [first_binding]
     assert len(teardown["retained_render_analyses"]) == 1
 
+    post_completion_exit_attempt = dict(completed_attempt)
+    post_completion_exit_attempt.update(
+        {
+            "dialog_closed": True,
+            "diagnostics": [],
+            "process_exited": True,
+            "process_exit_code": -1073741819,
+            "observed_output": {
+                "path": original_path.name,
+                "size_bytes": len(valid_wave),
+                "sha256": m.digest(valid_wave),
+            },
+        }
+    )
+    post_completion_exit_runtime = dict(inconclusive_runtime)
+    post_completion_exit_runtime["renders"] = [first_binding]
+    post_completion_exit_runtime["attempts"] = [post_completion_exit_attempt]
+    post_completion_exit = m.validate_original_inconclusive_runtime(
+        root, post_completion_exit_runtime
+    )
+    assert post_completion_exit["inconclusive_reason"] == (
+        "process-exit-after-completed-render"
+    )
+    assert post_completion_exit["process_exit_code"] == -1073741819
+    assert post_completion_exit["retained_renders"] == [first_binding]
+    assert post_completion_exit["observed_output"]["sha256"] == m.digest(valid_wave)
+
+    sealing_failure_attempt = dict(completed_attempt)
+    sealing_failure_attempt.update(
+        {
+            "outcome": "inconclusive",
+            "process_exited": False,
+            "process_exit_code": None,
+            "output": None,
+            "dialog_closed": True,
+            "stable_output_polls": 4,
+            "render_dialog_post_dispatch_observed_window_event_count": 0,
+            "render_dialog_unresolved_post_dispatch_event_count": 0,
+            "render_dialog_post_dispatch_event_count": 0,
+            "diagnostics": [
+                "render dialog observer did not stop within timeout",
+                "could not seal render-dialog observer: render dialog observer did not stop within timeout",
+            ],
+            "observed_output": {
+                "path": original_path.name,
+                "size_bytes": len(valid_wave),
+                "sha256": m.digest(valid_wave),
+            },
+        }
+    )
+    sealing_failure_runtime = dict(inconclusive_runtime)
+    sealing_failure_runtime["renders"] = []
+    sealing_failure_runtime["attempts"] = [sealing_failure_attempt]
+    sealing_failure = m.validate_original_inconclusive_runtime(
+        root, sealing_failure_runtime
+    )
+    assert sealing_failure["inconclusive_reason"] == "render-observer-sealing-failure"
+    assert "post-dispatch dialog evidence" in sealing_failure["binding_error"]
+    assert sealing_failure["observed_output"]["sha256"] == m.digest(valid_wave)
+    assert sealing_failure["retained_renders"] == []
+
     closed_first_attempt = dict(completed_attempt)
     closed_first_attempt["dialog_closed"] = True
     closed_first_attempt["diagnostics"] = []
