@@ -177,8 +177,9 @@ retrigger-continue effects; this waveform criterion does **not** establish the
 `FD 7F` note-delay effect or the `FE 04` extended-command effect.
 
 If the reference process exits during the verified render attempt, the observer
-instead retains the pre-render clean-load predicate, non-zero process exit code,
-exact diagnostic and hash/size binding for any created output. That path writes
+instead retains the pre-render clean-load predicate, exact integer process exit
+code (including zero), exact diagnostic and hash/size binding for any created
+output. That path writes
 `runtime_command_execution_observed: false` and remains `UNKNOWN`; it cannot
 be used as a delayed/retrigger execution trace.
 
