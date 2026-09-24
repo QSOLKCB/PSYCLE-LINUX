@@ -418,6 +418,50 @@ with tempfile.TemporaryDirectory() as temporary:
 
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
+    output_dir = root / "delayed-retrigger-execution"
+    output_dir.mkdir()
+    first_name = "original-delayed-retrigger-execution-1.wav"
+    first_path = output_dir / first_name
+    first_data = wave_pcm16([0] * 64)
+    first_path.write_bytes(first_data)
+    first_hash = hashlib.sha256(first_data).hexdigest()
+    first_binding = {
+        "path": "delayed-retrigger-execution/" + first_name,
+        "sha256": first_hash,
+    }
+    teardown_attempt = {
+        **valid_render_event_binding(),
+        "outcome": "rendered",
+        "command_verified": True,
+        "command_dispatched": True,
+        "dialog_verified": True,
+        "controls_configured": True,
+        "save_invoked": True,
+        "process_exited": False,
+        "process_exit_code": None,
+        "stable_output_polls": 4,
+        "dialog_closed": False,
+        "close_control_seen": True,
+        "close_uia_invoked": True,
+        "diagnostics": [
+            "render output finalized and Close control was verified, "
+            "but dialog teardown did not complete"
+        ],
+        "output": {"path": first_name, "sha256": first_hash},
+    }
+    retained = module.validate_inconclusive_runtime(
+        root,
+        {},
+        {"deterministic": False, "renders": [first_binding]},
+        [teardown_attempt],
+    )
+    assert retained["inconclusive_reason"] == "incomplete-repeated-render-procedure"
+    assert retained["completed_renders"] == [first_binding]
+    assert retained["diagnostics"] == teardown_attempt["diagnostics"]
+    assert retained["completed_render_analyses"][0]["frame_count"] == 64
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
     missing_attempt = {"observed_output": None}
     missing = isolation.validate_failed_observed_output(
         root,
