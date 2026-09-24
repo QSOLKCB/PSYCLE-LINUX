@@ -1059,15 +1059,20 @@ function Invoke-Phase6cAudioRender(
             throw "source-pinned Render as Wav menu signature missing, disabled or ambiguous"
         }
         $result.command_verified = $true
-        $dialogObserver = [Phase6cRenderWindowOpenedObserver]::new(
-            [uint32]$Process.Id
-        )
+        try {
+            $dialogObserver = [Phase6cRenderWindowOpenedObserver]::new(
+                [uint32]$Process.Id
+            )
+        }
+        catch {
+            throw "could not initialize render-dialog observer: $($_.Exception.Message)"
+        }
         $result.render_dialog_native_event_hook_armed = $true
         $result.render_dialog_event_message_pump_started = [bool](
             $dialogObserver.MessagePumpStarted
         )
         if (-not $result.render_dialog_event_message_pump_started) {
-            throw "render WinEvent message pump is not running"
+            throw "could not initialize render-dialog observer: render WinEvent message pump is not running"
         }
         if (-not [Phase6cRenderNative]::Invoke(
             [uint32]$Process.Id,
