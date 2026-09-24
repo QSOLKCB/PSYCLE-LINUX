@@ -1252,6 +1252,22 @@ with tempfile.TemporaryDirectory() as temporary:
     assert post_completion_exit["retained_renders"] == [first_binding]
     assert post_completion_exit["observed_output"]["sha256"] == m.digest(valid_wave)
 
+    clean_post_completion_exit_attempt = dict(post_completion_exit_attempt)
+    clean_post_completion_exit_attempt["process_exit_code"] = 0
+    clean_post_completion_exit_runtime = dict(inconclusive_runtime)
+    clean_post_completion_exit_runtime["renders"] = [first_binding]
+    clean_post_completion_exit_runtime["attempts"] = [
+        clean_post_completion_exit_attempt
+    ]
+    clean_post_completion_exit = m.validate_original_inconclusive_runtime(
+        root, clean_post_completion_exit_runtime
+    )
+    assert clean_post_completion_exit["inconclusive_reason"] == (
+        "process-exit-after-completed-render"
+    )
+    assert clean_post_completion_exit["process_exit_code"] == 0
+    assert clean_post_completion_exit["retained_renders"] == [first_binding]
+
     sealing_failure_attempt = dict(completed_attempt)
     sealing_failure_attempt.update(
         {
@@ -1374,6 +1390,18 @@ with tempfile.TemporaryDirectory() as temporary:
     assert (
         nondeterministic["retained_renders"][0]["sha256"]
         != nondeterministic["retained_renders"][1]["sha256"]
+    )
+
+    impossible_second_render = dict(nondeterministic_runtime)
+    impossible_second_render["attempts"] = [
+        completed_attempt,
+        closed_second_attempt,
+    ]
+    expect_value_error(
+        lambda: m.validate_original_inconclusive_runtime(
+            root, impossible_second_render
+        ),
+        "same-witness later render follows a non-clean completed render",
     )
 
     crash_attempt = dict(completed_attempt)
