@@ -19,7 +19,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install native-machine test dependencies
+        shell: bash
         run: |
+          # Disable dedicated Microsoft APT source files on this runner.
+          # These test dependencies are provided by Ubuntu repositories.
+          for source in /etc/apt/sources.list.d/*.list \
+                        /etc/apt/sources.list.d/*.sources; do
+            [ -f "$source" ] || continue
+            if grep -q 'packages\.microsoft\.com' "$source"; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \

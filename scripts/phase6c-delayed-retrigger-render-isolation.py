@@ -223,6 +223,117 @@ def require_attempt_prefix(attempt: object, name: str) -> dict:
     return attempt
 
 
+def require_fresh_render_event_binding(attempt: dict, name: str) -> None:
+    tick = attempt.get("render_dialog_dispatch_boundary_tick")
+    preexisting = attempt.get("preexisting_render_dialog_count")
+    handle = attempt.get("selected_render_dialog_native_handle")
+    runtime_id = attempt.get("selected_render_dialog_runtime_id")
+    if (
+        attempt.get("render_dialog_native_event_hook_armed") is not True
+        or attempt.get("render_dialog_event_message_pump_started") is not True
+        or attempt.get("render_dialog_dispatch_boundary_set") is not True
+        or not isinstance(tick, int)
+        or isinstance(tick, bool)
+        or not 0 <= tick <= 0xFFFFFFFF
+        or attempt.get("dialog_discovery")
+        != "pumped-win-event-object-show-strictly-after-dispatch-tick"
+        or not isinstance(preexisting, int)
+        or isinstance(preexisting, bool)
+        or preexisting < 0
+        or attempt.get("render_dialog_post_dispatch_observed_window_event_count") != 1
+        or type(attempt.get("render_dialog_post_dispatch_observed_window_event_count")) is not int
+        or attempt.get("render_dialog_unresolved_post_dispatch_event_count") != 0
+        or type(attempt.get("render_dialog_unresolved_post_dispatch_event_count")) is not int
+        or attempt.get("render_dialog_post_dispatch_event_count") != 1
+        or type(attempt.get("render_dialog_post_dispatch_event_count")) is not int
+        or not isinstance(handle, int)
+        or isinstance(handle, bool)
+        or handle <= 0
+        or not isinstance(runtime_id, list)
+        or not runtime_id
+        or any(type(value) is not int for value in runtime_id)
+    ):
+        raise ValueError(
+            f"{name}: fresh render lacks bound post-dispatch dialog evidence"
+        )
+
+
+def validate_completed_render_attempt(
+    attempt: dict,
+    name: str,
+    *,
+    allow_post_completion_exit: bool = False,
+    allow_process_inspection_failure: bool = False,
+) -> None:
+    require_fresh_render_event_binding(attempt, name)
+    diagnostics = attempt.get("diagnostics")
+    if not isinstance(diagnostics, list) or any(
+        not isinstance(value, str) for value in diagnostics
+    ):
+        raise ValueError(f"{name}: completed render diagnostics are malformed")
+    inspection_diagnostics = [
+        value
+        for value in diagnostics
+        if value.startswith("could not inspect reference process after render attempt:")
+    ]
+    if allow_process_inspection_failure:
+        if len(inspection_diagnostics) != 1:
+            raise ValueError(
+                f"{name}: post-render process-inspection failure evidence is missing"
+            )
+    elif inspection_diagnostics:
+        raise ValueError(
+            f"{name}: completed render unexpectedly contains process-inspection failure"
+        )
+    terminal_diagnostics = [
+        value
+        for value in diagnostics
+        if not value.startswith(
+            "could not inspect reference process after render attempt:"
+        )
+    ]
+    teardown_diagnostic = (
+        "render output finalized and Close control was verified, "
+        "but dialog teardown did not complete"
+    )
+    completed_and_closed = (
+        attempt.get("dialog_closed") is True
+        and attempt.get("close_control_seen") is True
+        and attempt.get("close_uia_invoked") is True
+        and terminal_diagnostics == []
+    )
+    completed_with_teardown_failure = (
+        attempt.get("dialog_closed") is False
+        and attempt.get("close_control_seen") is True
+        and attempt.get("close_uia_invoked") is True
+        and terminal_diagnostics == [teardown_diagnostic]
+    )
+    exit_code = attempt.get("process_exit_code")
+    process_state_valid = (
+        (
+            attempt.get("process_exited") is True
+            and isinstance(exit_code, int)
+            and not isinstance(exit_code, bool)
+        )
+        if allow_post_completion_exit
+        else (
+            attempt.get("process_exited") is False
+            and exit_code is None
+        )
+    )
+    if (
+        attempt.get("outcome") != "rendered"
+        or not process_state_valid
+        or not isinstance(attempt.get("stable_output_polls"), int)
+        or isinstance(attempt.get("stable_output_polls"), bool)
+        or attempt["stable_output_polls"] < 4
+        or not (completed_and_closed or completed_with_teardown_failure)
+    ):
+        raise ValueError(
+            f"{name}: completed render lacks terminal completion evidence"
+        )
+
+
 def validate_observed_output(
     original_root: Path, name: str, value: object, expected_filename: str
 ) -> dict:
@@ -321,19 +432,134 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
         attempts = runtime.get("attempts")
         if not isinstance(attempts, list) or len(attempts) != 1:
             raise ValueError(f"{name}: expected exactly one diagnostic render attempt")
-        attempt = require_attempt_prefix(attempts[0], name)
-        expected_filename = f"original-delayed-retrigger-isolation-{name}-1.wav"
         outcome = runtime.get("outcome")
+        raw_attempt = attempts[0]
+        if outcome == "inconclusive" and runtime.get("renders") == []:
+            try:
+                predispatch = render.validate_predispatch_observer_failure(
+                    raw_attempt
+                )
+            except ValueError:
+                pass
+            else:
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": predispatch["inconclusive_reason"],
+                    "load_result": load_result,
+                    "process_exit_code": None,
+                    "diagnostics": predispatch["diagnostics"],
+                }
+                continue
+            try:
+                precommand = render.validate_precommand_process_exit(
+                    raw_attempt
+                )
+            except ValueError:
+                pass
+            else:
+                if (
+                    load_result != "inconclusive"
+                    or receipt.get("observation")
+                    != "reference-process-exited-before-harness-termination"
+                    or receipt.get("exit_code_before_termination")
+                    != precommand["process_exit_code"]
+                ):
+                    raise ValueError(
+                        f"{name}: pre-command process-exit receipt mismatch"
+                    )
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": precommand["inconclusive_reason"],
+                    "load_result": load_result,
+                    "process_exit_code": precommand["process_exit_code"],
+                    "diagnostics": precommand["diagnostics"],
+                }
+                continue
+            try:
+                presave = render.validate_presave_render_quarantine(raw_attempt)
+            except ValueError:
+                pass
+            else:
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": presave["inconclusive_reason"],
+                    "load_result": load_result,
+                    "process_exit_code": presave["process_exit_code"],
+                    "diagnostics": presave["diagnostics"],
+                }
+                continue
+        attempt = require_attempt_prefix(raw_attempt, name)
+        expected_filename = f"original-delayed-retrigger-isolation-{name}-1.wav"
+
+        renders = runtime.get("renders")
+        process_inspection_failure = (
+            isinstance(renders, list)
+            and len(renders) == 1
+            and attempt.get("outcome") == "rendered"
+            and render.has_diagnostic_prefix(
+                attempt, render.PROCESS_INSPECTION_FAILURE_PREFIX
+            )
+        )
+        if process_inspection_failure:
+            validate_completed_render_attempt(
+                attempt,
+                name,
+                allow_post_completion_exit=(
+                    attempt.get("process_exited") is True
+                ),
+                allow_process_inspection_failure=True,
+            )
+            output = attempt.get("output")
+            expected_relative = (
+                f"delayed-retrigger-isolation-{name}/" + expected_filename
+            )
+            if (
+                not isinstance(output, dict)
+                or output.get("path") != expected_filename
+                or renders[0].get("path") != expected_relative
+                or renders[0].get("sha256") != output.get("sha256")
+            ):
+                raise ValueError(
+                    f"{name}: process-inspection render binding mismatch"
+                )
+            data = child(original_root, expected_relative).read_bytes()
+            if digest(data) != renders[0]["sha256"]:
+                raise ValueError(
+                    f"{name}: process-inspection render hash mismatch"
+                )
+            observed = validate_failed_observed_output(
+                original_root, name, attempt, expected_filename
+            )
+            if observed is None:
+                raise ValueError(
+                    f"{name}: process-inspection failure lacks bound finalized output"
+                )
+            if attempt.get("process_exited") is True:
+                if (
+                    load_result != "inconclusive"
+                    or receipt.get("observation")
+                    != "reference-process-exited-before-harness-termination"
+                    or receipt.get("exit_code_before_termination")
+                    != attempt.get("process_exit_code")
+                ):
+                    raise ValueError(
+                        f"{name}: process-inspection exit receipt mismatch"
+                    )
+            results[name] = {
+                "outcome": "inconclusive",
+                "inconclusive_reason": "post-render-process-inspection-failure",
+                "load_result": load_result,
+                "render_sha256": digest(data),
+                "process_exit_code": attempt.get("process_exit_code"),
+                "observed_output": observed,
+                "diagnostics": attempt.get("diagnostics"),
+            }
+            continue
 
         if outcome == "rendered-once":
             if load_result != "accepted":
                 raise ValueError(f"{name}: completed render requires accepted final load")
-            if attempt.get("outcome") != "rendered":
-                raise ValueError(f"{name}: completed runtime has wrong attempt outcome")
-            if attempt.get("process_exited") is not False:
-                raise ValueError(f"{name}: completed render recorded process exit")
-            if attempt.get("process_exit_code") is not None:
-                raise ValueError(f"{name}: completed render recorded exit code")
+            validate_completed_render_attempt(attempt, name)
             renders = runtime.get("renders")
             if not isinstance(renders, list) or len(renders) != 1:
                 raise ValueError(f"{name}: completed render binding is missing")
@@ -373,7 +599,6 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             if (
                 not isinstance(exit_code, int)
                 or isinstance(exit_code, bool)
-                or exit_code == 0
                 or receipt.get("exit_code_before_termination") != exit_code
                 or attempt.get("diagnostics")
                 != ["reference exited during offline render"]
@@ -382,22 +607,87 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             observed = validate_failed_observed_output(
                 original_root, name, attempt, expected_filename
             )
-            result = {
-                "outcome": "reference-process-exited-during-render",
-                "load_result": load_result,
-                "process_exit_code": exit_code,
-                "output_created": observed is not None,
-                "observed_output": observed,
-            }
+            if exit_code == 0:
+                result = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": "clean-process-exit-during-render",
+                    "load_result": load_result,
+                    "process_exit_code": exit_code,
+                    "output_created": observed is not None,
+                    "observed_output": observed,
+                    "diagnostics": attempt.get("diagnostics"),
+                }
+            else:
+                result = {
+                    "outcome": "reference-process-exited-during-render",
+                    "load_result": load_result,
+                    "process_exit_code": exit_code,
+                    "output_created": observed is not None,
+                    "observed_output": observed,
+                }
         elif outcome == "inconclusive":
-            if runtime.get("renders") != []:
-                raise ValueError(f"{name}: inconclusive render cannot retain completed renders")
-            result = {
-                "outcome": "inconclusive",
-                "load_result": load_result,
-                "process_exit_code": attempt.get("process_exit_code"),
-                "diagnostics": attempt.get("diagnostics"),
-            }
+            renders = runtime.get("renders")
+            post_completion_exit = (
+                isinstance(renders, list)
+                and len(renders) == 1
+                and attempt.get("outcome") == "rendered"
+                and attempt.get("process_exited") is True
+            )
+            if post_completion_exit:
+                validate_completed_render_attempt(
+                    attempt, name, allow_post_completion_exit=True
+                )
+                exit_code = attempt.get("process_exit_code")
+                if (
+                    load_result != "inconclusive"
+                    or receipt.get("observation")
+                    != "reference-process-exited-before-harness-termination"
+                    or receipt.get("exit_code_before_termination") != exit_code
+                ):
+                    raise ValueError(
+                        f"{name}: post-completion exit receipt mismatch"
+                    )
+                output = attempt.get("output")
+                expected_relative = (
+                    f"delayed-retrigger-isolation-{name}/" + expected_filename
+                )
+                if (
+                    not isinstance(output, dict)
+                    or output.get("path") != expected_filename
+                    or renders[0].get("path") != expected_relative
+                    or renders[0].get("sha256") != output.get("sha256")
+                ):
+                    raise ValueError(
+                        f"{name}: post-completion render binding mismatch"
+                    )
+                data = child(original_root, expected_relative).read_bytes()
+                if digest(data) != renders[0]["sha256"]:
+                    raise ValueError(
+                        f"{name}: post-completion render hash mismatch"
+                    )
+                observed = validate_failed_observed_output(
+                    original_root, name, attempt, expected_filename
+                )
+                result = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": "process-exit-after-completed-render",
+                    "load_result": load_result,
+                    "render_sha256": digest(data),
+                    "process_exit_code": exit_code,
+                    "observed_output": observed,
+                    "diagnostics": attempt.get("diagnostics"),
+                }
+            else:
+                if renders != []:
+                    raise ValueError(
+                        f"{name}: inconclusive render cannot retain completed renders"
+                    )
+                result = {
+                    "outcome": "inconclusive",
+                    "load_result": load_result,
+                    "process_exit_code": attempt.get("process_exit_code"),
+                    "diagnostics": attempt.get("diagnostics"),
+                }
         else:
             raise ValueError(f"{name}: unexpected render-isolation outcome: {outcome!r}")
         results[name] = result

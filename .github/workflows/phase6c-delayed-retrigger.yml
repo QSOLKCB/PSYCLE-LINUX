@@ -9,6 +9,7 @@ on:
       - 'phase6c/DELAYED_RETRIGGER.md'
       - 'phase6c/evidence/sequencer-delayed-retrigger/**'
       - 'phase6c/evidence/sequencer-sampler-fault-location/**'
+      - 'phase6c/evidence/sequencer-sampler-work-boundary/**'
       - 'phase6c/compatibility-matrix.json'
       - 'scripts/phase6c-validate-matrix.py'
       - 'PSYCLE_CORE_PARITY.md'
@@ -18,6 +19,7 @@ on:
       - 'tests/phase6c_sampler_work_boundary_fixture.c'
       - 'tests/phase6c_sampler_fault_location.py'
       - 'scripts/phase6c-delayed-retrigger-*'
+      - 'scripts/phase6c-sampulse-eins-compat.py'
       - 'scripts/phase6c-sampler-voice-startup.py'
       - 'scripts/phase6c-sampler-work-boundary.py'
       - 'scripts/phase6c-sampler-fault-location.py'
@@ -45,6 +47,7 @@ on:
       - 'phase6c/DELAYED_RETRIGGER.md'
       - 'phase6c/evidence/sequencer-delayed-retrigger/**'
       - 'phase6c/evidence/sequencer-sampler-fault-location/**'
+      - 'phase6c/evidence/sequencer-sampler-work-boundary/**'
       - 'phase6c/compatibility-matrix.json'
       - 'scripts/phase6c-validate-matrix.py'
       - 'PSYCLE_CORE_PARITY.md'
@@ -54,6 +57,7 @@ on:
       - 'tests/phase6c_sampler_work_boundary_fixture.c'
       - 'tests/phase6c_sampler_fault_location.py'
       - 'scripts/phase6c-delayed-retrigger-*'
+      - 'scripts/phase6c-sampulse-eins-compat.py'
       - 'scripts/phase6c-sampler-voice-startup.py'
       - 'scripts/phase6c-sampler-work-boundary.py'
       - 'scripts/phase6c-sampler-fault-location.py'
@@ -120,6 +124,9 @@ jobs:
 
       - name: Check Sampler fault-location negative controls
         run: python3 tests/phase6c_sampler_fault_location.py
+
+      - name: Check same-witness Sampulse render negative controls
+        run: python3 tests/phase6c_delayed_retrigger_same_witness.py
 
       - name: Validate versioned compatibility matrix
         run: python3 scripts/phase6c-validate-matrix.py phase6c/compatibility-matrix.json
@@ -230,12 +237,21 @@ jobs:
           python3 scripts/phase6c-sampler-fault-location.py candidate-check \
             phase6c-command-evidence
 
+      - name: Pack candidate command evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          # upload-artifact normalizes file modes. Keep the retained Linux
+          # renderer's executable bit inside a tar archive for replay.
+          tar -C phase6c-command-evidence -cf phase6c-command-evidence.tar .
+          tar -tf phase6c-command-evidence.tar >/dev/null
+
       - name: Upload candidate command evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: phase6c-delayed-retrigger-candidate
-          path: phase6c-command-evidence/
+          path: phase6c-command-evidence.tar
           if-no-files-found: warn
 
   original-command-observation:
@@ -251,7 +267,15 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: phase6c-delayed-retrigger-candidate
-          path: phase6c-command-candidate
+          path: phase6c-command-candidate-artifact
+
+      - name: Extract exact candidate command artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path phase6c-command-candidate -Force | Out-Null
+          & tar.exe -xf phase6c-command-candidate-artifact/phase6c-command-evidence.tar -C phase6c-command-candidate
+          if ($LASTEXITCODE -ne 0) { throw "candidate command evidence extraction failed" }
 
       - name: Install pinned Microsoft VC90 x86 runtime
         shell: pwsh
@@ -375,16 +399,20 @@ jobs:
           python scripts/phase6c-sampler-work-boundary.py source-check `
             phase6c-command-candidate
           if ($LASTEXITCODE -ne 0) { throw "Sampler work-boundary source validation failed" }
-          if ($collectFaultLocation) {
-            Write-Host "Dedicated fault-location rerun: preserving the frozen #76 work-boundary projection without comparing it to fresh receipt bytes; the exact short E-DF control is validated by the fault-location contract below"
-          } else {
-            python scripts/phase6c-sampler-work-boundary.py original `
-              phase6c-command-candidate phase6c-command-original
-            if ($LASTEXITCODE -ne 0) { throw "original Sampler work-boundary validation failed" }
-          }
+          python scripts/phase6c-sampler-work-boundary.py projection-check
+          if ($LASTEXITCODE -ne 0) { throw "frozen Sampler work-boundary projection validation failed" }
+          python scripts/phase6c-sampler-work-boundary.py original-rerun `
+            phase6c-command-candidate phase6c-command-original
+          if ($LASTEXITCODE -ne 0) { throw "fresh Sampler work-boundary rerun validation failed" }
           python scripts/phase6c-sampler-fault-location.py candidate-check `
             phase6c-command-candidate
           if ($LASTEXITCODE -ne 0) { throw "Sampler fault-location candidate validation failed" }
+          python scripts/phase6c-delayed-retrigger-same-witness.py candidate-check `
+            phase6c-command-candidate
+          if ($LASTEXITCODE -ne 0) { throw "same-witness Sampulse candidate validation failed" }
+          python scripts/phase6c-delayed-retrigger-same-witness.py original `
+            phase6c-command-candidate phase6c-command-original
+          if ($LASTEXITCODE -ne 0) { throw "same-witness Sampulse original validation failed" }
           if ($collectFaultLocation) {
             python scripts/phase6c-sampler-fault-location.py original `
               phase6c-command-candidate phase6c-command-original

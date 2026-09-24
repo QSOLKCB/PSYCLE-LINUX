@@ -6,6 +6,7 @@ ARTIFACT="$(realpath "${1:?candidate artifact root required}")"
 OUT="$ARTIFACT/delayed-retrigger"
 BUILD="$(mktemp -d)"
 STAGING="$ROOT/psycle-cpp-r12005-sanitized/psycle-player/phase6c-delayed-retrigger-probe-build"
+RENDER_STAGING="$ROOT/psycle-cpp-r12005-sanitized/psycle-player/phase6c-sampulse-render-build"
 
 [[ ! -e "$OUT" ]] || {
     echo 'refusing stale delayed/retrigger artifact directory' >&2
@@ -15,8 +16,12 @@ STAGING="$ROOT/psycle-cpp-r12005-sanitized/psycle-player/phase6c-delayed-retrigg
     echo 'refusing existing delayed/retrigger probe staging directory' >&2
     exit 2
 }
-mkdir "$OUT" "$STAGING"
-trap 'rm -rf -- "$BUILD" "$STAGING"' EXIT
+[[ ! -e "$RENDER_STAGING" ]] || {
+    echo 'refusing existing Sampulse render staging directory' >&2
+    exit 2
+}
+mkdir "$OUT" "$STAGING" "$RENDER_STAGING"
+trap 'rm -rf -- "$BUILD" "$STAGING" "$RENDER_STAGING"' EXIT
 
 run_logged() {
     local log="$1"
@@ -100,6 +105,31 @@ run_logged "$OUT/execution-candidate-receipt.log" \
 run_logged "$OUT/execution-candidate-validation.log" \
     python3 "$ROOT/scripts/phase6c-delayed-retrigger-render-evidence.py" candidate-check \
     "$ARTIFACT"
+
+run_logged "$OUT/sampulse-execution-fixture-build.log" \
+    gcc "${COMMON_CFLAGS[@]}" "${LUA_CFLAGS[@]}" \
+    "$ROOT/tests/phase6c_delayed_retrigger_sampulse_execution_fixture.c" \
+    -o "$BUILD/phase6c-delayed-retrigger-sampulse-execution-fixture" \
+    "${COMMON_LDFLAGS[@]}" "${LUA_LIBS[@]}"
+
+run_logged "$OUT/sampulse-execution-fixture-generator.log" \
+    "$BUILD/phase6c-delayed-retrigger-sampulse-execution-fixture" "$OUT"
+
+SAMPULSE_FIXTURE="$OUT/phase6c-delayed-retrigger-sampulse-execution.psy"
+MODERN_SAMPULSE_FIXTURE="$BUILD/phase6c-delayed-retrigger-sampulse-execution-modern.psy"
+mv "$SAMPULSE_FIXTURE" "$MODERN_SAMPULSE_FIXTURE"
+run_logged "$OUT/sampulse-eins-compat.log" \
+    python3 "$ROOT/scripts/phase6c-sampulse-eins-compat.py" \
+    "$MODERN_SAMPULSE_FIXTURE" "$SAMPULSE_FIXTURE"
+
+[[ -s "$SAMPULSE_FIXTURE" ]] || {
+    echo 'Sampulse execution witness was not generated' >&2
+    exit 2
+}
+[[ "$(head -c 8 "$SAMPULSE_FIXTURE")" == "PSY3SONG" ]] || {
+    echo 'Sampulse execution witness is not PSY3' >&2
+    exit 2
+}
 
 ISOLATION_OUT="$ARTIFACT/delayed-retrigger-isolation"
 mkdir "$ISOLATION_OUT"
@@ -242,3 +272,161 @@ run_logged "$OUT/candidate-collect.log" \
     "$ARTIFACT" "$BUILD/phase6c-delayed-retrigger-probe"
 run_logged "$OUT/candidate-validation.log" \
     python3 "$ROOT/scripts/phase6c-delayed-retrigger-evidence.py" candidate "$ARTIFACT"
+
+git_blob_sha256() {
+    git -C "$ROOT" cat-file blob "HEAD:$1" | sha256sum | awk '{print $1}'
+}
+
+RENDER_SOURCE_SHA256="$(git_blob_sha256 tests/phase6c_delayed_retrigger_sampulse_render.cpp)"
+RENDER_PROJECT_SHA256="$(git_blob_sha256 tests/phase6c_delayed_retrigger_sampulse_render.pro)"
+ENGINE_SEQUENCER_SHA256="$(git_blob_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sequencer.cpp)"
+ENGINE_PSY3_LOADER_SHA256="$(git_blob_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.cpp)"
+ENGINE_XMSAMPLER_SHA256="$(git_blob_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/xmsampler.cpp)"
+cat >"$BUILD/phase6c-render-provenance.hpp" <<EOF
+#pragma once
+#define PHASE6C_RENDER_SOURCE_SHA256 "$RENDER_SOURCE_SHA256"
+#define PHASE6C_RENDER_PROJECT_SHA256 "$RENDER_PROJECT_SHA256"
+#define PHASE6C_ENGINE_SEQUENCER_SHA256 "$ENGINE_SEQUENCER_SHA256"
+#define PHASE6C_ENGINE_PSY3_LOADER_SHA256 "$ENGINE_PSY3_LOADER_SHA256"
+#define PHASE6C_ENGINE_XMSAMPLER_SHA256 "$ENGINE_XMSAMPLER_SHA256"
+EOF
+
+cp "$ROOT/tests/phase6c_delayed_retrigger_sampulse_render.pro" "$RENDER_STAGING/render.pro"
+set +e
+(
+    cd "$RENDER_STAGING"
+    qmake CONFIG-=shared CONFIG+=release \
+        "PROBE_BUILD_DIR=$BUILD" "REPO_ROOT=$ROOT" \
+        -o "$BUILD/Makefile.sampulse-render" "$RENDER_STAGING/render.pro"
+) >"$OUT/sampulse-render-qmake.log" 2>&1
+render_qmake_status=$?
+set -e
+if (( render_qmake_status != 0 )); then
+    cat "$OUT/sampulse-render-qmake.log" >&2
+    exit "$render_qmake_status"
+fi
+
+run_logged "$OUT/sampulse-render-build.log" \
+    make -C "$BUILD" -f "$BUILD/Makefile.sampulse-render" -j2
+
+SAMPULSE_RUNTIME_OUT="$ARTIFACT/delayed-retrigger-sampulse-runtime"
+mkdir "$SAMPULSE_RUNTIME_OUT"
+cp "$BUILD/phase6c-delayed-retrigger-sampulse-render" \
+    "$SAMPULSE_RUNTIME_OUT/phase6c-delayed-retrigger-sampulse-render"
+cp "$ROOT/tests/phase6c_delayed_retrigger_sampulse_render.cpp" \
+    "$SAMPULSE_RUNTIME_OUT/render-probe.cpp"
+cp "$ROOT/tests/phase6c_delayed_retrigger_sampulse_render.pro" \
+    "$SAMPULSE_RUNTIME_OUT/render-probe.pro"
+cp "$ROOT/tests/phase6c_delayed_retrigger_sampulse_execution_fixture.c" \
+    "$SAMPULSE_RUNTIME_OUT/fixture-generator.c"
+cp "$ROOT/scripts/phase6c-sampulse-eins-compat.py" \
+    "$SAMPULSE_RUNTIME_OUT/eins-compat.py"
+cp "$BUILD/phase6c-render-provenance.hpp" \
+    "$SAMPULSE_RUNTIME_OUT/renderer-build-provenance.hpp"
+
+run_logged "$OUT/sampulse-render-provenance.log" \
+    "$SAMPULSE_RUNTIME_OUT/phase6c-delayed-retrigger-sampulse-render" \
+    --phase6c-provenance
+run_logged "$OUT/sampulse-render-symbols.log" \
+    nm -C --defined-only \
+    "$SAMPULSE_RUNTIME_OUT/phase6c-delayed-retrigger-sampulse-render"
+run_logged "$OUT/sampulse-render-main-disassembly.log" \
+    objdump -d -C --disassemble=main \
+    "$SAMPULSE_RUNTIME_OUT/phase6c-delayed-retrigger-sampulse-render"
+
+python3 - \
+    "$ROOT" \
+    "$BUILD/phase6c-delayed-retrigger-sampulse-render" \
+    "$OUT/sampulse-render-qmake.log" \
+    "$OUT/sampulse-render-build.log" \
+    "$OUT/sampulse-render-provenance.log" \
+    "$OUT/sampulse-render-symbols.log" \
+    "$OUT/sampulse-render-main-disassembly.log" \
+    "$SAMPULSE_RUNTIME_OUT/renderer-build-provenance.json" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+binary = Path(sys.argv[2])
+qmake_log = Path(sys.argv[3])
+build_log = Path(sys.argv[4])
+provenance_log = Path(sys.argv[5])
+symbols_log = Path(sys.argv[6])
+main_disassembly_log = Path(sys.argv[7])
+output = Path(sys.argv[8])
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+reviewed = {
+    "renderer_source": root / "tests/phase6c_delayed_retrigger_sampulse_render.cpp",
+    "renderer_project": root / "tests/phase6c_delayed_retrigger_sampulse_render.pro",
+    "fixture_generator": root / "tests/phase6c_delayed_retrigger_sampulse_execution_fixture.c",
+    "eins_converter": root / "scripts/phase6c-sampulse-eins-compat.py",
+}
+engine_anchors = {
+    "sequencer": root / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sequencer.cpp",
+    "psy3_loader": root / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.cpp",
+    "xmsampler": root / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/xmsampler.cpp",
+}
+value = {
+    "schema_version": 3,
+    "reviewed_inputs": {
+        name: {
+            "path": path.relative_to(root).as_posix(),
+            "sha256": sha256(path),
+        }
+        for name, path in reviewed.items()
+    },
+    "engine_anchors": {
+        name: {
+            "path": path.relative_to(root).as_posix(),
+            "sha256": sha256(path),
+        }
+        for name, path in engine_anchors.items()
+    },
+    "binary": {
+        "path": "delayed-retrigger-sampulse-runtime/phase6c-delayed-retrigger-sampulse-render",
+        "sha256": sha256(binary),
+    },
+    "qmake_log": {
+        "path": "delayed-retrigger/sampulse-render-qmake.log",
+        "sha256": sha256(qmake_log),
+    },
+    "build_log": {
+        "path": "delayed-retrigger/sampulse-render-build.log",
+        "sha256": sha256(build_log),
+    },
+    "provenance_challenge_log": {
+        "path": "delayed-retrigger/sampulse-render-provenance.log",
+        "sha256": sha256(provenance_log),
+    },
+    "code_identity": {
+        "symbols_log": {
+            "path": "delayed-retrigger/sampulse-render-symbols.log",
+            "sha256": sha256(symbols_log),
+        },
+        "main_disassembly_log": {
+            "path": "delayed-retrigger/sampulse-render-main-disassembly.log",
+            "sha256": sha256(main_disassembly_log),
+        },
+    },
+}
+output.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+for attempt in 1 2; do
+    run_logged "$OUT/sampulse-candidate-render-${attempt}.log" \
+        env PSYCLE_THREADS=1 \
+        "$BUILD/phase6c-delayed-retrigger-sampulse-render" \
+        "$SAMPULSE_FIXTURE" \
+        "$SAMPULSE_RUNTIME_OUT/candidate-delayed-retrigger-sampulse-runtime-${attempt}.wav"
+done
+
+run_logged "$OUT/sampulse-runtime-candidate-receipt.log" \
+    python3 "$ROOT/scripts/phase6c-delayed-retrigger-same-witness.py" candidate \
+    "$ARTIFACT"
+run_logged "$OUT/sampulse-runtime-candidate-validation.log" \
+    python3 "$ROOT/scripts/phase6c-delayed-retrigger-same-witness.py" candidate-check \
+    "$ARTIFACT"
