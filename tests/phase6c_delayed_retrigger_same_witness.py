@@ -1348,9 +1348,24 @@ with tempfile.TemporaryDirectory() as temporary:
         "process_exited": False,
         "process_exit_code": None,
         "diagnostics": [
-            "could not initialize render-dialog observer: synthetic second-attempt failure"
+            "could not initialize render-dialog observer: synthetic second-attempt failure",
+            "could not inspect reference process after render attempt: synthetic refresh failure",
         ],
     }
+    assert m.validate_original_predispatch_observer_failure(
+        second_init_failure
+    ) == second_init_failure["diagnostics"]
+    invalid_second_init_failure = dict(second_init_failure)
+    invalid_second_init_failure["diagnostics"] = [
+        second_init_failure["diagnostics"][0],
+        "unrelated infrastructure diagnostic",
+    ]
+    expect_value_error(
+        lambda: m.validate_original_predispatch_observer_failure(
+            invalid_second_init_failure
+        ),
+        "pre-dispatch observer failure shape is invalid",
+    )
     second_init_runtime = dict(inconclusive_runtime)
     second_init_runtime["renders"] = [first_binding]
     second_init_runtime["attempts"] = [
