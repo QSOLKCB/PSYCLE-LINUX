@@ -23,6 +23,13 @@ PROJECTION = (
     / "sequencer-sampler-work-boundary"
     / "observation.json"
 )
+FROZEN_MANIFEST = (
+    ROOT
+    / "phase6c"
+    / "evidence"
+    / "sequencer-sampler-work-boundary"
+    / "historical-manifest.json"
+)
 FROZEN_PROJECTION_RUN_ID = 35752301481
 FROZEN_PROJECTION_HEAD_SHA = "4cf71eba6f7b5f6ba14be6089cf37422b16b5ca6"
 FROZEN_CANDIDATE_ARTIFACT = {
@@ -34,6 +41,70 @@ FROZEN_ORIGINAL_ARTIFACT = {
     "id": 10706732946,
     "name": "phase6c-delayed-retrigger-original",
     "digest": "sha256:0865e2a07dcfd9ea72b1069db284e55dbd36c58d74fd5140b21ae0ba8705546d",
+}
+FROZEN_SOURCE_RECEIPT_SHA256 = (
+    "ef64d01bf1a2f98ee2921821d7463a30e73d8e7478e21f6b4a9b9794d13d2313"
+)
+FROZEN_HISTORICAL_RECEIPT = {
+    "path": "original-sampler-work-boundary-isolation.json",
+    "sha256": "35874e0b2cfc0ed56c30a2dacf8c7110ecca398e9fd0a74df7187f60c14c7666",
+    "diagnosis": "voice-tick-initialization-associated-exit",
+    "interpretation_boundary": (
+        "the source-bound release/delayed/ordinary ladder isolates whether the "
+        "pinned original access violation begins before Voice::Tick, during "
+        "Voice::Tick initialization, or only once controller.Work sample "
+        "processing becomes reachable; it does not classify delayed/retrigger parity"
+    ),
+}
+FROZEN_FIXTURE_IDENTITIES = {
+    "release-no-active-voice": {
+        "fixture_sha256": "edb7cd5fdf85b8379267d880bc535aa8f4d4b4a53c3048f21c0b9f5e201ed5cd",
+        "candidate_receipt_sha256": "9829ecf6d108202fc3bf40902165873f79169a6c83c906b2b4ae6e4369bbdb8b",
+        "original_receipt_sha256": "1cf7254ce4fdcac16cd13f26e4ea122078662ef4ff6cb76ba56c1ecc946bbebb",
+        "outcome": "stable-finalized-output-process-alive",
+        "process_exit_code": None,
+        "observed_output": {
+            "path": "sampler-work-boundary-release-no-active-voice/original-sampler-work-boundary-release-no-active-voice-1.wav",
+            "size_bytes": 4868,
+            "sha256": "f40e6f9f280c993b8c0ecdf6a54ba8314462803b7075e46d7db0c4a2bd9dfbae",
+        },
+    },
+    "delayed-note-short": {
+        "fixture_sha256": "f1021ee05ef3e76e71dca9f7d9f982decaef225124c8242788dbd3191813b195",
+        "candidate_receipt_sha256": "3947bfa36f834c2abcaef8dffd338c179b820618f22e62e3557c2e0216108fc3",
+        "original_receipt_sha256": "bcb6ce918df078e70e5b9ef99cf2a62f9ed81bf01330bb9577627c28245ff24a",
+        "outcome": "reference-process-exited-during-render",
+        "process_exit_code": EXPECTED_ACCESS_VIOLATION_EXIT_CODE,
+        "observed_output": {
+            "path": "sampler-work-boundary-delayed-note-short/original-sampler-work-boundary-delayed-note-short-1.wav",
+            "size_bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        },
+    },
+    "delayed-note-long": {
+        "fixture_sha256": "e4efab094ea6ce78c9c83b9eec4ffbc10abadc18a56bf2feec816830aa8543e9",
+        "candidate_receipt_sha256": "b385e263a3818e98f2ddd74a5dced790e23c39105b84d6b9a6aac31d57b6dee2",
+        "original_receipt_sha256": "041362cfa7e2f4e03397bb2957c947d40311ea3a3b15a715df4a10da87028d7d",
+        "outcome": "reference-process-exited-during-render",
+        "process_exit_code": EXPECTED_ACCESS_VIOLATION_EXIT_CODE,
+        "observed_output": {
+            "path": "sampler-work-boundary-delayed-note-long/original-sampler-work-boundary-delayed-note-long-1.wav",
+            "size_bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        },
+    },
+    "ordinary-note-short": {
+        "fixture_sha256": "6c6b606512ca3c87f91b7ea3ee41702b2e128fb741c1ac0a9ec0128ccaa1a3d3",
+        "candidate_receipt_sha256": "4f19b1966322b98f65eb2f467d13771a1bb55c4a3e48860e8421c69083ad01d5",
+        "original_receipt_sha256": "04bf960dabb83f5b0a3a54c367f686cd351a5606c2e65fc53570625a73ffca1f",
+        "outcome": "reference-process-exited-during-render",
+        "process_exit_code": EXPECTED_ACCESS_VIOLATION_EXIT_CODE,
+        "observed_output": {
+            "path": "sampler-work-boundary-ordinary-note-short/original-sampler-work-boundary-ordinary-note-short-1.wav",
+            "size_bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        },
+    },
 }
 QUALIFIED_DIAGNOSIS = "enabled-note-startup-pre-controller-work-associated-exit"
 HISTORICAL_DIAGNOSIS = "voice-tick-initialization-associated-exit"
@@ -669,17 +740,27 @@ def validate_projection(
     return str(PROJECTION.relative_to(ROOT))
 
 
-def validate_frozen_projection(
-    candidate_root: Path, original_root: Path
-) -> dict:
-    candidate_root = candidate_root.resolve()
-    original_root = original_root.resolve()
-    validate_candidate(candidate_root)
-    candidate_source = validate_source(candidate_root)
-    original_source = validate_source(original_root)
-    if candidate_source != original_source:
+def expected_frozen_manifest() -> dict:
+    return {
+        "schema_version": 1,
+        "workflow_run_id": FROZEN_PROJECTION_RUN_ID,
+        "head_sha": FROZEN_PROJECTION_HEAD_SHA,
+        "candidate_artifact": dict(FROZEN_CANDIDATE_ARTIFACT),
+        "original_artifact": dict(FROZEN_ORIGINAL_ARTIFACT),
+        "source_receipt_sha256": FROZEN_SOURCE_RECEIPT_SHA256,
+        "historical_receipt": dict(FROZEN_HISTORICAL_RECEIPT),
+        "fixtures": {
+            name: dict(value)
+            for name, value in FROZEN_FIXTURE_IDENTITIES.items()
+        },
+    }
+
+
+def validate_frozen_projection() -> dict:
+    manifest = read_json(FROZEN_MANIFEST)
+    if manifest != expected_frozen_manifest():
         raise ValueError(
-            "Sampler work-boundary frozen source receipts differ between artifacts"
+            "Sampler work-boundary durable historical manifest mismatch"
         )
 
     projection = read_json(PROJECTION)
@@ -696,46 +777,44 @@ def validate_frozen_projection(
         )
 
     source = projection.get("source_identity")
-    source_bytes = (candidate_root / SOURCE_RECEIPT).read_bytes()
-    source_sha256 = digest(source_bytes)
     if (
         not isinstance(source, dict)
-        or source.get("source_receipt_sha256") != source_sha256
-        or digest((original_root / SOURCE_RECEIPT).read_bytes()) != source_sha256
+        or source.get("source_commit") != SOURCE_COMMIT
+        or source.get("Sampler.cpp") != SAMPLER_CPP_BLOB
+        or source.get("Sampler.hpp") != SAMPLER_HPP_BLOB
+        or source.get("SongStructs.hpp") != SONG_STRUCTS_BLOB
+        or source.get("source_receipt_sha256")
+        != manifest["source_receipt_sha256"]
     ):
         raise ValueError(
             "Sampler work-boundary frozen source-receipt binding mismatch"
         )
 
     historical = projection.get("historical_receipt")
-    if (
-        not isinstance(historical, dict)
-        or historical.get("path")
-        != "original-sampler-work-boundary-isolation.json"
-        or not isinstance(historical.get("sha256"), str)
-    ):
+    if historical != manifest["historical_receipt"]:
         raise ValueError(
             "Sampler work-boundary historical receipt identity mismatch"
         )
-    summary_path = child(original_root, historical["path"])
-    summary_bytes = summary_path.read_bytes()
-    if digest(summary_bytes) != historical["sha256"]:
+
+    fixtures = projection.get("fixtures")
+    if fixtures != manifest["fixtures"]:
         raise ValueError(
-            "Sampler work-boundary historical receipt hash mismatch"
-        )
-    summary = read_json(summary_path)
-    if (
-        summary.get("diagnosis") != historical.get("diagnosis")
-        or summary.get("interpretation_boundary")
-        != historical.get("interpretation_boundary")
-    ):
-        raise ValueError(
-            "Sampler work-boundary historical receipt semantics mismatch"
+            "Sampler work-boundary frozen fixture receipt bindings mismatch"
         )
 
-    projection_path = validate_projection(
-        candidate_root, original_root, summary
-    )
+    interpretation = projection.get("qualified_interpretation")
+    if (
+        not isinstance(interpretation, dict)
+        or interpretation.get("controller_work_reachable") is not False
+        or interpretation.get("voice_work_entry") != "unresolved"
+        or interpretation.get("voice_tick_fault_location") != "unresolved"
+        or interpretation.get("voice_selection_fault_location") != "unresolved"
+    ):
+        raise ValueError(
+            "Sampler work-boundary projection overstates fault location"
+        )
+
+    projection_path = str(PROJECTION.relative_to(ROOT))
     return {
         "schema_version": 1,
         "phase": "6C",
@@ -746,8 +825,8 @@ def validate_frozen_projection(
         "candidate_artifact": dict(FROZEN_CANDIDATE_ARTIFACT),
         "original_artifact": dict(FROZEN_ORIGINAL_ARTIFACT),
         "historical_receipt_sha256": historical["sha256"],
-        "source_receipt_sha256": source_sha256,
-        "validation": "frozen-artifact-byte-replay",
+        "source_receipt_sha256": manifest["source_receipt_sha256"],
+        "validation": "durable-repository-manifest",
         "parity_status": "UNKNOWN",
     }
 
@@ -1016,9 +1095,7 @@ def main() -> int:
     rerun.add_argument("candidate_root", type=Path)
     rerun.add_argument("original_root", type=Path)
 
-    projection_check = sub.add_parser("projection-check")
-    projection_check.add_argument("candidate_root", type=Path)
-    projection_check.add_argument("original_root", type=Path)
+    sub.add_parser("projection-check")
 
     args = parser.parse_args()
     if args.command == "candidate":
@@ -1038,10 +1115,7 @@ def main() -> int:
             replay_historical_projection=False,
         )
     elif args.command == "projection-check":
-        result = validate_frozen_projection(
-            args.candidate_root,
-            args.original_root,
-        )
+        result = validate_frozen_projection()
     else:
         result = validate_original(
             args.candidate_root,
