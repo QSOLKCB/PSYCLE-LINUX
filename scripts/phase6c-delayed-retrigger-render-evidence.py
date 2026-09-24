@@ -514,6 +514,47 @@ def validate_process_exit_runtime(
     }
 
 
+OBSERVER_INITIALIZATION_FAILURE_PREFIX = (
+    "could not initialize render-dialog observer:"
+)
+
+
+def validate_predispatch_observer_failure(attempt: object) -> dict:
+    if not isinstance(attempt, dict):
+        raise ValueError("pre-dispatch observer failure attempt is not an object")
+    diagnostics = attempt.get("diagnostics")
+    if (
+        attempt.get("outcome") != "inconclusive"
+        or attempt.get("command_verified") is not True
+        or attempt.get("command_dispatched") is not False
+        or attempt.get("dialog_verified") is not False
+        or attempt.get("controls_configured") is not False
+        or attempt.get("save_invoked") is not False
+        or attempt.get("output") is not None
+        or attempt.get("observed_output") is not None
+        or attempt.get("process_exited") is not False
+        or attempt.get("process_exit_code") is not None
+        or not isinstance(diagnostics, list)
+        or len(diagnostics) != 1
+        or not isinstance(diagnostics[0], str)
+        or not diagnostics[0].startswith(
+            OBSERVER_INITIALIZATION_FAILURE_PREFIX
+        )
+    ):
+        raise ValueError(
+            "pre-dispatch observer initialization failure shape is invalid"
+        )
+    return {
+        "inconclusive_reason": "render-observer-initialization-failure",
+        "completed_renders": [],
+        "completed_render_analyses": [],
+        "binding_error": None,
+        "diagnostics": diagnostics,
+        "process_exit_code": None,
+        "observed_output": None,
+    }
+
+
 def validate_inconclusive_runtime(
     original_root: Path,
     receipt: dict,
@@ -531,6 +572,19 @@ def validate_inconclusive_runtime(
         or len(renders) > len(attempts)
     ):
         raise ValueError("inconclusive primary render shape is invalid")
+
+    if len(renders) == 0 and len(attempts) == 1:
+        attempt = attempts[0]
+        diagnostics = attempt.get("diagnostics") if isinstance(attempt, dict) else None
+        if (
+            isinstance(diagnostics, list)
+            and len(diagnostics) == 1
+            and isinstance(diagnostics[0], str)
+            and diagnostics[0].startswith(
+                OBSERVER_INITIALIZATION_FAILURE_PREFIX
+            )
+        ):
+            return validate_predispatch_observer_failure(attempt)
 
     completed = []
     completed_analyses = []
