@@ -594,9 +594,14 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                     attempt, name, allow_post_completion_exit=True
                 )
                 exit_code = attempt.get("process_exit_code")
-                if receipt.get("exit_code_before_termination") != exit_code:
+                if (
+                    load_result != "inconclusive"
+                    or receipt.get("observation")
+                    != "reference-process-exited-before-harness-termination"
+                    or receipt.get("exit_code_before_termination") != exit_code
+                ):
                     raise ValueError(
-                        f"{name}: post-completion exit code mismatch"
+                        f"{name}: post-completion exit receipt mismatch"
                     )
                 output = attempt.get("output")
                 expected_relative = (
