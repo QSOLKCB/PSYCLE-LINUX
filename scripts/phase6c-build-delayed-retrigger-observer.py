@@ -280,7 +280,14 @@ def main() -> None:
                         $renderOne.process_exited = $true
                         $renderOne.process_exit_code = [int64]$process.ExitCode
                     }
-                    if (-not $process.HasExited -and [bool]$renderOne.dialog_closed) {
+                    $renderOneInspectionFailure = @(
+                        @($renderOne.diagnostics) | Where-Object {
+                            [string]$_ -clike "could not inspect reference process after render attempt:*"
+                        }
+                    ).Count -gt 0
+                    if (-not $process.HasExited -and
+                        [bool]$renderOne.dialog_closed -and
+                        -not $renderOneInspectionFailure) {
                         $renderTwo = Invoke-Phase6cAudioRender $process $windowTitle $renderTwoPath
                         $attempts += $renderTwo
                         if ($renderTwo.outcome -eq "rendered" -and $null -ne $renderTwo.output) {
@@ -303,12 +310,20 @@ def main() -> None:
                     [string]$lastAttempt.outcome -ceq "rendered" -and
                     [bool]$lastAttempt.process_exited
                 )
+                $postRenderInspectionFailure = @(
+                    @($lastAttempt.diagnostics) | Where-Object {
+                        [string]$_ -clike "could not inspect reference process after render attempt:*"
+                    }
+                ).Count -gt 0
                 $deterministic = (
                     -not $postCompletionExit -and
+                    -not $postRenderInspectionFailure -and
                     $renderBindings.Count -eq 2 -and
                     [string]$renderBindings[0].sha256 -ceq [string]$renderBindings[1].sha256
                 )
-                $runtimeOutcome = if ($deterministic) {
+                $runtimeOutcome = if ($postRenderInspectionFailure) {
+                    "inconclusive"
+                } elseif ($deterministic) {
                     "rendered-twice"
                 } elseif ($postCompletionExit) {
                     "inconclusive"
@@ -378,7 +393,14 @@ def main() -> None:
                         $renderOne.process_exited = $true
                         $renderOne.process_exit_code = [int64]$process.ExitCode
                     }
-                    if (-not $process.HasExited -and [bool]$renderOne.dialog_closed) {
+                    $renderOneInspectionFailure = @(
+                        @($renderOne.diagnostics) | Where-Object {
+                            [string]$_ -clike "could not inspect reference process after render attempt:*"
+                        }
+                    ).Count -gt 0
+                    if (-not $process.HasExited -and
+                        [bool]$renderOne.dialog_closed -and
+                        -not $renderOneInspectionFailure) {
                         $renderTwo = Invoke-Phase6cAudioRender $process $windowTitle $renderTwoPath
                         $attempts += $renderTwo
                         if ($renderTwo.outcome -eq "rendered" -and $null -ne $renderTwo.output) {
@@ -401,12 +423,20 @@ def main() -> None:
                     [string]$lastAttempt.outcome -ceq "rendered" -and
                     [bool]$lastAttempt.process_exited
                 )
+                $postRenderInspectionFailure = @(
+                    @($lastAttempt.diagnostics) | Where-Object {
+                        [string]$_ -clike "could not inspect reference process after render attempt:*"
+                    }
+                ).Count -gt 0
                 $deterministic = (
                     -not $postCompletionExit -and
+                    -not $postRenderInspectionFailure -and
                     $renderBindings.Count -eq 2 -and
                     [string]$renderBindings[0].sha256 -ceq [string]$renderBindings[1].sha256
                 )
-                $runtimeOutcome = if ($deterministic) {
+                $runtimeOutcome = if ($postRenderInspectionFailure) {
+                    "inconclusive"
+                } elseif ($deterministic) {
                     "rendered-twice"
                 } elseif ($postCompletionExit) {
                     "inconclusive"
