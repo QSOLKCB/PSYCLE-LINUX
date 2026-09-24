@@ -364,6 +364,11 @@ class GeneratedObserver(unittest.TestCase):
             )
             guarded_repeat = (
                 '$process.Refresh()\n'
+                '                    if ($process.HasExited -and -not '
+                '[bool]$renderOne.process_exited) {\n'
+                '                        $renderOne.process_exited = $true\n'
+                '                        $renderOne.process_exit_code = [int64]$process.ExitCode\n'
+                '                    }\n'
                 '                    if (-not $process.HasExited -and '
                 '[bool]$renderOne.dialog_closed) {\n'
                 '                        $renderTwo = Invoke-Phase6cAudioRender '
