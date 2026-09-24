@@ -389,10 +389,18 @@ class GeneratedObserver(unittest.TestCase):
             )
             self.assertEqual(
                 text.count('$renderOne.process_exited = $true'),
+                5,
+            )
+            self.assertEqual(
+                text.count('$lastAttempt.process_exited = $true'),
                 2,
             )
             self.assertEqual(
                 text.count('$renderOne.process_exit_code = [int64]$process.ExitCode'),
+                5,
+            )
+            self.assertEqual(
+                text.count('$lastAttempt.process_exit_code = [int64]$process.ExitCode'),
                 2,
             )
             self.assertEqual(
