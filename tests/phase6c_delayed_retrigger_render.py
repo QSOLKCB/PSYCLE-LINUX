@@ -473,6 +473,32 @@ with tempfile.TemporaryDirectory() as temporary:
     assert exit_evidence["completed_render_sha256"] == [first_hash]
     assert exit_evidence["observed_output"]["path"].endswith(second_name)
 
+    second_path.unlink()
+    no_output_attempt = dict(second_attempt)
+    no_output_attempt["process_exit_code"] = 0
+    no_output_attempt["observed_output"] = None
+    no_output_receipt = dict(receipt)
+    no_output_receipt["exit_code_before_termination"] = 0
+    no_output_exit = module.validate_process_exit_runtime(
+        root, no_output_receipt, runtime, [first_attempt, no_output_attempt]
+    )
+    assert no_output_exit["attempt_number"] == 2
+    assert no_output_exit["process_exit_code"] == 0
+    assert no_output_exit["observed_output"] is None
+
+    second_path.write_bytes(b"unbound")
+    try:
+        module.validate_process_exit_runtime(
+            root, no_output_receipt, runtime, [first_attempt, no_output_attempt]
+        )
+    except ValueError as exc:
+        assert "unbound output file" in str(exc)
+    else:
+        raise AssertionError(
+            "expected process-exit receipt with unbound output file rejection"
+        )
+    second_path.unlink()
+
     try:
         module.validate_process_exit_runtime(
             root, receipt, {"deterministic": False, "renders": []},
