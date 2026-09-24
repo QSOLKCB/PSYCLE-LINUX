@@ -206,6 +206,24 @@ with tempfile.TemporaryDirectory() as temporary:
     assert precommand["completed_renders"] == []
     assert precommand["binding_error"] is None
 
+    precommand_with_inspection = dict(precommand_exit)
+    precommand_with_inspection["diagnostics"] = [
+        module.PRECOMMAND_EXIT_DIAGNOSTIC,
+        module.PROCESS_INSPECTION_FAILURE_PREFIX + " synthetic refresh failure",
+    ]
+    combined_precommand = module.validate_inconclusive_runtime(
+        root,
+        {"exit_code_before_termination": -1073741819},
+        {"deterministic": False, "renders": []},
+        [precommand_with_inspection],
+    )
+    assert combined_precommand["inconclusive_reason"] == (
+        "process-exit-before-render-command-verification"
+    )
+    assert combined_precommand["diagnostics"] == (
+        precommand_with_inspection["diagnostics"]
+    )
+
 presave_automation_failure = {
     **valid_render_event_binding(),
     "outcome": "inconclusive",
@@ -797,6 +815,14 @@ for consumer_path in (
     assert "validate_precommand_process_exit(" in consumer_source
     assert "post-render-process-inspection-failure" in consumer_source
 
+for consumer_path in (
+    ROOT / "scripts" / "phase6c-delayed-retrigger-render-isolation.py",
+    ROOT / "scripts" / "phase6c-delayed-retrigger-render-substrate.py",
+):
+    consumer_source = consumer_path.read_text(encoding="utf-8")
+    assert "clean-process-exit-during-render" in consumer_source
+    assert "or exit_code == 0" not in consumer_source
+
 render_helper_source = ORIGINAL_AUDIO_RENDER_SCRIPT.read_text(encoding="utf-8")
 observer_builder_source = (
     ROOT / "scripts" / "phase6c-build-delayed-retrigger-observer.py"
@@ -1019,6 +1045,17 @@ for check, name in (
     check(
         inspection_failure_completed,
         name,
+        allow_process_inspection_failure=True,
+    )
+    combined_inspection_exit = {
+        **inspection_failure_completed,
+        "process_exited": True,
+        "process_exit_code": -1073741819,
+    }
+    check(
+        combined_inspection_exit,
+        name,
+        allow_post_completion_exit=True,
         allow_process_inspection_failure=True,
     )
 
