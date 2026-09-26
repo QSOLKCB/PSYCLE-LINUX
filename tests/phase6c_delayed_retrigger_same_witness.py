@@ -57,6 +57,13 @@ def expect_value_error(fn, phrase: str) -> None:
 
 
 
+assert m.normalize_objdump_artifact_path(
+    b"/collection/root/renderer:     file format elf64-x86-64\n\nmain\n"
+) == m.normalize_objdump_artifact_path(
+    b"/downloaded/artifact/renderer:     file format elf64-x86-64\n\nmain\n"
+)
+
+
 def synthetic_eins_payload() -> bytes:
     compressed = base64.b64decode(
         "AQACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADtB/gEQPrD3g8QPudmAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -1441,6 +1448,24 @@ with tempfile.TemporaryDirectory() as temporary:
     assert m.validate_original_predispatch_observer_failure(
         second_init_failure
     ) == second_init_failure["diagnostics"]
+    exited_second_init_failure = {
+        **second_init_failure,
+        "process_exited": True,
+        "process_exit_code": -1073741819,
+    }
+    assert m.validate_original_predispatch_observer_failure(
+        exited_second_init_failure
+    ) == exited_second_init_failure["diagnostics"]
+    exited_second_init_runtime = dict(inconclusive_runtime)
+    exited_second_init_runtime["renders"] = [first_binding]
+    exited_second_init_runtime["attempts"] = [
+        closed_first_attempt,
+        exited_second_init_failure,
+    ]
+    exited_second_init = m.validate_original_inconclusive_runtime(
+        root, exited_second_init_runtime
+    )
+    assert exited_second_init["process_exit_code"] == -1073741819
     invalid_second_init_failure = dict(second_init_failure)
     invalid_second_init_failure["diagnostics"] = [
         second_init_failure["diagnostics"][0],
