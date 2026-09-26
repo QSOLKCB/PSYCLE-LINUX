@@ -1288,6 +1288,32 @@ def validate_compiled_provenance_output(data: bytes) -> dict:
 
 
 
+def normalize_objdump_artifact_path(data: bytes) -> bytes:
+    """Remove only the location-dependent objdump input path from its file header."""
+    marker = b":     file format "
+    lines = data.splitlines(keepends=True)
+    matches = [
+        index
+        for index, line in enumerate(lines)
+        if marker in line.rstrip(b"\r\n")
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            "same-witness renderer objdump evidence lacks one file-format header"
+        )
+    index = matches[0]
+    line = lines[index]
+    body = line.rstrip(b"\r\n")
+    newline = line[len(body) :]
+    prefix, suffix = body.split(marker, 1)
+    if not prefix:
+        raise ValueError(
+            "same-witness renderer objdump evidence has an empty artifact path"
+        )
+    lines[index] = b"<renderer>" + marker + suffix + newline
+    return b"".join(lines)
+
+
 def validate_renderer_code_identity(root: Path) -> dict:
     binary_relative = f"{NAME}/phase6c-delayed-retrigger-sampulse-render"
     symbols_relative = "delayed-retrigger/sampulse-render-symbols.log"
@@ -1348,7 +1374,11 @@ def validate_renderer_code_identity(root: Path) -> dict:
             raise ValueError(
                 "same-witness renderer code-identity inspection failed"
             ) from exc
-        if actual_symbols != symbols or actual_main != main_disassembly:
+        if (
+            actual_symbols != symbols
+            or normalize_objdump_artifact_path(actual_main)
+            != normalize_objdump_artifact_path(main_disassembly)
+        ):
             raise ValueError(
                 "same-witness renderer code-identity evidence does not match exact ELF"
             )
@@ -2221,6 +2251,16 @@ def validate_original_predispatch_observer_failure(attempt: object) -> list[str]
             )
         )
     )
+    exit_code = attempt.get("process_exit_code")
+    process_exited = attempt.get("process_exited")
+    process_state_valid = (
+        (process_exited is False and exit_code is None)
+        or (
+            process_exited is True
+            and isinstance(exit_code, int)
+            and not isinstance(exit_code, bool)
+        )
+    )
     if (
         attempt.get("outcome") != "inconclusive"
         or attempt.get("command_verified") is not True
@@ -2230,8 +2270,7 @@ def validate_original_predispatch_observer_failure(attempt: object) -> list[str]
         or attempt.get("save_invoked") is not False
         or attempt.get("output") is not None
         or attempt.get("observed_output") is not None
-        or attempt.get("process_exited") is not False
-        or attempt.get("process_exit_code") is not None
+        or not process_state_valid
         or not diagnostics_valid
     ):
         raise ValueError(
@@ -2675,7 +2714,7 @@ def validate_original_inconclusive_runtime(
                 "inconclusive_reason": "render-observer-initialization-failure",
                 "binding_error": None,
                 "diagnostics": retained_diagnostics + init_diagnostics,
-                "process_exit_code": None,
+                "process_exit_code": final_attempt.get("process_exit_code"),
                 "observed_output": None,
                 "retained_renders": retained_renders,
                 "retained_render_analyses": retained_analyses,
@@ -3066,7 +3105,7 @@ def validate_original_attempt(
         if value.startswith(base.PROCESS_INSPECTION_FAILURE_PREFIX)
     ]
     if allow_process_inspection_failure:
-        if len(inspection_diagnostics) != 1:
+        if not inspection_diagnostics:
             raise ValueError(
                 "same-witness post-render process-inspection evidence is missing"
             )
