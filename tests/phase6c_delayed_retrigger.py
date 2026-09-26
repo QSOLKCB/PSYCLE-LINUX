@@ -363,52 +363,51 @@ class GeneratedObserver(unittest.TestCase):
                 'expected_contract = "sequencer-delayed-retrigger"', text
             )
             guarded_repeat = (
-                '$process.Refresh()\n'
-                '                    if ($process.HasExited -and -not '
-                '[bool]$renderOne.process_exited) {\n'
-                '                        $renderOne.process_exited = $true\n'
-                '                        $renderOne.process_exit_code = [int64]$process.ExitCode\n'
-                '                    }\n'
+                '$renderOneProcessInspectionSucceeded = (\n'
+                '                        Update-Phase6cRenderAttemptProcessState '
+                '-Process $process -Attempt $renderOne\n'
+                '                    )\n'
                 '                    $renderOneInspectionFailure = @(\n'
                 '                        @($renderOne.diagnostics) | Where-Object {\n'
                 '                            [string]$_ -clike '
                 '"could not inspect reference process after render attempt:*"\n'
                 '                        }\n'
                 '                    ).Count -gt 0\n'
-                '                    if (-not $process.HasExited -and\n'
+                '                    if ($renderOneProcessInspectionSucceeded -and\n'
+                '                        -not [bool]$renderOne.process_exited -and\n'
                 '                        [bool]$renderOne.dialog_closed -and\n'
                 '                        -not $renderOneInspectionFailure) {\n'
                 '                        $renderTwo = Invoke-Phase6cAudioRender '
                 '$process $windowTitle $renderTwoPath'
             )
             self.assertIn(guarded_repeat, text)
-            self.assertNotIn(
-                '$process.Refresh()\n'
-                '                    if (-not $process.HasExited) {\n'
-                '                        $renderTwo = Invoke-Phase6cAudioRender '
-                '$process $windowTitle $renderTwoPath',
-                text,
+            self.assertEqual(
+                text.count("function Update-Phase6cRenderAttemptProcessState"),
+                1,
             )
+            self.assertEqual(
+                text.count(
+                    "Update-Phase6cRenderAttemptProcessState "
+                    "-Process $process -Attempt $renderOne"
+                ),
+                5,
+            )
+            self.assertEqual(
+                text.count(
+                    "Update-Phase6cRenderAttemptProcessState "
+                    "-Process $process -Attempt $lastAttempt"
+                ),
+                2,
+            )
+            self.assertEqual(
+                text.count("$renderOneProcessInspectionSucceeded = ("),
+                2,
+            )
+            self.assertIn("outer refresh failed:", text)
             self.assertEqual(text.count("$postCompletionExit = ("), 5)
             self.assertEqual(
                 text.count('} elseif ($postCompletionExit) {\n                    "inconclusive"'),
                 5,
-            )
-            self.assertEqual(
-                text.count('$renderOne.process_exited = $true'),
-                5,
-            )
-            self.assertEqual(
-                text.count('$lastAttempt.process_exited = $true'),
-                2,
-            )
-            self.assertEqual(
-                text.count('$renderOne.process_exit_code = [int64]$process.ExitCode'),
-                5,
-            )
-            self.assertEqual(
-                text.count('$lastAttempt.process_exit_code = [int64]$process.ExitCode'),
-                2,
             )
             self.assertEqual(
                 text.count('$runtimeOutcome = if ($postCompletionExit) {'),
@@ -425,6 +424,15 @@ class GeneratedObserver(unittest.TestCase):
             self.assertEqual(
                 text.count('$runtimeOutcome = if ($postRenderInspectionFailure) {'),
                 5,
+            )
+            self.assertIn(
+                '[string]$runtimeExecution.outcome -in '
+                '@("rendered-once", "rendered-twice")',
+                text,
+            )
+            self.assertIn(
+                '$lateExitAttempt.process_exit_code = [int64]$exitCode',
+                text,
             )
 
     def test_builder_accepts_crlf_checkout_of_pinned_base(self):
