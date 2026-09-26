@@ -179,6 +179,29 @@ def main() -> None:
 
     runtime_block = r'''
         $runtimeExecution = $null
+        function Update-Phase6cRenderAttemptProcessState {
+            param(
+                [System.Diagnostics.Process]$Process,
+                [object]$Attempt
+            )
+            try {
+                $Process.Refresh()
+                if ($Process.HasExited -and -not [bool]$Attempt.process_exited) {
+                    $Attempt.process_exited = $true
+                    $Attempt.process_exit_code = [int64]$Process.ExitCode
+                }
+                return $true
+            }
+            catch {
+                $diagnostic = (
+                    "could not inspect reference process after render attempt: " +
+                    "outer refresh failed: $($_.Exception.Message)"
+                )
+                $Attempt.diagnostics = @(@($Attempt.diagnostics) + $diagnostic)
+                return $false
+            }
+        }
+
         if ($CollectSamplerFaultLocation -and $spec.name -eq "sampler-fault-location") {
             $renderDirectory = Join-Path $outRoot "sampler-fault-location"
             if (-not (Test-Path -LiteralPath $renderDirectory)) {
@@ -275,17 +298,16 @@ def main() -> None:
                         path = "delayed-retrigger-execution/$($renderOne.output.path)"
                         sha256 = [string]$renderOne.output.sha256
                     }
-                    $process.Refresh()
-                    if ($process.HasExited -and -not [bool]$renderOne.process_exited) {
-                        $renderOne.process_exited = $true
-                        $renderOne.process_exit_code = [int64]$process.ExitCode
-                    }
+                    $renderOneProcessInspectionSucceeded = (
+                        Update-Phase6cRenderAttemptProcessState -Process $process -Attempt $renderOne
+                    )
                     $renderOneInspectionFailure = @(
                         @($renderOne.diagnostics) | Where-Object {
                             [string]$_ -clike "could not inspect reference process after render attempt:*"
                         }
                     ).Count -gt 0
-                    if (-not $process.HasExited -and
+                    if ($renderOneProcessInspectionSucceeded -and
+                        -not [bool]$renderOne.process_exited -and
                         [bool]$renderOne.dialog_closed -and
                         -not $renderOneInspectionFailure) {
                         $renderTwo = Invoke-Phase6cAudioRender $process $windowTitle $renderTwoPath
@@ -299,11 +321,7 @@ def main() -> None:
                     }
                 }
                 $lastAttempt = $attempts[-1]
-                $process.Refresh()
-                if ($process.HasExited -and -not [bool]$lastAttempt.process_exited) {
-                    $lastAttempt.process_exited = $true
-                    $lastAttempt.process_exit_code = [int64]$process.ExitCode
-                }
+                [void](Update-Phase6cRenderAttemptProcessState -Process $process -Attempt $lastAttempt)
                 $postCompletionExit = (
                     $renderBindings.Count -gt 0 -and
                     $renderBindings.Count -eq $attempts.Count -and
@@ -388,17 +406,16 @@ def main() -> None:
                         path = "delayed-retrigger-sampulse-runtime/$($renderOne.output.path)"
                         sha256 = [string]$renderOne.output.sha256
                     }
-                    $process.Refresh()
-                    if ($process.HasExited -and -not [bool]$renderOne.process_exited) {
-                        $renderOne.process_exited = $true
-                        $renderOne.process_exit_code = [int64]$process.ExitCode
-                    }
+                    $renderOneProcessInspectionSucceeded = (
+                        Update-Phase6cRenderAttemptProcessState -Process $process -Attempt $renderOne
+                    )
                     $renderOneInspectionFailure = @(
                         @($renderOne.diagnostics) | Where-Object {
                             [string]$_ -clike "could not inspect reference process after render attempt:*"
                         }
                     ).Count -gt 0
-                    if (-not $process.HasExited -and
+                    if ($renderOneProcessInspectionSucceeded -and
+                        -not [bool]$renderOne.process_exited -and
                         [bool]$renderOne.dialog_closed -and
                         -not $renderOneInspectionFailure) {
                         $renderTwo = Invoke-Phase6cAudioRender $process $windowTitle $renderTwoPath
@@ -412,11 +429,7 @@ def main() -> None:
                     }
                 }
                 $lastAttempt = $attempts[-1]
-                $process.Refresh()
-                if ($process.HasExited -and -not [bool]$lastAttempt.process_exited) {
-                    $lastAttempt.process_exited = $true
-                    $lastAttempt.process_exit_code = [int64]$process.ExitCode
-                }
+                [void](Update-Phase6cRenderAttemptProcessState -Process $process -Attempt $lastAttempt)
                 $postCompletionExit = (
                     $renderBindings.Count -gt 0 -and
                     $renderBindings.Count -eq $attempts.Count -and
@@ -501,11 +514,7 @@ def main() -> None:
                         sha256 = [string]$renderOne.output.sha256
                     }
                 }
-                $process.Refresh()
-                if ($process.HasExited -and -not [bool]$renderOne.process_exited) {
-                    $renderOne.process_exited = $true
-                    $renderOne.process_exit_code = [int64]$process.ExitCode
-                }
+                [void](Update-Phase6cRenderAttemptProcessState -Process $process -Attempt $renderOne)
                 $postCompletionExit = (
                     $renderBindings.Count -eq 1 -and
                     [string]$renderOne.outcome -ceq "rendered" -and
@@ -583,11 +592,7 @@ def main() -> None:
                         sha256 = [string]$renderOne.output.sha256
                     }
                 }
-                $process.Refresh()
-                if ($process.HasExited -and -not [bool]$renderOne.process_exited) {
-                    $renderOne.process_exited = $true
-                    $renderOne.process_exit_code = [int64]$process.ExitCode
-                }
+                [void](Update-Phase6cRenderAttemptProcessState -Process $process -Attempt $renderOne)
                 $postCompletionExit = (
                     $renderBindings.Count -eq 1 -and
                     [string]$renderOne.outcome -ceq "rendered" -and
@@ -667,11 +672,7 @@ def main() -> None:
                         sha256 = [string]$renderOne.output.sha256
                     }
                 }
-                $process.Refresh()
-                if ($process.HasExited -and -not [bool]$renderOne.process_exited) {
-                    $renderOne.process_exited = $true
-                    $renderOne.process_exit_code = [int64]$process.ExitCode
-                }
+                [void](Update-Phase6cRenderAttemptProcessState -Process $process -Attempt $renderOne)
                 $postCompletionExit = (
                     $renderBindings.Count -eq 1 -and
                     [string]$renderOne.outcome -ceq "rendered" -and
@@ -745,6 +746,13 @@ def main() -> None:
         '                "$Procedure; for the sequencer-delayed-retrigger contract load the exact frozen command fixture under pinned Psycle 1.12.0 x86 and retain the clean accepted-load/liveness evidence; command execution semantics are recorded separately from the pinned original source and are not inferred from this UI load receipt"\n'
         '            } elseif ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',
         "procedure",
+    )
+
+    text = replace_once(
+        text,
+        '        $receipt = [ordered]@{',
+        "        if ($ObserveDelayedRetrigger -and\n            $null -ne $runtimeExecution -and\n            $loadResult -ceq \"inconclusive\" -and\n            $observation -ceq \"reference-process-exited-before-harness-termination\" -and\n            $null -ne $exitCode -and\n            [string]$runtimeExecution.outcome -in @(\"rendered-once\", \"rendered-twice\")) {\n            $runtimeAttempts = @($runtimeExecution.attempts)\n            if ($runtimeAttempts.Count -gt 0) {\n                $lateExitAttempt = $runtimeAttempts[-1]\n                if (-not [bool]$lateExitAttempt.process_exited) {\n                    $lateExitAttempt.process_exited = $true\n                    $lateExitAttempt.process_exit_code = [int64]$exitCode\n                }\n            }\n            $runtimeExecution.outcome = \"inconclusive\"\n            $runtimeExecution.deterministic = $false\n        }\n\n" + '        $receipt = [ordered]@{',
+        "late runtime exit reconciliation",
     )
 
     text = replace_once(
