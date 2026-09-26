@@ -178,6 +178,22 @@ predispatch = module.validate_inconclusive_runtime(
 assert predispatch["inconclusive_reason"] == "render-observer-initialization-failure"
 assert predispatch["completed_renders"] == []
 
+predispatch_after_exit = {
+    **predispatch_observer_failure,
+    "process_exited": True,
+    "process_exit_code": -1073741819,
+}
+predispatch_exit = module.validate_inconclusive_runtime(
+    Path("."),
+    {},
+    {"deterministic": False, "renders": []},
+    [predispatch_after_exit],
+)
+assert predispatch_exit["inconclusive_reason"] == (
+    "render-observer-initialization-failure"
+)
+assert predispatch_exit["process_exit_code"] == -1073741819
+
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     precommand_exit = {
@@ -1044,6 +1060,18 @@ for check, name in (
         )
     check(
         inspection_failure_completed,
+        name,
+        allow_process_inspection_failure=True,
+    )
+    repeated_inspection_failure = {
+        **inspection_failure_completed,
+        "diagnostics": [
+            "could not inspect reference process after render attempt: helper refresh failure",
+            "could not inspect reference process after render attempt: outer refresh failure",
+        ],
+    }
+    check(
+        repeated_inspection_failure,
         name,
         allow_process_inspection_failure=True,
     )
