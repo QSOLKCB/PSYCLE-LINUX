@@ -277,7 +277,7 @@ def validate_completed_render_attempt(
         if value.startswith("could not inspect reference process after render attempt:")
     ]
     if allow_process_inspection_failure:
-        if len(inspection_diagnostics) != 1:
+        if not inspection_diagnostics:
             raise ValueError(
                 f"{name}: post-render process-inspection failure evidence is missing"
             )
