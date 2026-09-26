@@ -412,7 +412,7 @@ def validate_completed_render_attempt(
         if value.startswith(PROCESS_INSPECTION_FAILURE_PREFIX)
     ]
     if allow_process_inspection_failure:
-        if len(inspection_diagnostics) != 1:
+        if not inspection_diagnostics:
             raise ValueError(
                 "post-render process-inspection failure evidence is missing"
             )
@@ -651,6 +651,16 @@ def validate_predispatch_observer_failure(attempt: object) -> dict:
             )
         )
     )
+    exit_code = attempt.get("process_exit_code")
+    process_exited = attempt.get("process_exited")
+    process_state_valid = (
+        (process_exited is False and exit_code is None)
+        or (
+            process_exited is True
+            and isinstance(exit_code, int)
+            and not isinstance(exit_code, bool)
+        )
+    )
     if (
         attempt.get("outcome") != "inconclusive"
         or attempt.get("command_verified") is not True
@@ -660,8 +670,7 @@ def validate_predispatch_observer_failure(attempt: object) -> dict:
         or attempt.get("save_invoked") is not False
         or attempt.get("output") is not None
         or attempt.get("observed_output") is not None
-        or attempt.get("process_exited") is not False
-        or attempt.get("process_exit_code") is not None
+        or not process_state_valid
         or not diagnostics_valid
     ):
         raise ValueError(
@@ -673,7 +682,7 @@ def validate_predispatch_observer_failure(attempt: object) -> dict:
         "completed_render_analyses": [],
         "binding_error": None,
         "diagnostics": diagnostics,
-        "process_exit_code": None,
+        "process_exit_code": exit_code,
         "observed_output": None,
     }
 
