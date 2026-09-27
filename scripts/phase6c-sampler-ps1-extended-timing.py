@@ -777,44 +777,109 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
     }
 
 
-def compare(candidate_root: Path, original_root: Path) -> dict:
+def materialize_comparison_inputs(
+    candidate_root: Path, original_root: Path, comparison_root: Path
+) -> tuple[Path, Path]:
+    candidate_root = candidate_root.resolve()
+    original_root = original_root.resolve()
+    comparison_root = comparison_root.resolve()
+    comparison_root.mkdir(parents=True, exist_ok=True)
+    inputs = comparison_root / "inputs"
+    if inputs.exists():
+        raise ValueError("refusing stale timing comparison inputs")
+    candidate_copy = inputs / "candidate"
+    original_copy = inputs / "original"
+    shutil.copytree(candidate_root, candidate_copy)
+    shutil.copytree(original_root, original_copy)
+    return candidate_copy.resolve(), original_copy.resolve()
+
+
+def compare(
+    candidate_root: Path, original_root: Path, comparison_root: Path
+) -> dict:
+    candidate_root = candidate_root.resolve()
+    original_root = original_root.resolve()
+    comparison_root = comparison_root.resolve()
+    candidate_root.relative_to(comparison_root)
+    original_root.relative_to(comparison_root)
     candidate = validate_candidate(candidate_root)
     original = validate_original(candidate_root, original_root)
     candidate_runtime = {
         variant: candidate["variants"][variant]["runtime_execution"]
         for variant in VARIANTS
     }
-    candidate_receipt_sha256s = {
-        variant: sha256(
-            candidate_root.resolve()
-            / f"candidate-sampler-ps1-extended-{variant}.json"
+    candidate_receipts = {
+        variant: binding(
+            comparison_root,
+            candidate_root / f"candidate-sampler-ps1-extended-{variant}.json",
         )
+        for variant in VARIANTS
+    }
+    candidate_receipt_sha256s = {
+        variant: candidate_receipts[variant]["sha256"]
         for variant in VARIANTS
     }
     candidate_inputs = {
         variant: {
-            "receipt_sha256": candidate_receipt_sha256s[variant],
-            "fixture": {
-                "path": candidate["variants"][variant]["fixture"],
-                "sha256": candidate["variants"][variant]["fixture_sha256"],
-            },
-            "candidate_fixture": {
-                "path": candidate["variants"][variant]["candidate_fixture"],
-                "sha256": candidate["variants"][variant][
-                    "candidate_fixture_sha256"
-                ],
-            },
-            "candidate_pcm": {
-                "path": candidate["variants"][variant]["candidate_pcm"],
-                "sha256": candidate["variants"][variant]["candidate_pcm_sha256"],
-            },
-            "probe": candidate["variants"][variant]["probe"],
-            "probe_attestation": candidate["variants"][variant][
-                "probe_attestation"
-            ],
+            "receipt": candidate_receipts[variant],
+            "fixture": binding(
+                comparison_root,
+                candidate_root / candidate["variants"][variant]["fixture"],
+            ),
+            "candidate_fixture": binding(
+                comparison_root,
+                candidate_root
+                / candidate["variants"][variant]["candidate_fixture"],
+            ),
+            "candidate_pcm": binding(
+                comparison_root,
+                candidate_root / candidate["variants"][variant]["candidate_pcm"],
+            ),
+            "probe": binding(
+                comparison_root,
+                candidate_root / candidate["variants"][variant]["probe"]["path"],
+            ),
+            "probe_attestation": binding(
+                comparison_root,
+                candidate_root
+                / candidate["variants"][variant]["probe_attestation"]["path"],
+            ),
+            "raw_probe": binding(
+                comparison_root,
+                candidate_root
+                / candidate["variants"][variant]["raw_probe"]["path"],
+            ),
+            "probe_log": binding(
+                comparison_root,
+                candidate_root
+                / candidate["variants"][variant]["probe_log"]["path"],
+            ),
         }
         for variant in VARIANTS
     }
+    original_inputs = {}
+    for variant in VARIANTS:
+        receipt_path = (
+            original_root / f"original-sampler-ps1-extended-{variant}.json"
+        )
+        receipt = read_json(receipt_path)
+        runtime = receipt.get("runtime_execution")
+        renders = runtime.get("renders") if isinstance(runtime, dict) else []
+        render_bindings = []
+        if isinstance(renders, list):
+            for render in renders:
+                if not isinstance(render, dict) or not isinstance(
+                    render.get("path"), str
+                ):
+                    continue
+                render_path = (original_root / render["path"]).resolve()
+                render_path.relative_to(original_root)
+                if render_path.is_file():
+                    render_bindings.append(binding(comparison_root, render_path))
+        original_inputs[variant] = {
+            "receipt": binding(comparison_root, receipt_path),
+            "renders": render_bindings,
+        }
     result = {
         "schema_version": 1,
         "phase": "6C",
@@ -823,6 +888,12 @@ def compare(candidate_root: Path, original_root: Path) -> dict:
         "candidate_snapshot": SNAPSHOT,
         "candidate_receipt_sha256s": candidate_receipt_sha256s,
         "candidate_inputs": candidate_inputs,
+        "original_inputs": original_inputs,
+        "artifact_layout": {
+            "candidate_root": candidate_root.relative_to(comparison_root).as_posix(),
+            "original_root": original_root.relative_to(comparison_root).as_posix(),
+            "paths_resolve_from": "comparison-artifact-root",
+        },
         "commands": ["E-D3", "E-C3"],
         "boundary_comparison_contract": {
             variant: {
@@ -977,9 +1048,12 @@ def main() -> int:
     elif args.mode == "original-check":
         value = validate_original(args.candidate_root, args.original_root)
     else:
-        value = compare(args.candidate_root, args.original_root)
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        write_new(args.output, value)
+        comparison_root = args.output.parent.resolve()
+        candidate_copy, original_copy = materialize_comparison_inputs(
+            args.candidate_root, args.original_root, comparison_root
+        )
+        value = compare(candidate_copy, original_copy, comparison_root)
+        write_new(args.output.resolve(), value)
     print(json.dumps(value, sort_keys=True))
     return 0
 
