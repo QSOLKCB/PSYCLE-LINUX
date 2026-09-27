@@ -215,6 +215,34 @@ if m.OBSERVATION_PATH.is_file():
             m.validate_archived_evidence(archive_root, manifest, committed)
             == committed
         )
+
+        candidate = m.validate_archived_candidate(archive_root / "candidate")
+        _receipt, derived_analysis, derived_comparison = (
+            m.derive_archived_original_receipts(
+                candidate, archive_root / "original"
+            )
+        )
+        m.validate_derived_receipt_hashes(
+            derived_analysis, derived_comparison, committed
+        )
+
+        mutated_analysis = copy.deepcopy(derived_analysis)
+        mutated_analysis["diagnostics"] = []
+        expect_value_error(
+            lambda: m.validate_derived_receipt_hashes(
+                mutated_analysis, derived_comparison, committed
+            ),
+            "re-derived analysis_receipt hash differs",
+        )
+
+        mutated_comparison = copy.deepcopy(derived_comparison)
+        mutated_comparison["interpretation_boundary"] += " altered"
+        expect_value_error(
+            lambda: m.validate_derived_receipt_hashes(
+                derived_analysis, mutated_comparison, committed
+            ),
+            "re-derived comparison_receipt hash differs",
+        )
     finally:
         temporary.cleanup()
 
