@@ -1272,8 +1272,7 @@ function Invoke-Phase6cAudioRender(
         if ($result.render_dialog_post_dispatch_observed_window_event_count -lt 1 -or
             $result.render_dialog_post_dispatch_event_count -ne 1 -or
             $result.render_dialog_unresolved_post_dispatch_event_count -ne 0 -or
-            $result.render_dialog_post_dispatch_observed_window_event_count -lt
-                $result.render_dialog_post_dispatch_event_count) {
+            $result.render_dialog_post_dispatch_observed_window_event_count -lt $result.render_dialog_post_dispatch_event_count) {
             throw "offline render requires one unique post-dispatch Render as Wav File event with no unresolved window events"
         }
         $result.output = [ordered]@{
