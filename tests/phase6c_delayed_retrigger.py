@@ -430,16 +430,21 @@ class GeneratedObserver(unittest.TestCase):
                 '@("rendered-once", "rendered-twice")',
                 text,
             )
-            self.assertIn(
+            self.assertNotIn(
                 '$runtimeRenders = @($runtimeExecution.renders)',
                 text,
             )
             self.assertIn(
-                '$runtimeRenders.Count -eq $runtimeAttempts.Count',
+                '$runtimeAttempts.Count -gt 0',
                 text,
             )
             self.assertIn(
-                '[string]$lateExitAttempt.outcome -ceq "rendered"',
+                '$null -eq $lateExitAttempt.process_exit_code',
+                text,
+            )
+            self.assertIn(
+                '[string]$runtimeExecution.outcome -in '
+                '@("rendered-once", "rendered-twice")',
                 text,
             )
             self.assertIn(
