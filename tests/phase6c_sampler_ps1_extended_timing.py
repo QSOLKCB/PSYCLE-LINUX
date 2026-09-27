@@ -158,6 +158,27 @@ except ValueError as exc:
 else:
     raise AssertionError("unclassified zero-exit probe diagnostic must fail")
 
+with tempfile.TemporaryDirectory() as temporary:
+    base = Path(temporary)
+    candidate = base / "candidate"
+    original = base / "original"
+    comparison = base / "comparison"
+    candidate.mkdir()
+    original.mkdir()
+    (candidate / "candidate.txt").write_text("candidate", encoding="utf-8")
+    (original / "original.txt").write_text("original", encoding="utf-8")
+    candidate_copy, original_copy = timing.materialize_comparison_inputs(
+        candidate, original, comparison
+    )
+    assert candidate_copy == (comparison / "inputs/candidate").resolve()
+    assert original_copy == (comparison / "inputs/original").resolve()
+    assert (candidate_copy / "candidate.txt").read_text(encoding="utf-8") == "candidate"
+    assert (original_copy / "original.txt").read_text(encoding="utf-8") == "original"
+    candidate_binding = timing.binding(
+        comparison.resolve(), candidate_copy / "candidate.txt"
+    )
+    assert candidate_binding["path"] == "inputs/candidate/candidate.txt"
+
 archive = ROOT / "phase6c/evidence/sampler-ps1/pitch-hosted"
 manifest = json.loads((archive / "raw-manifest.json").read_text(encoding="utf-8"))
 for item in manifest["files"]:
