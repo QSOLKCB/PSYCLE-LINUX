@@ -43,12 +43,13 @@
     "receipt_sha256": "b60b0e27f4224baf34c3b4489fc6de5c1b76e61f87dc4b0fb6aa3b75b12e4f00",
     "reference_build": "Psycle 1.12.0 x86",
     "reference_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
-    "load_result": "accepted",
+    "load_result": "inconclusive",
     "stable_marker_polls": 34,
     "outcome": "reference-process-exited-during-render",
     "process_exit_code": -1073741819,
     "process_exit_hex": "0xC0000005",
-    "render_sha256s": []
+    "render_sha256s": [],
+    "pre_render_clean_accepted_load": true
   },
   "blocker": "Pinned original Psycle accepted the exact fixture but exited with 0xC0000005 after verified offline-render dispatch, so no deterministic original render pair exists. The scoped pitch witness and broad Sampler PS1 contract remain UNKNOWN.",
   "archive": {
