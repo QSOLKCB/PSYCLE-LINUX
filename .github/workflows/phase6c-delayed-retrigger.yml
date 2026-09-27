@@ -277,7 +277,7 @@ jobs:
           EVIDENCE='phase6c/evidence/sequencer-delayed-retrigger-same-witness'
           python3 scripts/phase6c-delayed-retrigger-same-witness-observation.py \
             archive-check \
-            "$EVIDENCE/canonical-raw.tar.gz.b64" \
+            "$EVIDENCE" \
             "$EVIDENCE/canonical-raw-manifest.json" \
             "$EVIDENCE/observation.json"
 
