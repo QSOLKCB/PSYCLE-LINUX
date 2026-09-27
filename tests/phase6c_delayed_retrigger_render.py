@@ -433,13 +433,16 @@ with tempfile.TemporaryDirectory() as temporary:
         "process_exited": False,
         "process_exit_code": None,
         "output": None,
-        "diagnostics": ["multiple post-dispatch Psycle window-show events observed"],
+        "diagnostics": [
+            "multiple post-dispatch Render as Wav File windows observed"
+        ],
         "observed_output": {
             "path": ambiguous_name,
             "size_bytes": len(b"partial"),
             "sha256": hashlib.sha256(b"partial").hexdigest(),
         },
         "render_dialog_post_dispatch_observed_window_event_count": 2,
+        "render_dialog_post_dispatch_event_count": 2,
     }
     ambiguous = module.validate_inconclusive_runtime(
         root,
