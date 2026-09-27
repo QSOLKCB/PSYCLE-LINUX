@@ -8,6 +8,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -33,6 +34,23 @@ PROBE_IDENTITY = f"PSYCLE_PHASE6C_PS1_EXTENDED_TIMING_PROBE_V1_{SNAPSHOT}"
 PROBE_BUILD_CONTRACT = "sampler-ps1-extended-timing-probe-build"
 BOUNDARY_FIELDS = {"delay": "first_active_frame", "noteoff": "last_active_frame"}
 BOUNDARY_TOLERANCES_FRAMES = {"delay": 4, "noteoff": 6}
+PROBE_DIAGNOSTIC_MARKERS = (
+    ("thread-name-tls", "# universalis # ../src/universalis/os/thread_name.cpp:56 # void universalis::os::thread_name::set_tls()"),
+    ("thread-name-set", "setting name for thread:"),
+    ("player-thread-start-enter", "# psycle-core # ../src/psycle/core/player.cpp:66 # void psycle::core::Player::start_threads()"),
+    ("player-thread-start", "psycle: core: player: starting scheduler threads"),
+    ("player-thread-count", "psycle: core: player: using 1 threads"),
+    ("psy3-load", "psycle: core: psy3 loader: loading psycle song fileformat version 3:"),
+    ("psy3-newer-version-warning", "This file is from a newer version of Psycle! This process will try to load it anyway."),
+    ("machine-create-sampler", "psycle: core: machine factory: create machine: loading with host: 0, plugin: <sampler>"),
+    ("machine-create-master", "psycle: core: machine factory: create machine: loading with host: 0, plugin: <master>"),
+    ("player-stopping", "psycle: core: player: stopping"),
+    ("player-starting", "psycle: core: player: starting"),
+    ("player-thread-stop-enter", "# psycle-core # ../src/psycle/core/player.cpp:452 # void psycle::core::Player::stop_threads()"),
+    ("player-thread-stop-join", "terminating and joining scheduler threads ..."),
+    ("player-thread-stop-check", "# psycle-core # ../src/psycle/core/player.cpp:454 # void psycle::core::Player::stop_threads()"),
+    ("player-thread-not-running", "scheduler threads were not running"),
+)
 
 _pitch_spec = importlib.util.spec_from_file_location(
     "phase6c_ps1_pitch", ROOT / "scripts/phase6c-sampler-ps1-pitch.py"
@@ -152,6 +170,29 @@ def validate_probe_attestation(probe: Path, root: Path, path: Path) -> dict:
     if not pitch.exact_equal(actual, expected):
         raise ValueError("candidate timing probe build attestation changed")
     return actual
+
+
+def classify_probe_diagnostics(data: bytes) -> list[str]:
+    text = data.decode("utf-8", errors="replace")
+    classes: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if re.fullmatch(r"log:\s+\d+us: [TIW]: .+", line) is None:
+            raise ValueError(
+                f"candidate timing probe emitted unclassified diagnostic: {line}"
+            )
+        matches = [
+            name for name, marker in PROBE_DIAGNOSTIC_MARKERS
+            if marker in line
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"candidate timing probe emitted unclassified diagnostic: {line}"
+            )
+        classes.append(matches[0])
+    return sorted(set(classes))
 
 
 def expected_probe(variant: str) -> dict:
@@ -288,12 +329,7 @@ def collect_candidate(root: Path, probe_build: Path) -> dict:
                 f"stderr:\n{stderr or '(empty)'}\n"
                 f"stdout:\n{stdout or '(empty)'}"
             )
-        if process.stderr.strip():
-            stderr = process.stderr.decode("utf-8", errors="replace").strip()
-            raise ValueError(
-                f"candidate {variant} timing probe emitted unclassified diagnostics:\n"
-                f"{stderr}"
-            )
+        diagnostic_classes = classify_probe_diagnostics(process.stderr)
         value = validate_probe(json.loads(process.stdout), variant)
         receipt = {
             "schema_version": 1,
@@ -315,6 +351,7 @@ def collect_candidate(root: Path, probe_build: Path) -> dict:
             "probe_attestation": binding(root, probe_attestation),
             "raw_probe": binding(root, raw),
             "probe_log": binding(root, log),
+            "probe_diagnostic_classes": diagnostic_classes,
             "source_sha256": source_hashes(),
             "runtime_execution": value,
             "original_psycle_observed": False,
@@ -386,8 +423,11 @@ def validate_candidate(root: Path) -> dict:
         attestation_path = (root / attestation["path"]).resolve()
         verify_probe_executable(probe_path)
         validate_probe_attestation(probe_path, root, attestation_path)
-        if (root / log["path"]).read_bytes().strip():
-            raise ValueError("candidate timing probe retained unclassified diagnostics")
+        diagnostic_classes = classify_probe_diagnostics(
+            (root / log["path"]).read_bytes()
+        )
+        if receipt.get("probe_diagnostic_classes") != diagnostic_classes:
+            raise ValueError("candidate timing probe diagnostic classification drift")
         value = validate_probe(json.loads((root / raw["path"]).read_bytes()), variant)
         if not pitch.exact_equal(receipt.get("runtime_execution"), value):
             raise ValueError("candidate timing runtime receipt drift")
