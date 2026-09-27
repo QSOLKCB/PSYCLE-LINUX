@@ -76,9 +76,21 @@ def expected_renderer_provenance() -> dict:
             ROOT
             / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sequencer.cpp"
         ),
-        "engine_psy3_loader_sha256": (
+        "engine_song_sha256": (
             ROOT
-            / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.cpp"
+            / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/song.cpp"
+        ),
+        "engine_sequence_sha256": (
+            ROOT
+            / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sequence.cpp"
+        ),
+        "engine_pattern_sha256": (
+            ROOT
+            / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/pattern.cpp"
+        ),
+        "engine_machinefactory_sha256": (
+            ROOT
+            / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/machinefactory.cpp"
         ),
         "engine_sampler_sha256": (
             ROOT
@@ -222,6 +234,14 @@ def collect_candidate(root: Path) -> dict:
             "threads": 1,
             "sequencer_work_calls": 1,
             "input_sha256": candidate_fixture_sha,
+            "candidate_fixture_loader_bypassed": True,
+            "harness_song_topology": "sampler-0-to-master-one-note",
+            "harness_bpm": 120,
+            "harness_lpb": 4,
+            "harness_note": NOTE,
+            "harness_track": 0,
+            "harness_machine": 0,
+            "harness_instrument": 0,
             "pcm_size_bytes": AUTHORED_SAMPLE_FRAMES * 2,
             "pcm_sha256": candidate_pcm_sha,
             "harness_sample_injection": True,
@@ -384,6 +404,14 @@ def validate_candidate(root: Path, value: dict | None = None) -> dict:
             "threads": 1,
             "sequencer_work_calls": 1,
             "input_sha256": sha256(candidate_fixture),
+            "candidate_fixture_loader_bypassed": True,
+            "harness_song_topology": "sampler-0-to-master-one-note",
+            "harness_bpm": 120,
+            "harness_lpb": 4,
+            "harness_note": NOTE,
+            "harness_track": 0,
+            "harness_machine": 0,
+            "harness_instrument": 0,
             "pcm_size_bytes": AUTHORED_SAMPLE_FRAMES * 2,
             "pcm_sha256": sha256(candidate_pcm),
             "harness_sample_injection": True,
