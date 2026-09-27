@@ -536,14 +536,24 @@ def validate_archive_manifest(
     ):
         raise ValueError("durable same-witness archive manifest identity mismatch")
     canonical = observation["canonical_observation"]
+    if manifest.get("source_verification") != (
+        "downloaded-by-pinned-artifact-id; local ZIP SHA-256 equals GitHub artifact digest"
+    ):
+        raise ValueError("durable same-witness source verification changed")
     for role in ("candidate_artifact", "original_artifact"):
         source = manifest.get(role)
         expected = canonical.get(role)
+        digest_value = source.get("digest") if isinstance(source, dict) else None
         if (
             not isinstance(source, dict)
             or not isinstance(expected, dict)
             or source.get("id") != expected.get("id")
-            or source.get("digest") != expected.get("digest")
+            or digest_value != expected.get("digest")
+            or not isinstance(source.get("size_in_bytes"), int)
+            or isinstance(source.get("size_in_bytes"), bool)
+            or source["size_in_bytes"] <= 0
+            or source.get("source_archive_sha256")
+            != digest_value.removeprefix("sha256:")
         ):
             raise ValueError(f"durable same-witness {role} provenance mismatch")
     files = manifest.get("files")
