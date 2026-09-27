@@ -134,7 +134,12 @@ static bool wav_pcm16_mono_frames(
     const char* path,
     std::uint32_t& frame_count
 ) {
-    std::ifstream input(path, std::ios::binary);
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
+    const std::streamoff file_size =
+        input ? static_cast<std::streamoff>(input.tellg()) : -1;
+    if (!input || file_size < 12) return false;
+    input.seekg(0, std::ios::beg);
+
     unsigned char header[12];
     input.read(reinterpret_cast<char*>(header), sizeof(header));
     if (
@@ -159,6 +164,15 @@ static bool wav_pcm16_mono_frames(
         input.read(reinterpret_cast<char*>(chunk_header), sizeof(chunk_header));
         if (!input) return false;
         const std::uint32_t chunk_size = le32(chunk_header + 4);
+        const std::streamoff chunk_data_offset =
+            static_cast<std::streamoff>(input.tellg());
+        if (
+            chunk_data_offset < 0
+            || static_cast<std::uint64_t>(chunk_size)
+                > static_cast<std::uint64_t>(file_size - chunk_data_offset)
+        ) {
+            return false;
+        }
 
         if (std::memcmp(chunk_header, "fmt ", 4) == 0) {
             if (chunk_size < 16u) return false;
