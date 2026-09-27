@@ -45,7 +45,8 @@ def delayed_validator():
         '"sampler-work-boundary-release-no-active-voice", '
         '"sampler-work-boundary-delayed-note-short", '
         '"sampler-work-boundary-delayed-note-long", '
-        '"sampler-work-boundary-ordinary-note-short"'
+        '"sampler-work-boundary-ordinary-note-short", '
+        '"delayed-retrigger-sampulse-runtime"'
     )
     source = source.replace(
         old,

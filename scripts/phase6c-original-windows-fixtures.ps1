@@ -87,6 +87,9 @@ if ($ObserveDelayedRetrigger -and (Test-Path -LiteralPath (Join-Path $outRoot "o
 if ($ObserveDelayedRetrigger -and (Test-Path -LiteralPath (Join-Path $outRoot "original-delayed-retrigger-execution.json"))) {
     $receiptNames += "delayed-retrigger-execution"
 }
+if ($ObserveDelayedRetrigger -and (Test-Path -LiteralPath (Join-Path $outRoot "original-delayed-retrigger-sampulse-runtime.json"))) {
+    $receiptNames += "delayed-retrigger-sampulse-runtime"
+}
 if ($ObserveDelayedRetrigger) {
     foreach ($variant in @("control", "fd", "fb", "fa", "fe")) {
         $name = "delayed-retrigger-isolation-$variant"

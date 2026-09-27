@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "workflow_run_id": 35752301481,
+  "head_sha": "4cf71eba6f7b5f6ba14be6089cf37422b16b5ca6",
+  "candidate_artifact": {
+    "id": 10706755598,
+    "name": "phase6c-delayed-retrigger-candidate",
+    "digest": "sha256:ce4016b1a64ce67cca97079711c4852a55b9a7b47a3bb96c3bf8589741f16919"
+  },
+  "original_artifact": {
+    "id": 10706732946,
+    "name": "phase6c-delayed-retrigger-original",
+    "digest": "sha256:0865e2a07dcfd9ea72b1069db284e55dbd36c58d74fd5140b21ae0ba8705546d"
+  },
+  "source_receipt_sha256": "ef64d01bf1a2f98ee2921821d7463a30e73d8e7478e21f6b4a9b9794d13d2313",
+  "historical_receipt": {
+    "path": "original-sampler-work-boundary-isolation.json",
+    "sha256": "35874e0b2cfc0ed56c30a2dacf8c7110ecca398e9fd0a74df7187f60c14c7666",
+    "diagnosis": "voice-tick-initialization-associated-exit",
+    "interpretation_boundary": "the source-bound release/delayed/ordinary ladder isolates whether the pinned original access violation begins before Voice::Tick, during Voice::Tick initialization, or only once controller.Work sample processing becomes reachable; it does not classify delayed/retrigger parity"
+  },
+  "fixtures": {
+    "release-no-active-voice": {
+      "fixture_sha256": "edb7cd5fdf85b8379267d880bc535aa8f4d4b4a53c3048f21c0b9f5e201ed5cd",
+      "candidate_receipt_sha256": "9829ecf6d108202fc3bf40902165873f79169a6c83c906b2b4ae6e4369bbdb8b",
+      "original_receipt_sha256": "1cf7254ce4fdcac16cd13f26e4ea122078662ef4ff6cb76ba56c1ecc946bbebb",
+      "outcome": "stable-finalized-output-process-alive",
+      "process_exit_code": null,
+      "observed_output": {
+        "path": "sampler-work-boundary-release-no-active-voice/original-sampler-work-boundary-release-no-active-voice-1.wav",
+        "size_bytes": 4868,
+        "sha256": "f40e6f9f280c993b8c0ecdf6a54ba8314462803b7075e46d7db0c4a2bd9dfbae"
+      }
+    },
+    "delayed-note-short": {
+      "fixture_sha256": "f1021ee05ef3e76e71dca9f7d9f982decaef225124c8242788dbd3191813b195",
+      "candidate_receipt_sha256": "3947bfa36f834c2abcaef8dffd338c179b820618f22e62e3557c2e0216108fc3",
+      "original_receipt_sha256": "bcb6ce918df078e70e5b9ef99cf2a62f9ed81bf01330bb9577627c28245ff24a",
+      "outcome": "reference-process-exited-during-render",
+      "process_exit_code": -1073741819,
+      "observed_output": {
+        "path": "sampler-work-boundary-delayed-note-short/original-sampler-work-boundary-delayed-note-short-1.wav",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "delayed-note-long": {
+      "fixture_sha256": "e4efab094ea6ce78c9c83b9eec4ffbc10abadc18a56bf2feec816830aa8543e9",
+      "candidate_receipt_sha256": "b385e263a3818e98f2ddd74a5dced790e23c39105b84d6b9a6aac31d57b6dee2",
+      "original_receipt_sha256": "041362cfa7e2f4e03397bb2957c947d40311ea3a3b15a715df4a10da87028d7d",
+      "outcome": "reference-process-exited-during-render",
+      "process_exit_code": -1073741819,
+      "observed_output": {
+        "path": "sampler-work-boundary-delayed-note-long/original-sampler-work-boundary-delayed-note-long-1.wav",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "ordinary-note-short": {
+      "fixture_sha256": "6c6b606512ca3c87f91b7ea3ee41702b2e128fb741c1ac0a9ec0128ccaa1a3d3",
+      "candidate_receipt_sha256": "4f19b1966322b98f65eb2f467d13771a1bb55c4a3e48860e8421c69083ad01d5",
+      "original_receipt_sha256": "04bf960dabb83f5b0a3a54c367f686cd351a5606c2e65fc53570625a73ffca1f",
+      "outcome": "reference-process-exited-during-render",
+      "process_exit_code": -1073741819,
+      "observed_output": {
+        "path": "sampler-work-boundary-ordinary-note-short/original-sampler-work-boundary-ordinary-note-short-1.wav",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  }
+}
