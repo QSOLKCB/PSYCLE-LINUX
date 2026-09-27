@@ -462,6 +462,32 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                 }
                 continue
             try:
+                postverify = render.validate_postverification_predispatch_quarantine(
+                    raw_attempt
+                )
+            except ValueError:
+                pass
+            else:
+                if postverify["process_exit_code"] is not None:
+                    if (
+                        load_result != "inconclusive"
+                        or receipt.get("observation")
+                        != "reference-process-exited-before-harness-termination"
+                        or receipt.get("exit_code_before_termination")
+                        != postverify["process_exit_code"]
+                    ):
+                        raise ValueError(
+                            f"{name}: command-dispatch failure exit receipt mismatch"
+                        )
+                results[name] = {
+                    "outcome": "inconclusive",
+                    "inconclusive_reason": postverify["inconclusive_reason"],
+                    "load_result": load_result,
+                    "process_exit_code": postverify["process_exit_code"],
+                    "diagnostics": postverify["diagnostics"],
+                }
+                continue
+            try:
                 precommand = render.validate_precommand_process_exit(
                     raw_attempt
                 )
@@ -499,10 +525,42 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                     "diagnostics": presave["diagnostics"],
                 }
                 continue
-        attempt = require_attempt_prefix(raw_attempt, name)
         expected_filename = f"original-delayed-retrigger-isolation-{name}-1.wav"
-
         renders = runtime.get("renders")
+        if (
+            outcome == "reference-process-exited-during-render"
+            and renders == []
+            and render.has_diagnostic_prefix(
+                raw_attempt, render.OBSERVER_SEALING_FAILURE_PREFIX
+            )
+        ):
+            sealing = render.validate_postsave_process_exit_sealing_quarantine(
+                raw_attempt
+            )
+            if (
+                load_result != "inconclusive"
+                or receipt.get("observation")
+                != "reference-process-exited-before-harness-termination"
+                or receipt.get("exit_code_before_termination")
+                != sealing["process_exit_code"]
+            ):
+                raise ValueError(
+                    f"{name}: post-Save sealing exit receipt mismatch"
+                )
+            observed = validate_failed_observed_output(
+                original_root, name, raw_attempt, expected_filename
+            )
+            results[name] = {
+                "outcome": "inconclusive",
+                "inconclusive_reason": sealing["inconclusive_reason"],
+                "load_result": load_result,
+                "process_exit_code": sealing["process_exit_code"],
+                "observed_output": observed,
+                "diagnostics": sealing["diagnostics"],
+            }
+            continue
+
+        attempt = require_attempt_prefix(raw_attempt, name)
         process_inspection_failure = (
             isinstance(renders, list)
             and len(renders) == 1
