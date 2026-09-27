@@ -137,6 +137,24 @@ assert timing.BOUNDARY_FIELDS == {
     "noteoff": "last_active_frame",
 }
 
+known_log = (
+    b"log:      73us: I: ps1-extended-timing: "
+    b"psycle: core: player: using 1 threads\n"
+    b"log:     183us: W: ps1-extended-timing: "
+    b"This file is from a newer version of Psycle! "
+    b"This process will try to load it anyway.\n"
+)
+assert timing.classify_probe_diagnostics(known_log) == [
+    "player-thread-count",
+    "psy3-newer-version-warning",
+]
+try:
+    timing.classify_probe_diagnostics(b"WARNING: damaged PSY3 chunk\n")
+except ValueError as exc:
+    assert "unclassified diagnostic" in str(exc)
+else:
+    raise AssertionError("unclassified zero-exit probe diagnostic must fail")
+
 archive = ROOT / "phase6c/evidence/sampler-ps1/pitch-hosted"
 manifest = json.loads((archive / "raw-manifest.json").read_text(encoding="utf-8"))
 for item in manifest["files"]:
