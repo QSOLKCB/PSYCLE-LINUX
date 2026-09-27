@@ -30,6 +30,8 @@ namespace {
 const int kSampleRate = 44100;
 const int kRenderFrames = 22050;
 const float kActiveThreshold = 64.0f;
+const char kProbeIdentity[] =
+    "PSYCLE_PHASE6C_PS1_EXTENDED_TIMING_PROBE_V1_00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a";
 
 struct LoadedEvent {
     double position;
@@ -174,6 +176,7 @@ void emit_common(
     std::cout << std::setprecision(
                   std::numeric_limits<double>::max_digits10)
               << "{\"schema_version\":1"
+              << ",\"probe_identity\":\"" << kProbeIdentity << "\""
               << ",\"variant\":\"" << variant << "\""
               << ",\"load_returned\":true"
               << ",\"bpm\":" << song.bpm()
