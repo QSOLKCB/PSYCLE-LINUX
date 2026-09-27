@@ -1187,7 +1187,8 @@ with tempfile.TemporaryDirectory() as temporary:
             "render_dialog_unresolved_post_dispatch_event_count": 0,
             "render_dialog_post_dispatch_event_count": 1,
             "diagnostics": [
-                "multiple post-dispatch Psycle window-show events observed"
+                'Exception calling "ThrowIfAmbiguous" with "0" argument(s): '
+                '"multiple post-dispatch Psycle window-show events observed"'
             ],
             "observed_output": {
                 "path": original_path.name,
