@@ -238,9 +238,14 @@ jobs:
             phase6c-command-evidence
 
       - name: Pack candidate command evidence
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
+          if [[ ! -d phase6c-command-evidence ]]; then
+            echo "No candidate command evidence directory was created."
+            exit 0
+          fi
           # upload-artifact normalizes file modes. Keep the retained Linux
           # renderer's executable bit inside a tar archive for replay.
           tar -C phase6c-command-evidence -cf phase6c-command-evidence.tar .
