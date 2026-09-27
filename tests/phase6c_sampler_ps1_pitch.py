@@ -230,6 +230,10 @@ with tempfile.TemporaryDirectory() as temporary:
         json.dumps(corrupted, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    portable = pitch.validate_renderer_provenance(
+        evidence, verify_checkout_sources=False
+    )
+    assert portable["attestation"] == corrupted
     try:
         pitch.validate_renderer_provenance(evidence)
     except ValueError as exc:
