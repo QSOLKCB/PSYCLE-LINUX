@@ -182,6 +182,23 @@ valid_pair["derived_observation"]["original_command_execution_observed"] = True
 valid_pair["derived_observation"]["command_bearing_runtime_pair_observed"] = True
 assert m.validate_projection(valid_pair) == valid_pair
 
+successful_raw_analysis = {
+    "renders": [
+        {"path": "original-1.wav", "sha256": "4" * 64},
+        {"path": "original-2.wav", "sha256": "4" * 64},
+    ],
+    "runtime_command_execution_observed": True,
+}
+successful_normalized = m.normalize_original_analysis_state(
+    successful_raw_analysis
+)
+assert successful_normalized["outcome"] == "rendered-twice"
+assert successful_normalized["inconclusive_reason"] is None
+assert successful_normalized["process_exit_code"] is None
+assert successful_normalized["fresh_render_event_binding"] == "accepted"
+assert successful_normalized["fresh_render_event_binding_error"] is None
+assert m.normalize_original_analysis_state(successful_normalized) == successful_normalized
+
 inconclusive_pair = copy.deepcopy(valid_pair)
 inconclusive_pair["original"].update(
     {
