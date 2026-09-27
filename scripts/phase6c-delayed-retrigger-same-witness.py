@@ -2141,13 +2141,14 @@ def validate_original_event_binding(attempt: dict) -> None:
         or preexisting_count < 0
         or not isinstance(observed_window_count, int)
         or isinstance(observed_window_count, bool)
-        or observed_window_count != 1
+        or observed_window_count < 1
         or not isinstance(unresolved_event_count, int)
         or isinstance(unresolved_event_count, bool)
         or unresolved_event_count != 0
         or not isinstance(post_dispatch_count, int)
         or isinstance(post_dispatch_count, bool)
         or post_dispatch_count != 1
+        or observed_window_count < post_dispatch_count
         or not isinstance(selected_handle, int)
         or isinstance(selected_handle, bool)
         or selected_handle <= 0
@@ -2899,63 +2900,95 @@ def validate_original_inconclusive_runtime(
     ):
         raise ValueError("same-witness inconclusive render shape mismatch")
 
-    try:
-        validate_original_event_binding(attempt)
-    except ValueError as exc:
-        binding_error = str(exc)
-        if any(
+    has_observer_sealing_failure = any(
+        isinstance(value, str)
+        and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+        for value in diagnostics
+    )
+    legacy_process_window_ambiguity = (
+        not has_observer_sealing_failure
+        and attempt.get("render_dialog_post_dispatch_observed_window_event_count", 0) > 1
+        and attempt.get("render_dialog_unresolved_post_dispatch_event_count") == 0
+        and attempt.get("render_dialog_post_dispatch_event_count") == 1
+        and any(
             isinstance(value, str)
-            and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+            and "multiple post-dispatch Psycle window-show events observed"
+            in value
             for value in diagnostics
-        ):
-            if attempt.get("save_invoked") is True:
-                validate_original_observer_sealing_failure(attempt)
-            else:
-                base.validate_presave_render_quarantine(attempt)
-            inconclusive_reason = "render-observer-sealing-failure"
-        elif any(
-            value == NO_EVENT_RENDER_DIALOG_DIAGNOSTIC
-            for value in diagnostics
-            if isinstance(value, str)
-        ):
-            validate_original_no_event_render_dialog_failure(attempt)
-            base.validate_presave_render_quarantine(attempt)
-            inconclusive_reason = "render-dialog-event-not-observed"
-        elif any(
-            value == VANISHED_RENDER_DIALOG_DIAGNOSTIC
-            for value in diagnostics
-            if isinstance(value, str)
-        ):
-            presave = base.validate_presave_render_quarantine(attempt)
-            inconclusive_reason = presave["inconclusive_reason"]
-        else:
-            validate_original_ambiguous_event_binding(attempt)
-            inconclusive_reason = (
-                "process-exit-before-save-wave"
-                if exited_validly
-                else "ambiguous-final-render-attempt"
-            )
+        )
+    )
+    if legacy_process_window_ambiguity:
+        # Preserve receipts produced by the pre-qualification harness. New
+        # harness runs no longer emit this diagnostic when exactly one render
+        # dialog was observed, but the frozen #80 observation remains valid
+        # historical uncertainty rather than being reinterpreted.
+        validate_original_ambiguous_event_binding(attempt)
+        binding_error = (
+            "same-witness original render lacks bound post-dispatch dialog evidence"
+        )
+        inconclusive_reason = (
+            "process-exit-before-save-wave"
+            if exited_validly
+            else "ambiguous-final-render-attempt"
+        )
     else:
-        # The dialog can be bound unambiguously and still fail later in UIA or
-        # harness automation. A process exit before Save Wave is likewise
-        # retained as non-evidentiary UNKNOWN.
-        binding_error = None
-        if any(
-            isinstance(value, str)
-            and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
-            for value in diagnostics
-        ):
-            if attempt.get("save_invoked") is True:
-                validate_original_observer_sealing_failure(attempt)
-            else:
+        try:
+            validate_original_event_binding(attempt)
+        except ValueError as exc:
+            binding_error = str(exc)
+            if any(
+                isinstance(value, str)
+                and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+                for value in diagnostics
+            ):
+                if attempt.get("save_invoked") is True:
+                    validate_original_observer_sealing_failure(attempt)
+                else:
+                    base.validate_presave_render_quarantine(attempt)
+                inconclusive_reason = "render-observer-sealing-failure"
+            elif any(
+                value == NO_EVENT_RENDER_DIALOG_DIAGNOSTIC
+                for value in diagnostics
+                if isinstance(value, str)
+            ):
+                validate_original_no_event_render_dialog_failure(attempt)
                 base.validate_presave_render_quarantine(attempt)
-            inconclusive_reason = "render-observer-sealing-failure"
+                inconclusive_reason = "render-dialog-event-not-observed"
+            elif any(
+                value == VANISHED_RENDER_DIALOG_DIAGNOSTIC
+                for value in diagnostics
+                if isinstance(value, str)
+            ):
+                presave = base.validate_presave_render_quarantine(attempt)
+                inconclusive_reason = presave["inconclusive_reason"]
+            else:
+                validate_original_ambiguous_event_binding(attempt)
+                inconclusive_reason = (
+                    "process-exit-before-save-wave"
+                    if exited_validly
+                    else "ambiguous-final-render-attempt"
+                )
         else:
-            inconclusive_reason = (
-                "process-exit-before-save-wave"
-                if exited_validly
-                else "post-binding-render-automation-failure"
-            )
+            # The dialog can be bound unambiguously and still fail later in UIA or
+            # harness automation. A process exit before Save Wave is likewise
+            # retained as non-evidentiary UNKNOWN.
+            binding_error = None
+            if any(
+                isinstance(value, str)
+                and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+                for value in diagnostics
+            ):
+                if attempt.get("save_invoked") is True:
+                    validate_original_observer_sealing_failure(attempt)
+                else:
+                    base.validate_presave_render_quarantine(attempt)
+                inconclusive_reason = "render-observer-sealing-failure"
+            else:
+                inconclusive_reason = (
+                    "process-exit-before-save-wave"
+                    if exited_validly
+                    else "post-binding-render-automation-failure"
+                )
 
     observed_binding = validate_original_observed_output(
         original_root, attempt, len(attempts)

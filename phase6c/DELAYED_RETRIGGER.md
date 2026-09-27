@@ -252,6 +252,50 @@ preserve the canonical re-derivation inputs after GitHub Actions retention expir
 uses only that committed bundle; it does not depend on run `36288494934`
 remaining downloadable.
 
+## Qualified render-dialog attribution
+
+The versioned #80 observation exposed a narrower harness boundary than the
+generic label `ambiguous-final-render-attempt` suggests. Its terminal attempt
+records:
+
+- `render_dialog_post_dispatch_observed_window_event_count: 2`;
+- `render_dialog_unresolved_post_dispatch_event_count: 0`;
+- `render_dialog_post_dispatch_event_count: 1`;
+- a positive selected native HWND and non-empty UI Automation runtime ID;
+- verified dialog controls and verified Save Wave invocation;
+- the retained 193,004-byte WAV.
+
+The old observer counted every resolved process-owned top-level
+`EVENT_OBJECT_SHOW` after the dispatch boundary and treated a count greater
+than one as fatal, even though it separately proved that exactly one event was
+the exact-title `Render as Wav File` dialog. That is stricter than the
+attribution claim actually requires.
+
+The current contract keeps all top-level show events in the receipt for
+diagnostics, but fresh render binding now requires:
+
+1. the process-filtered hook and message pump were active;
+2. the dispatch boundary timestamp was set;
+3. at least one resolved process-owned top-level show event was observed;
+4. **zero unresolved** post-dispatch events;
+5. **exactly one** exact-title `Render as Wav File` event;
+6. the selected dialog has a positive native handle and non-empty runtime ID.
+
+Additional resolved non-render top-level events do not invalidate that unique
+render-dialog attribution. Multiple render-dialog events and unresolved events
+remain non-evidentiary ambiguity.
+
+For preservation, the committed #80 raw receipt is not reinterpreted: its old
+`multiple post-dispatch Psycle window-show events observed` diagnostic is
+still validated as historical old-harness uncertainty. Only newly collected
+receipts use the qualified rule.
+
+This change does **not** establish original command execution by itself. The
+next evidence action is a fresh hosted rerun of the same four-beat witness. A
+runtime pair may be claimed only if the rerun reaches deterministic completed
+original renders under this qualified binding and passes the existing full
+same-witness validators.
+
 ## Original render-failure isolation
 
 The first full sampled-witness render ends in a pinned-reference access

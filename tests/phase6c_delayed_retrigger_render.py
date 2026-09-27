@@ -433,13 +433,16 @@ with tempfile.TemporaryDirectory() as temporary:
         "process_exited": False,
         "process_exit_code": None,
         "output": None,
-        "diagnostics": ["multiple post-dispatch Psycle window-show events observed"],
+        "diagnostics": [
+            "multiple post-dispatch Render as Wav File windows observed"
+        ],
         "observed_output": {
             "path": ambiguous_name,
             "size_bytes": len(b"partial"),
             "sha256": hashlib.sha256(b"partial").hexdigest(),
         },
         "render_dialog_post_dispatch_observed_window_event_count": 2,
+        "render_dialog_post_dispatch_event_count": 2,
     }
     ambiguous = module.validate_inconclusive_runtime(
         root,
@@ -1025,7 +1028,8 @@ assert owner_index < root_index < child_filter_index < top_level_count_index
 assert observer_source.count(
     "RecordQualifiedObservedWindow(eventTime, true)"
 ) == 2
-assert "postDispatchObservedWindowEventCount > 1" in render_helper_source
+assert "postDispatchObservedWindowEventCount > 1" not in render_helper_source
+assert "postDispatchEventCount > 1" in render_helper_source
 
 pump_start = render_helper_source.index("private void Pump()")
 pump_end = render_helper_source.index(
@@ -1550,7 +1554,10 @@ for altered in (
         "render_dialog_post_dispatch_event_count": 0,
         "render_dialog_unresolved_post_dispatch_event_count": 9,
     },
-    {"render_dialog_post_dispatch_observed_window_event_count": 2},
+    {
+        "render_dialog_post_dispatch_observed_window_event_count": 2,
+        "render_dialog_post_dispatch_event_count": 2,
+    },
     {"selected_render_dialog_native_handle": None},
 ):
     unbound = {**fresh_attempt, **altered}
@@ -1566,6 +1573,20 @@ for altered in (
             assert "bound post-dispatch dialog evidence" in str(exc)
         else:
             raise AssertionError("expected unbound fresh render attempt rejection")
+
+extra_resolved_window_attempt = {
+    **fresh_attempt,
+    "render_dialog_post_dispatch_observed_window_event_count": 2,
+    "render_dialog_unresolved_post_dispatch_event_count": 0,
+    "render_dialog_post_dispatch_event_count": 1,
+}
+for check, name in (
+    (work_boundary.require_attempt_prefix, "release-no-active-voice"),
+    (work_boundary.validate_completed_render_attempt, "release-no-active-voice"),
+    (startup.require_attempt_prefix, "note-sample-default-inst"),
+    (startup.validate_completed_render_attempt, "note-sample-default-inst"),
+):
+    check(extra_resolved_window_attempt, name)
 
 invalid_teardown_completed_attempt = dict(teardown_only_completed_attempt)
 invalid_teardown_completed_attempt["close_control_seen"] = False
@@ -1954,11 +1975,11 @@ fresh_ambiguous_attempt = {
     "preexisting_render_dialog_count": 0,
     "render_dialog_post_dispatch_observed_window_event_count": 2,
     "render_dialog_unresolved_post_dispatch_event_count": 0,
-    "render_dialog_post_dispatch_event_count": 1,
+    "render_dialog_post_dispatch_event_count": 2,
     "selected_render_dialog_native_handle": 12345,
     "selected_render_dialog_runtime_id": [42, 12345],
     "output": None,
-    "diagnostics": ["multiple post-dispatch Psycle window-show events observed"],
+    "diagnostics": ["multiple post-dispatch Render as Wav File windows observed"],
 }
 binding_error = work_boundary.validate_fresh_render_event_binding_or_quarantine(
     fresh_ambiguous_attempt,
@@ -1983,6 +2004,30 @@ startup_binding_error = (
 )
 assert startup_binding_error is not None
 assert "fresh render lacks bound post-dispatch dialog evidence" in startup_binding_error
+
+qualified_extra_window_attempt = {
+    **fresh_ambiguous_attempt,
+    "render_dialog_post_dispatch_event_count": 1,
+    "diagnostics": ["synthetic post-binding automation failure"],
+}
+assert (
+    work_boundary.validate_fresh_render_event_binding_or_quarantine(
+        qualified_extra_window_attempt,
+        "release-no-active-voice",
+        "inconclusive",
+        [],
+    )
+    is None
+)
+assert (
+    startup.validate_fresh_render_event_binding_or_quarantine(
+        qualified_extra_window_attempt,
+        "note-no-previous-inst",
+        "inconclusive",
+        [],
+    )
+    is None
+)
 
 early_fresh_ambiguous_attempt = dict(fresh_ambiguous_attempt)
 early_fresh_ambiguous_attempt.update(
@@ -2100,5 +2145,19 @@ except ValueError as exc:
     assert "0xC0000005" in str(exc)
 else:
     raise AssertionError("expected unrelated work-boundary exit rejection")
+
+audio_source = (
+    ROOT / "scripts" / "phase6c-original-audio-render.ps1"
+).read_text(encoding="utf-8")
+assert "if (postDispatchObservedWindowEventCount > 1)" not in audio_source
+assert "if (postDispatchEventCount > 1)" in audio_source
+assert (
+    "$result.render_dialog_post_dispatch_observed_window_event_count -lt 1"
+    in audio_source
+)
+assert (
+    "one unique post-dispatch Render as Wav File event with no unresolved window events"
+    in audio_source
+)
 
 print("phase6c-delayed-retrigger-render: PASS")
