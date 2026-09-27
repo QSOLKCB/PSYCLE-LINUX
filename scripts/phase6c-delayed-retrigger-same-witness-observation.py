@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import importlib.util
 import json
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import tarfile
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -105,7 +107,8 @@ def validate_run_metadata(value: object) -> dict:
     return value
 
 
-def validate_hosted_candidate(candidate_root: Path) -> dict:
+def validate_archived_candidate(candidate_root: Path) -> dict:
+    """Validate the durable raw subset, not the full hosted candidate artifact."""
     candidate_root = candidate_root.resolve()
     candidate = read_json(candidate_root / same.CANDIDATE_RECEIPT)
     if (
@@ -120,7 +123,7 @@ def validate_hosted_candidate(candidate_root: Path) -> dict:
         != same.RUNTIME_COMMAND_EXECUTION_SCOPE
         or not isinstance(candidate.get("analysis"), dict)
     ):
-        raise ValueError("hosted candidate same-witness receipt identity is invalid")
+        raise ValueError("archived candidate same-witness receipt identity is invalid")
     fixture_hash = require_sha256(
         candidate.get("fixture_sha256"), "candidate.fixture_sha256"
     )
@@ -129,32 +132,41 @@ def validate_hosted_candidate(candidate_root: Path) -> dict:
     )
     fixture_path = child(candidate_root, candidate["fixture"])
     if digest(fixture_path.read_bytes()) != fixture_hash:
-        raise ValueError("hosted candidate fixture hash mismatch")
+        raise ValueError("archived candidate fixture hash mismatch")
 
     observations = candidate.get("render_observations")
+    expected_paths = [
+        "delayed-retrigger-sampulse-runtime/"
+        "candidate-delayed-retrigger-sampulse-runtime-1.wav",
+        "delayed-retrigger-sampulse-runtime/"
+        "candidate-delayed-retrigger-sampulse-runtime-2.wav",
+    ]
     if not isinstance(observations, list) or len(observations) != 2:
-        raise ValueError("hosted candidate must retain exactly two render observations")
+        raise ValueError("archived candidate must retain exactly two render observations")
+    if [item.get("output_path") for item in observations if isinstance(item, dict)] != expected_paths:
+        raise ValueError("archived candidate render observations are not distinct canonical outputs")
     rendered = []
-    for index, observation in enumerate(observations, start=1):
+    for index, (observation, expected_path) in enumerate(
+        zip(observations, expected_paths), start=1
+    ):
         if (
             not isinstance(observation, dict)
             or observation.get("input_path") != candidate["fixture"]
             or observation.get("input_sha256") != fixture_hash
+            or observation.get("output_path") != expected_path
             or observation.get("output_sha256") != render_hash
-            or not isinstance(observation.get("output_path"), str)
         ):
             raise ValueError(
-                f"hosted candidate render observation {index} identity mismatch"
+                f"archived candidate render observation {index} identity mismatch"
             )
-        output_path = child(candidate_root, observation["output_path"])
-        data = output_path.read_bytes()
+        data = child(candidate_root, expected_path).read_bytes()
         if digest(data) != render_hash:
             raise ValueError(
-                f"hosted candidate render observation {index} hash mismatch"
+                f"archived candidate render observation {index} hash mismatch"
             )
         rendered.append(data)
     if rendered[0] != rendered[1]:
-        raise ValueError("hosted candidate repeated renders are not byte-identical")
+        raise ValueError("archived candidate repeated renders are not byte-identical")
 
     analysis = same.validate_same_witness_analysis(
         same.base.analyze_wave(rendered[0]),
@@ -162,8 +174,9 @@ def validate_hosted_candidate(candidate_root: Path) -> dict:
         require_retrigger_effects=True,
     )
     if analysis != candidate["analysis"]:
-        raise ValueError("hosted candidate analysis differs from WAV reanalysis")
+        raise ValueError("archived candidate analysis differs from WAV reanalysis")
     return candidate
+
 
 
 def derive_original_receipts(candidate: dict, original_root: Path) -> tuple[dict, dict, dict]:
@@ -440,10 +453,14 @@ def derive_original_receipts(candidate: dict, original_root: Path) -> tuple[dict
 
 
 def validate_stored_derivation(candidate_root: Path, original_root: Path) -> dict:
-    """Re-derive hosted receipts from artifact bytes without rerunning the renderer."""
+    """Re-run the full authoritative validators before freezing hosted evidence."""
     candidate_root = candidate_root.resolve()
     original_root = original_root.resolve()
-    candidate = validate_hosted_candidate(candidate_root)
+
+    # This is intentionally the full candidate-artifact validator: renderer
+    # binary/source, build provenance, logs, execution replay, fixture structure,
+    # distinct render bindings and deterministic output all remain mandatory.
+    candidate = same.validate_candidate(candidate_root)
 
     stored_analysis_path = original_root / same.ORIGINAL_ANALYSIS
     stored_comparison_path = original_root / same.COMPARISON
@@ -452,18 +469,31 @@ def validate_stored_derivation(candidate_root: Path, original_root: Path) -> dic
     stored_analysis = read_json(stored_analysis_path)
     stored_comparison = read_json(stored_comparison_path)
 
-    original_receipt, expected_analysis, expected_comparison = (
-        derive_original_receipts(candidate, original_root)
-    )
-    if expected_analysis != stored_analysis:
+    # same.validate_original() first invokes the generic original-receipt gate
+    # (installer/executable/environment/procedure/fixture identity) and then the
+    # same-witness runtime validator. Recompute in a copy so hosted artifacts
+    # remain immutable.
+    with tempfile.TemporaryDirectory() as temporary:
+        replay_root = Path(temporary) / "original"
+        shutil.copytree(original_root, replay_root)
+        for relative in (same.ORIGINAL_ANALYSIS, same.COMPARISON):
+            path = replay_root / relative
+            if path.exists():
+                path.unlink()
+        recomputed = same.validate_original(candidate_root, replay_root)
+        replay_analysis = read_json(replay_root / same.ORIGINAL_ANALYSIS)
+        replay_comparison = read_json(replay_root / same.COMPARISON)
+
+    if replay_analysis != stored_analysis:
         raise ValueError(
-            "hosted original analysis differs from independent byte/receipt derivation"
+            "hosted original analysis differs from full-validator recomputation"
         )
-    if expected_comparison != stored_comparison:
+    if replay_comparison != stored_comparison or recomputed != stored_comparison:
         raise ValueError(
-            "hosted comparison differs from independent byte/receipt derivation"
+            "hosted comparison differs from full-validator recomputation"
         )
 
+    original_receipt = read_json(original_root / same.ORIGINAL_RECEIPT)
     if candidate.get("fixture_sha256") != original_receipt.get("fixture_sha256"):
         raise ValueError("same-witness hosted fixture hashes differ")
     if stored_comparison.get("fixture_sha256") != candidate.get("fixture_sha256"):
@@ -491,6 +521,128 @@ def validate_stored_derivation(candidate_root: Path, original_root: Path) -> dic
         ),
         "comparison_binding": file_binding(original_root, same.COMPARISON),
     }
+
+
+def validate_archive_manifest(
+    archive_root: Path, manifest: dict, observation: dict
+) -> None:
+    if (
+        manifest.get("schema_version") != 1
+        or manifest.get("contract") != CONTRACT
+        or manifest.get("canonical_workflow_run_id")
+        != observation["canonical_observation"]["workflow_run_id"]
+        or manifest.get("workflow_head_sha")
+        != observation["canonical_observation"]["workflow_head_sha"]
+    ):
+        raise ValueError("durable same-witness archive manifest identity mismatch")
+    canonical = observation["canonical_observation"]
+    for role in ("candidate_artifact", "original_artifact"):
+        source = manifest.get(role)
+        expected = canonical.get(role)
+        if (
+            not isinstance(source, dict)
+            or not isinstance(expected, dict)
+            or source.get("id") != expected.get("id")
+            or source.get("digest") != expected.get("digest")
+        ):
+            raise ValueError(f"durable same-witness {role} provenance mismatch")
+    files = manifest.get("files")
+    if not isinstance(files, list) or not files:
+        raise ValueError("durable same-witness archive manifest has no files")
+    seen = set()
+    for item in files:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("path"), str)
+            or not isinstance(item.get("size_bytes"), int)
+            or isinstance(item.get("size_bytes"), bool)
+        ):
+            raise ValueError("durable same-witness archive file binding is malformed")
+        expected_hash = require_sha256(
+            item.get("sha256"), "durable archive file sha256"
+        )
+        path = child(archive_root, item["path"])
+        data = path.read_bytes()
+        if len(data) != item["size_bytes"] or digest(data) != expected_hash:
+            raise ValueError(
+                f"durable same-witness archive file mismatch: {item['path']}"
+            )
+        seen.add(item["path"])
+    actual = {
+        path.relative_to(archive_root).as_posix()
+        for path in archive_root.rglob("*")
+        if path.is_file()
+    }
+    if actual != seen:
+        raise ValueError("durable same-witness archive file inventory changed")
+
+
+def validate_archived_evidence(
+    archive_root: Path, manifest: dict, observation: dict
+) -> dict:
+    """Re-derive the canonical observation from durable raw evidence."""
+    validate_projection(observation)
+    validate_archive_manifest(archive_root, manifest, observation)
+    candidate_root = archive_root / "candidate"
+    original_root = archive_root / "original"
+    candidate = validate_archived_candidate(candidate_root)
+    original_receipt, original_analysis, comparison = derive_original_receipts(
+        candidate, original_root
+    )
+
+    canonical = observation["canonical_observation"]
+    if digest((candidate_root / same.CANDIDATE_RECEIPT).read_bytes()) != (
+        canonical["candidate_artifact"]["raw_receipt"]["sha256"]
+    ):
+        raise ValueError("durable candidate raw receipt differs from projection")
+    if digest((original_root / same.ORIGINAL_RECEIPT).read_bytes()) != (
+        canonical["original_artifact"]["raw_receipt"]["sha256"]
+    ):
+        raise ValueError("durable original raw receipt differs from projection")
+
+    expected_candidate = observation["candidate"]
+    if (
+        candidate["runtime_command_execution_observed"]
+        != expected_candidate["runtime_command_execution_observed"]
+        or candidate["runtime_command_execution_scope"]
+        != expected_candidate["runtime_command_execution_scope"]
+        or candidate["render_sha256"] != expected_candidate["render_sha256"]
+        or candidate["analysis"] != expected_candidate["analysis"]
+    ):
+        raise ValueError("durable candidate evidence differs from projection")
+
+    expected_original = observation["original"]
+    for key in (
+        "outcome",
+        "inconclusive_reason",
+        "runtime_command_execution_observed",
+        "runtime_command_execution_scope",
+        "render_sha256",
+        "analysis",
+        "process_exit_code",
+        "fresh_render_event_binding",
+        "fresh_render_event_binding_error",
+    ):
+        if original_analysis.get(key) != expected_original.get(key):
+            raise ValueError(
+                f"durable original evidence differs from projection: {key}"
+            )
+
+    expected_comparison = observation["comparison"]
+    for key in (
+        "same_fixture_bytes",
+        "same_onset_analyzer",
+        "command_bearing_runtime_pair_observed",
+        "classification_allowed",
+        "parity_status",
+        "interpretation_boundary",
+    ):
+        if comparison.get(key) != expected_comparison.get(key):
+            raise ValueError(
+                f"durable comparison differs from projection: {key}"
+            )
+    return observation
+
 
 
 def projection_from_hosted(
@@ -711,11 +863,24 @@ def main() -> int:
     check = sub.add_parser("check")
     check.add_argument("observation", type=Path, nargs="?", default=OBSERVATION_PATH)
 
+    archive_check = sub.add_parser("archive-check")
+    archive_check.add_argument("archive_root", type=Path)
+    archive_check.add_argument("manifest", type=Path)
+    archive_check.add_argument(
+        "observation", type=Path, nargs="?", default=OBSERVATION_PATH
+    )
+
     args = parser.parse_args()
     if args.mode == "project":
         metadata = read_json(args.metadata)
         value = projection_from_hosted(args.candidate_root, args.original_root, metadata)
         write_projection(args.output, value)
+    elif args.mode == "archive-check":
+        value = validate_archived_evidence(
+            args.archive_root,
+            read_json(args.manifest),
+            read_json(args.observation),
+        )
     else:
         value = validate_projection(read_json(args.observation))
     print(json.dumps(value, sort_keys=True))
