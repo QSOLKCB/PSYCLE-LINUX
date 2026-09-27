@@ -296,6 +296,40 @@ runtime pair may be claimed only if the rerun reaches deterministic completed
 original renders under this qualified binding and passes the existing full
 same-witness validators.
 
+## Scoped onset-timing interpretation
+
+Once a **new** hosted observation proves a command-bearing runtime pair on both
+sides with the same strict onset analyzer,
+`scripts/phase6c-delayed-retrigger-onset-timing.py` may derive the next
+receipt.
+
+The timing scope is intentionally narrower than the delayed/retrigger contract:
+
+- only the already-established `FB 3F retrigger` beat-1 window and
+  `FA 42 retrigger-continue` beat-2 window are parity-classifying;
+- each side's exact onset frames are retained;
+- within each command window, the first onset frame is subtracted from every
+  onset before comparison, producing a sample-exact **relative onset vector**;
+- the absolute first-onset phase delta is retained diagnostically but is not
+  parity-classifying, so a fixed renderer/start latency cannot masquerade as a
+  tracker-command timing difference;
+- exact equality of both FB/FA relative vectors yields scoped `PASS`;
+  any sample-level vector difference yields scoped `DIFFERENT`;
+- `FD 7F note-delay` and `FE 04 extended-command` remain explicitly
+  unestablished by this witness.
+
+The interpreter refuses the frozen #80 observation because that receipt does not
+contain an original command-bearing pair. It also refuses scope expansion or an
+attempt to promote the whole delayed/retrigger row. Therefore every timing
+receipt retains:
+
+- `whole_contract_parity_status: UNKNOWN`;
+- `whole_contract_classification_allowed: false`;
+- `absolute_phase_is_parity_classifying: false`.
+
+A real timing receipt is versioned only after a fresh qualified hosted rerun
+proves the required original+candidate pair.
+
 ## Original render-failure isolation
 
 The first full sampled-witness render ends in a pinned-reference access
