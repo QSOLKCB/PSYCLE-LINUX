@@ -73,6 +73,27 @@ assert committed["original"]["files"]["Sampler.hpp"] == {
     "git_blob": m.ORIGINAL_HPP_BLOB,
 }
 
+forged_binding = copy.deepcopy(committed)
+forged_binding["original"]["source_repository"] = "example/other"
+expect_value_error(
+    lambda: m.validate(forged_binding),
+    "source repository changed",
+)
+
+forged_path = copy.deepcopy(committed)
+forged_path["original"]["files"]["Sampler.cpp"]["path"] = "Sampler.cpp"
+expect_value_error(
+    lambda: m.validate(forged_path),
+    "source path/blob binding changed",
+)
+
+forged_edx = copy.deepcopy(committed)
+forged_edx["candidate"]["nonzero_extended_note_delay_assignment"] = False
+expect_value_error(
+    lambda: m.validate(forged_edx),
+    "nonzero E-Dx assignment changed",
+)
+
 promoted = copy.deepcopy(committed)
 promoted["parity_status"] = "PASS"
 expect_value_error(
