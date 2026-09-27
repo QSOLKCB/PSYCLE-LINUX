@@ -18,6 +18,7 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -121,7 +122,8 @@ void emit_common(
     const psycle::core::PlayerTimeInfo& info,
     int target)
 {
-    std::cout << std::setprecision(15)
+    std::cout << std::setprecision(
+                  std::numeric_limits<double>::max_digits10)
               << "{\"schema_version\":1"
               << ",\"variant\":\"" << variant << "\""
               << ",\"load_returned\":true"
@@ -242,7 +244,8 @@ int main(int argc, char** argv) {
                                         << ",\"trigger_fired_at_boundary\":"
                                         << (fired ? "true" : "false")
                                         << ",\"absolute_trigger_beats\":"
-                                        << (position + target / info.samplesPerBeat())
+                                        << (position + static_cast<double>(target) /
+                                            static_cast<double>(info.samplesPerBeat()))
                                         << "}" << std::endl;
                                     if (!before || !fired) result = 72;
                                 }
@@ -307,7 +310,8 @@ int main(int argc, char** argv) {
                                         << (fired ? "true" : "false")
                                         << ",\"absolute_trigger_beats\":"
                                         << (command_position +
-                                            target / info.samplesPerBeat())
+                                            static_cast<double>(target) /
+                                            static_cast<double>(info.samplesPerBeat()))
                                         << "}" << std::endl;
                                     if (!armed || !before || !fired) result = 75;
                                 }
