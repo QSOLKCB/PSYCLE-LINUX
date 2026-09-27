@@ -174,11 +174,10 @@ int main(int argc, char** argv) {
                 std::cerr << "candidate PCM injection failed\n";
                 result = 66;
             } else {
-                psycle::core::PlayerTimeInfo info;
+                psycle::core::PlayerTimeInfo& info = player.timeInfo();
                 info.setSampleRate(44100);
                 info.setBpm(song.bpm());
                 info.setTicksSpeed(song.tick_speed(), song.is_ticks());
-                player.timeInfo(info);
 
                 if (song.bpm() != 120.0f ||
                     song.tick_speed() != 4 ||
