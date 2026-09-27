@@ -17,6 +17,7 @@ class ParityReportSummary(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         (self.root / "phase6c").mkdir()
+        (self.root / "phase6c/evidence/sampler-ps1").mkdir(parents=True)
         (self.root / "scripts").mkdir()
         shutil.copyfile(
             ROOT / "phase6c/compatibility-matrix.json",
@@ -25,6 +26,10 @@ class ParityReportSummary(unittest.TestCase):
         shutil.copyfile(
             ROOT / "scripts/phase6d-validate-parity-report.py",
             self.root / "scripts/phase6d-validate-parity-report.py",
+        )
+        shutil.copyfile(
+            ROOT / "phase6c/evidence/sampler-ps1/source-contract.json",
+            self.root / "phase6c/evidence/sampler-ps1/source-contract.json",
         )
         shutil.copyfile(
             ROOT / "PSYCLE_CORE_PARITY.md",
@@ -85,6 +90,20 @@ class ParityReportSummary(unittest.TestCase):
         self.mutate_report(
             "sequence/pattern order are scoped PASS results, serialization/save capability",
             "sequence/pattern order are scoped PASS results; nevertheless it remains UNKNOWN, serialization/save capability",
+        )
+        self.check(False)
+
+    def test_sampler_pitch_boundary_reversal_is_rejected(self):
+        self.mutate_report(
+            "because original source uses sample-rate/output-rate while the candidate uses a 44.1-kHz basis",
+            "because original and candidate both use sample-rate/output-rate",
+        )
+        self.check(False)
+
+    def test_sampler_evidence_receipt_retarget_is_rejected(self):
+        self.mutate_report(
+            "[`source-contract.json`](phase6c/evidence/sampler-ps1/source-contract.json): pinned 1.12.0",
+            "[`source-contract.json`](phase6c/evidence/sampler-ps1/other.json): pinned 1.12.0",
         )
         self.check(False)
 

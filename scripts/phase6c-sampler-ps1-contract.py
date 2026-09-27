@@ -193,6 +193,20 @@ def require_exact_command_table(value: object, label: str) -> dict[str, int]:
     return value
 
 
+def require_exact_semantic_fields(
+    value: object, expected: dict[str, object], context: str
+) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError(f"{context} is missing")
+    for name, expected_value in expected.items():
+        if name not in value:
+            raise ValueError(f"{context} semantic field missing: {name}")
+        actual = value[name]
+        if type(actual) is not type(expected_value) or actual != expected_value:
+            raise ValueError(f"{context} semantic field changed: {name}")
+    return value
+
+
 def read_json(path: Path) -> dict:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -450,6 +464,32 @@ def validate(value: object) -> dict:
     scope = value.get("scope")
     if not isinstance(scope, dict) or scope.get("kind") != "source-semantic-baseline":
         raise ValueError("Sampler PS1 source scope is invalid")
+    require_exact_semantic_fields(
+        scope,
+        {
+            "kind": "source-semantic-baseline",
+            "covers": [
+                "PS1 command identifiers",
+                "polyphony defaults",
+                "pitch/sample-rate basis",
+                "amplitude-envelope sample-rate scaling",
+                "normal-loop wrap semantics",
+                "panning destination clamp",
+                "extended note-delay/note-off timing basis",
+                "Sampler machine-state chunk version",
+            ],
+            "does_not_classify": [
+                "runtime waveform parity",
+                "audible pitch parity",
+                "envelope timing parity",
+                "loop-boundary parity",
+                "tracker-command execution parity",
+                "Sampler state round-trip compatibility",
+                "XMSampler/Sampulse behaviour",
+            ],
+        },
+        "Sampler PS1 source scope",
+    )
     observations = value.get("source_observations")
     if not isinstance(observations, dict):
         raise ValueError("Sampler PS1 source observations are missing")
@@ -508,6 +548,17 @@ def validate(value: object) -> dict:
         2,
         "original Sampler machine_state_version",
     )
+    require_exact_semantic_fields(
+        original,
+        {
+            "pitch_sample_rate_basis": "wave-sample-rate/output-sample-rate",
+            "envelope_sample_rate_basis": "44100/output-sample-rate",
+            "normal_loop_wrap": "subtract-loop-length-at-loop-end",
+            "extended_note_timing_basis": "samples-per-row/6",
+            "nonzero_extended_note_delay_assignment": True,
+        },
+        "original Sampler",
+    )
     candidate = value["candidate"]
     if candidate.get("snapshot") != CANDIDATE_BASELINE:
         raise ValueError("candidate Sampler baseline changed")
@@ -553,6 +604,15 @@ def validate(value: object) -> dict:
         raise ValueError("candidate Sampler loaded-PSY3 timing evidence changed")
     if candidate.get("nonzero_extended_note_delay_assignment") is not True:
         raise ValueError("candidate Sampler nonzero E-Dx assignment changed")
+    require_exact_semantic_fields(
+        candidate,
+        {
+            "pitch_sample_rate_basis": "44100/output-sample-rate",
+            "envelope_sample_rate_basis": "44100/output-sample-rate",
+            "normal_loop_wrap": "subtract-loop-length-at-loop-end",
+        },
+        "candidate Sampler",
+    )
     cpsycle = value["cpsycle"]
     if cpsycle.get("source_repository") != CPSYCLE_SOURCE_REPOSITORY:
         raise ValueError("C-Psycle Sampler source repository changed")
@@ -573,8 +633,36 @@ def validate(value: object) -> dict:
         3,
         "C-Psycle Sampler machine_state_version",
     )
-    if not isinstance(value.get("next_evidence_boundary"), dict):
-        raise ValueError("Sampler PS1 next evidence boundary is missing")
+    require_exact_semantic_fields(
+        cpsycle,
+        {
+            "role": "shared-contract supporting source only",
+            "pitch_sample_rate_basis": "sample-rate/output-sample-rate",
+            "envelope_sample_rate_basis": "44100/output-sample-rate",
+            "extended_note_timing_basis": "samples-per-row/6",
+        },
+        "C-Psycle Sampler",
+    )
+    require_exact_semantic_fields(
+        value.get("next_evidence_boundary"),
+        {
+            "priority_1": (
+                "render the same project-authored PS1 note from at least one non-44100-Hz "
+                "sample under pinned original Psycle and the frozen candidate; compare "
+                "sample-rate-aware pitch/duration without classifying from source alone"
+            ),
+            "priority_2": (
+                "observe PS1 E-Dx/E-Cx execution with a command-bearing runtime witness; "
+                "the existing loaded-PSY3 timing receipt already establishes that the "
+                "candidate samplesPerTick interval equals the fixture row interval"
+            ),
+            "then": (
+                "add envelope, loop, panning, offset, volume, retrigger and state-roundtrip "
+                "fixtures before considering the broad Sampler PS1 row classifiable"
+            ),
+        },
+        "Sampler PS1 next evidence boundary",
+    )
     return value
 
 

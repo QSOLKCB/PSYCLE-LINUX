@@ -165,6 +165,102 @@ for observation_name, expected in committed["source_observations"].items():
         f"source observation {observation_name} must be boolean",
     )
 
+semantic_field_cases = (
+    (("scope", "covers"), [], "source scope semantic field changed: covers"),
+    (
+        ("scope", "does_not_classify"),
+        [],
+        "source scope semantic field changed: does_not_classify",
+    ),
+    (
+        ("original", "pitch_sample_rate_basis"),
+        "sample-rate/output-sample-rate",
+        "original Sampler semantic field changed: pitch_sample_rate_basis",
+    ),
+    (
+        ("original", "envelope_sample_rate_basis"),
+        "sample-rate/output-sample-rate",
+        "original Sampler semantic field changed: envelope_sample_rate_basis",
+    ),
+    (
+        ("original", "normal_loop_wrap"),
+        "clamp-at-loop-end",
+        "original Sampler semantic field changed: normal_loop_wrap",
+    ),
+    (
+        ("original", "extended_note_timing_basis"),
+        "samples-per-tick/6",
+        "original Sampler semantic field changed: extended_note_timing_basis",
+    ),
+    (
+        ("original", "nonzero_extended_note_delay_assignment"),
+        False,
+        "original Sampler semantic field changed: nonzero_extended_note_delay_assignment",
+    ),
+    (
+        ("candidate", "pitch_sample_rate_basis"),
+        "wave-sample-rate/output-sample-rate",
+        "candidate Sampler semantic field changed: pitch_sample_rate_basis",
+    ),
+    (
+        ("candidate", "envelope_sample_rate_basis"),
+        "sample-rate/output-sample-rate",
+        "candidate Sampler semantic field changed: envelope_sample_rate_basis",
+    ),
+    (
+        ("candidate", "normal_loop_wrap"),
+        "clamp-at-loop-end",
+        "candidate Sampler semantic field changed: normal_loop_wrap",
+    ),
+    (
+        ("cpsycle", "role"),
+        "runtime parity authority",
+        "C-Psycle Sampler semantic field changed: role",
+    ),
+    (
+        ("cpsycle", "pitch_sample_rate_basis"),
+        "44100/output-sample-rate",
+        "C-Psycle Sampler semantic field changed: pitch_sample_rate_basis",
+    ),
+    (
+        ("cpsycle", "envelope_sample_rate_basis"),
+        "sample-rate/output-sample-rate",
+        "C-Psycle Sampler semantic field changed: envelope_sample_rate_basis",
+    ),
+    (
+        ("cpsycle", "extended_note_timing_basis"),
+        "samples-per-tick/6",
+        "C-Psycle Sampler semantic field changed: extended_note_timing_basis",
+    ),
+    (
+        ("next_evidence_boundary", "priority_1"),
+        "skip pitch witness",
+        "next evidence boundary semantic field changed: priority_1",
+    ),
+    (
+        ("next_evidence_boundary", "priority_2"),
+        "skip command witness",
+        "next evidence boundary semantic field changed: priority_2",
+    ),
+    (
+        ("next_evidence_boundary", "then"),
+        "classify immediately",
+        "next evidence boundary semantic field changed: then",
+    ),
+)
+
+for field_path, replacement, phrase in semantic_field_cases:
+    forged_semantic = copy.deepcopy(committed)
+    cursor = forged_semantic
+    for key in field_path[:-1]:
+        cursor = cursor[key]
+    cursor[field_path[-1]] = replacement
+    expect_value_error(
+        lambda value=forged_semantic: m.validate(value),
+        phrase,
+    )
+
+
 forged_version_type = copy.deepcopy(committed)
 forged_version_type["candidate"]["sampler_machine_state_version"] = True
 expect_value_error(
