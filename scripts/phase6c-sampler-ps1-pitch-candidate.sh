@@ -110,8 +110,14 @@ if (( qmake_status != 0 )); then
 fi
 run_logged "$OUT/render-build.log"     make -C "$BUILD" -f "$BUILD/Makefile.ps1-pitch" -j2
 
-RENDER="$BUILD/phase6c-sampler-ps1-pitch-render"
+BUILT_RENDER="$BUILD/phase6c-sampler-ps1-pitch-render"
+mkdir -p "$OUT/renderer"
+cp -- "$BUILT_RENDER" "$OUT/renderer/phase6c-sampler-ps1-pitch-render"
+chmod 0755 "$OUT/renderer/phase6c-sampler-ps1-pitch-render"
+RENDER="$OUT/renderer/phase6c-sampler-ps1-pitch-render"
+
 run_logged "$OUT/renderer-provenance.json"     "$RENDER" --phase6c-provenance
+run_logged "$OUT/renderer-build-manifest.log"     python3 "$ROOT/scripts/phase6c-sampler-ps1-pitch.py" build-manifest "$OUT"
 
 for n in 1 2; do
     run_logged "$OUT/render/candidate-render-$n.log"         env PSYCLE_THREADS=1 "$RENDER"         "$OUT/fixture/phase6c-sampler-ps1-pitch-candidate.psy"         "$PCM"         "$OUT/render/candidate-sampler-ps1-pitch-$n.wav"
