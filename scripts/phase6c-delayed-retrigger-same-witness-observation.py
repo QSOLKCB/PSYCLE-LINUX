@@ -6,13 +6,12 @@ import argparse
 import base64
 import hashlib
 import importlib.util
-import io
 import json
 from pathlib import Path, PurePosixPath
 import re
 import shutil
-import tarfile
 import tempfile
+import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 SAME_WITNESS_SCRIPT = ROOT / "scripts" / "phase6c-delayed-retrigger-same-witness.py"
@@ -528,7 +527,7 @@ def validate_archive_manifest(
     archive_root: Path, manifest: dict, observation: dict
 ) -> None:
     if (
-        manifest.get("schema_version") != 1
+        manifest.get("schema_version") != 2
         or manifest.get("contract") != CONTRACT
         or manifest.get("canonical_workflow_run_id")
         != observation["canonical_observation"]["workflow_run_id"]
@@ -554,6 +553,8 @@ def validate_archive_manifest(
     for item in files:
         if (
             not isinstance(item, dict)
+            or item.get("encoding") != "zlib+base64"
+            or not isinstance(item.get("encoded_path"), str)
             or not isinstance(item.get("path"), str)
             or not isinstance(item.get("size_bytes"), int)
             or isinstance(item.get("size_bytes"), bool)
@@ -578,54 +579,56 @@ def validate_archive_manifest(
         raise ValueError("durable same-witness archive file inventory changed")
 
 
-def materialize_durable_archive(
-    encoded_archive: Path, manifest: dict
+def materialize_durable_evidence(
+    encoded_root: Path, manifest: dict
 ) -> tuple[tempfile.TemporaryDirectory, Path]:
-    archive_meta = manifest.get("archive")
-    if (
-        not isinstance(archive_meta, dict)
-        or archive_meta.get("encoding") != "base64-of-tar-gzip"
-        or not isinstance(archive_meta.get("decoded_size_bytes"), int)
-        or isinstance(archive_meta.get("decoded_size_bytes"), bool)
-    ):
-        raise ValueError("durable same-witness archive metadata is invalid")
-    expected_hash = require_sha256(
-        archive_meta.get("decoded_sha256"), "durable archive decoded_sha256"
-    )
-    try:
-        encoded = encoded_archive.read_text(encoding="ascii").strip()
-        raw = base64.b64decode(encoded, validate=True)
-    except (OSError, UnicodeDecodeError, ValueError) as exc:
-        raise ValueError("durable same-witness archive encoding is invalid") from exc
-    if (
-        len(raw) != archive_meta["decoded_size_bytes"]
-        or digest(raw) != expected_hash
-    ):
-        raise ValueError("durable same-witness archive identity mismatch")
+    if manifest.get("schema_version") != 2:
+        raise ValueError("durable same-witness manifest schema is invalid")
+    files = manifest.get("files")
+    if not isinstance(files, list) or not files:
+        raise ValueError("durable same-witness manifest has no encoded files")
 
     temporary = tempfile.TemporaryDirectory()
     root = Path(temporary.name) / "raw"
     root.mkdir()
     try:
-        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
-            members = archive.getmembers()
-            for member in members:
-                pure = PurePosixPath(member.name)
-                if (
-                    pure.is_absolute()
-                    or ".." in pure.parts
-                    or member.issym()
-                    or member.islnk()
-                    or not (member.isdir() or member.isfile())
-                ):
-                    raise ValueError(
-                        "durable same-witness archive contains unsafe member"
-                    )
-            archive.extractall(root)
+        for item in files:
+            if (
+                not isinstance(item, dict)
+                or item.get("encoding") != "zlib+base64"
+                or not isinstance(item.get("encoded_path"), str)
+                or not isinstance(item.get("path"), str)
+                or not isinstance(item.get("size_bytes"), int)
+                or isinstance(item.get("size_bytes"), bool)
+            ):
+                raise ValueError(
+                    "durable same-witness encoded file binding is malformed"
+                )
+            expected_hash = require_sha256(
+                item.get("sha256"), "durable encoded file sha256"
+            )
+            encoded_path = child(encoded_root, item["encoded_path"])
+            try:
+                encoded = encoded_path.read_text(encoding="ascii").strip()
+                compressed = base64.b64decode(encoded, validate=True)
+                raw = zlib.decompress(compressed)
+            except (OSError, UnicodeDecodeError, ValueError, zlib.error) as exc:
+                raise ValueError(
+                    f"durable same-witness encoded file is invalid: "
+                    f"{item['encoded_path']}"
+                ) from exc
+            if len(raw) != item["size_bytes"] or digest(raw) != expected_hash:
+                raise ValueError(
+                    f"durable same-witness decoded file mismatch: {item['path']}"
+                )
+            output = child(root, item["path"])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(raw)
     except Exception:
         temporary.cleanup()
         raise
     return temporary, root
+
 
 
 def validate_archived_evidence(
@@ -915,7 +918,7 @@ def main() -> int:
     check.add_argument("observation", type=Path, nargs="?", default=OBSERVATION_PATH)
 
     archive_check = sub.add_parser("archive-check")
-    archive_check.add_argument("encoded_archive", type=Path)
+    archive_check.add_argument("encoded_root", type=Path)
     archive_check.add_argument("manifest", type=Path)
     archive_check.add_argument(
         "observation", type=Path, nargs="?", default=OBSERVATION_PATH
@@ -928,8 +931,8 @@ def main() -> int:
         write_projection(args.output, value)
     elif args.mode == "archive-check":
         manifest = read_json(args.manifest)
-        temporary, archive_root = materialize_durable_archive(
-            args.encoded_archive, manifest
+        temporary, archive_root = materialize_durable_evidence(
+            args.encoded_root, manifest
         )
         try:
             value = validate_archived_evidence(
