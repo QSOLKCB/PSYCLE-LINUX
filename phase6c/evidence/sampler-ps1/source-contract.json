@@ -101,20 +101,25 @@
     "loaded_psy3_timing_evidence": {
       "observation": "phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json",
       "tick_speed": 8,
-      "derived_lpb": 8,
+      "derived_lpb": 8.0,
       "samples_per_tick_equals_fixture_line": true
     }
   },
   "cpsycle": {
     "role": "shared-contract supporting source only",
+    "source_repository": "QSOLKCB/PSYCLE-LINUX",
+    "snapshot": "cpsycle-r12005-baseline",
     "files": {
       "sampler.c": {
+        "path": "cpsycle/audio/src/sampler.c",
         "git_blob": "475c96cc0742091b3b34aad634bd8d989caf83c8"
       },
       "sampler.h": {
+        "path": "cpsycle/audio/src/sampler.h",
         "git_blob": "e74dd3270f5581e17104006efe874299e974e94b"
       },
       "samplerdefs.h": {
+        "path": "cpsycle/audio/src/samplerdefs.h",
         "git_blob": "88e4b0fa1d720e1dd567386270694052df0ecd61"
       }
     },
