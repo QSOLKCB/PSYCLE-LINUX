@@ -92,7 +92,6 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
   group: phase6c-delayed-retrigger-${{ github.workflow }}-${{ github.ref }}
@@ -271,101 +270,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Read canonical observation metadata
-        id: canonical
+      - name: Verify durable canonical same-witness archive
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          path = Path(
-              "phase6c/evidence/sequencer-delayed-retrigger-same-witness/"
-              "observation.json"
-          )
-          value = json.loads(path.read_text(encoding="utf-8"))
-          canonical = value["canonical_observation"]
-          output = Path(os.environ["GITHUB_OUTPUT"])
-          with output.open("a", encoding="utf-8") as handle:
-              handle.write(f"run_id={canonical['workflow_run_id']}\n")
-              handle.write(
-                  f"candidate_name={canonical['candidate_artifact']['name']}\n"
-              )
-              handle.write(
-                  f"original_name={canonical['original_artifact']['name']}\n"
-              )
-          Path("canonical-observation-metadata.json").write_text(
-              json.dumps(
-                  {
-                      "workflow_name": canonical["workflow_name"],
-                      "workflow_run_id": canonical["workflow_run_id"],
-                      "workflow_event": canonical["workflow_event"],
-                      "workflow_head_sha": canonical["workflow_head_sha"],
-                      "candidate_job_id": canonical["candidate_job_id"],
-                      "original_job_id": canonical["original_job_id"],
-                      "candidate_artifact": canonical["candidate_artifact"],
-                      "original_artifact": canonical["original_artifact"],
-                  },
-                  indent=2,
-                  sort_keys=True,
-              )
-              + "\n",
-              encoding="utf-8",
-          )
-          PY
-
-      - name: Download canonical candidate artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ steps.canonical.outputs.candidate_name }}
-          path: canonical-candidate-artifact
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ steps.canonical.outputs.run_id }}
-
-      - name: Download canonical original artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ steps.canonical.outputs.original_name }}
-          path: canonical-original
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ steps.canonical.outputs.run_id }}
-
-      - name: Re-derive canonical same-witness projection
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p canonical-candidate
-          tar -xf canonical-candidate-artifact/phase6c-command-evidence.tar \
-            -C canonical-candidate
+          EVIDENCE='phase6c/evidence/sequencer-delayed-retrigger-same-witness'
+          base64 --decode "$EVIDENCE/canonical-raw.tar.gz.b64" > canonical-raw.tar.gz
+          echo '2ffe29dd44a59b58f35163d84dd25604588617a14d21782b18482c47709de452  canonical-raw.tar.gz' \
+            | sha256sum -c -
+          mkdir canonical-raw
+          tar -xzf canonical-raw.tar.gz -C canonical-raw
           python3 scripts/phase6c-delayed-retrigger-same-witness-observation.py \
-            project \
-            canonical-candidate \
-            canonical-original \
-            canonical-observation-metadata.json \
-            recomputed-observation.json
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          committed = json.loads(
-              Path(
-                  "phase6c/evidence/sequencer-delayed-retrigger-same-witness/"
-                  "observation.json"
-              ).read_text(encoding="utf-8")
-          )
-          recomputed = json.loads(
-              Path("recomputed-observation.json").read_text(encoding="utf-8")
-          )
-          if recomputed != committed:
-              raise SystemExit(
-                  "canonical same-witness projection differs from hosted artifacts"
-              )
-          print("canonical same-witness hosted projection: PASS")
-          PY
+            archive-check \
+            canonical-raw \
+            "$EVIDENCE/canonical-raw-manifest.json" \
+            "$EVIDENCE/observation.json"
 
   original-command-observation:
     needs: candidate-command-observation
