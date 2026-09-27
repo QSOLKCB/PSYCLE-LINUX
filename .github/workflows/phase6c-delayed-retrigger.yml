@@ -275,14 +275,9 @@ jobs:
         run: |
           set -euo pipefail
           EVIDENCE='phase6c/evidence/sequencer-delayed-retrigger-same-witness'
-          base64 --decode "$EVIDENCE/canonical-raw.tar.gz.b64" > canonical-raw.tar.gz
-          echo '2ffe29dd44a59b58f35163d84dd25604588617a14d21782b18482c47709de452  canonical-raw.tar.gz' \
-            | sha256sum -c -
-          mkdir canonical-raw
-          tar -xzf canonical-raw.tar.gz -C canonical-raw
           python3 scripts/phase6c-delayed-retrigger-same-witness-observation.py \
             archive-check \
-            canonical-raw \
+            "$EVIDENCE/canonical-raw.tar.gz.b64" \
             "$EVIDENCE/canonical-raw-manifest.json" \
             "$EVIDENCE/observation.json"
 
