@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import struct
+import subprocess
 import wave
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +26,9 @@ REFERENCE_EXECUTABLE_SHA256 = (
     "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6"
 )
 RENDERER_PROVENANCE = "renderer-provenance.json"
+RENDERER_BUILD_MANIFEST = "renderer-build-inputs.json"
+RENDERER_EXECUTABLE = "renderer/phase6c-sampler-ps1-pitch-render"
+RENDERER_BUILD_SCOPE = "phase6c-sampler-ps1-pitch-render-build-closure"
 ORIGINAL_FIXTURE = "fixture/phase6c-sampler-ps1-pitch-original.psy"
 CANDIDATE_FIXTURE = "fixture/phase6c-sampler-ps1-pitch-candidate.psy"
 CANDIDATE_PCM = "fixture/phase6c-sampler-ps1-pitch-candidate.pcm16le"
@@ -112,6 +116,237 @@ def expected_renderer_provenance() -> dict:
             name: sha256(path)
             for name, path in renderer_provenance_sources().items()
         },
+    }
+
+
+def renderer_build_input_selectors() -> tuple[str, ...]:
+    return (
+        "tests/phase6c_sampler_ps1_pitch_render.cpp",
+        "tests/phase6c_sampler_ps1_pitch_render.pro",
+        "psycle-cpp-r12005-sanitized/build-systems",
+        "psycle-cpp-r12005-sanitized/diversalis",
+        "psycle-cpp-r12005-sanitized/universalis",
+        "psycle-cpp-r12005-sanitized/psycle-helpers",
+        "psycle-cpp-r12005-sanitized/psycle-audiodrivers",
+        "psycle-cpp-r12005-sanitized/psycle-core",
+        "psycle-cpp-r12005-sanitized/psycle-plugins/src",
+    )
+
+
+def renderer_build_input_paths() -> list[Path]:
+    paths: set[Path] = set()
+    for selector in renderer_build_input_selectors():
+        path = ROOT / selector
+        if not path.exists():
+            raise ValueError(f"candidate renderer build input is missing: {selector}")
+        if path.is_file():
+            paths.add(path)
+            continue
+        for candidate in path.rglob("*"):
+            if not candidate.is_file():
+                continue
+            relative_parts = candidate.relative_to(ROOT).parts
+            if (
+                "++qmake" in relative_parts
+                or ".git" in relative_parts
+                or "__pycache__" in relative_parts
+            ):
+                continue
+            paths.add(candidate)
+    return sorted(paths, key=lambda item: item.relative_to(ROOT).as_posix())
+
+
+def renderer_build_input_records() -> list[dict]:
+    return [
+        {
+            "path": path.relative_to(ROOT).as_posix(),
+            "sha256": sha256(path),
+        }
+        for path in renderer_build_input_paths()
+    ]
+
+
+def git_head() -> str:
+    result = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    value = result.stdout.strip()
+    if (
+        result.returncode != 0
+        or len(value) != 40
+        or any(char not in "0123456789abcdef" for char in value)
+    ):
+        raise ValueError("candidate renderer build could not resolve Git HEAD")
+    return value
+
+
+def ensure_renderer_build_inputs_clean() -> None:
+    selectors = list(renderer_build_input_selectors())
+    for args in (
+        ["diff", "--quiet", "HEAD", "--", *selectors],
+        ["diff", "--cached", "--quiet", "HEAD", "--", *selectors],
+    ):
+        result = subprocess.run(
+            ["git", "-C", str(ROOT), *args],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise ValueError("candidate renderer tracked build inputs are dirty")
+
+    untracked = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(ROOT),
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            *selectors,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if untracked.returncode != 0:
+        raise ValueError("candidate renderer untracked-input audit failed")
+    allowed_file = (
+        "psycle-cpp-r12005-sanitized/psycle-plugins/src/"
+        "psycle/plugin_interface.hpp"
+    )
+    allowed_prefix = "psycle-cpp-r12005-sanitized/diversalis/"
+    unexpected = []
+    for raw in untracked.stdout.split(b"\0"):
+        if not raw:
+            continue
+        relative = raw.decode("utf-8", errors="strict")
+        if "++qmake/" in relative:
+            continue
+        if relative == allowed_file or relative.startswith(allowed_prefix):
+            continue
+        unexpected.append(relative)
+    if unexpected:
+        raise ValueError(
+            "candidate renderer has unexpected untracked build inputs: "
+            + ", ".join(sorted(unexpected)[:5])
+        )
+
+
+def expected_renderer_build_manifest(root: Path) -> dict:
+    executable = child(root, RENDERER_EXECUTABLE)
+    if not executable.is_file():
+        raise ValueError("candidate renderer executable is missing")
+    ensure_renderer_build_inputs_clean()
+    return {
+        "schema_version": 1,
+        "scope": RENDERER_BUILD_SCOPE,
+        "git_head": git_head(),
+        "renderer_executable": RENDERER_EXECUTABLE,
+        "renderer_executable_sha256": sha256(executable),
+        "inputs": renderer_build_input_records(),
+    }
+
+
+def write_renderer_build_manifest(root: Path) -> dict:
+    root = root.resolve()
+    manifest = expected_renderer_build_manifest(root)
+    path = child(root, RENDERER_BUILD_MANIFEST)
+    if path.exists():
+        raise ValueError("candidate renderer build manifest already exists")
+    path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def validate_renderer_build_manifest(
+    root: Path, *, verify_checkout_sources: bool = True
+) -> dict:
+    root = root.resolve()
+    manifest_path = child(root, RENDERER_BUILD_MANIFEST)
+    if not manifest_path.is_file():
+        raise ValueError("candidate renderer build-input manifest is missing")
+    manifest = read_json(manifest_path)
+    if set(manifest) != {
+        "schema_version",
+        "scope",
+        "git_head",
+        "renderer_executable",
+        "renderer_executable_sha256",
+        "inputs",
+    }:
+        raise ValueError("candidate renderer build-input manifest field set changed")
+    if type(manifest.get("schema_version")) is not int or manifest["schema_version"] != 1:
+        raise ValueError("candidate renderer build-input manifest schema changed")
+    if manifest.get("scope") != RENDERER_BUILD_SCOPE:
+        raise ValueError("candidate renderer build-input manifest scope changed")
+    head = manifest.get("git_head")
+    if (
+        not isinstance(head, str)
+        or len(head) != 40
+        or any(char not in "0123456789abcdef" for char in head)
+    ):
+        raise ValueError("candidate renderer build-input Git identity is invalid")
+    if manifest.get("renderer_executable") != RENDERER_EXECUTABLE:
+        raise ValueError("candidate renderer executable path changed")
+    executable = child(root, RENDERER_EXECUTABLE)
+    executable_sha = manifest.get("renderer_executable_sha256")
+    if (
+        not isinstance(executable_sha, str)
+        or len(executable_sha) != 64
+        or any(char not in "0123456789abcdef" for char in executable_sha)
+        or not executable.is_file()
+        or sha256(executable) != executable_sha
+    ):
+        raise ValueError("candidate renderer executable identity changed")
+
+    inputs = manifest.get("inputs")
+    if not isinstance(inputs, list) or not inputs:
+        raise ValueError("candidate renderer build-input manifest is empty")
+    previous = ""
+    for item in inputs:
+        if not isinstance(item, dict) or set(item) != {"path", "sha256"}:
+            raise ValueError("candidate renderer build-input record changed")
+        relative = item.get("path")
+        digest = item.get("sha256")
+        if (
+            not isinstance(relative, str)
+            or not relative
+            or relative <= previous
+            or relative.startswith("/")
+            or ".." in Path(relative).parts
+        ):
+            raise ValueError("candidate renderer build-input path is invalid")
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(char not in "0123456789abcdef" for char in digest)
+        ):
+            raise ValueError("candidate renderer build-input digest is invalid")
+        previous = relative
+
+    if verify_checkout_sources:
+        expected = expected_renderer_build_manifest(root)
+        if not exact_equal(manifest, expected):
+            raise ValueError(
+                "candidate renderer build-input manifest does not match the "
+                "clean checked-out/staged build closure"
+            )
+    return {
+        "path": RENDERER_BUILD_MANIFEST,
+        "sha256": sha256(manifest_path),
+        "git_head": head,
+        "renderer_executable": RENDERER_EXECUTABLE,
+        "renderer_executable_sha256": executable_sha,
+        "input_count": len(inputs),
     }
 
 
@@ -238,6 +473,7 @@ def collect_candidate(root: Path) -> dict:
     original_fixture, candidate_fixture, candidate_pcm, fixture_info = require_fixture_pair(root)
     candidate_fixture_sha = sha256(candidate_fixture)
     candidate_pcm_sha = sha256(candidate_pcm)
+    renderer_build_identity = validate_renderer_build_manifest(root)
     renders = []
     for index in (1, 2):
         path = child(root, f"render/candidate-sampler-ps1-pitch-{index}.wav")
@@ -249,6 +485,9 @@ def collect_candidate(root: Path) -> dict:
         expected_execution = {
             "schema_version": 1,
             "fixed_frame_render": True,
+            "renderer_executable_sha256": renderer_build_identity[
+                "renderer_executable_sha256"
+            ],
             "sample_rate": OUTPUT_RATE,
             "channels": 1,
             "bits_per_sample": 16,
@@ -310,6 +549,7 @@ def collect_candidate(root: Path) -> dict:
         "evidence_role": "candidate",
         "snapshot": CANDIDATE_SNAPSHOT,
         "renderer_provenance": renderer_provenance,
+        "renderer_build_identity": renderer_build_identity,
         "fixture": ORIGINAL_FIXTURE,
         "fixture_sha256": sha256(original_fixture),
         "candidate_fixture": CANDIDATE_FIXTURE,
@@ -374,6 +614,11 @@ def validate_candidate(
     )
     if not exact_equal(value.get("renderer_provenance"), provenance):
         raise ValueError("candidate renderer provenance binding changed")
+    renderer_build_identity = validate_renderer_build_manifest(
+        root, verify_checkout_sources=verify_checkout_sources
+    )
+    if not exact_equal(value.get("renderer_build_identity"), renderer_build_identity):
+        raise ValueError("candidate renderer executable/build-input binding changed")
     original_fixture, candidate_fixture, candidate_pcm, info = require_fixture_pair(root)
     if value.get("fixture_sha256") != sha256(original_fixture):
         raise ValueError("original-generation pitch fixture digest mismatch")
@@ -426,6 +671,9 @@ def validate_candidate(
         expected_execution = {
             "schema_version": 1,
             "fixed_frame_render": True,
+            "renderer_executable_sha256": renderer_build_identity[
+                "renderer_executable_sha256"
+            ],
             "sample_rate": OUTPUT_RATE,
             "channels": 1,
             "bits_per_sample": 16,
@@ -458,6 +706,10 @@ def validate_candidate(
                     f"candidate pitch renderer execution binding changed: {key}"
                 )
         analysis = analyze_wave(path)
+        if analysis["frame_count"] != OUTPUT_RATE:
+            raise ValueError(
+                "candidate fixed-frame render does not contain exactly 44100 frames"
+            )
         if not exact_equal(render.get("analysis"), analysis):
             raise ValueError("candidate pitch render analysis mismatch")
         validated.append((render["sha256"], analysis))
@@ -696,22 +948,117 @@ def original_observation(candidate_root: Path, original_root: Path) -> dict:
 
     if outcome in {"reference-process-exited-during-render", "inconclusive"}:
         pre_render = runtime.get("pre_render_load")
-        if not isinstance(pre_render, dict):
+        if (
+            not isinstance(pre_render, dict)
+            or type(pre_render.get("schema_version")) is not int
+            or pre_render.get("schema_version") != 1
+        ):
             raise ValueError("blocked original pitch witness lacks pre-render load evidence")
-        if attempts:
-            last = attempts[-1]
-            if not isinstance(last, dict):
-                raise ValueError("blocked original pitch attempt is invalid")
-        else:
-            last = {}
+
+        clean_gate = (
+            pre_render.get("clean_accepted_load") is True
+            and pre_render.get("load_warning_dismissed") is True
+            and pre_render.get("process_running_before_render") is True
+            and receipt.get("ui_automation_diagnostics") == []
+            and receipt.get("runtime_identity_diagnostics") == []
+            and receipt.get("error_marker") is None
+            and receipt.get("application_error_marker") is None
+            and receipt.get("main_window_seen") is True
+        )
+        stable = pre_render.get("stable_marker_polls")
+        matched = pre_render.get("matched_marker")
+        if (
+            not clean_gate
+            or type(stable) is not int
+            or stable < 4
+            or stable != receipt.get("stable_marker_polls")
+            or not isinstance(matched, str)
+            or not matched
+            or matched != receipt.get("load_evidence_marker")
+        ):
+            raise ValueError(
+                "blocked original pitch witness lacks a clean accepted-load gate"
+            )
+
+        if not attempts:
+            raise ValueError(
+                "clean accepted original pitch witness has no retained render attempt"
+            )
+        last = attempts[-1]
+        if not isinstance(last, dict):
+            raise ValueError("blocked original pitch attempt is invalid")
+
+        if outcome == "reference-process-exited-during-render":
+            required_dispatch = (
+                "command_verified",
+                "command_dispatched",
+                "dialog_verified",
+                "controls_configured",
+                "save_invoked",
+                "render_dialog_native_event_hook_armed",
+                "render_dialog_event_message_pump_started",
+                "render_dialog_dispatch_boundary_set",
+            )
+            for field in required_dispatch:
+                if last.get(field) is not True:
+                    raise ValueError(
+                        f"original pitch process-exit outcome lacks verified {field}"
+                    )
             if (
-                pre_render.get("clean_accepted_load") is True
-                and pre_render.get("load_warning_dismissed") is True
+                type(last.get("schema_version")) is not int
+                or last.get("schema_version") != 1
+                or last.get("outcome") != "inconclusive"
             ):
                 raise ValueError(
-                    "clean accepted original pitch witness has no retained render attempt"
+                    "original pitch process-exit attempt identity changed"
                 )
-        if outcome == "reference-process-exited-during-render":
+            if last.get("preexisting_render_dialog_count") != 0:
+                raise ValueError(
+                    "original pitch process-exit attempt had a preexisting render dialog"
+                )
+            if last.get("dialog_discovery") != (
+                "pumped-win-event-object-show-strictly-after-dispatch-tick"
+            ):
+                raise ValueError(
+                    "original pitch process-exit render dialog attribution changed"
+                )
+            if (
+                type(last.get("render_dialog_post_dispatch_event_count")) is not int
+                or last.get("render_dialog_post_dispatch_event_count") != 1
+                or type(
+                    last.get(
+                        "render_dialog_post_dispatch_observed_window_event_count"
+                    )
+                )
+                is not int
+                or last.get(
+                    "render_dialog_post_dispatch_observed_window_event_count"
+                )
+                < 1
+                or type(
+                    last.get("render_dialog_unresolved_post_dispatch_event_count")
+                )
+                is not int
+                or last.get("render_dialog_unresolved_post_dispatch_event_count")
+                != 0
+            ):
+                raise ValueError(
+                    "original pitch process-exit dialog attribution is ambiguous"
+                )
+            handle = last.get("selected_render_dialog_native_handle")
+            runtime_id = last.get("selected_render_dialog_runtime_id")
+            if type(handle) is not int or handle <= 0:
+                raise ValueError(
+                    "original pitch process-exit render dialog handle is invalid"
+                )
+            if (
+                not isinstance(runtime_id, list)
+                or not runtime_id
+                or any(type(value) is not int for value in runtime_id)
+            ):
+                raise ValueError(
+                    "original pitch process-exit render dialog identity is invalid"
+                )
             if last.get("process_exited") is not True:
                 raise ValueError("original pitch process-exit outcome lacks exit evidence")
             code = last.get("process_exit_code")
@@ -748,6 +1095,7 @@ def compare_observations(
         raise ValueError("candidate source receipt SHA-256 is invalid")
     candidate_span = candidate["renders"][0]["analysis"]["active_span_frames"]
     provenance = candidate["renderer_provenance"]
+    renderer_build_identity = candidate["renderer_build_identity"]
     original_identity = original["identity"]
     candidate_render_hashes = [render["sha256"] for render in candidate["renders"]]
     original_render_hashes = original.get("render_sha256s", [])
@@ -762,6 +1110,11 @@ def compare_observations(
         "candidate_source_receipt_sha256": candidate_source_receipt_sha256,
         "candidate_renderer_provenance_sha256": provenance["sha256"],
         "candidate_compiled_provenance": provenance["attestation"],
+        "candidate_renderer_executable_sha256": renderer_build_identity[
+            "renderer_executable_sha256"
+        ],
+        "candidate_build_input_manifest_sha256": renderer_build_identity["sha256"],
+        "candidate_build_input_git_head": renderer_build_identity["git_head"],
         "candidate_render_sha256s": candidate_render_hashes,
         "original_reference_build": original_identity["reference_build"],
         "original_reference_file": original_identity["reference_file"],
@@ -836,6 +1189,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="mode", required=True)
 
+    bm = sub.add_parser("build-manifest")
+    bm.add_argument("root", type=Path)
     c = sub.add_parser("candidate")
     c.add_argument("root", type=Path)
     cc = sub.add_parser("candidate-check")
@@ -851,7 +1206,9 @@ def main() -> int:
     comp.add_argument("output", type=Path)
 
     args = parser.parse_args()
-    if args.mode == "candidate":
+    if args.mode == "build-manifest":
+        value = write_renderer_build_manifest(args.root)
+    elif args.mode == "candidate":
         value = collect_candidate(args.root)
         target = args.root / CANDIDATE_RECEIPT
         write_new(target, value)
@@ -862,7 +1219,9 @@ def main() -> int:
     elif args.mode == "original-check":
         value = original_observation(args.candidate_root, args.original_root)
     else:
-        candidate = validate_candidate(args.candidate_root)
+        candidate = validate_candidate(
+            args.candidate_root, verify_checkout_sources=False
+        )
         original = original_observation(args.candidate_root, args.original_root)
         value = compare_observations(
             candidate,
