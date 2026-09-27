@@ -45,7 +45,8 @@ assert committed["source_observations"] == {
     "polyphony_defaults_match_original_candidate": True,
     "sampler_machine_state_version_match_original_candidate": False,
     "pitch_sample_rate_basis_match_original_candidate": False,
-    "extended_note_timing_basis_match_original_candidate": False,
+    "extended_note_source_expression_names_match_original_candidate": False,
+    "loaded_psy3_extended_note_timing_basis_match_original_candidate": True,
     "source_correspondence_is_runtime_parity": False,
 }
 
@@ -59,9 +60,16 @@ assert committed["candidate"]["pitch_sample_rate_basis"] == (
     "44100/output-sample-rate"
 )
 assert committed["original"]["extended_note_timing_basis"] == "samples-per-row/6"
-assert committed["candidate"]["extended_note_timing_basis"] == (
-    "samples-per-tick/6"
+assert committed["candidate"]["extended_note_timing_expression"] == "samplesPerTick/6"
+assert committed["candidate"]["loaded_psy3_extended_note_timing_basis"] == (
+    "row-interval/6"
 )
+assert committed["candidate"]["loaded_psy3_timing_evidence"] == {
+    "observation": "phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json",
+    "tick_speed": 8,
+    "derived_lpb": 8.0,
+    "samples_per_tick_equals_fixture_line": True,
+}
 assert committed["candidate"]["nonzero_extended_note_delay_assignment"] is True
 assert committed["original"]["source_repository"] == "jpaquim/psycle"
 assert committed["original"]["files"]["Sampler.cpp"] == {
@@ -71,6 +79,15 @@ assert committed["original"]["files"]["Sampler.cpp"] == {
 assert committed["original"]["files"]["Sampler.hpp"] == {
     "path": "psycle/src/psycle/host/Sampler.hpp",
     "git_blob": m.ORIGINAL_HPP_BLOB,
+}
+
+assert committed["candidate"]["files"]["sampler.cpp"] == {
+    "path": "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.cpp",
+    "git_blob": m.CANDIDATE_CPP_BLOB,
+}
+assert committed["candidate"]["files"]["sampler.h"] == {
+    "path": "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.h",
+    "git_blob": m.CANDIDATE_HPP_BLOB,
 }
 
 forged_binding = copy.deepcopy(committed)
@@ -106,6 +123,29 @@ forged_commands["candidate"]["command_ids"]["OFFSET"] = 0x90
 expect_value_error(
     lambda: m.validate(forged_commands),
     "candidate command table changed",
+)
+
+forged_boolean_command = copy.deepcopy(committed)
+forged_boolean_command["candidate"]["command_ids"]["PORTAUP"] = True
+expect_value_error(
+    lambda: m.validate(forged_boolean_command),
+    "candidate command identifier changed: PORTAUP",
+)
+
+forged_candidate_path = copy.deepcopy(committed)
+forged_candidate_path["candidate"]["files"]["sampler.cpp"]["path"] = "sampler.cpp"
+expect_value_error(
+    lambda: m.validate(forged_candidate_path),
+    "candidate Sampler source blob binding changed",
+)
+
+forged_loaded_timing = copy.deepcopy(committed)
+forged_loaded_timing["candidate"]["loaded_psy3_extended_note_timing_basis"] = (
+    "samples-per-tick/6"
+)
+expect_value_error(
+    lambda: m.validate(forged_loaded_timing),
+    "candidate Sampler loaded-PSY3 timing basis changed",
 )
 
 forged_version = copy.deepcopy(committed)
