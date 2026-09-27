@@ -205,11 +205,13 @@ claim.
 fail-closed versioning boundary for the hosted candidate/original artifact pair.
 Before a projection can be committed it:
 
-- validates the candidate artifact through the maintained same-witness validator;
-- copies the hosted original artifact to temporary storage, removes only the
-  derived analysis/comparison receipts, and independently regenerates them;
-- requires the regenerated analysis and comparison to match the uploaded hosted
-  receipts exactly as JSON objects;
+- re-analyzes both candidate WAVs, requires byte-identical repeated output, and
+  checks the strict command-bearing onset analysis against the hosted candidate
+  receipt;
+- re-derives the original UNKNOWN/runtime-pair analysis directly from the raw
+  original receipt plus any bound WAV bytes, without rerunning original Psycle;
+- requires the independently derived analysis and comparison to match the
+  uploaded hosted receipts exactly as JSON objects;
 - binds workflow run/head/event, candidate/original job IDs, artifact IDs and
   artifact SHA-256 digests, plus raw candidate/original receipt hashes and the
   derived original analysis/comparison hashes;
@@ -221,11 +223,25 @@ Before a projection can be committed it:
   analyzer.
 
 The projection is written no-clobber below
-`phase6c/evidence/sequencer-delayed-retrigger-same-witness/`. If the hosted
-original remains inconclusive, the projection preserves that exact boundary and
-the roadmap item stays open. If a command-bearing pair is observed, the next
-rung is a **separately versioned onset-timing interpretation**; the freeze step
-still does not classify delayed/retrigger parity by itself.
+`phase6c/evidence/sequencer-delayed-retrigger-same-witness/`.
+
+The canonical hosted observation is main workflow `36288494934` at merge head
+`6ccb21adb0d4f237da763aff0d27803599ebb2b7`. Candidate artifact
+`10921047089` (`sha256:fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae`)
+contains the deterministic command-bearing render
+`7c0eb0461ee4d41c1f53e8421d30dc66b9b08d8ce0463d9b1de1d703f35b924b`.
+Original artifact `10921642971`
+(`sha256:1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba`)
+retains a 193,004-byte WAV,
+`16eed8a40ee3a732b54fd9a09663a46b3fc929248de9ebf7c24f1ddd6fbd229a`,
+but the attempt remains `ambiguous-final-render-attempt`: multiple
+post-dispatch Psycle window-show events prevent the observer from binding a
+unique fresh render dialog. The projection therefore records candidate command
+execution as observed, original command execution as **not** observed,
+`command_bearing_runtime_pair_observed: false`, and timing classification as
+forbidden. The parent roadmap item stays open. A future successful original
+pair would advance only to a **separately versioned onset-timing
+interpretation**; this freeze step never classifies parity by itself.
 
 ## Original render-failure isolation
 
