@@ -915,6 +915,14 @@ def validate_inconclusive_runtime(
                         "pre-dispatch second-render failure follows "
                         "a non-clean first render"
                     )
+            if (
+                quarantine["process_exit_code"] is not None
+                and receipt.get("exit_code_before_termination")
+                != quarantine["process_exit_code"]
+            ):
+                raise ValueError(
+                    "pre-dispatch observer process-exit code is inconsistent"
+                )
             quarantine["completed_renders"] = completed
             quarantine["completed_render_analyses"] = completed_analyses
             quarantine["diagnostics"] = (
@@ -1256,7 +1264,11 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "fresh_render_event_binding": (
                 "not-dispatched"
                 if uncertainty["inconclusive_reason"]
-                == "render-observer-initialization-failure"
+                in {
+                    "render-observer-initialization-failure",
+                    "process-exit-before-render-command-verification",
+                    "pre-command-verification-failure",
+                }
                 else (
                     "accepted"
                     if uncertainty["binding_error"] is None
