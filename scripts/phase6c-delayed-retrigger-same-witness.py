@@ -2924,30 +2924,30 @@ def validate_original_inconclusive_runtime(
         except ValueError as exc:
             binding_error = str(exc)
             if any(
-            isinstance(value, str)
-            and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
-            for value in diagnostics
-        ):
-            if attempt.get("save_invoked") is True:
-                validate_original_observer_sealing_failure(attempt)
-            else:
+                isinstance(value, str)
+                and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+                for value in diagnostics
+            ):
+                if attempt.get("save_invoked") is True:
+                    validate_original_observer_sealing_failure(attempt)
+                else:
+                    base.validate_presave_render_quarantine(attempt)
+                inconclusive_reason = "render-observer-sealing-failure"
+            elif any(
+                value == NO_EVENT_RENDER_DIALOG_DIAGNOSTIC
+                for value in diagnostics
+                if isinstance(value, str)
+            ):
+                validate_original_no_event_render_dialog_failure(attempt)
                 base.validate_presave_render_quarantine(attempt)
-            inconclusive_reason = "render-observer-sealing-failure"
-        elif any(
-            value == NO_EVENT_RENDER_DIALOG_DIAGNOSTIC
-            for value in diagnostics
-            if isinstance(value, str)
-        ):
-            validate_original_no_event_render_dialog_failure(attempt)
-            base.validate_presave_render_quarantine(attempt)
-            inconclusive_reason = "render-dialog-event-not-observed"
-        elif any(
-            value == VANISHED_RENDER_DIALOG_DIAGNOSTIC
-            for value in diagnostics
-            if isinstance(value, str)
-        ):
-            presave = base.validate_presave_render_quarantine(attempt)
-            inconclusive_reason = presave["inconclusive_reason"]
+                inconclusive_reason = "render-dialog-event-not-observed"
+            elif any(
+                value == VANISHED_RENDER_DIALOG_DIAGNOSTIC
+                for value in diagnostics
+                if isinstance(value, str)
+            ):
+                presave = base.validate_presave_render_quarantine(attempt)
+                inconclusive_reason = presave["inconclusive_reason"]
             else:
                 validate_original_ambiguous_event_binding(attempt)
                 inconclusive_reason = (
@@ -2961,16 +2961,16 @@ def validate_original_inconclusive_runtime(
             # retained as non-evidentiary UNKNOWN.
             binding_error = None
             if any(
-            isinstance(value, str)
-            and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
-            for value in diagnostics
-        ):
-            if attempt.get("save_invoked") is True:
-                validate_original_observer_sealing_failure(attempt)
+                isinstance(value, str)
+                and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+                for value in diagnostics
+            ):
+                if attempt.get("save_invoked") is True:
+                    validate_original_observer_sealing_failure(attempt)
+                else:
+                    base.validate_presave_render_quarantine(attempt)
+                inconclusive_reason = "render-observer-sealing-failure"
             else:
-                base.validate_presave_render_quarantine(attempt)
-            inconclusive_reason = "render-observer-sealing-failure"
-        else:
                 inconclusive_reason = (
                     "process-exit-before-save-wave"
                     if exited_validly
