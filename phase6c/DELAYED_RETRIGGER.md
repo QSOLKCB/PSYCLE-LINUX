@@ -195,6 +195,63 @@ already-frozen PR #69 one-beat callback schedule remains preservation evidence;
 it is not a like-for-like comparison partner for this separate four-beat
 sampled witness.
 
+## Hosted same-witness observation freeze
+
+The collection machinery and the versioned observation are deliberately
+separate. A successful Actions run is not itself a committed compatibility
+claim.
+
+`scripts/phase6c-delayed-retrigger-same-witness-observation.py` provides the
+fail-closed versioning boundary for the hosted candidate/original artifact pair.
+Before a projection can be committed it:
+
+- runs the full maintained same-witness candidate validator before projection,
+  preserving renderer binary/source identity, build provenance, render logs,
+  execution replay, fixture structure, distinct output bindings and deterministic
+  repeated output;
+- reruns the full maintained original validator in a temporary artifact copy,
+  including the generic installer/executable/environment/procedure/fixture gate,
+  then requires its regenerated analysis/comparison receipts to match the hosted
+  derived receipts exactly;
+- archives the minimal canonical raw evidence required for long-term independent
+  re-derivation (candidate receipt + fixture + both WAVs, original receipt +
+  retained WAV) as six hash-pinned per-file `zlib+base64` blobs in the evidence tree;
+- binds workflow run/head/event, candidate/original job IDs, artifact IDs and
+  artifact SHA-256 digests, plus raw candidate/original receipt hashes and the
+  derived original analysis/comparison hashes;
+- requires identical fixture bytes across both sides;
+- requires `parity_status: UNKNOWN`, `classification_allowed: false`, and
+  `exact_onset_timing_interpretation: deferred`;
+- refuses to claim a command-bearing runtime pair unless the original analysis
+  itself records command-bearing execution and both sides use the same onset
+  analyzer.
+
+The projection is written no-clobber below
+`phase6c/evidence/sequencer-delayed-retrigger-same-witness/`.
+
+The canonical hosted observation is main workflow `36288494934` at merge head
+`6ccb21adb0d4f237da763aff0d27803599ebb2b7`. Candidate artifact
+`10921047089` (`sha256:fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae`)
+contains the deterministic command-bearing render
+`7c0eb0461ee4d41c1f53e8421d30dc66b9b08d8ce0463d9b1de1d703f35b924b`.
+Original artifact `10921642971`
+(`sha256:1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba`)
+retains a 193,004-byte WAV,
+`16eed8a40ee3a732b54fd9a09663a46b3fc929248de9ebf7c24f1ddd6fbd229a`,
+but the attempt remains `ambiguous-final-render-attempt`: multiple
+post-dispatch Psycle window-show events prevent the observer from binding a
+unique fresh render dialog. The projection therefore records candidate command
+execution as observed, original command execution as **not** observed,
+`command_bearing_runtime_pair_observed: false`, and timing classification as
+forbidden. The parent roadmap item stays open. A future successful original
+pair would advance only to a **separately versioned onset-timing
+interpretation**; this freeze step never classifies parity by itself.
+
+The durable per-file `*.zlib.b64` inputs plus `canonical-raw-manifest.json`
+preserve the canonical re-derivation inputs after GitHub Actions retention expires. Normal CI
+uses only that committed bundle; it does not depend on run `36288494934`
+remaining downloadable.
+
 ## Original render-failure isolation
 
 The first full sampled-witness render ends in a pinned-reference access

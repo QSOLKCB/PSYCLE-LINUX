@@ -1,0 +1,63 @@
+{
+  "candidate_artifact": {
+    "digest": "sha256:fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae",
+    "id": 10921047089,
+    "size_in_bytes": 1978866,
+    "source_archive_sha256": "fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae"
+  },
+  "canonical_workflow_run_id": 36288494934,
+  "contract": "sequencer-delayed-retrigger-same-witness-render",
+  "files": [
+    {
+      "encoded_path": "candidate-receipt.json.zlib.b64",
+      "encoding": "zlib+base64",
+      "path": "candidate/candidate-delayed-retrigger-sampulse-runtime.json",
+      "sha256": "c3da3133c4345a7dccf4fe596a6bad423f2405f96850db034fba0b0e22c7d251",
+      "size_bytes": 13594
+    },
+    {
+      "encoded_path": "fixture.psy.zlib.b64",
+      "encoding": "zlib+base64",
+      "path": "candidate/delayed-retrigger/phase6c-delayed-retrigger-sampulse-execution.psy",
+      "sha256": "cfeb6dbcc1e68a063ed3c1a1cfa70e68e88a974209a3940070a184e5b31b6b05",
+      "size_bytes": 5653
+    },
+    {
+      "encoded_path": "candidate-render-1.wav.zlib.b64",
+      "encoding": "zlib+base64",
+      "path": "candidate/delayed-retrigger-sampulse-runtime/candidate-delayed-retrigger-sampulse-runtime-1.wav",
+      "sha256": "7c0eb0461ee4d41c1f53e8421d30dc66b9b08d8ce0463d9b1de1d703f35b924b",
+      "size_bytes": 164212
+    },
+    {
+      "encoded_path": "candidate-render-2.wav.zlib.b64",
+      "encoding": "zlib+base64",
+      "path": "candidate/delayed-retrigger-sampulse-runtime/candidate-delayed-retrigger-sampulse-runtime-2.wav",
+      "sha256": "7c0eb0461ee4d41c1f53e8421d30dc66b9b08d8ce0463d9b1de1d703f35b924b",
+      "size_bytes": 164212
+    },
+    {
+      "encoded_path": "original-receipt.json.zlib.b64",
+      "encoding": "zlib+base64",
+      "path": "original/original-delayed-retrigger-sampulse-runtime.json",
+      "sha256": "b76bc3a8c3301daa6b3b9564403b8d8881a9f669adf5190f5500af42b55313d2",
+      "size_bytes": 15482
+    },
+    {
+      "encoded_path": "original-render-1.wav.zlib.b64",
+      "encoding": "zlib+base64",
+      "path": "original/delayed-retrigger-sampulse-runtime/original-delayed-retrigger-sampulse-runtime-1.wav",
+      "sha256": "16eed8a40ee3a732b54fd9a09663a46b3fc929248de9ebf7c24f1ddd6fbd229a",
+      "size_bytes": 193004
+    }
+  ],
+  "original_artifact": {
+    "digest": "sha256:1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba",
+    "id": 10921642971,
+    "size_in_bytes": 3110435,
+    "source_archive_sha256": "1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba"
+  },
+  "schema_version": 2,
+  "workflow_head_sha": "6ccb21adb0d4f237da763aff0d27803599ebb2b7",
+  "source_verification": "downloaded-by-pinned-artifact-id; local ZIP SHA-256 equals GitHub artifact digest"
+}

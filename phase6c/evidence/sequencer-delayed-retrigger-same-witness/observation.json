@@ -1,0 +1,125 @@
+{
+  "candidate": {
+    "analysis": {
+      "bits_per_sample": 16,
+      "channels": 1,
+      "frame_count": 82084,
+      "onset_beats": [
+        0.071813681,
+        1.013209751,
+        1.044430839,
+        1.075651927,
+        1.106873016,
+        1.138094104,
+        2.013216553,
+        2.044437642,
+        2.07954195,
+        2.118581255,
+        3.263250945
+      ],
+      "onset_frames": [
+        1387,
+        19569,
+        20172,
+        20775,
+        21378,
+        21981,
+        38883,
+        39486,
+        40164,
+        40918,
+        63026
+      ],
+      "sample_rate": 44100,
+      "window_onset_counts": {
+        "extended_marker_beat_3": 1,
+        "note_delay_beat_0": 1,
+        "retr_cont_beat_2": 4,
+        "retrigger_beat_1": 5
+      }
+    },
+    "render_sha256": "7c0eb0461ee4d41c1f53e8421d30dc66b9b08d8ce0463d9b1de1d703f35b924b",
+    "runtime_command_execution_observed": true,
+    "runtime_command_execution_scope": {
+      "criterion": "multiple distinct onsets in both the FB beat-1 and FA beat-2 windows",
+      "established_effects": [
+        "FB 3F retrigger",
+        "FA 42 retrigger-continue"
+      ],
+      "not_established": [
+        "FD 7F note-delay effect",
+        "FE 04 extended-command effect"
+      ]
+    }
+  },
+  "canonical_observation": {
+    "candidate_artifact": {
+      "digest": "sha256:fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae",
+      "id": 10921047089,
+      "name": "phase6c-delayed-retrigger-candidate",
+      "raw_receipt": {
+        "path": "candidate-delayed-retrigger-sampulse-runtime.json",
+        "sha256": "c3da3133c4345a7dccf4fe596a6bad423f2405f96850db034fba0b0e22c7d251"
+      }
+    },
+    "candidate_job_id": 108533812401,
+    "original_artifact": {
+      "analysis_receipt": {
+        "path": "original-delayed-retrigger-sampulse-runtime-analysis.json",
+        "sha256": "6509079d2368b7af2e2027a2ae8fbdcd858167b28d9c7ac721df80d20ce140cd"
+      },
+      "comparison_receipt": {
+        "path": "delayed-retrigger-sampulse-runtime-comparison.json",
+        "sha256": "279bf08352776d8417808495ec11f23d5fc9917c2969122b6c73eb1fa7e78518"
+      },
+      "digest": "sha256:1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba",
+      "id": 10921642971,
+      "name": "phase6c-delayed-retrigger-original",
+      "raw_receipt": {
+        "path": "original-delayed-retrigger-sampulse-runtime.json",
+        "sha256": "b76bc3a8c3301daa6b3b9564403b8d8881a9f669adf5190f5500af42b55313d2"
+      }
+    },
+    "original_job_id": 108534102974,
+    "workflow_event": "push",
+    "workflow_head_sha": "6ccb21adb0d4f237da763aff0d27803599ebb2b7",
+    "workflow_name": "Phase 6C delayed retrigger observation",
+    "workflow_run_id": 36288494934
+  },
+  "classification_allowed": false,
+  "comparison": {
+    "classification_allowed": false,
+    "command_bearing_runtime_pair_observed": false,
+    "interpretation_boundary": "The candidate rendered the exact four-beat Sampulse/XMSampler witness, but the pinned original did not complete a deterministic repeated-render pair. Completed original renders and any terminal teardown or ambiguity evidence are retained diagnostically; no cross-side runtime pair is claimed and delayed/retrigger parity remains unclassified.",
+    "parity_status": "UNKNOWN",
+    "same_fixture_bytes": true,
+    "same_onset_analyzer": false
+  },
+  "contract": "sequencer-delayed-retrigger-same-witness-render",
+  "derived_observation": {
+    "candidate_command_execution_observed": true,
+    "command_bearing_runtime_pair_observed": false,
+    "next_evidence_boundary": "obtain a reproducible command-bearing original runtime output from the same four-beat witness; do not classify delayed/retrigger timing yet",
+    "original_command_execution_observed": false,
+    "timing_classification_permitted": false
+  },
+  "exact_onset_timing_interpretation": "deferred",
+  "fixture": {
+    "path": "delayed-retrigger/phase6c-delayed-retrigger-sampulse-execution.psy",
+    "sha256": "cfeb6dbcc1e68a063ed3c1a1cfa70e68e88a974209a3940070a184e5b31b6b05"
+  },
+  "original": {
+    "analysis": null,
+    "fresh_render_event_binding": "rejected",
+    "fresh_render_event_binding_error": "same-witness original render lacks bound post-dispatch dialog evidence",
+    "inconclusive_reason": "ambiguous-final-render-attempt",
+    "outcome": "inconclusive",
+    "process_exit_code": null,
+    "render_sha256": null,
+    "runtime_command_execution_observed": false,
+    "runtime_command_execution_scope": null
+  },
+  "parity_status": "UNKNOWN",
+  "phase": "6C",
+  "schema_version": 1
+}
