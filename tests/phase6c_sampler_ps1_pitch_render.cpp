@@ -125,6 +125,9 @@ static void print_compiled_provenance() {
         << ",\"engine_sequencer_sha256\":\"" << PHASE6C_ENGINE_SEQUENCER_SHA256 << "\""
         << ",\"engine_psy3_loader_sha256\":\"" << PHASE6C_ENGINE_PSY3_LOADER_SHA256 << "\""
         << ",\"engine_sampler_sha256\":\"" << PHASE6C_ENGINE_SAMPLER_SHA256 << "\""
+        << ",\"engine_instrument_sha256\":\"" << PHASE6C_ENGINE_INSTRUMENT_SHA256 << "\""
+        << ",\"compat_script_sha256\":\"" << PHASE6C_COMPAT_SCRIPT_SHA256 << "\""
+        << ",\"fixture_generator_sha256\":\"" << PHASE6C_FIXTURE_GENERATOR_SHA256 << "\""
         << "}" << std::endl;
 }
 
