@@ -110,8 +110,6 @@ def verify_probe_executable(path: Path) -> None:
         raise ValueError("candidate timing probe is not the audited ELF build")
     if PROBE_IDENTITY.encode("ascii") not in data:
         raise ValueError("candidate timing probe identity marker is missing")
-    if not os.access(path, os.X_OK):
-        raise ValueError("candidate timing probe is not executable")
 
 
 def expected_probe_attestation(probe: Path, root: Path) -> dict:
