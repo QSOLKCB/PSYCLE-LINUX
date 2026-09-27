@@ -146,11 +146,16 @@ source-indicated risk:
 2. **PS1 extended timing witness** — the dedicated paired collector now uses
    separate `E-D3` and `E-C3` PSY3 fixtures. The candidate bridge removes only
    modern `SMSB` storage, then the frozen candidate loads the bridged PSY3 and
-   injects the exact decoded PCM into the wave-empty legacy Instrument. Its
-   runtime probe requires 3/6 of the loaded 5512.5-sample row to truncate to
-   sample 2756, remain pending through sample 2755, and fire at sample 2756.
-   Pinned original Psycle uses the same hardened two-render observer; a scoped
-   verdict remains pending the first hosted paired run.
+   injects the exact decoded PCM into the wave-empty legacy Instrument. The
+   candidate witness now renders the loaded fixture through the frozen
+   Sequencer/Player path, whose Player processing splits work at the historical
+   256-sample maximum, and records the resulting audible first/last active
+   frames. The source-derived 3/6-row value still truncates to semantic sample
+   2756, but it is not treated as an audible boundary unless production-block
+   playback actually produces it. Pinned original Psycle uses the same hardened
+   two-render observer; deterministic silent renders are retained explicitly
+   rather than treated as harness failures. A scoped verdict remains pending the
+   first hosted paired run.
 3. **Envelope / loop / panning / offset / volume / retrigger** — add one narrow
    fixture per behaviour rather than one opaque omnibus song.
 4. **Sampler state round trip** — save/reopen corrected-C4, slide mode,
