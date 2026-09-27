@@ -200,6 +200,9 @@ blocked = pitch.compare_observations(
 assert blocked["scoped_pitch_status"] == "UNKNOWN"
 assert blocked["comparison_ready"] is False
 
+assert pitch.exact_equal({"schema_version": 1}, {"schema_version": 1})
+assert not pitch.exact_equal({"schema_version": True}, {"schema_version": 1})
+
 with tempfile.TemporaryDirectory() as temporary:
     evidence = Path(temporary)
     provenance = pitch.expected_renderer_provenance()
@@ -272,6 +275,20 @@ with tempfile.TemporaryDirectory() as temporary:
         render_sha,
         evidence,
     )
+
+    bool_schema = dict(attempt)
+    bool_schema["schema_version"] = True
+    try:
+        pitch.validate_completed_render_attempt(
+            bool_schema,
+            "sampler-ps1-pitch/original-sampler-ps1-pitch-1.wav",
+            render_sha,
+            evidence,
+        )
+    except ValueError as exc:
+        assert "did not complete as rendered" in str(exc)
+    else:
+        raise AssertionError("boolean render-attempt schema version must fail")
 
     weakened = dict(attempt)
     weakened["controls_configured"] = False
