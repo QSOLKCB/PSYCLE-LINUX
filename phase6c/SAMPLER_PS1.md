@@ -36,6 +36,8 @@ The frozen C++ candidate remains the imported Phase 6B r12005 family:
 
 C-Psycle is retained only as supporting shared-contract source:
 
+- repository: `QSOLKCB/PSYCLE-LINUX`
+- frozen baseline tag: `cpsycle-r12005-baseline`
 - `cpsycle/audio/src/sampler.c` Git blob:
   `475c96cc0742091b3b34aad634bd8d989caf83c8`
 - `cpsycle/audio/src/sampler.h` Git blob:
