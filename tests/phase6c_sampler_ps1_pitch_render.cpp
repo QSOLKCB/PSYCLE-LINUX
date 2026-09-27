@@ -198,14 +198,14 @@ int main(int argc, char** argv) {
             player.song(song);
 
             psycle::core::Machine* master =
-                factory.CreateMachine(psycle::core::InternalKeys::master, MASTER_INDEX);
+                factory.CreateMachine(psycle::core::InternalKeys::master, psycle::core::MASTER_INDEX);
             psycle::core::Machine* sampler =
                 factory.CreateMachine(psycle::core::InternalKeys::sampler, 0);
             if (master == 0 || sampler == 0) {
                 std::cerr << "minimal candidate machine construction failed\n";
                 result = 65;
             } else {
-                song.AddMachine(master, MASTER_INDEX);
+                song.AddMachine(master, psycle::core::MASTER_INDEX);
                 song.AddMachine(sampler, 0);
                 if (song.InsertConnection(*sampler, *master) < 0) {
                     std::cerr << "minimal candidate routing construction failed\n";
