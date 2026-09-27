@@ -178,11 +178,12 @@ original = {
     "render_sha256s": [original_render_sha, original_render_sha],
     "analysis": {"active_span_frames": 22050},
 }
-comparison = pitch.compare_observations(candidate, original)
+comparison = pitch.compare_observations(candidate, original, "9" * 64)
 assert comparison["scoped_pitch_status"] == "DIFFERENT"
 assert comparison["comparison_ready"] is True
 assert comparison["sampler_ps1_status"] == "UNKNOWN"
 assert comparison["candidate_snapshot"] == pitch.CANDIDATE_SNAPSHOT
+assert comparison["candidate_source_receipt_sha256"] == "9" * 64
 assert comparison["candidate_render_sha256s"] == [candidate_render_sha] * 2
 assert comparison["original_reference_build"] == pitch.REFERENCE_BUILD
 assert comparison["original_executable_sha256"] == pitch.REFERENCE_EXECUTABLE_SHA256
@@ -196,6 +197,7 @@ blocked = pitch.compare_observations(
         "render_sha256s": [],
         "process_exit_code": 0xC0000005,
     },
+    "9" * 64,
 )
 assert blocked["scoped_pitch_status"] == "UNKNOWN"
 assert blocked["comparison_ready"] is False
