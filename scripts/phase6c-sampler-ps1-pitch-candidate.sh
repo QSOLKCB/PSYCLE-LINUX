@@ -68,17 +68,23 @@ run_logged "$OUT/fixture-validation.log" \
     "$OUT/fixture/phase6c-sampler-ps1-pitch-original.psy" \
     "$OUT/fixture/phase6c-sampler-ps1-pitch-candidate.psy"
 
-git_blob_sha256() {
-    git -C "$ROOT" cat-file blob "HEAD:$1" | sha256sum | awk '{print $1}'
+source_sha256() {
+    local relative="$1"
+    local path="$ROOT/$relative"
+    [[ -f "$path" ]] || {
+        echo "missing PS1 pitch build input: $relative" >&2
+        return 1
+    }
+    sha256sum "$path" | awk '{print $1}'
 }
 
 cat >"$BUILD/phase6c-ps1-pitch-provenance.hpp" <<EOF
 #pragma once
-#define PHASE6C_RENDER_SOURCE_SHA256 "$(git_blob_sha256 tests/phase6c_sampler_ps1_pitch_render.cpp)"
-#define PHASE6C_RENDER_PROJECT_SHA256 "$(git_blob_sha256 tests/phase6c_sampler_ps1_pitch_render.pro)"
-#define PHASE6C_ENGINE_SEQUENCER_SHA256 "$(git_blob_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sequencer.cpp)"
-#define PHASE6C_ENGINE_PSY3_LOADER_SHA256 "$(git_blob_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.cpp)"
-#define PHASE6C_ENGINE_SAMPLER_SHA256 "$(git_blob_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.cpp)"
+#define PHASE6C_RENDER_SOURCE_SHA256 "$(source_sha256 tests/phase6c_sampler_ps1_pitch_render.cpp)"
+#define PHASE6C_RENDER_PROJECT_SHA256 "$(source_sha256 tests/phase6c_sampler_ps1_pitch_render.pro)"
+#define PHASE6C_ENGINE_SEQUENCER_SHA256 "$(source_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sequencer.cpp)"
+#define PHASE6C_ENGINE_PSY3_LOADER_SHA256 "$(source_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.cpp)"
+#define PHASE6C_ENGINE_SAMPLER_SHA256 "$(source_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.cpp)"
 EOF
 
 cp "$ROOT/tests/phase6c_sampler_ps1_pitch_render.pro" "$RENDER_STAGING/render.pro"
