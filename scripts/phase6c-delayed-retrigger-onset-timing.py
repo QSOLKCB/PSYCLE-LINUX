@@ -28,8 +28,9 @@ BPM = 137
 EXPECTED_SAMPLE_RATE = 44100
 BEAT_FRAMES = EXPECTED_SAMPLE_RATE * 60.0 / BPM
 NORMALIZATION = (
-    "derive one render-wide original-minus-candidate phase offset from the first "
-    "onset in the established FB 3F beat-1 window, apply it before command-window "
+    "identify the candidate's first onset in the established FB 3F beat-1 window, "
+    "match that onset ordinal on the original side to derive one render-wide "
+    "original-minus-candidate phase offset, apply it before command-window "
     "membership, then subtract each side's first onset in each classified window "
     "and require every classified window to retain that same render-wide phase delta"
 )
@@ -46,7 +47,7 @@ WINDOWS = {
     },
 }
 ALIGNMENT_ANCHOR_WINDOW = "fb_retrigger_beat_1"
-ALIGNMENT_ANCHOR = "first-established-fb-retrigger-onset"
+ALIGNMENT_ANCHOR = "candidate-first-established-fb-retrigger-onset-matched-by-ordinal"
 OUTPUT_PATH = (
     ROOT
     / "phase6c"
@@ -133,18 +134,33 @@ def validate_analysis(analysis: object, role: str) -> dict:
     return analysis
 
 
-def established_alignment_anchor(analysis: dict, role: str) -> int:
+def established_alignment_anchors(
+    candidate_analysis: dict, original_analysis: dict
+) -> tuple[int, int, int]:
     window = WINDOWS[ALIGNMENT_ANCHOR_WINDOW]
-    selected = [
-        frame
-        for frame in analysis["onset_frames"]
-        if window["start_beat"] <= frame / BEAT_FRAMES < window["end_beat"]
-    ]
-    if not selected:
+    candidate_frames = candidate_analysis["onset_frames"]
+    anchor_ordinal = next(
+        (
+            index
+            for index, frame in enumerate(candidate_frames)
+            if window["start_beat"] <= frame / BEAT_FRAMES < window["end_beat"]
+        ),
+        None,
+    )
+    if anchor_ordinal is None:
         raise ValueError(
-            f"{role} lacks an onset in the established {window['label']} anchor window"
+            f"candidate lacks an onset in the established {window['label']} anchor window"
         )
-    return selected[0]
+    original_frames = original_analysis["onset_frames"]
+    if anchor_ordinal >= len(original_frames):
+        raise ValueError(
+            "original onset sequence is too short to match the established FB anchor ordinal"
+        )
+    return (
+        candidate_frames[anchor_ordinal],
+        original_frames[anchor_ordinal],
+        anchor_ordinal,
+    )
 
 
 def extract_window(
@@ -225,12 +241,11 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
     candidate_analysis = validate_analysis(candidate.get("analysis"), "candidate")
     original_analysis = validate_analysis(original.get("analysis"), "original")
 
-    candidate_anchor_frame = established_alignment_anchor(
-        candidate_analysis, "candidate"
-    )
-    original_anchor_frame = established_alignment_anchor(
-        original_analysis, "original"
-    )
+    (
+        candidate_anchor_frame,
+        original_anchor_frame,
+        anchor_onset_ordinal,
+    ) = established_alignment_anchors(candidate_analysis, original_analysis)
     global_phase_delta = original_anchor_frame - candidate_anchor_frame
 
     windows: dict[str, dict] = {}
@@ -330,6 +345,7 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
         },
         "phase_alignment": {
             "anchor": ALIGNMENT_ANCHOR,
+            "anchor_onset_ordinal": anchor_onset_ordinal,
             "candidate_anchor_frame": candidate_anchor_frame,
             "original_anchor_frame": original_anchor_frame,
             "original_minus_candidate_frames": global_phase_delta,
@@ -343,9 +359,11 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
         "interpretation_boundary": (
             "This receipt classifies only sample-exact relative onset geometry "
             "for the already-established FB 3F and FA 42 effects. One render-wide "
-            "phase delta, anchored by the first onset in the established FB 3F "
-            "beat-1 window, is applied before command-window membership and may be "
-            "ignored as fixed renderer/start "
+            "phase delta is anchored by the candidate's first onset in the established "
+            "FB 3F beat-1 window and the same onset ordinal on the original side, so "
+            "either-direction boundary crossings do not change anchor identity. The "
+            "delta is applied before command-window membership and may be ignored as "
+            "fixed renderer/start "
             "latency, but command-specific phase skew is a timing difference. Absolute phase "
             "itself remains diagnostic rather than parity-classifying. FD 7F note-"
             "delay and FE 04 extended-command behavior remain outside "
@@ -409,6 +427,8 @@ def validate_timing(value: object) -> dict:
     if (
         not isinstance(alignment, dict)
         or alignment.get("anchor") != ALIGNMENT_ANCHOR
+        or type(alignment.get("anchor_onset_ordinal")) is not int
+        or alignment["anchor_onset_ordinal"] < 0
         or type(alignment.get("candidate_anchor_frame")) is not int
         or alignment["candidate_anchor_frame"] < 0
         or type(alignment.get("original_anchor_frame")) is not int
@@ -493,6 +513,17 @@ def validate_timing(value: object) -> dict:
         if entry["relative_onset_frames_exact_match"] is not exact:
             raise ValueError(f"{key} exact-match flag is inconsistent")
         exact_flags.append(exact)
+
+    anchor_window = windows[ALIGNMENT_ANCHOR_WINDOW]
+    if (
+        alignment["candidate_anchor_frame"]
+        != anchor_window["candidate"]["first_onset_frame"]
+        or alignment["original_anchor_frame"]
+        != anchor_window["original"]["first_onset_frame"]
+    ):
+        raise ValueError(
+            "same-witness onset-timing phase anchor does not match aligned FB window"
+        )
 
     phase_delta_consistent = all(
         phase_delta == global_phase_delta for phase_delta in phase_deltas
