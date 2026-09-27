@@ -131,6 +131,7 @@ jobs:
         run: |
           python3 tests/phase6c_delayed_retrigger_same_witness.py
           python3 tests/phase6c_delayed_retrigger_same_witness_observation.py
+          python3 tests/phase6c_delayed_retrigger_onset_timing.py
 
       - name: Validate versioned compatibility matrix
         run: python3 scripts/phase6c-validate-matrix.py phase6c/compatibility-matrix.json
