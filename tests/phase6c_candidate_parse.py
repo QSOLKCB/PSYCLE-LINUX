@@ -119,7 +119,11 @@ class MatrixEvidence(unittest.TestCase):
         self.root=Path(self.temp.name)
         shutil.copytree(ROOT/'phase6c',self.root/'phase6c')
         (self.root/'scripts').mkdir()
-        for name in ('phase6c-validate-matrix.py','phase6c-candidate-parse.py'):
+        for name in (
+            'phase6c-validate-matrix.py',
+            'phase6c-candidate-parse.py',
+            'phase6c-sampler-ps1-contract.py',
+        ):
             shutil.copyfile(ROOT/'scripts'/name,self.root/'scripts'/name)
 
     def check(self, success):
