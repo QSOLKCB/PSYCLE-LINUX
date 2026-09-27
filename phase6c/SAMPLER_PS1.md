@@ -137,12 +137,20 @@ Runtime fixtures must still prove the externally visible behaviour.
 The next Sampler PS1 rungs are intentionally ordered by the strongest
 source-indicated risk:
 
-1. **Non-44.1-kHz pitch witness** — use one project-authored sample whose embedded
-   sample rate is not 44.1 kHz, render the same note under pinned original Psycle
-   and the frozen candidate, and compare pitch/duration with identity-bound
-   receipts.
-2. **PS1 extended timing witness** — exercise `E-Dx` and `E-Cx` on a dedicated
-   PS1 Sampler fixture and retain exact onset/off timing from both sides.
+1. **Non-44.1-kHz pitch witness** — the paired collector is implemented and
+   PR #84 workflow run `36323407398` is now versioned. The frozen candidate
+   produced a deterministic 11,025-frame active span, while pinned Psycle 1.12.0
+   accepted the exact fixture and then exited with `0xC0000005` after verified
+   offline-render dispatch. The scoped pitch result therefore remains `UNKNOWN`;
+   see `phase6c/evidence/sampler-ps1/pitch-hosted/observation.json`.
+2. **PS1 extended timing witness** — the dedicated paired collector now uses
+   separate `E-D3` and `E-C3` PSY3 fixtures. The candidate bridge removes only
+   modern `SMSB` storage, then the frozen candidate loads the bridged PSY3 and
+   injects the exact decoded PCM into the wave-empty legacy Instrument. Its
+   runtime probe requires 3/6 of the loaded 5512.5-sample row to truncate to
+   sample 2756, remain pending through sample 2755, and fire at sample 2756.
+   Pinned original Psycle uses the same hardened two-render observer; a scoped
+   verdict remains pending the first hosted paired run.
 3. **Envelope / loop / panning / offset / volume / retrigger** — add one narrow
    fixture per behaviour rather than one opaque omnibus song.
 4. **Sampler state round trip** — save/reopen corrected-C4, slide mode,
