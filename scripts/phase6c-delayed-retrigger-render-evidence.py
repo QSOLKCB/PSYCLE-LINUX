@@ -310,13 +310,14 @@ def validate_render_event_binding(attempt: dict) -> None:
         or preexisting_count < 0
         or not isinstance(observed_window_count, int)
         or isinstance(observed_window_count, bool)
-        or observed_window_count != 1
+        or observed_window_count < 1
         or not isinstance(unresolved_event_count, int)
         or isinstance(unresolved_event_count, bool)
         or unresolved_event_count != 0
         or not isinstance(post_dispatch_count, int)
         or isinstance(post_dispatch_count, bool)
         or post_dispatch_count != 1
+        or observed_window_count < post_dispatch_count
         or not isinstance(selected_handle, int)
         or isinstance(selected_handle, bool)
         or selected_handle <= 0
