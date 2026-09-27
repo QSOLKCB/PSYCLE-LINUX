@@ -29,10 +29,11 @@ EXPECTED_SAMPLE_RATE = 44100
 BEAT_FRAMES = EXPECTED_SAMPLE_RATE * 60.0 / BPM
 NORMALIZATION = (
     "identify the candidate's first onset in the established FB 3F beat-1 window, "
-    "match that onset ordinal on the original side to derive one render-wide "
-    "original-minus-candidate phase offset, apply it before command-window "
-    "membership, then subtract each side's first onset in each classified window "
-    "and require every classified window to retain that same render-wide phase delta"
+    "find the unique original onset whose phase offset preserves the established "
+    "FB/FA window cardinalities after alignment, apply that render-wide offset before "
+    "command-window membership, then subtract each side's first onset in each "
+    "classified window and require every classified window to retain that same "
+    "render-wide phase delta"
 )
 WINDOWS = {
     "fb_retrigger_beat_1": {
@@ -47,7 +48,15 @@ WINDOWS = {
     },
 }
 ALIGNMENT_ANCHOR_WINDOW = "fb_retrigger_beat_1"
-ALIGNMENT_ANCHOR = "candidate-first-established-fb-retrigger-onset-matched-by-ordinal"
+ALIGNMENT_ANCHOR = (
+    "candidate-first-established-fb-retrigger-onset-"
+    "unique-established-window-cardinality-match"
+)
+CANONICAL_OBSERVATION_PATH = observation_module.OBSERVATION_PATH
+CANONICAL_OBSERVATION_RELATIVE = CANONICAL_OBSERVATION_PATH.relative_to(ROOT).as_posix()
+CANONICAL_ARCHIVE_MANIFEST_PATH = (
+    CANONICAL_OBSERVATION_PATH.parent / "canonical-raw-manifest.json"
+)
 OUTPUT_PATH = (
     ROOT
     / "phase6c"
@@ -134,33 +143,78 @@ def validate_analysis(analysis: object, role: str) -> dict:
     return analysis
 
 
+def frames_in_window(
+    frames: list[int],
+    start: float,
+    end: float,
+    *,
+    phase_alignment_frames: int = 0,
+) -> list[int]:
+    return [
+        frame
+        for frame in frames
+        if start <= (frame - phase_alignment_frames) / BEAT_FRAMES < end
+    ]
+
+
 def established_alignment_anchors(
     candidate_analysis: dict, original_analysis: dict
-) -> tuple[int, int, int]:
-    window = WINDOWS[ALIGNMENT_ANCHOR_WINDOW]
+) -> tuple[int, int]:
+    anchor_window = WINDOWS[ALIGNMENT_ANCHOR_WINDOW]
     candidate_frames = candidate_analysis["onset_frames"]
-    anchor_ordinal = next(
-        (
-            index
-            for index, frame in enumerate(candidate_frames)
-            if window["start_beat"] <= frame / BEAT_FRAMES < window["end_beat"]
-        ),
-        None,
+    candidate_anchor_frames = frames_in_window(
+        candidate_frames,
+        anchor_window["start_beat"],
+        anchor_window["end_beat"],
     )
-    if anchor_ordinal is None:
+    if not candidate_anchor_frames:
         raise ValueError(
-            f"candidate lacks an onset in the established {window['label']} anchor window"
+            "candidate lacks an onset in the established "
+            f"{anchor_window['label']} anchor window"
         )
+    candidate_anchor_frame = candidate_anchor_frames[0]
+
+    expected_counts = {
+        key: len(
+            frames_in_window(
+                candidate_frames,
+                window["start_beat"],
+                window["end_beat"],
+            )
+        )
+        for key, window in WINDOWS.items()
+    }
+
+    matches: list[tuple[int, int]] = []
     original_frames = original_analysis["onset_frames"]
-    if anchor_ordinal >= len(original_frames):
+    for original_anchor_frame in original_frames:
+        phase_delta = original_anchor_frame - candidate_anchor_frame
+        aligned = {
+            key: frames_in_window(
+                original_frames,
+                window["start_beat"],
+                window["end_beat"],
+                phase_alignment_frames=phase_delta,
+            )
+            for key, window in WINDOWS.items()
+        }
+        if (
+            aligned[ALIGNMENT_ANCHOR_WINDOW]
+            and aligned[ALIGNMENT_ANCHOR_WINDOW][0] == original_anchor_frame
+            and all(
+                len(aligned[key]) == expected_counts[key]
+                for key in WINDOWS
+            )
+        ):
+            matches.append((original_anchor_frame, phase_delta))
+
+    if len(matches) != 1:
+        qualifier = "missing" if not matches else "ambiguous"
         raise ValueError(
-            "original onset sequence is too short to match the established FB anchor ordinal"
+            "same-witness timing established FB anchor match is "
+            f"{qualifier}; refusing timing classification"
         )
-    return (
-        candidate_frames[anchor_ordinal],
-        original_frames[anchor_ordinal],
-        anchor_ordinal,
-    )
+    return candidate_anchor_frame, matches[0][0]
 
 
 def extract_window(
@@ -172,11 +226,12 @@ def extract_window(
     phase_alignment_frames: int = 0,
 ) -> dict:
     frames = analysis["onset_frames"]
-    selected = [
-        frame
-        for frame in frames
-        if start <= (frame - phase_alignment_frames) / BEAT_FRAMES < end
-    ]
+    selected = frames_in_window(
+        frames,
+        start,
+        end,
+        phase_alignment_frames=phase_alignment_frames,
+    )
     if len(selected) < 2:
         raise ValueError(f"{label} does not contain multiple command onsets")
     relative = [frame - selected[0] for frame in selected]
@@ -241,11 +296,9 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
     candidate_analysis = validate_analysis(candidate.get("analysis"), "candidate")
     original_analysis = validate_analysis(original.get("analysis"), "original")
 
-    (
-        candidate_anchor_frame,
-        original_anchor_frame,
-        anchor_onset_ordinal,
-    ) = established_alignment_anchors(candidate_analysis, original_analysis)
+    candidate_anchor_frame, original_anchor_frame = established_alignment_anchors(
+        candidate_analysis, original_analysis
+    )
     global_phase_delta = original_anchor_frame - candidate_anchor_frame
 
     windows: dict[str, dict] = {}
@@ -345,7 +398,6 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
         },
         "phase_alignment": {
             "anchor": ALIGNMENT_ANCHOR,
-            "anchor_onset_ordinal": anchor_onset_ordinal,
             "candidate_anchor_frame": candidate_anchor_frame,
             "original_anchor_frame": original_anchor_frame,
             "original_minus_candidate_frames": global_phase_delta,
@@ -360,10 +412,11 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
             "This receipt classifies only sample-exact relative onset geometry "
             "for the already-established FB 3F and FA 42 effects. One render-wide "
             "phase delta is anchored by the candidate's first onset in the established "
-            "FB 3F beat-1 window and the same onset ordinal on the original side, so "
-            "either-direction boundary crossings do not change anchor identity. The "
-            "delta is applied before command-window membership and may be ignored as "
-            "fixed renderer/start "
+            "FB 3F beat-1 window and the unique original onset whose phase offset "
+            "preserves the established FB/FA window cardinalities after alignment. "
+            "This ignores out-of-scope onset ordering and tolerates either-direction "
+            "boundary crossings. The delta is applied before command-window membership "
+            "and may be ignored as fixed renderer/start "
             "latency, but command-specific phase skew is a timing difference. Absolute phase "
             "itself remains diagnostic rather than parity-classifying. FD 7F note-"
             "delay and FE 04 extended-command behavior remain outside "
@@ -427,8 +480,6 @@ def validate_timing(value: object) -> dict:
     if (
         not isinstance(alignment, dict)
         or alignment.get("anchor") != ALIGNMENT_ANCHOR
-        or type(alignment.get("anchor_onset_ordinal")) is not int
-        or alignment["anchor_onset_ordinal"] < 0
         or type(alignment.get("candidate_anchor_frame")) is not int
         or alignment["candidate_anchor_frame"] < 0
         or type(alignment.get("original_anchor_frame")) is not int
@@ -549,27 +600,57 @@ def resolve_bound_observation_path(source_path: str) -> Path:
     return resolved
 
 
-def validate_bound_receipt(value: object) -> dict:
-    receipt = validate_timing(value)
-    source = receipt["input_observation"]
-    observation_path = resolve_bound_observation_path(source["path"])
+def require_canonical_observation_path(source_path: str) -> Path:
+    resolved = resolve_bound_observation_path(source_path)
+    if resolved != CANONICAL_OBSERVATION_PATH.resolve():
+        raise ValueError(
+            "timing receipt input must be the canonical archive-verified observation"
+        )
+    return resolved
+
+
+def load_archive_verified_observation(source_path: str) -> tuple[dict, bytes]:
+    observation_path = require_canonical_observation_path(source_path)
     try:
         raw = observation_path.read_bytes()
+        observation = json.loads(raw.decode("utf-8"))
     except OSError as exc:
         raise ValueError(
-            f"bound input observation cannot be read: {source['path']}"
+            f"canonical input observation cannot be read: {source_path}"
         ) from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            "canonical input observation is not valid UTF-8 JSON"
+        ) from exc
+    if not isinstance(observation, dict):
+        raise ValueError("canonical input observation is not an object")
 
+    manifest = read_json(CANONICAL_ARCHIVE_MANIFEST_PATH)
+    temporary, archive_root = observation_module.materialize_durable_evidence(
+        CANONICAL_OBSERVATION_PATH.parent,
+        manifest,
+    )
+    try:
+        verified = observation_module.validate_archived_evidence(
+            archive_root,
+            manifest,
+            observation,
+        )
+    finally:
+        temporary.cleanup()
+    if verified != observation:
+        raise ValueError("archive-verified observation differs from canonical projection")
+    return observation, raw
+
+
+def validate_receipt_derivation(
+    receipt: dict, observation: dict, raw: bytes
+) -> dict:
+    """Validate receipt binding after the caller establishes observation trust."""
+    source = receipt["input_observation"]
     actual_sha256 = digest(raw)
     if actual_sha256 != source["sha256"]:
         raise ValueError("bound input observation hash mismatch")
-
-    try:
-        observation = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("bound input observation is not valid UTF-8 JSON") from exc
-    if not isinstance(observation, dict):
-        raise ValueError("bound input observation is not an object")
 
     observation_module.validate_projection(observation)
     if observation.get("contract") != INPUT_CONTRACT:
@@ -594,6 +675,13 @@ def validate_bound_receipt(value: object) -> dict:
     return receipt
 
 
+def validate_bound_receipt(value: object) -> dict:
+    receipt = validate_timing(value)
+    source = receipt["input_observation"]
+    observation, raw = load_archive_verified_observation(source["path"])
+    return validate_receipt_derivation(receipt, observation, raw)
+
+
 def write_new(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("x", encoding="utf-8") as handle:
@@ -613,14 +701,11 @@ def main() -> int:
 
     args = parser.parse_args()
     if args.mode == "derive":
-        observation_path = resolve_bound_observation_path(
+        observation_path = require_canonical_observation_path(
             args.observation.as_posix()
         )
         input_path = observation_path.relative_to(ROOT.resolve()).as_posix()
-        raw = observation_path.read_bytes()
-        observation = json.loads(raw.decode("utf-8"))
-        if not isinstance(observation, dict):
-            raise ValueError("same-witness observation is not an object")
+        observation, raw = load_archive_verified_observation(input_path)
         value = derive_timing(
             observation,
             input_path=input_path,
