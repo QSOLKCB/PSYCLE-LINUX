@@ -222,6 +222,8 @@
         "observation": "phase6c/evidence/sampler-ps1/source-contract.json"
       },
       "cpsycle": {
+        "source_repository": "QSOLKCB/PSYCLE-LINUX",
+        "snapshot": "cpsycle-r12005-baseline",
         "evidence": "phase6c/evidence/sampler-ps1/source-contract.json",
         "reusable": "shared-contract-support-only"
       },
