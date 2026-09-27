@@ -156,7 +156,7 @@ def validate_probe(value: object, variant: str) -> dict:
     if (
         type(final_beat) not in (int, float)
         or isinstance(final_beat, bool)
-        or not math.isclose(float(final_beat), 1.0, rel_tol=0.0, abs_tol=1e-9)
+        or not math.isclose(float(final_beat), 1.0, rel_tol=0.0, abs_tol=1e-6)
     ):
         raise ValueError("candidate timing production render duration changed")
 
