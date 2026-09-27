@@ -149,89 +149,65 @@ def parse_modern_sample(payload: bytes) -> dict:
     return result
 
 
-def legacy_wave_chunk(sample: dict) -> bytes:
-    payload = bytearray()
-    payload += u32(0)  # legacy wave index
-    payload += u32(sample["frames"])
-    payload += struct.pack("<H", 100)  # 100 -> 1.0 legacy global volume
-    payload += u32(sample["loop_start"])
-    payload += u32(sample["loop_end"])
-    payload += i32(sample["tune"])
-    payload += i32(0)  # legacy +/-256 finetune units; witness is exactly zero
-    payload += struct.pack("<B", 1 if sample["loop_type"] == 1 else 0)
-    payload += struct.pack("<B", sample["stereo"])
-    payload += cstring(sample["name"])
-    payload += u32(len(sample["packed_left"]))
-    payload += sample["packed_left"]
-    if sample["stereo"]:
-        assert sample["packed_right"] is not None
-        payload += u32(len(sample["packed_right"]))
-        payload += sample["packed_right"]
-    return b"WAVE" + u32(0) + u32(len(payload)) + bytes(payload)
+def sound_desquash_pcm16le(packed: bytes) -> bytes:
+    """Decode Psycle SoundSquash v1 without depending on either runtime."""
+    if len(packed) < 5 or packed[0] != 0x01:
+        raise ValueError("SMSB left sample is not SoundSquash v1")
+    frames = int.from_bytes(packed[1:5], "little")
+    if frames != AUTHORED_SAMPLE_FRAMES:
+        raise ValueError("SoundSquash frame count changed")
 
+    source = packed + b"\0\0\0\0"
+    cursor = 5
+    bitpos = 0
+    prevprev = 0
+    prev = 0
+    values: list[int] = []
+    masks = tuple((1 << bits) - 1 for bits in range(16))
 
-def augment_insd(payload: bytes, wave: bytes) -> bytes:
-    if len(payload) < 78:
-        raise ValueError("INSD payload is too short")
-    if struct.unpack_from("<i", payload, 0)[0] != 0:
-        raise ValueError("expected INSD instrument index 0")
+    for _ in range(frames):
+        if cursor + 4 > len(source):
+            raise ValueError("truncated SoundSquash bitstream")
+        bits = int.from_bytes(source[cursor : cursor + 4], "little") >> bitpos
+        numbits = bits & 0x0F
+        negative = (bits & 0x10) != 0
+        magnitude = (bits >> 5) & masks[numbits]
+        if negative:
+            error = magnitude | ((0xFFFF << numbits) & 0xFFFF)
+        else:
+            error = magnitude
+        if error & 0x8000:
+            error -= 0x10000
 
-    offset = 4
-    offset += 1  # loop bool
-    offset += 4  # lines
-    offset += 1  # NNA
-    offset += 12 * 4  # amplitude/filter integer fields
-    offset += 4  # legacy pan
-    offset += 3  # RPAN/RCUT/RRES
-    _name, offset = read_cstring(payload, offset)
-    if offset + 4 > len(payload):
-        raise ValueError("INSD numwaves field is missing")
-    numwaves = struct.unpack_from("<i", payload, offset)[0]
-    if numwaves != 0:
-        raise ValueError("modern INSD unexpectedly contains legacy waves")
-    tail = payload[offset + 4 :]
-    if len(tail) != 8:
-        raise ValueError("modern INSD sampler-lock tail changed")
-    return payload[:offset] + i32(1) + wave + tail
+        sample = (prev + (prev - prevprev) + error) & 0xFFFF
+        values.append(sample)
+        signed = sample if sample < 0x8000 else sample - 0x10000
+        prevprev = prev
+        prev = signed
+
+        bitpos += numbits + 5
+        cursor += bitpos // 8
+        bitpos %= 8
+
+    return b"".join(struct.pack("<H", value) for value in values)
 
 
 def inspect_original(data: bytes) -> dict:
     _prefix, chunks = parse_chunks(data)
     insd = [item for item in chunks if item[0] == b"INSD"]
     smsb = [item for item in chunks if item[0] == b"SMSB"]
-    if len(insd) != 1 or len(smsb) != 1:
-        raise ValueError("original witness must contain exactly one INSD and one SMSB chunk")
-    if insd[0][1] != 2 or smsb[0][1] != 2:
-        raise ValueError("unexpected original INSD/SMSB chunk version")
-    sample = parse_modern_sample(smsb[0][2])
-    return {
-        "sample": sample,
-        "chunk_ids": [item[0] for item in chunks],
-    }
-
-
-def inspect_candidate(data: bytes, original: bytes) -> dict:
-    _prefix, chunks = parse_chunks(data)
-    original_prefix, original_chunks = parse_chunks(original)
-    original_info = inspect_original(original)
-    sample = original_info["sample"]
-
-    insd = [item for item in chunks if item[0] == b"INSD"]
-    smsb = [item for item in chunks if item[0] == b"SMSB"]
     if len(insd) != 1 or smsb:
-        raise ValueError("candidate witness must contain one legacy INSD and no SMSB")
+        raise ValueError("candidate witness must contain one INSD and no SMSB")
     if insd[0][1] != 2:
         raise ValueError("candidate INSD chunk version changed")
 
-    # Every non-sample chunk must remain byte-identical and in the same order.
-    expected_other = [
-        item for item in original_chunks if item[0] not in {b"INSD", b"SMSB"}
-    ]
-    actual_other = [item for item in chunks if item[0] != b"INSD"]
-    if actual_other != expected_other:
-        raise ValueError("candidate bridge changed non-sample PSY3 chunks")
+    # The candidate load fixture differs only by omission of the unsupported
+    # modern SMSB chunk. Its INSD remains the exact original instrument body
+    # with numwaves=0; the candidate harness installs the separately bound PCM.
+    expected_chunks = [item for item in original_chunks if item[0] != b"SMSB"]
+    if chunks != expected_chunks:
+        raise ValueError("candidate bridge changed PSY3 bytes beyond removing SMSB")
     if bytes(_prefix) != bytes(original_prefix):
-        # The only permitted prefix mutation is the top-level chunk count.
         candidate_prefix = bytearray(_prefix)
         source_prefix = bytearray(original_prefix)
         struct.pack_into("<I", candidate_prefix, 16, 0)
@@ -242,54 +218,34 @@ def inspect_candidate(data: bytes, original: bytes) -> dict:
     payload = insd[0][2]
     offset = 4 + 1 + 4 + 1 + 12 * 4 + 4 + 3
     _name, offset = read_cstring(payload, offset)
-    numwaves = struct.unpack_from("<i", payload, offset)[0]
-    offset += 4
-    if numwaves != 1:
-        raise ValueError("candidate INSD must contain exactly one legacy WAVE")
-    if payload[offset : offset + 4] != b"WAVE":
-        raise ValueError("candidate legacy WAVE header is missing")
-    version, size = struct.unpack_from("<II", payload, offset + 4)
-    if version != 0 or offset + 12 + size > len(payload):
-        raise ValueError("candidate legacy WAVE chunk is invalid")
-    wave_payload = payload[offset + 12 : offset + 12 + size]
-    if struct.unpack_from("<I", wave_payload, 4)[0] != AUTHORED_SAMPLE_FRAMES:
-        raise ValueError("candidate legacy WAVE frame count changed")
+    if offset + 4 > len(payload):
+        raise ValueError("candidate INSD numwaves field is missing")
+    if struct.unpack_from("<i", payload, offset)[0] != 0:
+        raise ValueError("candidate INSD must remain wave-empty before harness injection")
 
-    # Legacy WAVE deliberately has no sample-rate field. Its packed PCM must be
-    # byte-identical to the modern SMSB source that carries 22.05-kHz metadata.
-    wave_cursor = 4 + 4 + 2 + 4 + 4 + 4 + 4 + 1 + 1
-    _wave_name, wave_cursor = read_cstring(wave_payload, wave_cursor)
-    packed_size = struct.unpack_from("<I", wave_payload, wave_cursor)[0]
-    wave_cursor += 4
-    packed = wave_payload[wave_cursor : wave_cursor + packed_size]
-    if packed != sample["packed_left"]:
-        raise ValueError("candidate WAVE and original SMSB PCM payloads differ")
-
-    # The candidate INSD is the original legacy-compatible instrument body plus
-    # one WAVE. The modern SMSB is intentionally absent so the r12005 loader
-    # cannot scan unsupported compressed sample metadata as unknown chunks.
-    original_insd = [item for item in original_chunks if item[0] == b"INSD"][0][2]
-    original_offset = 4 + 1 + 4 + 1 + 12 * 4 + 4 + 3
-    _original_name, original_offset = read_cstring(original_insd, original_offset)
-    if struct.unpack_from("<i", original_insd, original_offset)[0] != 0:
-        raise ValueError("original INSD unexpectedly contains legacy waves")
-    original_tail = original_insd[original_offset + 4 :]
-    candidate_tail = payload[offset + 12 + size :]
-    if candidate_tail != original_tail:
-        raise ValueError("candidate bridge changed the INSD sampler-lock tail")
+    decoded = sound_desquash_pcm16le(sample["packed_left"])
+    if pcm16le is not None and pcm16le != decoded:
+        raise ValueError("candidate PCM sidecar differs from original SMSB audio")
 
     return {
         "authored_sample_rate": sample["sample_rate"],
         "authored_sample_frames": sample["frames"],
-        "legacy_wave_frame_count": AUTHORED_SAMPLE_FRAMES,
-        "pcm_payload_identity": "byte-identical-compressed-left-channel",
+        "pcm_payload_identity": "decoded-SMSB-pcm16le-identical-sidecar",
+        "pcm16le_bytes": len(decoded),
         "original_metadata_source": "SMSB",
-        "candidate_audio_source": "INSD/WAVE",
-        "candidate_sample_rate_metadata": "absent-from-legacy-WAVE",
+        "candidate_audio_source": "hash-bound-harness-injected-pcm16le",
+        "candidate_sample_rate_metadata": "not-imported-into-legacy-Instrument",
+        "candidate_pre_injection_wave_state": "empty",
         "candidate_modern_sample_chunk_removed": True,
         "non_sample_psy3_chunks": "byte-identical",
     }
 
+
+def inspect_pair(
+    original: bytes, candidate: bytes, pcm16le: bytes | None = None
+) -> dict:
+    inspect_original(original)
+    return inspect_candidate(candidate, original, pcm16le)
 
 def inspect_pair(original: bytes, candidate: bytes) -> dict:
     inspect_original(original)
@@ -297,26 +253,15 @@ def inspect_pair(original: bytes, candidate: bytes) -> dict:
 
 def convert(data: bytes) -> bytes:
     prefix, chunks = parse_chunks(data)
-    insd_indexes = [i for i, item in enumerate(chunks) if item[0] == b"INSD"]
+    insd = [item for item in chunks if item[0] == b"INSD"]
     smsb = [item for item in chunks if item[0] == b"SMSB"]
-    if len(insd_indexes) != 1 or len(smsb) != 1:
+    if len(insd) != 1 or len(smsb) != 1:
         raise ValueError("expected exactly one INSD and one SMSB chunk")
-    if chunks[insd_indexes[0]][1] != 2 or smsb[0][1] != 2:
+    if insd[0][1] != 2 or smsb[0][1] != 2:
         raise ValueError("unexpected modern INSD/SMSB version")
 
-    sample = parse_modern_sample(smsb[0][2])
-    wave = legacy_wave_chunk(sample)
-    rebuilt: list[tuple[bytes, int, bytes]] = []
-    for fourcc, version, payload in chunks:
-        if fourcc == b"INSD":
-            rebuilt.append((fourcc, version, augment_insd(payload, wave)))
-        elif fourcc == b"SMSB":
-            # r12005 has no SMSB handler. Do not leave the unsupported modern
-            # compressed sample chunk in its chunk stream.
-            continue
-        else:
-            rebuilt.append((fourcc, version, payload))
-
+    parse_modern_sample(smsb[0][2])
+    rebuilt = [item for item in chunks if item[0] != b"SMSB"]
     struct.pack_into("<I", prefix, 16, len(rebuilt))
     output = bytearray(prefix)
     for fourcc, version, payload in rebuilt:
@@ -324,32 +269,39 @@ def convert(data: bytes) -> bytes:
     inspect_pair(data, bytes(output))
     return bytes(output)
 
+
+def extract_pcm16le(data: bytes) -> bytes:
+    return sound_desquash_pcm16le(inspect_original(data)["sample"]["packed_left"])
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("convert", "check"))
     parser.add_argument("original", type=Path)
     parser.add_argument("candidate", type=Path)
+    parser.add_argument("pcm16le", type=Path)
     args = parser.parse_args()
 
+    source = args.original.read_bytes()
     if args.mode == "convert":
-        if args.candidate.exists():
-            raise SystemExit(f"refusing existing output: {args.candidate}")
-        source = args.original.read_bytes()
+        if args.candidate.exists() or args.pcm16le.exists():
+            raise SystemExit("refusing existing candidate fixture or PCM sidecar")
         converted = convert(source)
+        pcm = extract_pcm16le(source)
         args.candidate.parent.mkdir(parents=True, exist_ok=True)
         args.candidate.write_bytes(converted)
-        info = inspect_pair(source, converted)
+        args.pcm16le.write_bytes(pcm)
     else:
-        info = inspect_pair(
-            args.original.read_bytes(),
-            args.candidate.read_bytes(),
-        )
+        converted = args.candidate.read_bytes()
+        pcm = args.pcm16le.read_bytes()
 
+    info = inspect_pair(source, converted, pcm)
     print(
         "phase6c-sampler-ps1-pitch-compat: PASS "
         f"sample_rate={info['authored_sample_rate']} "
         f"frames={info['authored_sample_frames']} "
         f"pcm={info['pcm_payload_identity']} "
+        f"pcm_bytes={info['pcm16le_bytes']} "
         f"candidate_smsb_removed={info['candidate_modern_sample_chunk_removed']}"
     )
     return 0
