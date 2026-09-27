@@ -2851,6 +2851,26 @@ def validate_original_inconclusive_runtime(
             "retained_render_analyses": retained_analyses,
         }
 
+    if (
+        attempt.get("command_verified") is True
+        and attempt.get("command_dispatched") is False
+    ):
+        quarantine = base.validate_postverification_predispatch_quarantine(
+            attempt
+        )
+        observed_binding = validate_original_observed_output(
+            original_root, attempt, len(attempts)
+        )
+        return {
+            "inconclusive_reason": quarantine["inconclusive_reason"],
+            "binding_error": None,
+            "diagnostics": quarantine["diagnostics"],
+            "process_exit_code": quarantine["process_exit_code"],
+            "observed_output": observed_binding,
+            "retained_renders": retained_renders,
+            "retained_render_analyses": retained_analyses,
+        }
+
     for key in ("command_verified", "command_dispatched"):
         if attempt.get(key) is not True:
             raise ValueError(
@@ -2958,6 +2978,7 @@ def inconclusive_render_binding_status(quarantine: dict) -> str:
         "render-observer-initialization-failure",
         "process-exit-before-render-command-verification",
         "pre-command-verification-failure",
+        "render-command-dispatch-failure",
     }:
         return "not-dispatched"
     return "accepted" if quarantine.get("binding_error") is None else "rejected"
@@ -3025,33 +3046,32 @@ def validate_original_process_exit_runtime(
                 f"same-witness process-exit render did not verify {key}"
             )
     exit_code = attempt.get("process_exit_code")
-    diagnostics = attempt.get("diagnostics")
+    diagnostics, sealing_failure = base.validate_process_exit_diagnostics(
+        attempt
+    )
     if (
         attempt.get("outcome") != "inconclusive"
         or attempt.get("process_exited") is not True
         or not isinstance(exit_code, int)
         or isinstance(exit_code, bool)
         or attempt.get("output") is not None
-        or not isinstance(diagnostics, list)
-        or "reference exited during offline render" not in diagnostics
         or receipt.get("exit_code_before_termination") != exit_code
     ):
         raise ValueError("same-witness process-exit evidence mismatch")
 
-    try:
-        validate_original_event_binding(attempt)
-    except ValueError as exc:
-        binding_error = str(exc)
-        if any(
-            isinstance(value, str)
-            and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
-            for value in diagnostics
-        ):
-            validate_original_observer_sealing_failure(attempt)
-        else:
-            validate_original_ambiguous_event_binding(attempt)
+    if sealing_failure:
+        sealing_quarantine = (
+            base.validate_postsave_process_exit_sealing_quarantine(attempt)
+        )
+        binding_error = sealing_quarantine["binding_error"]
     else:
-        binding_error = None
+        try:
+            validate_original_event_binding(attempt)
+        except ValueError as exc:
+            binding_error = str(exc)
+            validate_original_ambiguous_event_binding(attempt)
+        else:
+            binding_error = None
 
     observed_binding = validate_original_observed_output(
         original_root, attempt, len(attempts)
