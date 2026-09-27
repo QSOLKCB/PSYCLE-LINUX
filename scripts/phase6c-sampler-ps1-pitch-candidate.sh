@@ -57,8 +57,16 @@ run_logged "$OUT/fixture-build.log"     cc "${COMMON_CFLAGS[@]}" "${LUA_CFLAGS[@
 
 run_logged "$OUT/fixture-authoring.log"     "$BUILD/phase6c_sampler_ps1_pitch_fixture"     "$BUILD/phase6c-sampler-ps1-pitch-modern.psy"
 
-run_logged "$OUT/fixture-compat.log"     python3 "$ROOT/scripts/phase6c-sampler-ps1-pitch-compat.py" convert     "$BUILD/phase6c-sampler-ps1-pitch-modern.psy"     "$OUT/fixture/phase6c-sampler-ps1-pitch.psy"
-run_logged "$OUT/fixture-validation.log"     python3 "$ROOT/scripts/phase6c-sampler-ps1-pitch-compat.py" check     "$OUT/fixture/phase6c-sampler-ps1-pitch.psy"
+cp "$BUILD/phase6c-sampler-ps1-pitch-modern.psy" \
+    "$OUT/fixture/phase6c-sampler-ps1-pitch-original.psy"
+run_logged "$OUT/fixture-compat.log" \
+    python3 "$ROOT/scripts/phase6c-sampler-ps1-pitch-compat.py" convert \
+    "$OUT/fixture/phase6c-sampler-ps1-pitch-original.psy" \
+    "$OUT/fixture/phase6c-sampler-ps1-pitch-candidate.psy"
+run_logged "$OUT/fixture-validation.log" \
+    python3 "$ROOT/scripts/phase6c-sampler-ps1-pitch-compat.py" check \
+    "$OUT/fixture/phase6c-sampler-ps1-pitch-original.psy" \
+    "$OUT/fixture/phase6c-sampler-ps1-pitch-candidate.psy"
 
 git_blob_sha256() {
     git -C "$ROOT" cat-file blob "HEAD:$1" | sha256sum | awk '{print $1}'
@@ -91,7 +99,7 @@ RENDER="$BUILD/phase6c-sampler-ps1-pitch-render"
 run_logged "$OUT/renderer-provenance.json"     "$RENDER" --phase6c-provenance
 
 for n in 1 2; do
-    run_logged "$OUT/render/candidate-render-$n.log"         env PSYCLE_THREADS=1 "$RENDER"         "$OUT/fixture/phase6c-sampler-ps1-pitch.psy"         "$OUT/render/candidate-sampler-ps1-pitch-$n.wav"
+    run_logged "$OUT/render/candidate-render-$n.log"         env PSYCLE_THREADS=1 "$RENDER"         "$OUT/fixture/phase6c-sampler-ps1-pitch-candidate.psy"         "$OUT/render/candidate-sampler-ps1-pitch-$n.wav"
 done
 
 run_logged "$OUT/candidate-collect.log"     python3 "$ROOT/scripts/phase6c-sampler-ps1-pitch.py" candidate "$OUT"
