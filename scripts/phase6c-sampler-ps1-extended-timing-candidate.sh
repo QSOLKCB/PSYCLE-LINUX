@@ -100,6 +100,11 @@ if (( qmake_status != 0 )); then
 fi
 
 run_logged "$ARTIFACT/probe-build.log" make -C "$BUILD" -j2
+run_logged "$ARTIFACT/probe-attestation.log" \
+    python3 "$ROOT/scripts/phase6c-sampler-ps1-extended-timing.py" attest-probe \
+    "$BUILD/phase6c-sampler-ps1-extended-timing-probe" \
+    "$ARTIFACT" \
+    "$BUILD/phase6c-sampler-ps1-extended-timing-probe.attestation.json"
 run_logged "$ARTIFACT/candidate-collect.log" \
     python3 "$ROOT/scripts/phase6c-sampler-ps1-extended-timing.py" collect \
     "$ARTIFACT" "$BUILD/phase6c-sampler-ps1-extended-timing-probe"
