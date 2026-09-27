@@ -26,6 +26,12 @@ CONTRACT = "sequencer-delayed-retrigger-same-witness-onset-timing"
 INPUT_CONTRACT = observation_module.CONTRACT
 BPM = 137
 EXPECTED_SAMPLE_RATE = 44100
+BEAT_FRAMES = EXPECTED_SAMPLE_RATE * 60.0 / BPM
+NORMALIZATION = (
+    "subtract each side's first onset in each command window, while requiring "
+    "one consistent original-minus-candidate first-onset phase delta across "
+    "all classified windows"
+)
 WINDOWS = {
     "fb_retrigger_beat_1": {
         "label": "FB 3F retrigger",
@@ -89,28 +95,48 @@ def validate_analysis(analysis: object, role: str) -> dict:
     beats = require_number_list(analysis.get("onset_beats"), f"{role}.onset_beats")
     if len(frames) != len(beats):
         raise ValueError(f"{role} onset frame/beat lengths differ")
+    if frames != sorted(frames) or len(frames) != len(set(frames)):
+        raise ValueError(f"{role} onset frames are not strictly increasing")
     if (
         analysis.get("sample_rate") != EXPECTED_SAMPLE_RATE
         or analysis.get("channels") != 1
         or analysis.get("bits_per_sample") != 16
     ):
         raise ValueError(f"{role} render format changed")
+
+    expected_beats = [round(frame / BEAT_FRAMES, 9) for frame in frames]
+    if beats != expected_beats:
+        raise ValueError(f"{role} onset beats do not match onset frames")
+
     counts = analysis.get("window_onset_counts")
     if not isinstance(counts, dict):
         raise ValueError(f"{role} onset-window counts are missing")
-    for key in ("retrigger_beat_1", "retr_cont_beat_2"):
-        if type(counts.get(key)) is not int or counts[key] < 2:
-            raise ValueError(f"{role} does not retain command-bearing {key} onsets")
+    expected_counts = {
+        "retrigger_beat_1": sum(
+            1 for frame in frames if 1.0 <= frame / BEAT_FRAMES < 2.0
+        ),
+        "retr_cont_beat_2": sum(
+            1 for frame in frames if 2.0 <= frame / BEAT_FRAMES < 3.0
+        ),
+    }
+    for key, expected_count in expected_counts.items():
+        if (
+            type(counts.get(key)) is not int
+            or counts[key] != expected_count
+            or expected_count < 2
+        ):
+            raise ValueError(
+                f"{role} does not retain frame-derived command-bearing {key} onsets"
+            )
     return analysis
 
 
 def extract_window(analysis: dict, start: float, end: float, label: str) -> dict:
     frames = analysis["onset_frames"]
-    beats = analysis["onset_beats"]
     selected = [
         frame
-        for frame, beat in zip(frames, beats)
-        if start <= float(beat) < end
+        for frame in frames
+        if start <= frame / BEAT_FRAMES < end
     ]
     if len(selected) < 2:
         raise ValueError(f"{label} does not contain multiple command onsets")
@@ -166,6 +192,7 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
 
     windows: dict[str, dict] = {}
     all_relative_exact = True
+    first_onset_phase_deltas: list[int] = []
     for key, window in WINDOWS.items():
         candidate_window = extract_window(
             candidate_analysis,
@@ -195,6 +222,11 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
                     original_window["relative_frames"],
                 )
             ]
+        phase_delta = (
+            original_window["first_onset_frame"]
+            - candidate_window["first_onset_frame"]
+        )
+        first_onset_phase_deltas.append(phase_delta)
         windows[key] = {
             "label": window["label"],
             "beat_window": [window["start_beat"], window["end_beat"]],
@@ -202,20 +234,29 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
             "original": original_window,
             "relative_onset_frames_exact_match": relative_exact,
             "original_minus_candidate_relative_frames": ordinal_delta,
-            "first_onset_phase_delta_frames": (
-                original_window["first_onset_frame"]
-                - candidate_window["first_onset_frame"]
-            ),
+            "first_onset_phase_delta_frames": phase_delta,
         }
 
-    scoped_status = "PASS" if all_relative_exact else "DIFFERENT"
-    interpretation = (
-        "The FB/FA command-bearing relative onset vectors match exactly at "
-        "44.1 kHz after removing each command window's first-onset phase."
-        if all_relative_exact
-        else "At least one FB/FA command-bearing relative onset vector differs "
-        "at sample resolution between original and candidate."
-    )
+    phase_delta_consistent = len(set(first_onset_phase_deltas)) == 1
+    scoped_match = all_relative_exact and phase_delta_consistent
+    scoped_status = "PASS" if scoped_match else "DIFFERENT"
+    if scoped_match:
+        interpretation = (
+            "The FB/FA command-bearing relative onset vectors match exactly at "
+            "44.1 kHz and share one original-minus-candidate first-onset phase "
+            "delta across both command windows."
+        )
+    elif not all_relative_exact:
+        interpretation = (
+            "At least one FB/FA command-bearing relative onset vector differs "
+            "at sample resolution between original and candidate."
+        )
+    else:
+        interpretation = (
+            "The FB/FA within-window relative onset vectors match, but their "
+            "first-onset phase deltas disagree across command windows; this is "
+            "not explainable by one fixed renderer/start latency."
+        )
 
     result = {
         "schema_version": 1,
@@ -236,10 +277,7 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
             "classification": "FB/FA retrigger-family relative onset timing",
             "established_effects": list(expected_scope["established_effects"]),
             "not_established": list(expected_scope["not_established"]),
-            "normalization": (
-                "per command beat window, subtract that side's first onset frame "
-                "before comparing subsequent onset frames"
-            ),
+            "normalization": NORMALIZATION,
             "sample_rate": EXPECTED_SAMPLE_RATE,
             "bpm": BPM,
         },
@@ -251,9 +289,11 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
         "interpretation": interpretation,
         "interpretation_boundary": (
             "This receipt classifies only sample-exact relative onset geometry "
-            "for the already-established FB 3F and FA 42 effects. Absolute first-"
-            "onset phase is retained diagnostically but is not parity-classifying. "
-            "FD 7F note-delay and FE 04 extended-command behavior remain outside "
+            "for the already-established FB 3F and FA 42 effects. One common "
+            "first-onset phase delta may be ignored as fixed renderer/start latency, "
+            "but command-specific phase skew is a timing difference. Absolute phase "
+            "itself remains diagnostic rather than parity-classifying. FD 7F note-"
+            "delay and FE 04 extended-command behavior remain outside "
             "this witness's established runtime scope, so sequencer-delayed-"
             "retrigger remains UNKNOWN as a whole."
         ),
@@ -301,6 +341,7 @@ def validate_timing(value: object) -> dict:
         != same.RUNTIME_COMMAND_EXECUTION_SCOPE["established_effects"]
         or scope.get("not_established")
         != same.RUNTIME_COMMAND_EXECUTION_SCOPE["not_established"]
+        or scope.get("normalization") != NORMALIZATION
         or scope.get("sample_rate") != EXPECTED_SAMPLE_RATE
         or scope.get("bpm") != BPM
     ):
@@ -311,6 +352,7 @@ def validate_timing(value: object) -> dict:
         raise ValueError("same-witness onset-timing windows changed")
 
     exact_flags = []
+    phase_deltas = []
     for key, definition in WINDOWS.items():
         entry = windows.get(key)
         if (
@@ -350,18 +392,100 @@ def validate_timing(value: object) -> dict:
                 or data.get("first_onset_frame") != absolute[0]
             ):
                 raise ValueError(f"{key}.{role} timing derivation is inconsistent")
-        exact = (
-            entry["candidate"]["relative_frames"]
-            == entry["original"]["relative_frames"]
+        candidate_relative = entry["candidate"]["relative_frames"]
+        original_relative = entry["original"]["relative_frames"]
+        expected_ordinal_delta = None
+        if len(candidate_relative) == len(original_relative):
+            expected_ordinal_delta = [
+                original_value - candidate_value
+                for candidate_value, original_value in zip(
+                    candidate_relative, original_relative
+                )
+            ]
+        if (
+            entry.get("original_minus_candidate_relative_frames")
+            != expected_ordinal_delta
+        ):
+            raise ValueError(f"{key} relative-frame diagnostic is inconsistent")
+
+        expected_phase_delta = (
+            entry["original"]["first_onset_frame"]
+            - entry["candidate"]["first_onset_frame"]
         )
+        if entry.get("first_onset_phase_delta_frames") != expected_phase_delta:
+            raise ValueError(f"{key} first-onset phase diagnostic is inconsistent")
+        phase_deltas.append(expected_phase_delta)
+
+        exact = candidate_relative == original_relative
         if entry["relative_onset_frames_exact_match"] is not exact:
             raise ValueError(f"{key} exact-match flag is inconsistent")
         exact_flags.append(exact)
 
-    expected_status = "PASS" if all(exact_flags) else "DIFFERENT"
+    phase_delta_consistent = len(set(phase_deltas)) == 1
+    expected_status = (
+        "PASS" if all(exact_flags) and phase_delta_consistent else "DIFFERENT"
+    )
     if value.get("scoped_timing_status") != expected_status:
         raise ValueError("same-witness scoped timing status is inconsistent")
     return value
+
+
+def resolve_bound_observation_path(source_path: str) -> Path:
+    path = Path(source_path)
+    if path.is_absolute():
+        return path
+    root = ROOT.resolve()
+    resolved = (root / path).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("input observation path escapes repository root") from exc
+    return resolved
+
+
+def validate_bound_receipt(value: object) -> dict:
+    receipt = validate_timing(value)
+    source = receipt["input_observation"]
+    observation_path = resolve_bound_observation_path(source["path"])
+    try:
+        raw = observation_path.read_bytes()
+    except OSError as exc:
+        raise ValueError(
+            f"bound input observation cannot be read: {source['path']}"
+        ) from exc
+
+    actual_sha256 = digest(raw)
+    if actual_sha256 != source["sha256"]:
+        raise ValueError("bound input observation hash mismatch")
+
+    try:
+        observation = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("bound input observation is not valid UTF-8 JSON") from exc
+    if not isinstance(observation, dict):
+        raise ValueError("bound input observation is not an object")
+
+    observation_module.validate_projection(observation)
+    if observation.get("contract") != INPUT_CONTRACT:
+        raise ValueError("bound input observation contract changed")
+    canonical = observation.get("canonical_observation")
+    if (
+        not isinstance(canonical, dict)
+        or source["workflow_run_id"] != canonical.get("workflow_run_id")
+        or source["workflow_head_sha"] != canonical.get("workflow_head_sha")
+    ):
+        raise ValueError("bound input observation workflow identity mismatch")
+
+    expected = derive_timing(
+        observation,
+        input_path=source["path"],
+        input_sha256=actual_sha256,
+    )
+    if receipt != expected:
+        raise ValueError(
+            "same-witness onset-timing receipt differs from bound observation derivation"
+        )
+    return receipt
 
 
 def write_new(path: Path, value: dict) -> None:
@@ -394,7 +518,7 @@ def main() -> int:
         )
         write_new(args.output, value)
     else:
-        value = validate_timing(read_json(args.receipt))
+        value = validate_bound_receipt(read_json(args.receipt))
     print(json.dumps(value, sort_keys=True))
     return 0
 
