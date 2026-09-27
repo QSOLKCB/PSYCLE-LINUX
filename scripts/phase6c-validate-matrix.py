@@ -461,6 +461,25 @@ DELAYED_RETRIGGER_SAME_WITNESS_OBSERVATION = (
     / "sequencer-delayed-retrigger-same-witness"
     / "observation.json"
 )
+DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE = (
+    EVIDENCE_ROOT
+    / "sequencer-delayed-retrigger-same-witness"
+    / "canonical-raw.tar.gz.b64"
+)
+DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_MANIFEST = (
+    EVIDENCE_ROOT
+    / "sequencer-delayed-retrigger-same-witness"
+    / "canonical-raw-manifest.json"
+)
+EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_TEXT_SHA256 = (
+    "5f3f7472193847d8a375905b22baa46e1e873112459f6e176eab0765571439b5"
+)
+EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_MANIFEST_SHA256 = (
+    "d82ab70ffcf8c57223b801096866416485a7ec87a3beaed49baf300b0f2eceff"
+)
+EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_SHA256 = (
+    "2ffe29dd44a59b58f35163d84dd25604588617a14d21782b18482c47709de452"
+)
 EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_OBSERVATION_SHA256 = (
     "74c309107bce3c2bb3a6320e9fac237b2d5f898a7be7a1806b965e6d69781b9a"
 )
@@ -1505,6 +1524,37 @@ def validate_delayed_retrigger_same_witness_observation() -> None:
         die(f"delayed/retrigger same-witness observation is invalid JSON: {exc}")
     if not isinstance(observation, dict):
         die("delayed/retrigger same-witness observation must be an object")
+
+    archive_path = DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE
+    manifest_path = DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_MANIFEST
+    if not archive_path.is_file() or not manifest_path.is_file():
+        die("delayed/retrigger same-witness durable raw evidence is missing")
+    if hashlib.sha256(archive_path.read_bytes()).hexdigest() != (
+        EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_TEXT_SHA256
+    ):
+        die("delayed/retrigger same-witness durable archive text changed")
+    manifest_raw = manifest_path.read_bytes()
+    if hashlib.sha256(manifest_raw).hexdigest() != (
+        EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_MANIFEST_SHA256
+    ):
+        die("delayed/retrigger same-witness durable archive manifest changed")
+    try:
+        archive_manifest = json.loads(manifest_raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        die(f"delayed/retrigger durable archive manifest is invalid JSON: {exc}")
+    if (
+        not isinstance(archive_manifest, dict)
+        or archive_manifest.get("schema_version") != 1
+        or archive_manifest.get("contract")
+        != "sequencer-delayed-retrigger-same-witness-render"
+        or archive_manifest.get("canonical_workflow_run_id") != 36288494934
+        or archive_manifest.get("workflow_head_sha")
+        != "6ccb21adb0d4f237da763aff0d27803599ebb2b7"
+        or archive_manifest.get("archive", {}).get("decoded_sha256")
+        != EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_SHA256
+        or archive_manifest.get("archive", {}).get("decoded_size_bytes") != 11572
+    ):
+        die("delayed/retrigger durable archive manifest identity changed")
     if (
         observation.get("schema_version") != 1
         or observation.get("phase") != "6C"
