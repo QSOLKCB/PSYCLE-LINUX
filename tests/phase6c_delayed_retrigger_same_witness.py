@@ -1123,6 +1123,7 @@ with tempfile.TemporaryDirectory() as temporary:
     )
 
     ambiguous_event_attempt = dict(completed_attempt)
+    ambiguous_event_attempt["render_dialog_post_dispatch_observed_window_event_count"] = 2
     ambiguous_event_attempt["render_dialog_post_dispatch_event_count"] = 2
     expect_value_error(
         lambda: m.validate_original_attempt(root, ambiguous_event_attempt, 1),
@@ -1146,10 +1147,9 @@ with tempfile.TemporaryDirectory() as temporary:
 
     extra_observed_attempt = dict(completed_attempt)
     extra_observed_attempt["render_dialog_post_dispatch_observed_window_event_count"] = 2
-    expect_value_error(
-        lambda: m.validate_original_attempt(root, extra_observed_attempt, 1),
-        "post-dispatch dialog evidence",
-    )
+    # A second resolved process-owned top-level show event does not make the
+    # uniquely observed Render as Wav File dialog ambiguous.
+    m.validate_original_attempt(root, extra_observed_attempt, 1)
 
     missing_boundary_attempt = dict(completed_attempt)
     missing_boundary_attempt["render_dialog_dispatch_boundary_set"] = False
@@ -1212,6 +1212,10 @@ with tempfile.TemporaryDirectory() as temporary:
         "renders": [],
         "attempts": [ambiguous_attempt],
     }
+    # The frozen #80 receipt was produced by the old harness and must retain
+    # its historical ambiguity classification even though current fresh
+    # binding accepts observed=2 / unresolved=0 / render-dialog=1.
+    m.validate_original_event_binding(ambiguous_attempt)
     quarantine = m.validate_original_inconclusive_runtime(
         root, inconclusive_runtime
     )
