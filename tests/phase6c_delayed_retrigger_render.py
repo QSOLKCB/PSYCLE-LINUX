@@ -887,6 +887,8 @@ for consumer_path in (
     consumer_source = consumer_path.read_text(encoding="utf-8")
     assert "validate_precommand_process_exit(" in consumer_source
     assert "post-render-process-inspection-failure" in consumer_source
+    assert '"process_exit_code": predispatch["process_exit_code"]' in consumer_source
+    assert "pre-dispatch observer exit receipt mismatch" in consumer_source
 
 for consumer_path in (
     ROOT / "scripts" / "phase6c-delayed-retrigger-render-isolation.py",
