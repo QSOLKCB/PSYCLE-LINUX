@@ -396,6 +396,7 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
             "sampler_machine_state_version": cpsycle_version,
             "pitch_sample_rate_basis": "sample-rate/output-sample-rate",
             "envelope_sample_rate_basis": "44100/output-sample-rate",
+            "panning_destination_cap": 0.5,
             "extended_note_timing_basis": "samples-per-row/6",
         },
         "source_observations": {
