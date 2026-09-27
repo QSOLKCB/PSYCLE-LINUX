@@ -565,7 +565,18 @@ def original_observation(candidate_root: Path, original_root: Path) -> dict:
     raise ValueError(f"unexpected original pitch runtime outcome: {outcome!r}")
 
 
-def compare_observations(candidate: dict, original: dict) -> dict:
+def compare_observations(
+    candidate: dict, original: dict, candidate_source_receipt_sha256: str
+) -> dict:
+    if (
+        not isinstance(candidate_source_receipt_sha256, str)
+        or len(candidate_source_receipt_sha256) != 64
+        or any(
+            char not in "0123456789abcdef"
+            for char in candidate_source_receipt_sha256
+        )
+    ):
+        raise ValueError("candidate source receipt SHA-256 is invalid")
     candidate_span = candidate["renders"][0]["analysis"]["active_span_frames"]
     provenance = candidate["renderer_provenance"]
     original_identity = original["identity"]
@@ -579,6 +590,7 @@ def compare_observations(candidate: dict, original: dict) -> dict:
         "fixture_sha256": candidate["fixture_sha256"],
         "candidate_fixture_sha256": candidate["candidate_fixture_sha256"],
         "candidate_snapshot": candidate["snapshot"],
+        "candidate_source_receipt_sha256": candidate_source_receipt_sha256,
         "candidate_renderer_provenance_sha256": provenance["sha256"],
         "candidate_compiled_provenance": provenance["attestation"],
         "candidate_render_sha256s": candidate_render_hashes,
@@ -679,7 +691,11 @@ def main() -> int:
     else:
         candidate = validate_candidate(args.candidate_root)
         original = original_observation(args.candidate_root, args.original_root)
-        value = compare_observations(candidate, original)
+        value = compare_observations(
+            candidate,
+            original,
+            sha256(args.candidate_root / CANDIDATE_RECEIPT),
+        )
         write_new(args.output, value)
     print(json.dumps(value, sort_keys=True))
     return 0
