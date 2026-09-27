@@ -185,7 +185,7 @@ predispatch_after_exit = {
 }
 predispatch_exit = module.validate_inconclusive_runtime(
     Path("."),
-    {},
+    {"exit_code_before_termination": -1073741819},
     {"deterministic": False, "renders": []},
     [predispatch_after_exit],
 )
@@ -250,6 +250,40 @@ preverification_after_exit = {
 assert module.validate_preverification_render_quarantine(
     preverification_after_exit
 )["process_exit_code"] == -1073741819
+
+dispatch_failure = {
+    **preverification_failure,
+    "command_verified": True,
+    "render_dialog_native_event_hook_armed": True,
+    "render_dialog_event_message_pump_started": True,
+    "diagnostics": [module.COMMAND_DISPATCH_FAILURE_DIAGNOSTIC],
+}
+dispatch_quarantine = module.validate_postverification_predispatch_quarantine(
+    dispatch_failure
+)
+assert dispatch_quarantine["inconclusive_reason"] == (
+    "render-command-dispatch-failure"
+)
+dispatch_runtime = module.validate_inconclusive_runtime(
+    Path("."),
+    {},
+    {"deterministic": False, "renders": []},
+    [dispatch_failure],
+)
+assert dispatch_runtime["inconclusive_reason"] == "render-command-dispatch-failure"
+
+dispatch_failure_after_exit = {
+    **dispatch_failure,
+    "process_exited": True,
+    "process_exit_code": -1073741819,
+}
+dispatch_exit_runtime = module.validate_inconclusive_runtime(
+    Path("."),
+    {"exit_code_before_termination": -1073741819},
+    {"deterministic": False, "renders": []},
+    [dispatch_failure_after_exit],
+)
+assert dispatch_exit_runtime["process_exit_code"] == -1073741819
 
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
@@ -591,6 +625,29 @@ with tempfile.TemporaryDirectory() as temporary:
     assert exit_evidence["completed_render_count"] == 1
     assert exit_evidence["completed_render_sha256"] == [first_hash]
     assert exit_evidence["observed_output"]["path"].endswith(second_name)
+    assert exit_evidence["diagnostics"] == [module.PROCESS_EXIT_DIAGNOSTIC]
+    assert exit_evidence["binding_error"] is None
+
+    sealing_exit_attempt = dict(second_attempt)
+    sealing_exit_attempt.update(
+        {
+            "render_dialog_post_dispatch_observed_window_event_count": 0,
+            "render_dialog_unresolved_post_dispatch_event_count": 0,
+            "render_dialog_post_dispatch_event_count": 0,
+            "diagnostics": [
+                module.PROCESS_EXIT_DIAGNOSTIC,
+                module.OBSERVER_SEALING_FAILURE_PREFIX
+                + " synthetic post-Save seal failure",
+            ],
+        }
+    )
+    sealing_exit = module.validate_process_exit_runtime(
+        root, receipt, runtime, [first_attempt, sealing_exit_attempt]
+    )
+    assert sealing_exit["process_exit_code"] == -1073741819
+    assert sealing_exit["binding_error"] is not None
+    assert sealing_exit["diagnostics"] == sealing_exit_attempt["diagnostics"]
+    assert sealing_exit["observed_output"]["path"].endswith(second_name)
 
     second_path.unlink()
     no_output_attempt = dict(second_attempt)
@@ -886,9 +943,11 @@ for consumer_path in (
 ):
     consumer_source = consumer_path.read_text(encoding="utf-8")
     assert "validate_precommand_process_exit(" in consumer_source
+    assert "validate_postverification_predispatch_quarantine(" in consumer_source
     assert "post-render-process-inspection-failure" in consumer_source
     assert '"process_exit_code": predispatch["process_exit_code"]' in consumer_source
     assert "pre-dispatch observer exit receipt mismatch" in consumer_source
+    assert "post-Save sealing exit receipt mismatch" in consumer_source
 
 for consumer_path in (
     ROOT / "scripts" / "phase6c-delayed-retrigger-render-isolation.py",
