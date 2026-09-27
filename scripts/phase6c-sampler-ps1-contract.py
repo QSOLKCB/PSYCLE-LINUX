@@ -372,8 +372,12 @@ def validate(value: object) -> dict:
         if section.get("command_ids") != COMMAND_IDS:
             raise ValueError(f"Sampler PS1 {role} command table changed")
     original = value["original"]
+    if original.get("reference_build") != REFERENCE_BUILD:
+        raise ValueError("original Sampler reference build changed")
     if original.get("source_repository") != ORIGINAL_SOURCE_REPOSITORY:
         raise ValueError("original Sampler source repository changed")
+    if original.get("source_commit") != ORIGINAL_SOURCE_COMMIT:
+        raise ValueError("original Sampler source commit changed")
     files = original.get("files")
     if not isinstance(files, dict):
         raise ValueError("original Sampler source files are missing")
@@ -386,6 +390,14 @@ def validate(value: object) -> dict:
     if original.get("sampler_machine_state_version") != 2:
         raise ValueError("original Sampler machine-state version changed")
     candidate = value["candidate"]
+    if candidate.get("snapshot") != CANDIDATE_BASELINE:
+        raise ValueError("candidate Sampler baseline changed")
+    expected_candidate_files = {
+        "sampler.cpp": {"git_blob": CANDIDATE_CPP_BLOB},
+        "sampler.h": {"git_blob": CANDIDATE_HPP_BLOB},
+    }
+    if candidate.get("files") != expected_candidate_files:
+        raise ValueError("candidate Sampler source blob binding changed")
     if candidate.get("sampler_machine_state_version") != 1:
         raise ValueError("candidate Sampler machine-state version changed")
     if candidate.get("extended_note_timing_basis") != "samples-per-tick/6":
