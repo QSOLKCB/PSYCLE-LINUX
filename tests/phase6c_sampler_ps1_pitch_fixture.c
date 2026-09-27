@@ -2,10 +2,11 @@
 /*
  * Project-authored Phase 6C Sampler PS1 non-44.1-kHz pitch witness.
  *
- * The modern C-Psycle save is an intermediate authoring form. A separate
- * fail-closed converter adds a byte-identical legacy WAVE representation for
- * the frozen C++ candidate while retaining the modern SMSB sample metadata for
- * pinned Psycle 1.12.0.
+ * The modern C-Psycle save is the authoritative authored fixture for pinned
+ * Psycle 1.12.0. For the frozen r12005 candidate, a fail-closed bridge removes
+ * only the unsupported modern SMSB chunk and extracts its exact decoded PCM16
+ * bytes to a hash-bound sidecar. The candidate harness installs those bytes into
+ * the already-loaded legacy Instrument before executing the untouched Sampler.
  */
 #include <math.h>
 #include <stdint.h>
