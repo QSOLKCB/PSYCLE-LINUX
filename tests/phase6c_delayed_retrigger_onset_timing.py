@@ -181,6 +181,27 @@ assert all(
     for entry in fd_only_shift_timing["windows"].values()
 )
 
+fd_in_beat0_shift = copy.deepcopy(pair)
+fd_in_beat0_analysis = fd_in_beat0_shift["original"]["analysis"]
+fd_in_beat0_analysis["onset_frames"][0] = 2400
+sync_onset_beats(fd_in_beat0_analysis)
+sync_window_counts(fd_in_beat0_analysis)
+fd_in_beat0_timing = m.derive_timing(
+    fd_in_beat0_shift,
+    input_path="synthetic-qualified-observation.json",
+    input_sha256="d" * 64,
+)
+assert fd_in_beat0_timing["scoped_timing_status"] == "PASS"
+assert (
+    fd_in_beat0_timing["phase_alignment"]["original_minus_candidate_frames"]
+    == 0
+)
+assert all(
+    entry["first_onset_phase_delta_frames"] == 0
+    and entry["relative_onset_frames_exact_match"] is True
+    for entry in fd_in_beat0_timing["windows"].values()
+)
+
 fd_reordered = copy.deepcopy(pair)
 fd_reordered_analysis = fd_reordered["original"]["analysis"]
 fd_reordered_analysis["onset_frames"][0] = 62000
