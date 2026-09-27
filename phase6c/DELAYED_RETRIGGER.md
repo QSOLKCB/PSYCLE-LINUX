@@ -310,7 +310,9 @@ The timing scope is intentionally narrower than the delayed/retrigger contract:
 - each side's exact onset frames are retained;
 - one render-wide original-minus-candidate phase offset is derived by identifying
   the candidate's first onset in the established `FB 3F retrigger` beat-1 window
-  and matching that same onset ordinal on the original side;
+  and finding the **unique** original onset whose offset preserves the established
+  FB/FA window cardinalities after alignment; ambiguous or missing matches fail
+  closed instead of producing a timing classification;
 - that single phase offset is applied to the original frames **before**
   command-window membership is derived, so a fixed renderer/start latency
   cannot move corresponding onsets into different nominal command windows;
@@ -342,10 +344,13 @@ delayed/retrigger row. Therefore every timing receipt retains:
 - `absolute_phase_is_parity_classifying: false`.
 
 A real timing receipt is versioned only after a fresh qualified hosted rerun
-proves the required original+candidate pair. Receipt validation reloads that
-bound observation, revalidates its projection, verifies its SHA-256 and workflow
-identity, and requires the complete timing receipt to equal a fresh derivation
-from those exact observation bytes.
+proves the required original+candidate pair. Production derive/check accepts only
+the canonical committed same-witness observation, replays its hash-pinned durable
+raw archive through the maintained archive validator, verifies the observation
+SHA-256 and workflow identity, and requires the complete timing receipt to equal
+a fresh derivation from those exact archive-verified observation bytes. Synthetic
+qualified pairs remain negative-control inputs only and cannot bind versioned
+timing evidence.
 
 ## Original render-failure isolation
 
