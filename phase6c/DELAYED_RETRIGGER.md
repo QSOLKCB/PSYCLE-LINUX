@@ -310,11 +310,17 @@ The timing scope is intentionally narrower than the delayed/retrigger contract:
 - each side's exact onset frames are retained;
 - within each command window, the first onset frame is subtracted from every
   onset before comparison, producing a sample-exact **relative onset vector**;
-- the absolute first-onset phase delta is retained diagnostically but is not
-  parity-classifying, so a fixed renderer/start latency cannot masquerade as a
-  tracker-command timing difference;
-- exact equality of both FB/FA relative vectors yields scoped `PASS`;
-  any sample-level vector difference yields scoped `DIFFERENT`;
+- window membership is derived from the retained onset frames at the pinned
+  44.1 kHz / BPM 137 timing basis, and the duplicated `onset_beats` values
+  must rederive exactly from those frames;
+- each window's absolute first-onset phase delta is retained diagnostically;
+  one common original-minus-candidate phase delta may be ignored as fixed
+  renderer/start latency, but different deltas across FB and FA are themselves
+  a cross-command timing difference;
+- scoped `PASS` therefore requires exact equality of both FB/FA relative
+  vectors **and** one consistent first-onset phase delta across both windows;
+  any sample-level vector difference or command-specific phase skew yields
+  scoped `DIFFERENT`;
 - `FD 7F note-delay` and `FE 04 extended-command` remain explicitly
   unestablished by this witness.
 
@@ -328,7 +334,10 @@ receipt retains:
 - `absolute_phase_is_parity_classifying: false`.
 
 A real timing receipt is versioned only after a fresh qualified hosted rerun
-proves the required original+candidate pair.
+proves the required original+candidate pair. Receipt validation reloads that
+bound observation, revalidates its projection, verifies its SHA-256 and workflow
+identity, and requires the complete timing receipt to equal a fresh derivation
+from those exact observation bytes.
 
 ## Original render-failure isolation
 
