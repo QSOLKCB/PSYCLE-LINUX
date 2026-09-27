@@ -2239,16 +2239,14 @@ def validate_original_predispatch_observer_failure(attempt: object) -> list[str]
     diagnostics = attempt.get("diagnostics")
     diagnostics_valid = (
         isinstance(diagnostics, list)
-        and len(diagnostics) in (1, 2)
+        and 1 <= len(diagnostics) <= 3
         and all(isinstance(value, str) for value in diagnostics)
         and diagnostics[0].startswith(
             OBSERVER_INITIALIZATION_FAILURE_PREFIX
         )
-        and (
-            len(diagnostics) == 1
-            or diagnostics[1].startswith(
-                base.PROCESS_INSPECTION_FAILURE_PREFIX
-            )
+        and all(
+            value.startswith(base.PROCESS_INSPECTION_FAILURE_PREFIX)
+            for value in diagnostics[1:]
         )
     )
     exit_code = attempt.get("process_exit_code")
@@ -2283,6 +2281,9 @@ PRECOMMAND_EXIT_DIAGNOSTIC = "reference exited before offline render observation
 NO_EVENT_RENDER_DIALOG_DIAGNOSTIC = (
     "post-dispatch Render as Wav File EVENT_OBJECT_SHOW not observed"
 )
+VANISHED_RENDER_DIALOG_DIAGNOSTIC = (
+    "newly opened Render as Wav File dialog became unavailable before binding"
+)
 
 
 def validate_original_precommand_exit(attempt: object) -> list[str]:
@@ -2292,14 +2293,12 @@ def validate_original_precommand_exit(attempt: object) -> list[str]:
     exit_code = attempt.get("process_exit_code")
     diagnostics_valid = (
         isinstance(diagnostics, list)
-        and len(diagnostics) in (1, 2)
+        and 1 <= len(diagnostics) <= 3
         and all(isinstance(value, str) for value in diagnostics)
         and diagnostics[0] == PRECOMMAND_EXIT_DIAGNOSTIC
-        and (
-            len(diagnostics) == 1
-            or diagnostics[1].startswith(
-                base.PROCESS_INSPECTION_FAILURE_PREFIX
-            )
+        and all(
+            value.startswith(base.PROCESS_INSPECTION_FAILURE_PREFIX)
+            for value in diagnostics[1:]
         )
     )
     if (
@@ -2348,14 +2347,12 @@ def validate_original_no_event_render_dialog_failure(
     )
     diagnostics_valid = (
         isinstance(diagnostics, list)
-        and len(diagnostics) in (1, 2)
+        and 1 <= len(diagnostics) <= 3
         and all(isinstance(value, str) for value in diagnostics)
         and diagnostics[0] == NO_EVENT_RENDER_DIALOG_DIAGNOSTIC
-        and (
-            len(diagnostics) == 1
-            or diagnostics[1].startswith(
-                base.PROCESS_INSPECTION_FAILURE_PREFIX
-            )
+        and all(
+            value.startswith(base.PROCESS_INSPECTION_FAILURE_PREFIX)
+            for value in diagnostics[1:]
         )
     )
     boundary_tick = attempt.get("render_dialog_dispatch_boundary_tick")
@@ -2671,16 +2668,14 @@ def validate_original_inconclusive_runtime(
         )
         if (
             isinstance(final_diagnostics, list)
-            and len(final_diagnostics) in (1, 2)
+            and 1 <= len(final_diagnostics) <= 3
             and all(isinstance(value, str) for value in final_diagnostics)
             and final_diagnostics[0].startswith(
                 OBSERVER_INITIALIZATION_FAILURE_PREFIX
             )
-            and (
-                len(final_diagnostics) == 1
-                or final_diagnostics[1].startswith(
-                    base.PROCESS_INSPECTION_FAILURE_PREFIX
-                )
+            and all(
+                value.startswith(base.PROCESS_INSPECTION_FAILURE_PREFIX)
+                for value in final_diagnostics[1:]
             )
         ):
             retained_diagnostics = []
@@ -2821,7 +2816,6 @@ def validate_original_inconclusive_runtime(
     attempt_diagnostics = attempt.get("diagnostics")
     if (
         isinstance(attempt_diagnostics, list)
-        and len(attempt_diagnostics) in (1, 2)
         and attempt_diagnostics
         and attempt_diagnostics[0] == PRECOMMAND_EXIT_DIAGNOSTIC
     ):
@@ -2834,6 +2828,24 @@ def validate_original_inconclusive_runtime(
             "binding_error": None,
             "diagnostics": attempt_diagnostics,
             "process_exit_code": attempt.get("process_exit_code"),
+            "observed_output": observed_binding,
+            "retained_renders": retained_renders,
+            "retained_render_analyses": retained_analyses,
+        }
+
+    if (
+        attempt.get("command_verified") is False
+        and attempt.get("command_dispatched") is False
+    ):
+        quarantine = base.validate_preverification_render_quarantine(attempt)
+        observed_binding = validate_original_observed_output(
+            original_root, attempt, len(attempts)
+        )
+        return {
+            "inconclusive_reason": quarantine["inconclusive_reason"],
+            "binding_error": None,
+            "diagnostics": quarantine["diagnostics"],
+            "process_exit_code": quarantine["process_exit_code"],
             "observed_output": observed_binding,
             "retained_renders": retained_renders,
             "retained_render_analyses": retained_analyses,
@@ -2889,6 +2901,13 @@ def validate_original_inconclusive_runtime(
             validate_original_no_event_render_dialog_failure(attempt)
             base.validate_presave_render_quarantine(attempt)
             inconclusive_reason = "render-dialog-event-not-observed"
+        elif any(
+            value == VANISHED_RENDER_DIALOG_DIAGNOSTIC
+            for value in diagnostics
+            if isinstance(value, str)
+        ):
+            presave = base.validate_presave_render_quarantine(attempt)
+            inconclusive_reason = presave["inconclusive_reason"]
         else:
             validate_original_ambiguous_event_binding(attempt)
             inconclusive_reason = (
