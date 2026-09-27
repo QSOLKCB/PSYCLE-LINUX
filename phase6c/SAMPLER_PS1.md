@@ -18,10 +18,11 @@ The baseline is mechanically frozen in:
 Original Psycle remains the authoritative compatibility target:
 
 - reference build: **Psycle 1.12.0 x86**
+- source repository: `jpaquim/psycle`
 - source commit: `7ac6d2c3553e2ee8dda55814d8e689919c345478`
-- `Sampler.cpp` Git blob:
+- `psycle/src/psycle/host/Sampler.cpp` Git blob:
   `6cc0bd7328d01131c3d41b68f4e5d4189959e364`
-- `Sampler.hpp` Git blob:
+- `psycle/src/psycle/host/Sampler.hpp` Git blob:
   `46da9fa80757b11ed146a21a529c70dbc6364f12`
 
 The frozen C++ candidate remains the imported Phase 6B r12005 family:
@@ -85,10 +86,10 @@ original and candidate execution is captured.
 Pinned original Psycle expresses PS1 extended `Cx` / `Dx` timing in fixed
 sixths of a **row**.
 
-The frozen candidate's retained source expresses the visible extended note-off
-calculation in sixths of a **tick**, while its `Dx` branch only special-cases a
-zero low nibble in `VoiceTick`; the nonzero note-delay assignment present in the
-pinned original source is not present there.
+The frozen candidate's retained source assigns both nonzero extended
+`Cx` note-off and `Dx` note-delay timing in sixths of a **tick**. The early
+`VoiceTick` branch special-cases `E-D0`, while the later note-initialization
+path assigns `_triggerNoteDelay` for nonzero `E-Dx`.
 
 C-Psycle's PS1 path uses row-based sixths.
 
