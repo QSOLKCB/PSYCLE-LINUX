@@ -948,7 +948,25 @@ def original_observation(candidate_root: Path, original_root: Path) -> dict:
             "load_result": receipt["load_result"],
         }
 
-    if outcome in {"reference-process-exited-during-render", "inconclusive"}:
+    if outcome == "inconclusive":
+        if runtime.get("deterministic") is not False or renders:
+            raise ValueError(
+                "inconclusive original pitch witness retained completed render evidence"
+            )
+        if attempts and not isinstance(attempts[-1], dict):
+            raise ValueError("inconclusive original pitch attempt is invalid")
+        last = attempts[-1] if attempts else {}
+        return {
+            "outcome": "inconclusive",
+            "deterministic": False,
+            "identity": identity,
+            "render_sha256s": [],
+            "load_result": receipt.get("load_result"),
+            "process_exit_code": last.get("process_exit_code"),
+            "diagnostics": last.get("diagnostics", []),
+        }
+
+    if outcome == "reference-process-exited-during-render":
         pre_render = runtime.get("pre_render_load")
         if (
             not isinstance(pre_render, dict)
