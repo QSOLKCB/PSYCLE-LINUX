@@ -209,12 +209,22 @@
       "subsystem": "Sampler",
       "contract": "Sampler PS1 behaviour",
       "status": "UNKNOWN",
-      "original": {},
-      "candidate": {},
-      "cpsycle": {
-        "reusable": true
+      "original": {
+        "reference_build": "Psycle 1.12.0 x86",
+        "source_commit": "7ac6d2c3553e2ee8dda55814d8e689919c345478",
+        "procedure": "fetch the exact pinned original Sampler.cpp and Sampler.hpp source blobs; verify Git blob identities; mechanically derive the PS1 command table, polyphony defaults, machine-state version and source markers for pitch/sample-rate basis, envelopes, normal-loop wrap, panning clamp and extended note timing; source semantics do not classify runtime parity",
+        "observation": "phase6c/evidence/sampler-ps1/source-contract.json"
       },
-      "notes": "Compare pitch, envelopes, looping and tracker commands."
+      "candidate": {
+        "snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+        "procedure": "verify the frozen r12005 sampler.cpp/sampler.h Git blobs and mechanically derive the same PS1 source-semantic fields; retain source differences as evidence targets without promoting them to behavioural verdicts",
+        "observation": "phase6c/evidence/sampler-ps1/source-contract.json"
+      },
+      "cpsycle": {
+        "evidence": "phase6c/evidence/sampler-ps1/source-contract.json",
+        "reusable": "shared-contract-support-only"
+      },
+      "notes": "Source-pinned baseline only; overall status remains UNKNOWN. Original and candidate share the classic PS1 command IDs and 16/8 max/default polyphony, but source generations differ: original Sampler state version 2 versus candidate version 1; original note pitch uses the sample's own rate/output rate while the candidate's older path uses 44100/output rate; original E-Cx/E-Dx timing is row/6 while the visible candidate E-Cx path uses tick/6 and its VoiceTick E-Dx branch does not retain the original nonzero delay assignment. These are prioritized runtime witnesses, not source-only DIFFERENT claims. See phase6c/SAMPLER_PS1.md."
     },
     {
       "id": "sampler-xmsampler",
