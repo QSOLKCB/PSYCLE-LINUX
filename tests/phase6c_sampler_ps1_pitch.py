@@ -31,8 +31,13 @@ pitch = load(
 )
 
 
+def zero_sound_squash(frames: int) -> bytes:
+    # Zero PCM produces a zero-error predictor stream: one 5-bit code per frame.
+    return b"\x01" + struct.pack("<I", frames) + bytes((frames * 5 + 7) // 8 + 4)
+
+
 def modern_sample_body(rate: int = 22050, frames: int = 11025) -> bytes:
-    packed = b"packed-identical-audio"
+    packed = zero_sound_squash(frames)
     body = bytearray()
     body += b"Phase 6C test\0"
     body += struct.pack("<IfH", frames, 1.0, 128)
@@ -81,11 +86,15 @@ def synthetic_psy3(rate: int = 22050) -> bytes:
 
 original_fixture = synthetic_psy3()
 candidate_fixture = compat.convert(original_fixture)
-info = compat.inspect_pair(original_fixture, candidate_fixture)
+candidate_pcm = compat.extract_pcm16le(original_fixture)
+info = compat.inspect_pair(original_fixture, candidate_fixture, candidate_pcm)
 assert info["authored_sample_rate"] == 22050
 assert info["authored_sample_frames"] == 11025
-assert info["pcm_payload_identity"] == "byte-identical-compressed-left-channel"
+assert info["pcm_payload_identity"] == "decoded-SMSB-pcm16le-identical-sidecar"
+assert info["pcm16le_bytes"] == 22050
+assert info["candidate_pre_injection_wave_state"] == "empty"
 assert info["candidate_modern_sample_chunk_removed"] is True
+assert candidate_pcm == bytes(22050)
 
 _original_prefix, original_chunks = compat.parse_chunks(original_fixture)
 _candidate_prefix, candidate_chunks = compat.parse_chunks(candidate_fixture)
@@ -99,20 +108,12 @@ except ValueError as exc:
 else:
     raise AssertionError("44.1-kHz sample must not satisfy non-44.1 witness")
 
-prefix, chunks = compat.parse_chunks(candidate_fixture)
-mutated = bytearray(prefix)
-for fourcc, version, payload in chunks:
-    if fourcc == b"INSD":
-        payload = payload.replace(
-            b"packed-identical-audio",
-            b"packed-different-audio",
-            1,
-        )
-    mutated += fourcc + struct.pack("<II", version, len(payload)) + payload
+mutated_pcm = bytearray(candidate_pcm)
+mutated_pcm[-1] ^= 1
 try:
-    compat.inspect_pair(original_fixture, bytes(mutated))
+    compat.inspect_pair(original_fixture, candidate_fixture, bytes(mutated_pcm))
 except ValueError as exc:
-    assert "PCM payloads differ" in str(exc)
+    assert "PCM sidecar differs" in str(exc)
 else:
     raise AssertionError("mismatched candidate/original PCM must fail")
 
@@ -153,10 +154,13 @@ candidate = {
             "engine_sequencer_sha256": "3" * 64,
             "engine_psy3_loader_sha256": "4" * 64,
             "engine_sampler_sha256": "5" * 64,
+            "engine_instrument_sha256": "6" * 64,
+            "compat_script_sha256": "7" * 64,
+            "fixture_generator_sha256": "8" * 64,
         },
     },
     "fixture_semantics": {
-        "pcm_payload_identity": "byte-identical-compressed-left-channel",
+        "pcm_payload_identity": "decoded-SMSB-pcm16le-identical-sidecar",
     },
     "runtime_pitch_observation": "fixed-44100-basis-compatible-duration",
     "renders": [
