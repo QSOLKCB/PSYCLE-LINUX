@@ -1028,7 +1028,8 @@ assert owner_index < root_index < child_filter_index < top_level_count_index
 assert observer_source.count(
     "RecordQualifiedObservedWindow(eventTime, true)"
 ) == 2
-assert "postDispatchObservedWindowEventCount > 1" in render_helper_source
+assert "postDispatchObservedWindowEventCount > 1" not in render_helper_source
+assert "postDispatchEventCount > 1" in render_helper_source
 
 pump_start = render_helper_source.index("private void Pump()")
 pump_end = render_helper_source.index(
