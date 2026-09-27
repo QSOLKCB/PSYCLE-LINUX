@@ -734,7 +734,12 @@ def validate_candidate(
 
 
 def validate_completed_render_attempt(
-    attempt: dict, expected_relative_path: str, expected_sha256: str, root: Path
+    attempt: dict,
+    expected_relative_path: str,
+    expected_sha256: str,
+    root: Path,
+    *,
+    allow_incomplete_dialog_teardown: bool = False,
 ) -> None:
     if not isinstance(attempt, dict):
         raise ValueError("original pitch render attempt is invalid")
@@ -752,7 +757,6 @@ def validate_completed_render_attempt(
         "controls_configured",
         "save_invoked",
         "close_control_seen",
-        "dialog_closed",
         "render_dialog_native_event_hook_armed",
         "render_dialog_event_message_pump_started",
         "render_dialog_dispatch_boundary_set",
@@ -760,6 +764,24 @@ def validate_completed_render_attempt(
     for field in required_true:
         if attempt.get(field) is not True:
             raise ValueError(f"original pitch render attempt lacks verified {field}")
+
+    dialog_closed = attempt.get("dialog_closed")
+    if dialog_closed is not True:
+        if not allow_incomplete_dialog_teardown or dialog_closed is not False:
+            raise ValueError(
+                "original pitch render attempt lacks verified dialog_closed"
+            )
+        if not any(
+            attempt.get(field) is True
+            for field in (
+                "close_uia_invoked",
+                "close_native_fallback_invoked",
+                "close_wm_close_invoked",
+            )
+        ):
+            raise ValueError(
+                "original pitch partial render lacks a verified close attempt"
+            )
 
     stable = attempt.get("stable_output_polls")
     if type(stable) is not int or stable < 4:
@@ -800,8 +822,15 @@ def validate_completed_render_attempt(
     ):
         raise ValueError("original pitch render dialog runtime identity is invalid")
     diagnostics = attempt.get("diagnostics")
-    if diagnostics != []:
-        raise ValueError("original pitch render attempt retained diagnostics")
+    if dialog_closed is True:
+        if diagnostics != []:
+            raise ValueError("original pitch render attempt retained diagnostics")
+    elif diagnostics != [
+        "render output finalized and Close control was verified, but dialog teardown did not complete"
+    ]:
+        raise ValueError(
+            "original pitch partial render retained unexpected diagnostics"
+        )
 
     expected_file = Path(expected_relative_path).name
     output = attempt.get("output")
@@ -819,6 +848,57 @@ def validate_completed_render_attempt(
     size = observed_output.get("size_bytes")
     if type(size) is not int or size != rendered.stat().st_size or size <= 44:
         raise ValueError("original pitch render observed-output size mismatch")
+
+
+def validate_retained_render_bindings(
+    renders: list,
+    attempts: list,
+    root: Path,
+    *,
+    allow_incomplete_last_teardown: bool,
+) -> list[str]:
+    if len(renders) > 2 or len(attempts) > 2 or len(renders) > len(attempts):
+        raise ValueError("original pitch retained render/attempt count is invalid")
+
+    hashes = []
+    for index, render in enumerate(renders, 1):
+        if not isinstance(render, dict):
+            raise ValueError("original pitch retained render binding is invalid")
+        expected = f"sampler-ps1-pitch/original-sampler-ps1-pitch-{index}.wav"
+        if render.get("path") != expected:
+            raise ValueError("original pitch retained render path changed")
+        path = child(root, expected)
+        if not path.is_file():
+            raise ValueError("original pitch retained render file is missing")
+        digest = sha256(path)
+        if render.get("sha256") != digest:
+            raise ValueError("original pitch retained render digest mismatch")
+
+        attempt = attempts[index - 1]
+        allow_partial = (
+            allow_incomplete_last_teardown
+            and index == len(attempts)
+            and isinstance(attempt, dict)
+            and attempt.get("dialog_closed") is False
+        )
+        validate_completed_render_attempt(
+            attempt,
+            expected,
+            digest,
+            root,
+            allow_incomplete_dialog_teardown=allow_partial,
+        )
+        hashes.append(digest)
+
+    for attempt in attempts[len(renders) :]:
+        if not isinstance(attempt, dict):
+            raise ValueError("original pitch trailing render attempt is invalid")
+        if attempt.get("outcome") == "rendered":
+            raise ValueError(
+                "original pitch completed attempt lacks a retained render binding"
+            )
+
+    return hashes
 
 
 def original_observation(candidate_root: Path, original_root: Path) -> dict:
@@ -959,18 +1039,22 @@ def original_observation(candidate_root: Path, original_root: Path) -> dict:
         }
 
     if outcome == "inconclusive":
-        if runtime.get("deterministic") is not False or renders:
+        if runtime.get("deterministic") is not False:
             raise ValueError(
-                "inconclusive original pitch witness retained completed render evidence"
+                "inconclusive original pitch witness claims deterministic evidence"
             )
-        if attempts and not isinstance(attempts[-1], dict):
-            raise ValueError("inconclusive original pitch attempt is invalid")
+        retained_hashes = validate_retained_render_bindings(
+            renders,
+            attempts,
+            original_root,
+            allow_incomplete_last_teardown=True,
+        )
         last = attempts[-1] if attempts else {}
         return {
             "outcome": "inconclusive",
             "deterministic": False,
             "identity": identity,
-            "render_sha256s": [],
+            "render_sha256s": retained_hashes,
             "load_result": receipt.get("load_result"),
             "process_exit_code": last.get("process_exit_code"),
             "diagnostics": last.get("diagnostics", []),
@@ -1014,6 +1098,12 @@ def original_observation(candidate_root: Path, original_root: Path) -> dict:
             raise ValueError(
                 "clean accepted original pitch witness has no retained render attempt"
             )
+        retained_hashes = validate_retained_render_bindings(
+            renders,
+            attempts,
+            original_root,
+            allow_incomplete_last_teardown=False,
+        )
         last = attempts[-1]
         if not isinstance(last, dict):
             raise ValueError("blocked original pitch attempt is invalid")
@@ -1098,11 +1188,7 @@ def original_observation(candidate_root: Path, original_root: Path) -> dict:
             "outcome": outcome,
             "deterministic": False,
             "identity": identity,
-            "render_sha256s": [
-                render.get("sha256")
-                for render in renders
-                if isinstance(render, dict) and isinstance(render.get("sha256"), str)
-            ],
+            "render_sha256s": retained_hashes,
             "load_result": receipt.get("load_result"),
             "process_exit_code": last.get("process_exit_code"),
             "diagnostics": last.get("diagnostics", []),
