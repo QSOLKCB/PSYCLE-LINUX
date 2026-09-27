@@ -206,7 +206,6 @@ if m.OBSERVATION_PATH.is_file():
 
     evidence_root = m.OBSERVATION_PATH.parent
     manifest_path = evidence_root / "canonical-raw-manifest.json"
-    archive_path = evidence_root / "canonical-raw.tar.gz.b64"
     manifest = m.read_json(manifest_path)
     temporary, archive_root = m.materialize_durable_evidence(
         evidence_root, manifest
@@ -221,8 +220,8 @@ if m.OBSERVATION_PATH.is_file():
 
     bad_manifest = copy.deepcopy(manifest)
     bad_manifest["candidate_artifact"]["id"] += 1
-    temporary, archive_root = m.materialize_durable_archive(
-        archive_path, manifest
+    temporary, archive_root = m.materialize_durable_evidence(
+        evidence_root, manifest
     )
     try:
         expect_value_error(
