@@ -96,13 +96,46 @@ with tempfile.TemporaryDirectory() as temporary:
         handle.setnchannels(1)
         handle.setsampwidth(2)
         handle.setframerate(timing.OUTPUT_RATE)
-        handle.writeframes(b"\x00\x00" * 256)
+        handle.writeframes(b"\x00\x00" * timing.RENDER_FRAMES)
     analysis = timing.analyze_timing_wave(silent_wav)
     assert analysis["audio_active"] is False
     assert analysis["first_active_frame"] is None
     assert analysis["last_active_frame"] is None
     assert analysis["active_frame_count"] == 0
     assert analysis["active_span_frames"] == 0
+
+    short_wav = Path(temporary) / "short.wav"
+    with wave.open(str(short_wav), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(timing.OUTPUT_RATE)
+        handle.writeframes(b"\x00\x00" * (timing.RENDER_FRAMES - 1))
+    try:
+        timing.analyze_timing_wave(short_wav)
+    except ValueError as exc:
+        assert "shorter than the complete fixture interval" in str(exc)
+    else:
+        raise AssertionError("truncated full-song timing render must fail")
+
+    fake_probe = Path(temporary) / "fake-probe"
+    fake_probe.write_text("#!/usr/bin/env python3\nprint('{}')\n", encoding="utf-8")
+    fake_probe.chmod(0o755)
+    try:
+        timing.verify_probe_executable(fake_probe)
+    except ValueError as exc:
+        assert "audited ELF build" in str(exc)
+    else:
+        raise AssertionError("non-audited timing probe executable must fail")
+
+cpp_source = (ROOT / "tests/phase6c_sampler_ps1_extended_timing.cpp").read_text(
+    encoding="utf-8"
+)
+assert timing.PROBE_IDENTITY in cpp_source
+assert timing.BOUNDARY_TOLERANCES_FRAMES == {"delay": 4, "noteoff": 6}
+assert timing.BOUNDARY_FIELDS == {
+    "delay": "first_active_frame",
+    "noteoff": "last_active_frame",
+}
 
 archive = ROOT / "phase6c/evidence/sampler-ps1/pitch-hosted"
 manifest = json.loads((archive / "raw-manifest.json").read_text(encoding="utf-8"))
