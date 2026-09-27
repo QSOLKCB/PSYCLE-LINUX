@@ -53,6 +53,20 @@ def read_json(path: Path) -> dict:
     return value
 
 
+def exact_equal(actual: object, expected: object) -> bool:
+    if type(actual) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        return actual.keys() == expected.keys() and all(
+            exact_equal(actual[key], value) for key, value in expected.items()
+        )
+    if isinstance(expected, list):
+        return len(actual) == len(expected) and all(
+            exact_equal(left, right) for left, right in zip(actual, expected)
+        )
+    return actual == expected
+
+
 def expected_renderer_provenance() -> dict:
     sources = {
         "renderer_source_sha256": ROOT / "tests/phase6c_sampler_ps1_pitch_render.cpp",
@@ -82,7 +96,7 @@ def validate_renderer_provenance(root: Path) -> dict:
         raise ValueError("candidate compiled-renderer provenance is missing")
     attestation = read_json(path)
     expected = expected_renderer_provenance()
-    if attestation != expected:
+    if not exact_equal(attestation, expected):
         raise ValueError(
             "candidate compiled-renderer provenance does not match checked-out "
             "renderer/engine sources"
@@ -238,27 +252,33 @@ def validate_candidate(root: Path, value: dict | None = None) -> dict:
         if value.get(key) != expected or type(value.get(key)) is not type(expected):
             raise ValueError(f"candidate pitch receipt identity changed: {key}")
     provenance = validate_renderer_provenance(root)
-    if value.get("renderer_provenance") != provenance:
+    if not exact_equal(value.get("renderer_provenance"), provenance):
         raise ValueError("candidate renderer provenance binding changed")
     original_fixture, candidate_fixture, info = require_fixture_pair(root)
     if value.get("fixture_sha256") != sha256(original_fixture):
         raise ValueError("original-generation pitch fixture digest mismatch")
     if value.get("candidate_fixture_sha256") != sha256(candidate_fixture):
         raise ValueError("candidate-generation pitch fixture digest mismatch")
-    if value.get("fixture_semantics") != info:
+    if not exact_equal(value.get("fixture_semantics"), info):
         raise ValueError("candidate pitch fixture-pair semantics changed")
-    if value.get("authored_sample") != {
-        "sample_rate": AUTHORED_SAMPLE_RATE,
-        "frames": AUTHORED_SAMPLE_FRAMES,
-        "note": NOTE,
-    }:
+    if not exact_equal(
+        value.get("authored_sample"),
+        {
+            "sample_rate": AUTHORED_SAMPLE_RATE,
+            "frames": AUTHORED_SAMPLE_FRAMES,
+            "note": NOTE,
+        },
+    ):
         raise ValueError("candidate authored-sample identity changed")
-    if value.get("render_settings") != {
-        "sample_rate": OUTPUT_RATE,
-        "bits_per_sample": 16,
-        "channels": "mono-mix",
-        "dither": False,
-    }:
+    if not exact_equal(
+        value.get("render_settings"),
+        {
+            "sample_rate": OUTPUT_RATE,
+            "bits_per_sample": 16,
+            "channels": "mono-mix",
+            "dither": False,
+        },
+    ):
         raise ValueError("candidate render settings changed")
     renders = value.get("renders")
     if not isinstance(renders, list) or len(renders) != 2:
@@ -274,7 +294,7 @@ def validate_candidate(root: Path, value: dict | None = None) -> dict:
         if render.get("sha256") != sha256(path):
             raise ValueError("candidate pitch render digest mismatch")
         analysis = analyze_wave(path)
-        if render.get("analysis") != analysis:
+        if not exact_equal(render.get("analysis"), analysis):
             raise ValueError("candidate pitch render analysis mismatch")
         validated.append((render["sha256"], analysis))
     if validated[0] != validated[1]:
@@ -290,7 +310,11 @@ def validate_completed_render_attempt(
 ) -> None:
     if not isinstance(attempt, dict):
         raise ValueError("original pitch render attempt is invalid")
-    if attempt.get("schema_version") != 1 or attempt.get("outcome") != "rendered":
+    if (
+        type(attempt.get("schema_version")) is not int
+        or attempt.get("schema_version") != 1
+        or attempt.get("outcome") != "rendered"
+    ):
         raise ValueError("original pitch render attempt did not complete as rendered")
 
     required_true = (
@@ -316,7 +340,8 @@ def validate_completed_render_attempt(
         raise ValueError("original pitch render attempt exited the reference process")
     if attempt.get("process_exit_code") is not None:
         raise ValueError("original pitch completed render retained an exit code")
-    if attempt.get("preexisting_render_dialog_count") != 0:
+    preexisting = attempt.get("preexisting_render_dialog_count")
+    if type(preexisting) is not int or preexisting != 0:
         raise ValueError("original pitch render started with a preexisting render dialog")
     if attempt.get("dialog_discovery") != (
         "pumped-win-event-object-show-strictly-after-dispatch-tick"
@@ -326,7 +351,12 @@ def validate_completed_render_attempt(
     post_dispatch = attempt.get("render_dialog_post_dispatch_event_count")
     observed = attempt.get("render_dialog_post_dispatch_observed_window_event_count")
     unresolved = attempt.get("render_dialog_unresolved_post_dispatch_event_count")
-    if post_dispatch != 1 or unresolved != 0:
+    if (
+        type(post_dispatch) is not int
+        or post_dispatch != 1
+        or type(unresolved) is not int
+        or unresolved != 0
+    ):
         raise ValueError("original pitch render dialog event attribution is ambiguous")
     if type(observed) is not int or observed < 1:
         raise ValueError("original pitch render lacks a post-dispatch window event")
@@ -398,15 +428,22 @@ def original_observation(candidate_root: Path, original_root: Path) -> dict:
     }
 
     runtime = receipt.get("runtime_execution")
-    if not isinstance(runtime, dict) or runtime.get("schema_version") != 1:
+    if (
+        not isinstance(runtime, dict)
+        or type(runtime.get("schema_version")) is not int
+        or runtime.get("schema_version") != 1
+    ):
         raise ValueError("original pitch runtime observation is missing")
-    if runtime.get("settings") != {
-        "sample_rate": OUTPUT_RATE,
-        "bits_per_sample": 16,
-        "channels": "mono-mix",
-        "dither": False,
-        "range": "entire-song",
-    }:
+    if not exact_equal(
+        runtime.get("settings"),
+        {
+            "sample_rate": OUTPUT_RATE,
+            "bits_per_sample": 16,
+            "channels": "mono-mix",
+            "dither": False,
+            "range": "entire-song",
+        },
+    ):
         raise ValueError("original pitch render settings changed")
 
     outcome = runtime.get("outcome")
@@ -430,7 +467,11 @@ def original_observation(candidate_root: Path, original_root: Path) -> dict:
             raise ValueError("completed original pitch witness lacks the reference window")
 
         pre_render = runtime.get("pre_render_load")
-        if not isinstance(pre_render, dict) or pre_render.get("schema_version") != 1:
+        if (
+            not isinstance(pre_render, dict)
+            or type(pre_render.get("schema_version")) is not int
+            or pre_render.get("schema_version") != 1
+        ):
             raise ValueError("completed original pitch witness lacks pre-render load evidence")
         if pre_render.get("clean_accepted_load") is not True:
             raise ValueError("completed original pitch witness lacks clean accepted-load evidence")
