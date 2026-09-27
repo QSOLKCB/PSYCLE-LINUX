@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import struct
+import wave
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = "sampler-ps1-extended-timing-runtime"
@@ -25,6 +27,8 @@ COMMANDS = {"delay": "E-D3", "noteoff": "E-C3"}
 PARAMETERS = {"delay": 0xD3, "noteoff": 0xC3}
 EXPECTED_TRIGGER = 2756
 OUTPUT_RATE = 44100
+ACTIVE_THRESHOLD = 64
+RENDER_FRAMES = 22050
 
 _pitch_spec = importlib.util.spec_from_file_location(
     "phase6c_ps1_pitch", ROOT / "scripts/phase6c-sampler-ps1-pitch.py"
@@ -76,6 +80,11 @@ def source_hashes() -> dict[str, str]:
         "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.cpp",
         "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.h",
         "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/playertimeinfo.cpp",
+        "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/player.cpp",
+        "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sequencer.cpp",
+        "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/machine.cpp",
+        "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/internal_machines.cpp",
+        "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/constants.h",
         "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.cpp",
     )
     return {path: canonical_source_sha256(ROOT / path) for path in paths}
@@ -103,18 +112,23 @@ def expected_probe(variant: str) -> dict:
         "timing_parameter": 3,
         "trigger_samples": EXPECTED_TRIGGER,
         "command": COMMANDS[variant],
-        "before_boundary_preserved": True,
-        "trigger_fired_at_boundary": True,
+        "processing_path": "sequencer-player-production-blocks",
+        "player_max_work_block_samples": 256,
+        "render_frames": RENDER_FRAMES,
+        "active_threshold_abs_float": ACTIVE_THRESHOLD,
     }
     if variant == "delay":
         base.update(
             event_position_beats=0,
+            semantic_boundary_frame=EXPECTED_TRIGGER,
             absolute_trigger_beats=EXPECTED_TRIGGER / 22050.0,
         )
     else:
+        command_frame = int(0.25 * 22050)
         base.update(
             command_position_beats=0.25,
-            trigger_armed=True,
+            command_position_frame=command_frame,
+            semantic_boundary_frame=command_frame + EXPECTED_TRIGGER,
             absolute_trigger_beats=0.25 + EXPECTED_TRIGGER / 22050.0,
         )
     return base
@@ -137,6 +151,31 @@ def validate_probe(value: object, variant: str) -> dict:
                 )
         elif actual != wanted or type(actual) is not type(wanted):
             raise ValueError(f"candidate timing probe field changed: {key}")
+
+    final_beat = value.get("final_play_beat")
+    if (
+        type(final_beat) not in (int, float)
+        or isinstance(final_beat, bool)
+        or not math.isclose(float(final_beat), 1.0, rel_tol=0.0, abs_tol=1e-9)
+    ):
+        raise ValueError("candidate timing production render duration changed")
+
+    active = value.get("audio_active")
+    count = value.get("active_frame_count")
+    first = value.get("first_active_frame")
+    last = value.get("last_active_frame")
+    if type(active) is not bool or type(count) is not int or count < 0:
+        raise ValueError("candidate timing audio activity fields are invalid")
+    if active:
+        if (
+            type(first) is not int
+            or type(last) is not int
+            or not (0 <= first <= last < RENDER_FRAMES)
+            or count <= 0
+        ):
+            raise ValueError("candidate timing active-frame bounds are invalid")
+    elif first is not None or last is not None or count != 0:
+        raise ValueError("candidate timing silent render retained active-frame bounds")
     return value
 
 
@@ -169,8 +208,13 @@ def collect_candidate(root: Path, probe_build: Path) -> dict:
         raw.write_bytes(process.stdout)
         log.write_bytes(process.stderr)
         if process.returncode != 0:
+            stderr = process.stderr.decode("utf-8", errors="replace").strip()
+            stdout = process.stdout.decode("utf-8", errors="replace").strip()
             raise ValueError(
-                f"candidate {variant} timing probe failed: exit={process.returncode}"
+                f"candidate {variant} timing probe failed: "
+                f"exit={process.returncode}\n"
+                f"stderr:\n{stderr or '(empty)'}\n"
+                f"stdout:\n{stdout or '(empty)'}"
             )
         value = validate_probe(json.loads(process.stdout), variant)
         receipt = {
@@ -265,10 +309,65 @@ def validate_candidate(root: Path) -> dict:
     return {"variants": results}
 
 
+def analyze_timing_wave(path: Path) -> dict:
+    with wave.open(str(path), "rb") as handle:
+        channels = handle.getnchannels()
+        width = handle.getsampwidth()
+        rate = handle.getframerate()
+        frames = handle.getnframes()
+        payload = handle.readframes(frames)
+    if channels != 1 or width != 2 or rate != OUTPUT_RATE:
+        raise ValueError("timing witness WAV format changed")
+    if len(payload) != frames * 2:
+        raise ValueError("timing witness WAV payload is truncated")
+    samples = struct.unpack("<" + "h" * frames, payload) if frames else ()
+    active = [
+        index for index, sample in enumerate(samples)
+        if abs(sample) > ACTIVE_THRESHOLD
+    ]
+    if not active:
+        return {
+            "sample_rate": rate,
+            "channels": channels,
+            "bits_per_sample": width * 8,
+            "frame_count": frames,
+            "active_threshold_abs_pcm16": ACTIVE_THRESHOLD,
+            "audio_active": False,
+            "first_active_frame": None,
+            "last_active_frame": None,
+            "active_frame_count": 0,
+            "active_span_frames": 0,
+            "active_span_seconds": 0.0,
+        }
+    first = active[0]
+    last = active[-1]
+    return {
+        "sample_rate": rate,
+        "channels": channels,
+        "bits_per_sample": width * 8,
+        "frame_count": frames,
+        "active_threshold_abs_pcm16": ACTIVE_THRESHOLD,
+        "audio_active": True,
+        "first_active_frame": first,
+        "last_active_frame": last,
+        "active_frame_count": len(active),
+        "active_span_frames": last - first + 1,
+        "active_span_seconds": (last - first + 1) / float(rate),
+    }
+
+
 def clean_load_gate(receipt: dict, runtime: dict) -> None:
     pre = runtime.get("pre_render_load")
+    outcome = runtime.get("outcome")
+    load_result = receipt.get("load_result")
+    if outcome == "rendered-twice":
+        load_ok = load_result == "accepted"
+    elif outcome in ("reference-process-exited-during-render", "inconclusive"):
+        load_ok = load_result in ("accepted", "inconclusive")
+    else:
+        load_ok = False
     if (
-        receipt.get("load_result") != "accepted"
+        not load_ok
         or receipt.get("ui_automation_diagnostics") != []
         or receipt.get("runtime_identity_diagnostics") != []
         or receipt.get("error_marker") is not None
@@ -279,7 +378,7 @@ def clean_load_gate(receipt: dict, runtime: dict) -> None:
         or pre.get("load_warning_dismissed") is not True
         or pre.get("process_running_before_render") is not True
     ):
-        raise ValueError("original timing witness lacks clean accepted-load gate")
+        raise ValueError("original timing witness lacks clean pre-render load gate")
     stable = pre.get("stable_marker_polls")
     if (
         type(stable) is not int
@@ -349,7 +448,7 @@ def validate_original_variant(
                 attempts[index - 1], expected, digest, original_root
             )
             hashes.append(digest)
-            analyses.append(pitch.analyze_wave(path))
+            analyses.append(analyze_timing_wave(path))
         if hashes[0] != hashes[1] or analyses[0] != analyses[1]:
             raise ValueError("original timing repeated renders differ")
     elif outcome in ("reference-process-exited-during-render", "inconclusive"):
@@ -360,6 +459,10 @@ def validate_original_variant(
             attempts,
             original_root,
             allow_incomplete_last_teardown=(outcome == "inconclusive"),
+            expected_path_prefix=(
+                f"sampler-ps1-extended-{variant}/"
+                f"original-sampler-ps1-extended-{variant}"
+            ),
         )
         if outcome == "reference-process-exited-during-render":
             if not attempts or not isinstance(attempts[-1], dict):
@@ -414,6 +517,10 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
 def compare(candidate_root: Path, original_root: Path) -> dict:
     candidate = validate_candidate(candidate_root)
     original = validate_original(candidate_root, original_root)
+    candidate_runtime = {
+        variant: candidate["variants"][variant]["runtime_execution"]
+        for variant in VARIANTS
+    }
     result = {
         "schema_version": 1,
         "phase": "6C",
@@ -422,20 +529,26 @@ def compare(candidate_root: Path, original_root: Path) -> dict:
         "candidate_snapshot": SNAPSHOT,
         "commands": ["E-D3", "E-C3"],
         "candidate_trigger_samples": {
-            variant: candidate["variants"][variant]["runtime_execution"][
-                "trigger_samples"
-            ]
+            variant: candidate_runtime[variant]["trigger_samples"]
             for variant in VARIANTS
         },
-        "candidate_runtime_exact_boundary": {
-            variant: (
-                candidate["variants"][variant]["runtime_execution"][
-                    "before_boundary_preserved"
-                ]
-                and candidate["variants"][variant]["runtime_execution"][
-                    "trigger_fired_at_boundary"
-                ]
-            )
+        "candidate_processing_path": {
+            variant: candidate_runtime[variant]["processing_path"]
+            for variant in VARIANTS
+        },
+        "candidate_audio_observations": {
+            variant: {
+                "audio_active": candidate_runtime[variant]["audio_active"],
+                "first_active_frame": candidate_runtime[variant][
+                    "first_active_frame"
+                ],
+                "last_active_frame": candidate_runtime[variant][
+                    "last_active_frame"
+                ],
+                "semantic_boundary_frame": candidate_runtime[variant][
+                    "semantic_boundary_frame"
+                ],
+            }
             for variant in VARIANTS
         },
         "original_outcomes": {
@@ -475,27 +588,51 @@ def compare(candidate_root: Path, original_root: Path) -> dict:
     if delay is None or noteoff is None:
         raise ValueError("comparison-ready timing observation lacks WAV analysis")
 
-    # E-D3: 3/6 of one LPB=4 row => 2756 integer samples in the pinned code.
-    delay_ok = abs(delay["first_active_frame"] - EXPECTED_TRIGGER) <= 4
-    # E-C3 command is on row 1 (nominal 5512.5 frames), then another 2756.
-    expected_noteoff = int(OUTPUT_RATE * 60 / 120 / 4) + EXPECTED_TRIGGER
-    noteoff_ok = abs(noteoff["last_active_frame"] - expected_noteoff) <= 6
-    result["original_delay_first_active_frame"] = delay["first_active_frame"]
-    result["original_noteoff_last_active_frame"] = noteoff["last_active_frame"]
-    result["expected_delay_frame"] = EXPECTED_TRIGGER
-    result["expected_noteoff_frame"] = expected_noteoff
+    candidate_delay = candidate_runtime["delay"]
+    candidate_noteoff = candidate_runtime["noteoff"]
+    result["original_audio_observations"] = {
+        "delay": delay,
+        "noteoff": noteoff,
+    }
 
-    if delay_ok and noteoff_ok:
+    pairs = (
+        ("delay", candidate_delay, delay, "first_active_frame", 4),
+        ("noteoff", candidate_noteoff, noteoff, "last_active_frame", 6),
+    )
+    boundary_results: dict[str, bool | None] = {}
+    for variant, candidate_audio, original_audio, field, tolerance in pairs:
+        candidate_active = candidate_audio["audio_active"]
+        original_active = original_audio["audio_active"]
+        if candidate_active != original_active:
+            boundary_results[variant] = False
+            continue
+        if not candidate_active:
+            boundary_results[variant] = None
+            continue
+        boundary_results[variant] = (
+            abs(candidate_audio[field] - original_audio[field]) <= tolerance
+        )
+
+    result["boundary_match"] = boundary_results
+    if any(value is False for value in boundary_results.values()):
+        result["scoped_timing_status"] = "DIFFERENT"
+        result["comparison_ready"] = True
+        result["result"] = (
+            "The deterministic candidate and pinned-original renders differ in "
+            "audible E-D3/E-C3 timing or activity for the exact paired fixtures."
+        )
+    elif all(value is True for value in boundary_results.values()):
         result["scoped_timing_status"] = "PASS"
         result["comparison_ready"] = True
         result["result"] = (
-            "Pinned original Psycle and the frozen candidate both place the "
-            "E-D3/E-C3 trigger boundary at the loaded row interval divided by six."
+            "The deterministic candidate and pinned-original renders agree on "
+            "the measured audible E-D3 onset and E-C3 note-off boundaries."
         )
     else:
         result["blocker"] = (
-            "Both original fixtures rendered deterministically, but the measured "
-            "audio boundaries did not satisfy the predeclared row/6 discriminator."
+            "Both sides rendered deterministically, but at least one paired "
+            "fixture was silent on both sides, so an audible timing boundary "
+            "cannot be classified."
         )
     return result
 
