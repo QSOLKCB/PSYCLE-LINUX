@@ -515,7 +515,17 @@ def validate_process_exit_runtime(
         completed_hashes.append(digest(data))
 
     attempt_number = len(attempts)
-    attempt = validate_render_attempt(attempts[-1], "inconclusive")
+    raw_attempt = attempts[-1]
+    diagnostics, sealing_failure = validate_process_exit_diagnostics(raw_attempt)
+    if sealing_failure:
+        sealing_quarantine = validate_postsave_process_exit_sealing_quarantine(
+            raw_attempt
+        )
+        attempt = raw_attempt
+        binding_error = sealing_quarantine["binding_error"]
+    else:
+        attempt = validate_render_attempt(raw_attempt, "inconclusive")
+        binding_error = None
     if attempt.get("process_exited") is not True:
         raise ValueError("render process-exit outcome lacks process-exit evidence")
     if attempt.get("output") is not None:
@@ -527,10 +537,6 @@ def validate_process_exit_runtime(
         or receipt.get("exit_code_before_termination") != exit_code
     ):
         raise ValueError("render process-exit code is missing or inconsistent")
-    diagnostics = attempt.get("diagnostics")
-    if diagnostics != ["reference exited during offline render"]:
-        raise ValueError("render process-exit diagnostic is unexpected")
-
     expected_output = (
         "delayed-retrigger-execution/"
         f"original-delayed-retrigger-execution-{attempt_number}.wav"
@@ -553,6 +559,8 @@ def validate_process_exit_runtime(
         "completed_render_sha256": completed_hashes,
         "process_exit_code": exit_code,
         "observed_output": observed_output,
+        "diagnostics": diagnostics,
+        "binding_error": binding_error,
     }
 
 
@@ -564,6 +572,8 @@ PROCESS_INSPECTION_FAILURE_PREFIX = (
     "could not inspect reference process after render attempt:"
 )
 PRECOMMAND_EXIT_DIAGNOSTIC = "reference exited before offline render observation"
+COMMAND_DISPATCH_FAILURE_DIAGNOSTIC = "verified Render as Wav command dispatch failed"
+PROCESS_EXIT_DIAGNOSTIC = "reference exited during offline render"
 
 
 def has_diagnostic_prefix(attempt: object, prefix: str) -> bool:
@@ -630,6 +640,163 @@ def validate_preverification_render_quarantine(attempt: object) -> dict:
         "diagnostics": diagnostics,
         "process_exit_code": exit_code,
         "observed_output": None,
+    }
+
+
+def validate_postverification_predispatch_quarantine(attempt: object) -> dict:
+    if not isinstance(attempt, dict):
+        raise ValueError(
+            "post-verification pre-dispatch quarantine attempt is not an object"
+        )
+    diagnostics = attempt.get("diagnostics")
+    exit_code = attempt.get("process_exit_code")
+    process_state_valid = (
+        (attempt.get("process_exited") is False and exit_code is None)
+        or (
+            attempt.get("process_exited") is True
+            and isinstance(exit_code, int)
+            and not isinstance(exit_code, bool)
+        )
+    )
+    preexisting_count = attempt.get("preexisting_render_dialog_count")
+    diagnostics_valid = (
+        isinstance(diagnostics, list)
+        and 1 <= len(diagnostics) <= 4
+        and all(isinstance(value, str) for value in diagnostics)
+        and diagnostics[0] == COMMAND_DISPATCH_FAILURE_DIAGNOSTIC
+        and all(
+            value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+            or value.startswith(PROCESS_INSPECTION_FAILURE_PREFIX)
+            for value in diagnostics[1:]
+        )
+        and sum(
+            value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+            for value in diagnostics[1:]
+        )
+        <= 1
+        and sum(
+            value.startswith(PROCESS_INSPECTION_FAILURE_PREFIX)
+            for value in diagnostics[1:]
+        )
+        <= 2
+    )
+    if (
+        attempt.get("outcome") != "inconclusive"
+        or attempt.get("command_verified") is not True
+        or attempt.get("command_dispatched") is not False
+        or attempt.get("dialog_verified") is not False
+        or attempt.get("controls_configured") is not False
+        or attempt.get("save_invoked") is not False
+        or attempt.get("render_dialog_native_event_hook_armed") is not True
+        or attempt.get("render_dialog_event_message_pump_started") is not True
+        or attempt.get("render_dialog_dispatch_boundary_set") is not False
+        or attempt.get("render_dialog_dispatch_boundary_tick") is not None
+        or not isinstance(preexisting_count, int)
+        or isinstance(preexisting_count, bool)
+        or preexisting_count < 0
+        or attempt.get("render_dialog_post_dispatch_observed_window_event_count") != 0
+        or attempt.get("render_dialog_unresolved_post_dispatch_event_count") != 0
+        or attempt.get("render_dialog_post_dispatch_event_count") != 0
+        or attempt.get("selected_render_dialog_native_handle") is not None
+        or attempt.get("selected_render_dialog_runtime_id") != []
+        or attempt.get("dialog_discovery") is not None
+        or attempt.get("output") is not None
+        or attempt.get("observed_output") is not None
+        or not process_state_valid
+        or not diagnostics_valid
+    ):
+        raise ValueError(
+            "post-verification pre-dispatch quarantine shape is invalid"
+        )
+    return {
+        "inconclusive_reason": "render-command-dispatch-failure",
+        "completed_renders": [],
+        "completed_render_analyses": [],
+        "binding_error": None,
+        "diagnostics": diagnostics,
+        "process_exit_code": exit_code,
+        "observed_output": None,
+    }
+
+
+def validate_process_exit_diagnostics(attempt: object) -> tuple[list[str], bool]:
+    if not isinstance(attempt, dict):
+        raise ValueError("render process-exit attempt is not an object")
+    diagnostics = attempt.get("diagnostics")
+    if (
+        not isinstance(diagnostics, list)
+        or not 1 <= len(diagnostics) <= 4
+        or any(not isinstance(value, str) for value in diagnostics)
+        or diagnostics[0] != PROCESS_EXIT_DIAGNOSTIC
+    ):
+        raise ValueError("render process-exit diagnostic is unexpected")
+    suffix = diagnostics[1:]
+    sealing = [
+        value
+        for value in suffix
+        if value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
+    ]
+    inspection = [
+        value
+        for value in suffix
+        if value.startswith(PROCESS_INSPECTION_FAILURE_PREFIX)
+    ]
+    if (
+        len(sealing) > 1
+        or len(inspection) > 2
+        or len(sealing) + len(inspection) != len(suffix)
+    ):
+        raise ValueError("render process-exit diagnostic is unexpected")
+    return diagnostics, bool(sealing)
+
+
+def validate_postsave_process_exit_sealing_quarantine(attempt: object) -> dict:
+    diagnostics, sealing_failure = validate_process_exit_diagnostics(attempt)
+    exit_code = attempt.get("process_exit_code") if isinstance(attempt, dict) else None
+    tick = attempt.get("render_dialog_dispatch_boundary_tick")
+    preexisting_count = attempt.get("preexisting_render_dialog_count")
+    handle = attempt.get("selected_render_dialog_native_handle")
+    runtime_id = attempt.get("selected_render_dialog_runtime_id")
+    if (
+        not sealing_failure
+        or attempt.get("outcome") != "inconclusive"
+        or attempt.get("command_verified") is not True
+        or attempt.get("command_dispatched") is not True
+        or attempt.get("dialog_verified") is not True
+        or attempt.get("controls_configured") is not True
+        or attempt.get("save_invoked") is not True
+        or attempt.get("render_dialog_native_event_hook_armed") is not True
+        or attempt.get("render_dialog_event_message_pump_started") is not True
+        or attempt.get("render_dialog_dispatch_boundary_set") is not True
+        or not isinstance(tick, int)
+        or isinstance(tick, bool)
+        or not 0 <= tick <= 0xFFFFFFFF
+        or not isinstance(preexisting_count, int)
+        or isinstance(preexisting_count, bool)
+        or preexisting_count < 0
+        or attempt.get("dialog_discovery")
+        != "pumped-win-event-object-show-strictly-after-dispatch-tick"
+        or not isinstance(handle, int)
+        or isinstance(handle, bool)
+        or handle <= 0
+        or not isinstance(runtime_id, list)
+        or not runtime_id
+        or any(type(value) is not int for value in runtime_id)
+        or attempt.get("process_exited") is not True
+        or not isinstance(exit_code, int)
+        or isinstance(exit_code, bool)
+        or attempt.get("output") is not None
+    ):
+        raise ValueError(
+            "post-Save process-exit observer-sealing quarantine shape is invalid"
+        )
+    return {
+        "inconclusive_reason": "post-save-process-exit-observer-sealing-failure",
+        "diagnostics": diagnostics,
+        "process_exit_code": exit_code,
+        "binding_error": (
+            "render-dialog observer sealing failed after Save Wave process exit"
+        ),
     }
 
 
@@ -1025,6 +1192,32 @@ def validate_inconclusive_runtime(
         )
         return quarantine
 
+    if (
+        attempt.get("command_verified") is True
+        and attempt.get("command_dispatched") is False
+    ):
+        quarantine = validate_postverification_predispatch_quarantine(attempt)
+        expected_name = f"original-delayed-retrigger-execution-{attempt_number}.wav"
+        expected_path = child(
+            original_root, "delayed-retrigger-execution/" + expected_name
+        )
+        if expected_path.exists():
+            raise ValueError("command-dispatch failure created unbound output")
+        if (
+            quarantine["process_exit_code"] is not None
+            and receipt.get("exit_code_before_termination")
+            != quarantine["process_exit_code"]
+        ):
+            raise ValueError(
+                "command-dispatch failure process-exit code is inconsistent"
+            )
+        quarantine["completed_renders"] = completed
+        quarantine["completed_render_analyses"] = completed_analyses
+        quarantine["diagnostics"] = (
+            completed_diagnostics + quarantine["diagnostics"]
+        )
+        return quarantine
+
     for key in ("command_verified", "command_dispatched"):
         if attempt.get(key) is not True:
             raise ValueError(
@@ -1232,6 +1425,13 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             "completed_render_sha256": exit_evidence["completed_render_sha256"],
             "process_exit_code": exit_evidence["process_exit_code"],
             "observed_output": exit_evidence["observed_output"],
+            "diagnostics": exit_evidence["diagnostics"],
+            "fresh_render_event_binding": (
+                "rejected"
+                if exit_evidence["binding_error"] is not None
+                else "accepted"
+            ),
+            "fresh_render_event_binding_error": exit_evidence["binding_error"],
             "interpretation_boundary": (
                 "the exact fixture reached the clean accepted-load gate and each "
                 "completed render attempt is hash-bound; the final source-pinned "
@@ -1268,6 +1468,7 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
                     "render-observer-initialization-failure",
                     "process-exit-before-render-command-verification",
                     "pre-command-verification-failure",
+                    "render-command-dispatch-failure",
                 }
                 else (
                     "accepted"
