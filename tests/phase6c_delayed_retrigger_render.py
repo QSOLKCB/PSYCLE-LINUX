@@ -194,6 +194,63 @@ assert predispatch_exit["inconclusive_reason"] == (
 )
 assert predispatch_exit["process_exit_code"] == -1073741819
 
+predispatch_with_two_inspections = {
+    **predispatch_observer_failure,
+    "diagnostics": [
+        "could not initialize render-dialog observer: synthetic hook failure",
+        module.PROCESS_INSPECTION_FAILURE_PREFIX + " helper refresh failure",
+        module.PROCESS_INSPECTION_FAILURE_PREFIX + " outer refresh failure",
+    ],
+}
+predispatch_double_inspection = module.validate_inconclusive_runtime(
+    Path("."),
+    {},
+    {"deterministic": False, "renders": []},
+    [predispatch_with_two_inspections],
+)
+assert predispatch_double_inspection["diagnostics"] == (
+    predispatch_with_two_inspections["diagnostics"]
+)
+
+preverification_failure = {
+    "outcome": "inconclusive",
+    "command_verified": False,
+    "command_dispatched": False,
+    "dialog_verified": False,
+    "controls_configured": False,
+    "save_invoked": False,
+    "render_dialog_native_event_hook_armed": False,
+    "render_dialog_event_message_pump_started": False,
+    "render_dialog_dispatch_boundary_set": False,
+    "render_dialog_dispatch_boundary_tick": None,
+    "preexisting_render_dialog_count": 0,
+    "render_dialog_post_dispatch_observed_window_event_count": 0,
+    "render_dialog_unresolved_post_dispatch_event_count": 0,
+    "render_dialog_post_dispatch_event_count": 0,
+    "selected_render_dialog_native_handle": None,
+    "selected_render_dialog_runtime_id": [],
+    "dialog_discovery": None,
+    "output": None,
+    "observed_output": None,
+    "process_exited": False,
+    "process_exit_code": None,
+    "diagnostics": ["synthetic Render as Wav menu inspection failure"],
+}
+preverification = module.validate_preverification_render_quarantine(
+    preverification_failure
+)
+assert preverification["inconclusive_reason"] == (
+    "pre-command-verification-failure"
+)
+preverification_after_exit = {
+    **preverification_failure,
+    "process_exited": True,
+    "process_exit_code": -1073741819,
+}
+assert module.validate_preverification_render_quarantine(
+    preverification_after_exit
+)["process_exit_code"] == -1073741819
+
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     precommand_exit = {
