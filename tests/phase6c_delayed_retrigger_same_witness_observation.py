@@ -208,8 +208,8 @@ if m.OBSERVATION_PATH.is_file():
     manifest_path = evidence_root / "canonical-raw-manifest.json"
     archive_path = evidence_root / "canonical-raw.tar.gz.b64"
     manifest = m.read_json(manifest_path)
-    temporary, archive_root = m.materialize_durable_archive(
-        archive_path, manifest
+    temporary, archive_root = m.materialize_durable_evidence(
+        evidence_root, manifest
     )
     try:
         assert (
@@ -241,8 +241,9 @@ assert "recomputed = same.validate_original(candidate_root, replay_root)" in sou
 workflow_source = (
     ROOT / ".github" / "workflows" / "phase6c-delayed-retrigger.yml"
 ).read_text(encoding="utf-8")
-assert "canonical-raw.tar.gz.b64" in workflow_source
+assert "canonical-raw-manifest.json" in workflow_source
 assert "archive-check" in workflow_source
+assert "canonical-raw.tar.gz.b64" not in workflow_source
 assert "steps.canonical.outputs.run_id" not in workflow_source
 
 print("phase6c-delayed-retrigger-same-witness-observation: PASS")
