@@ -59,10 +59,19 @@ assert committed["candidate"]["pitch_sample_rate_basis"] == (
     "44100/output-sample-rate"
 )
 assert committed["original"]["extended_note_timing_basis"] == "samples-per-row/6"
-assert committed["candidate"]["extended_noteoff_timing_basis"] == (
+assert committed["candidate"]["extended_note_timing_basis"] == (
     "samples-per-tick/6"
 )
-assert committed["candidate"]["nonzero_extended_note_delay_assignment"] is False
+assert committed["candidate"]["nonzero_extended_note_delay_assignment"] is True
+assert committed["original"]["source_repository"] == "jpaquim/psycle"
+assert committed["original"]["files"]["Sampler.cpp"] == {
+    "path": "psycle/src/psycle/host/Sampler.cpp",
+    "git_blob": m.ORIGINAL_CPP_BLOB,
+}
+assert committed["original"]["files"]["Sampler.hpp"] == {
+    "path": "psycle/src/psycle/host/Sampler.hpp",
+    "git_blob": m.ORIGINAL_HPP_BLOB,
+}
 
 promoted = copy.deepcopy(committed)
 promoted["parity_status"] = "PASS"
