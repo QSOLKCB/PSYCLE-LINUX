@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import subprocess
 import tempfile
+import wave
 import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,25 +21,88 @@ spec.loader.exec_module(timing)
 
 for variant in timing.VARIANTS:
     expected = timing.expected_probe(variant)
-    assert timing.validate_probe(dict(expected), variant) == expected
+    valid = {
+        **expected,
+        "audio_active": True,
+        "active_frame_count": 100,
+        "first_active_frame": 10,
+        "last_active_frame": 109,
+        "final_play_beat": 1.0,
+    }
+    assert timing.validate_probe(dict(valid), variant) == valid
 
-    wrong = dict(expected)
+    wrong = dict(valid)
     wrong["trigger_samples"] = timing.EXPECTED_TRIGGER + 1
     try:
         timing.validate_probe(wrong, variant)
     except ValueError as exc:
         assert "trigger_samples" in str(exc)
     else:
-        raise AssertionError("off-by-one PS1 trigger must fail")
+        raise AssertionError("off-by-one PS1 semantic trigger must fail")
 
-    early = dict(expected)
-    early["before_boundary_preserved"] = False
+    tiny_blocks = dict(valid)
+    tiny_blocks["player_max_work_block_samples"] = 1
     try:
-        timing.validate_probe(early, variant)
+        timing.validate_probe(tiny_blocks, variant)
     except ValueError as exc:
-        assert "before_boundary_preserved" in str(exc)
+        assert "player_max_work_block_samples" in str(exc)
     else:
-        raise AssertionError("early PS1 trigger must fail")
+        raise AssertionError("non-production timing work-block contract must fail")
+
+    silent = {
+        **expected,
+        "audio_active": False,
+        "active_frame_count": 0,
+        "first_active_frame": None,
+        "last_active_frame": None,
+        "final_play_beat": 1.0,
+    }
+    assert timing.validate_probe(dict(silent), variant) == silent
+
+clean_receipt = {
+    "load_result": "inconclusive",
+    "ui_automation_diagnostics": [],
+    "runtime_identity_diagnostics": [],
+    "error_marker": None,
+    "application_error_marker": None,
+    "main_window_seen": True,
+    "stable_marker_polls": 8,
+    "load_evidence_marker": "marker",
+}
+clean_runtime = {
+    "outcome": "reference-process-exited-during-render",
+    "pre_render_load": {
+        "clean_accepted_load": True,
+        "load_warning_dismissed": True,
+        "process_running_before_render": True,
+        "stable_marker_polls": 8,
+        "matched_marker": "marker",
+    },
+}
+timing.clean_load_gate(clean_receipt, clean_runtime)
+
+completed_with_inconclusive_load = dict(clean_runtime)
+completed_with_inconclusive_load["outcome"] = "rendered-twice"
+try:
+    timing.clean_load_gate(clean_receipt, completed_with_inconclusive_load)
+except ValueError as exc:
+    assert "clean pre-render load gate" in str(exc)
+else:
+    raise AssertionError("completed renders must retain accepted final load result")
+
+with tempfile.TemporaryDirectory() as temporary:
+    silent_wav = Path(temporary) / "silent.wav"
+    with wave.open(str(silent_wav), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(timing.OUTPUT_RATE)
+        handle.writeframes(b"\x00\x00" * 256)
+    analysis = timing.analyze_timing_wave(silent_wav)
+    assert analysis["audio_active"] is False
+    assert analysis["first_active_frame"] is None
+    assert analysis["last_active_frame"] is None
+    assert analysis["active_frame_count"] == 0
+    assert analysis["active_span_frames"] == 0
 
 archive = ROOT / "phase6c/evidence/sampler-ps1/pitch-hosted"
 manifest = json.loads((archive / "raw-manifest.json").read_text(encoding="utf-8"))
@@ -53,6 +117,8 @@ assert observation["status"] == "UNKNOWN"
 assert observation["comparison_ready"] is False
 assert observation["original"]["process_exit_hex"] == "0xC0000005"
 assert observation["original"]["outcome"] == "reference-process-exited-during-render"
+assert observation["original"]["load_result"] == "inconclusive"
+assert observation["original"]["pre_render_clean_accepted_load"] is True
 assert observation["candidate"]["deterministic"] is True
 assert len(set(observation["candidate"]["render_sha256s"])) == 1
 
