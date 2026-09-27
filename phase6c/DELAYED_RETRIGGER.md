@@ -205,13 +205,17 @@ claim.
 fail-closed versioning boundary for the hosted candidate/original artifact pair.
 Before a projection can be committed it:
 
-- re-analyzes both candidate WAVs, requires byte-identical repeated output, and
-  checks the strict command-bearing onset analysis against the hosted candidate
-  receipt;
-- re-derives the original UNKNOWN/runtime-pair analysis directly from the raw
-  original receipt plus any bound WAV bytes, without rerunning original Psycle;
-- requires the independently derived analysis and comparison to match the
-  uploaded hosted receipts exactly as JSON objects;
+- runs the full maintained same-witness candidate validator before projection,
+  preserving renderer binary/source identity, build provenance, render logs,
+  execution replay, fixture structure, distinct output bindings and deterministic
+  repeated output;
+- reruns the full maintained original validator in a temporary artifact copy,
+  including the generic installer/executable/environment/procedure/fixture gate,
+  then requires its regenerated analysis/comparison receipts to match the hosted
+  derived receipts exactly;
+- archives the minimal canonical raw evidence required for long-term independent
+  re-derivation (candidate receipt + fixture + both WAVs, original receipt +
+  retained WAV) as a hash-pinned base64 tar/gzip bundle in the evidence tree;
 - binds workflow run/head/event, candidate/original job IDs, artifact IDs and
   artifact SHA-256 digests, plus raw candidate/original receipt hashes and the
   derived original analysis/comparison hashes;
@@ -242,6 +246,12 @@ execution as observed, original command execution as **not** observed,
 forbidden. The parent roadmap item stays open. A future successful original
 pair would advance only to a **separately versioned onset-timing
 interpretation**; this freeze step never classifies parity by itself.
+
+The durable files
+`canonical-raw.tar.gz.b64` and `canonical-raw-manifest.json` preserve the
+canonical re-derivation inputs after GitHub Actions retention expires. Normal CI
+uses only that committed bundle; it does not depend on run `36288494934`
+remaining downloadable.
 
 ## Original render-failure isolation
 
