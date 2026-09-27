@@ -134,6 +134,8 @@ def main() -> None:
                     $deterministic = (
                         $renderBindings.Count -eq 2 -and
                         $attempts.Count -eq 2 -and
+                        [bool]$attempts[0].dialog_closed -and
+                        [bool]$attempts[1].dialog_closed -and
                         [string]$renderBindings[0].sha256 -ceq [string]$renderBindings[1].sha256 -and
                         -not [bool]$lastAttempt.process_exited
                     )
