@@ -11,7 +11,10 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = "sampler-ps1-source-semantics"
 REFERENCE_BUILD = "Psycle 1.12.0 x86"
+ORIGINAL_SOURCE_REPOSITORY = "jpaquim/psycle"
 ORIGINAL_SOURCE_COMMIT = "7ac6d2c3553e2ee8dda55814d8e689919c345478"
+ORIGINAL_CPP_PATH = "psycle/src/psycle/host/Sampler.cpp"
+ORIGINAL_HPP_PATH = "psycle/src/psycle/host/Sampler.hpp"
 CANDIDATE_BASELINE = "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a"
 
 ORIGINAL_CPP_BLOB = "6cc0bd7328d01131c3d41b68f4e5d4189959e364"
@@ -71,6 +74,7 @@ CANDIDATE_CPP_MARKERS = [
     "timeInfo.samplesPerTick()/6",
     "SAMPLER_CMD_EXT_NOTEDELAY",
     "(pEntry.parameter() & 0x0f) == 0",
+    "pVoice->_triggerNoteDelay = static_cast<int>( (timeInfo.samplesPerTick()/6)*(pEntry.parameter() & 0x0f) );",
     "pFile->Write(SAMPLERVERSION);",
 ]
 CANDIDATE_HPP_MARKERS = [
@@ -240,10 +244,17 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
         },
         "original": {
             "reference_build": REFERENCE_BUILD,
+            "source_repository": ORIGINAL_SOURCE_REPOSITORY,
             "source_commit": ORIGINAL_SOURCE_COMMIT,
             "files": {
-                "Sampler.cpp": {"git_blob": ORIGINAL_CPP_BLOB},
-                "Sampler.hpp": {"git_blob": ORIGINAL_HPP_BLOB},
+                "Sampler.cpp": {
+                    "path": ORIGINAL_CPP_PATH,
+                    "git_blob": ORIGINAL_CPP_BLOB,
+                },
+                "Sampler.hpp": {
+                    "path": ORIGINAL_HPP_PATH,
+                    "git_blob": ORIGINAL_HPP_BLOB,
+                },
             },
             "max_polyphony": original_max_polyphony,
             "default_polyphony": original_default_polyphony,
@@ -270,8 +281,12 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
             "envelope_sample_rate_basis": "44100/output-sample-rate",
             "normal_loop_wrap": "subtract-loop-length-at-loop-end",
             "panning_destination_cap": 0.5,
-            "extended_noteoff_timing_basis": "samples-per-tick/6",
-            "nonzero_extended_note_delay_assignment": False,
+            "extended_note_timing_basis": "samples-per-tick/6",
+            "nonzero_extended_note_delay_assignment": (
+                "pVoice->_triggerNoteDelay = static_cast<int>( "
+                "(timeInfo.samplesPerTick()/6)*(pEntry.parameter() & 0x0f) );"
+                in candidate_cpp_text
+            ),
         },
         "cpsycle": {
             "role": "shared-contract supporting source only",
@@ -356,10 +371,27 @@ def validate(value: object) -> dict:
             raise ValueError(f"Sampler PS1 {role} polyphony contract changed")
         if section.get("command_ids") != COMMAND_IDS:
             raise ValueError(f"Sampler PS1 {role} command table changed")
-    if value["original"].get("sampler_machine_state_version") != 2:
+    original = value["original"]
+    if original.get("source_repository") != ORIGINAL_SOURCE_REPOSITORY:
+        raise ValueError("original Sampler source repository changed")
+    files = original.get("files")
+    if not isinstance(files, dict):
+        raise ValueError("original Sampler source files are missing")
+    expected_original_files = {
+        "Sampler.cpp": {"path": ORIGINAL_CPP_PATH, "git_blob": ORIGINAL_CPP_BLOB},
+        "Sampler.hpp": {"path": ORIGINAL_HPP_PATH, "git_blob": ORIGINAL_HPP_BLOB},
+    }
+    if files != expected_original_files:
+        raise ValueError("original Sampler source path/blob binding changed")
+    if original.get("sampler_machine_state_version") != 2:
         raise ValueError("original Sampler machine-state version changed")
-    if value["candidate"].get("sampler_machine_state_version") != 1:
+    candidate = value["candidate"]
+    if candidate.get("sampler_machine_state_version") != 1:
         raise ValueError("candidate Sampler machine-state version changed")
+    if candidate.get("extended_note_timing_basis") != "samples-per-tick/6":
+        raise ValueError("candidate Sampler extended-note timing basis changed")
+    if candidate.get("nonzero_extended_note_delay_assignment") is not True:
+        raise ValueError("candidate Sampler nonzero E-Dx assignment changed")
     if value["cpsycle"].get("sampler_machine_state_version") != 3:
         raise ValueError("C-Psycle Sampler machine-state version changed")
     if not isinstance(value.get("next_evidence_boundary"), dict):
