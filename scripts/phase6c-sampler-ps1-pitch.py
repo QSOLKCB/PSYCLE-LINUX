@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import struct
 import wave
@@ -336,6 +337,10 @@ def compare_observations(candidate: dict, original: dict) -> dict:
             "The broad Sampler PS1 row remains UNKNOWN regardless of this scoped "
             "pitch witness; later command/envelope/loop/state witnesses are separate."
         ),
+        "workflow": {
+            "github_run_id": os.environ.get("GITHUB_RUN_ID"),
+            "github_sha": os.environ.get("GITHUB_SHA"),
+        },
     }
     if original["outcome"] != "rendered-twice":
         result["blocker"] = (
