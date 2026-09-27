@@ -1325,6 +1325,30 @@ with tempfile.TemporaryDirectory() as temporary:
     assert teardown["retained_renders"] == [first_binding]
     assert len(teardown["retained_render_analyses"]) == 1
 
+    late_exit_teardown_attempt = dict(completed_attempt)
+    late_exit_teardown_attempt.update(
+        {
+            "process_exited": True,
+            "process_exit_code": -1073741819,
+            "observed_output": {
+                "path": original_path.name,
+                "size_bytes": len(valid_wave),
+                "sha256": m.digest(valid_wave),
+            },
+        }
+    )
+    late_exit_teardown_runtime = dict(inconclusive_runtime)
+    late_exit_teardown_runtime["renders"] = [first_binding]
+    late_exit_teardown_runtime["attempts"] = [late_exit_teardown_attempt]
+    late_exit_teardown = m.validate_original_inconclusive_runtime(
+        root, late_exit_teardown_runtime
+    )
+    assert late_exit_teardown["inconclusive_reason"] == (
+        "process-exit-after-completed-render"
+    )
+    assert late_exit_teardown["process_exit_code"] == -1073741819
+    assert late_exit_teardown["retained_renders"] == [first_binding]
+
     post_completion_exit_attempt = dict(completed_attempt)
     post_completion_exit_attempt.update(
         {
