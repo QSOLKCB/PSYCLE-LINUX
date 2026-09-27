@@ -46,7 +46,7 @@ COMMAND_IDS = {
 ORIGINAL_CPP_MARKERS = [
     "baseC = notecommands::middleC;",
     "_resampler.quality(helpers::dsp::resampler::quality::spline);",
-    "wave.WaveSampleRate()/Global::player().SampleRate()",
+    "speeddouble = pow(2.0f, (pEntry->_note+wave.WaveTune()-baseC +finetune)/12.0f)*((float)wave.WaveSampleRate()/Global::player().SampleRate());",
     "_envelope._step = (1.0f/inst->ENV_AT)*_envelope.sratefactor;",
     "controller._rVolDest > 0.5f",
     "controller._lVolDest > 0.5f",
@@ -64,7 +64,7 @@ ORIGINAL_HPP_MARKERS = [
 CANDIDATE_CPP_MARKERS = [
     "baseC = 60;",
     "resampler_.quality(dsp::resampler::quality::linear);",
-    "*(44100.0f/timeInfo.sampleRate())",
+    "speeddouble = pow(2.0f, (pEntry.note()+pIns->waveTune-baseC +finetune)/12.0f)*4294967296.0f*(44100.0f/timeInfo.sampleRate());",
     "pVoice->_envelope._step = (1.0f/pIns->ENV_AT)*(44100.0f/timeInfo.sampleRate());",
     "pVoice->_wave._rVolDest > 0.5f",
     "pVoice->_wave._lVolDest > 0.5f",
@@ -155,6 +155,13 @@ def command_table(source: str, prefix: str = "SAMPLER_CMD_") -> dict[str, int]:
     }
 
 
+def polyphony(source: str, prefix: str = "SAMPLER_") -> tuple[int, int]:
+    return (
+        extract_define(source, "MAX_POLYPHONY", prefix),
+        extract_define(source, "DEFAULT_POLYPHONY", prefix),
+    )
+
+
 def derive(original_cpp: Path, original_hpp: Path) -> dict:
     require_blob(original_cpp, ORIGINAL_CPP_BLOB, "original Sampler.cpp")
     require_blob(original_hpp, ORIGINAL_HPP_BLOB, "original Sampler.hpp")
@@ -189,6 +196,19 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
         raise ValueError("frozen candidate PS1 command table changed")
     if cpsycle_commands != COMMAND_IDS:
         raise ValueError("C-Psycle PS1 command table changed")
+
+    original_max_polyphony, original_default_polyphony = polyphony(
+        original_hpp_text
+    )
+    candidate_max_polyphony, candidate_default_polyphony = polyphony(
+        candidate_hpp_text
+    )
+    cpsycle_max_polyphony, cpsycle_default_polyphony = polyphony(
+        cpsycle_h_text, "PS1_SAMPLER_"
+    )
+    original_version = extract_cpp_version(original_hpp_text)
+    candidate_version = extract_cpp_version(candidate_hpp_text)
+    cpsycle_version = extract_c_version(cpsycle_defs_text)
 
     result = {
         "schema_version": 1,
@@ -225,10 +245,10 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
                 "Sampler.cpp": {"git_blob": ORIGINAL_CPP_BLOB},
                 "Sampler.hpp": {"git_blob": ORIGINAL_HPP_BLOB},
             },
-            "max_polyphony": 16,
-            "default_polyphony": 8,
+            "max_polyphony": original_max_polyphony,
+            "default_polyphony": original_default_polyphony,
             "command_ids": original_commands,
-            "sampler_machine_state_version": extract_cpp_version(original_hpp_text),
+            "sampler_machine_state_version": original_version,
             "pitch_sample_rate_basis": "wave-sample-rate/output-sample-rate",
             "envelope_sample_rate_basis": "44100/output-sample-rate",
             "normal_loop_wrap": "subtract-loop-length-at-loop-end",
@@ -242,10 +262,10 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
                 "sampler.cpp": {"git_blob": CANDIDATE_CPP_BLOB},
                 "sampler.h": {"git_blob": CANDIDATE_HPP_BLOB},
             },
-            "max_polyphony": 16,
-            "default_polyphony": 8,
+            "max_polyphony": candidate_max_polyphony,
+            "default_polyphony": candidate_default_polyphony,
             "command_ids": candidate_commands,
-            "sampler_machine_state_version": extract_cpp_version(candidate_hpp_text),
+            "sampler_machine_state_version": candidate_version,
             "pitch_sample_rate_basis": "44100/output-sample-rate",
             "envelope_sample_rate_basis": "44100/output-sample-rate",
             "normal_loop_wrap": "subtract-loop-length-at-loop-end",
@@ -260,18 +280,23 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
                 "sampler.h": {"git_blob": CPSYCLE_H_BLOB},
                 "samplerdefs.h": {"git_blob": CPSYCLE_DEFS_BLOB},
             },
-            "max_polyphony": 16,
-            "default_polyphony": 8,
+            "max_polyphony": cpsycle_max_polyphony,
+            "default_polyphony": cpsycle_default_polyphony,
             "command_ids": cpsycle_commands,
-            "sampler_machine_state_version": extract_c_version(cpsycle_defs_text),
+            "sampler_machine_state_version": cpsycle_version,
             "pitch_sample_rate_basis": "sample-rate/output-sample-rate",
             "envelope_sample_rate_basis": "44100/output-sample-rate",
             "extended_note_timing_basis": "samples-per-row/6",
         },
         "source_observations": {
             "command_ids_match_original_candidate": original_commands == candidate_commands,
-            "polyphony_defaults_match_original_candidate": True,
-            "sampler_machine_state_version_match_original_candidate": False,
+            "polyphony_defaults_match_original_candidate": (
+                original_max_polyphony == candidate_max_polyphony
+                and original_default_polyphony == candidate_default_polyphony
+            ),
+            "sampler_machine_state_version_match_original_candidate": (
+                original_version == candidate_version
+            ),
             "pitch_sample_rate_basis_match_original_candidate": False,
             "extended_note_timing_basis_match_original_candidate": False,
             "source_correspondence_is_runtime_parity": False,
