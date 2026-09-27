@@ -105,11 +105,345 @@ def validate_run_metadata(value: object) -> dict:
     return value
 
 
+def validate_hosted_candidate(candidate_root: Path) -> dict:
+    candidate_root = candidate_root.resolve()
+    candidate = read_json(candidate_root / same.CANDIDATE_RECEIPT)
+    if (
+        candidate.get("schema_version") != 1
+        or candidate.get("phase") != "6C"
+        or candidate.get("contract") != CONTRACT
+        or candidate.get("evidence_role") != "candidate"
+        or candidate.get("fixture") != same.FIXTURE
+        or candidate.get("parity_status") != "UNKNOWN"
+        or candidate.get("runtime_command_execution_observed") is not True
+        or candidate.get("runtime_command_execution_scope")
+        != same.RUNTIME_COMMAND_EXECUTION_SCOPE
+        or not isinstance(candidate.get("analysis"), dict)
+    ):
+        raise ValueError("hosted candidate same-witness receipt identity is invalid")
+    fixture_hash = require_sha256(
+        candidate.get("fixture_sha256"), "candidate.fixture_sha256"
+    )
+    render_hash = require_sha256(
+        candidate.get("render_sha256"), "candidate.render_sha256"
+    )
+    fixture_path = child(candidate_root, candidate["fixture"])
+    if digest(fixture_path.read_bytes()) != fixture_hash:
+        raise ValueError("hosted candidate fixture hash mismatch")
+
+    observations = candidate.get("render_observations")
+    if not isinstance(observations, list) or len(observations) != 2:
+        raise ValueError("hosted candidate must retain exactly two render observations")
+    rendered = []
+    for index, observation in enumerate(observations, start=1):
+        if (
+            not isinstance(observation, dict)
+            or observation.get("input_path") != candidate["fixture"]
+            or observation.get("input_sha256") != fixture_hash
+            or observation.get("output_sha256") != render_hash
+            or not isinstance(observation.get("output_path"), str)
+        ):
+            raise ValueError(
+                f"hosted candidate render observation {index} identity mismatch"
+            )
+        output_path = child(candidate_root, observation["output_path"])
+        data = output_path.read_bytes()
+        if digest(data) != render_hash:
+            raise ValueError(
+                f"hosted candidate render observation {index} hash mismatch"
+            )
+        rendered.append(data)
+    if rendered[0] != rendered[1]:
+        raise ValueError("hosted candidate repeated renders are not byte-identical")
+
+    analysis = same.validate_same_witness_analysis(
+        same.base.analyze_wave(rendered[0]),
+        "candidate",
+        require_retrigger_effects=True,
+    )
+    if analysis != candidate["analysis"]:
+        raise ValueError("hosted candidate analysis differs from WAV reanalysis")
+    return candidate
+
+
+def derive_original_receipts(candidate: dict, original_root: Path) -> tuple[dict, dict, dict]:
+    original_root = original_root.resolve()
+    receipt = read_json(original_root / same.ORIGINAL_RECEIPT)
+    if (
+        receipt.get("schema_version") != 1
+        or receipt.get("phase") != "6C"
+        or receipt.get("contract") != CONTRACT
+        or receipt.get("evidence_role") != "original"
+        or receipt.get("reference_build") != same.REFERENCE_BUILD
+        or receipt.get("fixture_sha256") != candidate["fixture_sha256"]
+        or receipt.get("original_psycle_observed") is not True
+        or receipt.get("parity_status") != "UNKNOWN"
+    ):
+        raise ValueError("hosted original same-witness receipt identity is invalid")
+    runtime = receipt.get("runtime_execution")
+    if not isinstance(runtime, dict):
+        raise ValueError("hosted original same-witness runtime receipt is missing")
+    outcome = runtime.get("outcome")
+
+    candidate_comparison = {
+        "render_sha256": candidate["render_sha256"],
+        "analysis": candidate["analysis"],
+        "runtime_command_execution_observed": True,
+        "runtime_command_execution_scope": same.RUNTIME_COMMAND_EXECUTION_SCOPE,
+    }
+
+    if outcome == "reference-process-exited-during-render":
+        if (
+            receipt.get("load_result") != "inconclusive"
+            or receipt.get("observation")
+            != "reference-process-exited-before-harness-termination"
+        ):
+            raise ValueError("hosted original process-exit load result is inconsistent")
+        crash = same.validate_original_process_exit_runtime(
+            original_root, runtime, receipt
+        )
+        original_analysis = {
+            "schema_version": 1,
+            "phase": "6C",
+            "contract": CONTRACT,
+            "evidence_role": "original-runtime",
+            "reference_build": same.REFERENCE_BUILD,
+            "fixture": candidate["fixture"],
+            "fixture_sha256": candidate["fixture_sha256"],
+            "machine_substrate": "XMSampler/Sampulse",
+            "outcome": "reference-process-exited-during-render",
+            "renders": crash["retained_renders"],
+            "retained_render_analyses": crash["retained_render_analyses"],
+            "render_sha256": None,
+            "analysis": None,
+            "runtime_command_execution_observed": False,
+            "process_exit_code": crash["process_exit_code"],
+            "fresh_render_event_binding": (
+                "accepted" if crash["binding_error"] is None else "rejected"
+            ),
+            "fresh_render_event_binding_error": crash["binding_error"],
+            "observed_output": crash["observed_output"],
+            "diagnostics": crash["diagnostics"],
+            "timing_interpretation": "deferred",
+            "parity_status": "UNKNOWN",
+        }
+        comparison = {
+            "schema_version": 1,
+            "phase": "6C",
+            "contract": CONTRACT,
+            "fixture_sha256": candidate["fixture_sha256"],
+            "same_fixture_bytes": True,
+            "same_onset_analyzer": False,
+            "candidate_onset_analyzer": same.STRICT_ANALYZER_ID,
+            "original_retained_render_analyzer": same.RELAXED_ANALYZER_ID,
+            "candidate": candidate_comparison,
+            "original": {
+                "reference_build": same.REFERENCE_BUILD,
+                "outcome": "reference-process-exited-during-render",
+                "retained_renders": crash["retained_renders"],
+                "retained_render_analyses": crash["retained_render_analyses"],
+                "render_sha256": None,
+                "analysis": None,
+                "runtime_command_execution_observed": False,
+                "process_exit_code": crash["process_exit_code"],
+                "observed_output": crash["observed_output"],
+            },
+            "command_bearing_runtime_pair_observed": False,
+            "exact_onset_timing_interpretation": "deferred",
+            "classification_allowed": False,
+            "parity_status": "UNKNOWN",
+            "interpretation_boundary": (
+                "The pinned original exited during the source-pinned Save Wave "
+                "procedure. Exact exit and any partial-output evidence are "
+                "retained diagnostically, but no deterministic original runtime "
+                "render pair or delayed/retrigger parity is claimed."
+            ),
+        }
+        return receipt, original_analysis, comparison
+
+    if outcome == "inconclusive":
+        if receipt.get("load_result") not in {"accepted", "inconclusive"}:
+            raise ValueError("hosted original inconclusive load result is invalid")
+        quarantine = same.validate_original_inconclusive_runtime(
+            original_root, runtime
+        )
+        if (
+            quarantine.get("process_exit_code") is not None
+            and receipt.get("exit_code_before_termination")
+            != quarantine["process_exit_code"]
+        ):
+            raise ValueError(
+                "hosted original inconclusive process-exit code is inconsistent"
+            )
+        binding_status = same.inconclusive_render_binding_status(quarantine)
+        original_analysis = {
+            "schema_version": 1,
+            "phase": "6C",
+            "contract": CONTRACT,
+            "evidence_role": "original-runtime",
+            "reference_build": same.REFERENCE_BUILD,
+            "fixture": candidate["fixture"],
+            "fixture_sha256": candidate["fixture_sha256"],
+            "machine_substrate": "XMSampler/Sampulse",
+            "outcome": "inconclusive",
+            "inconclusive_reason": quarantine["inconclusive_reason"],
+            "renders": quarantine["retained_renders"],
+            "retained_render_analyses": quarantine["retained_render_analyses"],
+            "retained_render_analyzer": same.RELAXED_ANALYZER_ID,
+            "render_sha256": None,
+            "analysis": None,
+            "runtime_command_execution_observed": False,
+            "fresh_render_event_binding": binding_status,
+            "fresh_render_event_binding_error": quarantine["binding_error"],
+            "observed_output": quarantine["observed_output"],
+            "diagnostics": quarantine["diagnostics"],
+            "process_exit_code": quarantine.get("process_exit_code"),
+            "timing_interpretation": "deferred",
+            "parity_status": "UNKNOWN",
+        }
+        comparison = {
+            "schema_version": 1,
+            "phase": "6C",
+            "contract": CONTRACT,
+            "fixture_sha256": candidate["fixture_sha256"],
+            "same_fixture_bytes": True,
+            "same_onset_analyzer": False,
+            "candidate_onset_analyzer": same.STRICT_ANALYZER_ID,
+            "original_retained_render_analyzer": same.RELAXED_ANALYZER_ID,
+            "candidate": candidate_comparison,
+            "original": {
+                "reference_build": same.REFERENCE_BUILD,
+                "outcome": "inconclusive",
+                "inconclusive_reason": quarantine["inconclusive_reason"],
+                "retained_renders": quarantine["retained_renders"],
+                "retained_render_analyses": quarantine[
+                    "retained_render_analyses"
+                ],
+                "render_sha256": None,
+                "analysis": None,
+                "runtime_command_execution_observed": False,
+                "fresh_render_event_binding": binding_status,
+                "fresh_render_event_binding_error": quarantine["binding_error"],
+                "observed_output": quarantine["observed_output"],
+                "process_exit_code": quarantine.get("process_exit_code"),
+            },
+            "command_bearing_runtime_pair_observed": False,
+            "exact_onset_timing_interpretation": "deferred",
+            "classification_allowed": False,
+            "parity_status": "UNKNOWN",
+            "interpretation_boundary": (
+                "The candidate rendered the exact four-beat Sampulse/XMSampler "
+                "witness, but the pinned original did not complete a deterministic "
+                "repeated-render pair. Completed original renders and any terminal "
+                "teardown or ambiguity evidence are retained diagnostically; no "
+                "cross-side runtime pair is claimed and delayed/retrigger parity "
+                "remains unclassified."
+            ),
+        }
+        return receipt, original_analysis, comparison
+
+    if outcome != "rendered-twice" or receipt.get("load_result") != "accepted":
+        raise ValueError("hosted original same-witness runtime outcome is invalid")
+    attempts = same.validate_original_runtime_procedure(runtime)
+    first_binding, first = same.validate_original_attempt(
+        original_root, attempts[0], 1
+    )
+    same.require_clean_completed_attempt_before_later_attempt(
+        attempts[0], "same-witness repeated render"
+    )
+    second_binding, second = same.validate_original_attempt(
+        original_root, attempts[1], 2
+    )
+    if first != second or first_binding["sha256"] != second_binding["sha256"]:
+        raise ValueError("hosted original repeated renders are not byte-identical")
+    if runtime.get("renders") != [first_binding, second_binding]:
+        raise ValueError("hosted original runtime render bindings mismatch")
+    analysis, command_observed, analysis_error = (
+        same.analyze_original_command_evidence(first)
+    )
+    second_analysis, second_observed, second_error = (
+        same.analyze_original_command_evidence(second)
+    )
+    if (
+        analysis != second_analysis
+        or command_observed != second_observed
+        or analysis_error != second_error
+    ):
+        raise ValueError("hosted original repeated onset analyses differ")
+    original_analysis = {
+        "schema_version": 1,
+        "phase": "6C",
+        "contract": CONTRACT,
+        "evidence_role": "original-runtime",
+        "reference_build": same.REFERENCE_BUILD,
+        "fixture": candidate["fixture"],
+        "fixture_sha256": candidate["fixture_sha256"],
+        "machine_substrate": "XMSampler/Sampulse",
+        "renders": [first_binding, second_binding],
+        "render_sha256": digest(first),
+        "analysis": analysis,
+        "runtime_command_execution_observed": command_observed,
+        "runtime_command_execution_scope": (
+            same.RUNTIME_COMMAND_EXECUTION_SCOPE if command_observed else None
+        ),
+        "command_execution_analysis_error": analysis_error,
+        "timing_interpretation": "deferred",
+        "parity_status": "UNKNOWN",
+    }
+    comparison = {
+        "schema_version": 1,
+        "phase": "6C",
+        "contract": CONTRACT,
+        "fixture_sha256": candidate["fixture_sha256"],
+        "same_fixture_bytes": True,
+        "same_onset_analyzer": command_observed,
+        "candidate_onset_analyzer": same.STRICT_ANALYZER_ID,
+        "original_onset_analyzer": (
+            same.STRICT_ANALYZER_ID
+            if command_observed
+            else same.RELAXED_ANALYZER_ID
+        ),
+        "candidate": candidate_comparison,
+        "original": {
+            "reference_build": same.REFERENCE_BUILD,
+            "render_sha256": original_analysis["render_sha256"],
+            "analysis": original_analysis["analysis"],
+            "runtime_command_execution_observed": command_observed,
+            "runtime_command_execution_scope": (
+                same.RUNTIME_COMMAND_EXECUTION_SCOPE if command_observed else None
+            ),
+            "command_execution_analysis_error": analysis_error,
+        },
+        "command_bearing_runtime_pair_observed": command_observed,
+        "exact_onset_timing_interpretation": "deferred",
+        "classification_allowed": False,
+        "parity_status": "UNKNOWN",
+        "interpretation_boundary": (
+            (
+                "Both sides rendered the exact same four-beat Sampulse/XMSampler "
+                "witness with the same command geometry and the same onset analyzer. "
+                "The multiple-onset evidence establishes only the FB retrigger and FA "
+                "retrigger-continue effects; FD note-delay and FE extended-command "
+                "effects are explicitly not established here. Exact onset timing is "
+                "retained for the next evidence rung and is not classified in this receipt."
+            )
+            if command_observed
+            else (
+                "The pinned original produced a deterministic repeated render pair, "
+                "but that audio did not satisfy the conservative command-bearing onset "
+                "criteria. The bound WAVs and relaxed onset observation are retained; "
+                "runtime command execution is not claimed and parity remains UNKNOWN."
+            )
+        ),
+    }
+    return receipt, original_analysis, comparison
+
+
 def validate_stored_derivation(candidate_root: Path, original_root: Path) -> dict:
-    """Recompute derived receipts in a temporary original-artifact copy."""
+    """Re-derive hosted receipts from artifact bytes without rerunning the renderer."""
     candidate_root = candidate_root.resolve()
     original_root = original_root.resolve()
-    candidate = same.validate_candidate(candidate_root)
+    candidate = validate_hosted_candidate(candidate_root)
 
     stored_analysis_path = original_root / same.ORIGINAL_ANALYSIS
     stored_comparison_path = original_root / same.COMPARISON
@@ -118,27 +452,17 @@ def validate_stored_derivation(candidate_root: Path, original_root: Path) -> dic
     stored_analysis = read_json(stored_analysis_path)
     stored_comparison = read_json(stored_comparison_path)
 
-    with tempfile.TemporaryDirectory() as temporary:
-        replay_root = Path(temporary) / "original"
-        shutil.copytree(original_root, replay_root)
-        for relative in (same.ORIGINAL_ANALYSIS, same.COMPARISON):
-            path = replay_root / relative
-            if path.exists():
-                path.unlink()
-        recomputed = same.validate_original(candidate_root, replay_root)
-        replay_analysis = read_json(replay_root / same.ORIGINAL_ANALYSIS)
-        replay_comparison = read_json(replay_root / same.COMPARISON)
-
-    if replay_analysis != stored_analysis:
-        raise ValueError("hosted original analysis differs from independent recomputation")
-    if replay_comparison != stored_comparison or recomputed != stored_comparison:
-        raise ValueError("hosted comparison differs from independent recomputation")
-
-    candidate_receipt_path = candidate_root / same.CANDIDATE_RECEIPT
-    original_receipt_path = original_root / same.ORIGINAL_RECEIPT
-    if not original_receipt_path.is_file():
-        raise ValueError("hosted original artifact lacks raw same-witness receipt")
-    original_receipt = read_json(original_receipt_path)
+    original_receipt, expected_analysis, expected_comparison = (
+        derive_original_receipts(candidate, original_root)
+    )
+    if expected_analysis != stored_analysis:
+        raise ValueError(
+            "hosted original analysis differs from independent byte/receipt derivation"
+        )
+    if expected_comparison != stored_comparison:
+        raise ValueError(
+            "hosted comparison differs from independent byte/receipt derivation"
+        )
 
     if candidate.get("fixture_sha256") != original_receipt.get("fixture_sha256"):
         raise ValueError("same-witness hosted fixture hashes differ")
@@ -147,7 +471,9 @@ def validate_stored_derivation(candidate_root: Path, original_root: Path) -> dic
     if stored_comparison.get("parity_status") != "UNKNOWN":
         raise ValueError("same-witness hosted comparison must retain UNKNOWN parity")
     if stored_comparison.get("classification_allowed") is not False:
-        raise ValueError("same-witness hosted comparison unexpectedly allows classification")
+        raise ValueError(
+            "same-witness hosted comparison unexpectedly allows classification"
+        )
     if stored_comparison.get("exact_onset_timing_interpretation") != "deferred":
         raise ValueError("same-witness hosted comparison interpreted timing too early")
 
@@ -157,8 +483,12 @@ def validate_stored_derivation(candidate_root: Path, original_root: Path) -> dic
         "original_analysis": stored_analysis,
         "comparison": stored_comparison,
         "candidate_receipt": file_binding(candidate_root, same.CANDIDATE_RECEIPT),
-        "original_receipt_binding": file_binding(original_root, same.ORIGINAL_RECEIPT),
-        "original_analysis_binding": file_binding(original_root, same.ORIGINAL_ANALYSIS),
+        "original_receipt_binding": file_binding(
+            original_root, same.ORIGINAL_RECEIPT
+        ),
+        "original_analysis_binding": file_binding(
+            original_root, same.ORIGINAL_ANALYSIS
+        ),
         "comparison_binding": file_binding(original_root, same.COMPARISON),
     }
 
