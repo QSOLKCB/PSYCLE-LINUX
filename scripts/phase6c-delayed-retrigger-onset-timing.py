@@ -29,11 +29,11 @@ EXPECTED_SAMPLE_RATE = 44100
 BEAT_FRAMES = EXPECTED_SAMPLE_RATE * 60.0 / BPM
 NORMALIZATION = (
     "identify the candidate's first onset in the established FB 3F beat-1 window, "
-    "find the unique original onset whose phase offset preserves the established "
-    "FB/FA window cardinalities after alignment, apply that render-wide offset before "
-    "command-window membership, then subtract each side's first onset in each "
-    "classified window and require every classified window to retain that same "
-    "render-wide phase delta"
+    "score original anchor candidates only against the established FB/FA onset series "
+    "after alignment, require a unique best established-series match, apply that "
+    "render-wide offset before command-window membership, then subtract each side's "
+    "first onset in each classified window and require every classified window to "
+    "retain that same render-wide phase delta"
 )
 WINDOWS = {
     "fb_retrigger_beat_1": {
@@ -50,7 +50,7 @@ WINDOWS = {
 ALIGNMENT_ANCHOR_WINDOW = "fb_retrigger_beat_1"
 ALIGNMENT_ANCHOR = (
     "candidate-first-established-fb-retrigger-onset-"
-    "unique-established-window-cardinality-match"
+    "unique-best-established-series-match"
 )
 CANONICAL_OBSERVATION_PATH = observation_module.OBSERVATION_PATH
 CANONICAL_OBSERVATION_RELATIVE = CANONICAL_OBSERVATION_PATH.relative_to(ROOT).as_posix()
@@ -174,18 +174,20 @@ def established_alignment_anchors(
         )
     candidate_anchor_frame = candidate_anchor_frames[0]
 
-    expected_counts = {
-        key: len(
-            frames_in_window(
-                candidate_frames,
-                window["start_beat"],
-                window["end_beat"],
-            )
+    candidate_series = {
+        key: frames_in_window(
+            candidate_frames,
+            window["start_beat"],
+            window["end_beat"],
         )
         for key, window in WINDOWS.items()
     }
+    expected_counts = {
+        key: len(candidate_series[key])
+        for key in WINDOWS
+    }
 
-    matches: list[tuple[int, int]] = []
+    matches: list[tuple[int, int, int]] = []
     original_frames = original_analysis["onset_frames"]
     for original_anchor_frame in original_frames:
         phase_delta = original_anchor_frame - candidate_anchor_frame
@@ -199,22 +201,47 @@ def established_alignment_anchors(
             for key, window in WINDOWS.items()
         }
         if (
-            aligned[ALIGNMENT_ANCHOR_WINDOW]
-            and aligned[ALIGNMENT_ANCHOR_WINDOW][0] == original_anchor_frame
-            and all(
-                len(aligned[key]) == expected_counts[key]
+            not aligned[ALIGNMENT_ANCHOR_WINDOW]
+            or aligned[ALIGNMENT_ANCHOR_WINDOW][0] != original_anchor_frame
+            or any(
+                len(aligned[key]) != expected_counts[key]
                 for key in WINDOWS
             )
         ):
-            matches.append((original_anchor_frame, phase_delta))
+            continue
 
-    if len(matches) != 1:
-        qualifier = "missing" if not matches else "ambiguous"
-        raise ValueError(
-            "same-witness timing established FB anchor match is "
-            f"{qualifier}; refusing timing classification"
+        established_series_error = sum(
+            abs(
+                (original_frame - phase_delta)
+                - candidate_frame
+            )
+            for key in WINDOWS
+            for candidate_frame, original_frame in zip(
+                candidate_series[key],
+                aligned[key],
+            )
         )
-    return candidate_anchor_frame, matches[0][0]
+        matches.append(
+            (
+                established_series_error,
+                original_anchor_frame,
+                phase_delta,
+            )
+        )
+
+    if not matches:
+        raise ValueError(
+            "same-witness timing established FB anchor match is missing; "
+            "refusing timing classification"
+        )
+    best_error = min(match[0] for match in matches)
+    best_matches = [match for match in matches if match[0] == best_error]
+    if len(best_matches) != 1:
+        raise ValueError(
+            "same-witness timing established FB anchor match is ambiguous; "
+            "refusing timing classification"
+        )
+    return candidate_anchor_frame, best_matches[0][1]
 
 
 def extract_window(
@@ -412,9 +439,9 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
             "This receipt classifies only sample-exact relative onset geometry "
             "for the already-established FB 3F and FA 42 effects. One render-wide "
             "phase delta is anchored by the candidate's first onset in the established "
-            "FB 3F beat-1 window and the unique original onset whose phase offset "
-            "preserves the established FB/FA window cardinalities after alignment. "
-            "This ignores out-of-scope onset ordering and tolerates either-direction "
+            "FB 3F beat-1 window and the unique best original anchor when candidates "
+            "are scored only against the aligned established FB/FA onset series. "
+            "This ignores out-of-scope onset timing/order and tolerates either-direction "
             "boundary crossings. The delta is applied before command-window membership "
             "and may be ignored as fixed renderer/start "
             "latency, but command-specific phase skew is a timing difference. Absolute phase "
