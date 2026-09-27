@@ -2900,9 +2900,11 @@ def validate_original_inconclusive_runtime(
     ):
         raise ValueError("same-witness inconclusive render shape mismatch")
 
-    legacy_process_window_ambiguity = (
-        "multiple post-dispatch Psycle window-show events observed"
-        in diagnostics
+    legacy_process_window_ambiguity = any(
+        isinstance(value, str)
+        and "multiple post-dispatch Psycle window-show events observed"
+        in value
+        for value in diagnostics
     )
     if legacy_process_window_ambiguity:
         # Preserve receipts produced by the pre-qualification harness. New
