@@ -128,6 +128,34 @@ assert all(
     for entry in uniform_shift_timing["windows"].values()
 )
 
+uniform_negative_shift = copy.deepcopy(pair)
+uniform_negative_shift["candidate"]["analysis"]["onset_frames"] = candidate_frames
+uniform_negative_shift["original"]["analysis"]["onset_frames"] = [
+    frame - 1000 for frame in candidate_frames
+]
+for role in ("candidate", "original"):
+    sync_onset_beats(uniform_negative_shift[role]["analysis"])
+    sync_window_counts(uniform_negative_shift[role]["analysis"])
+uniform_negative_shift_timing = m.derive_timing(
+    uniform_negative_shift,
+    input_path="synthetic-qualified-observation.json",
+    input_sha256="b" * 64,
+)
+assert uniform_negative_shift_timing["scoped_timing_status"] == "PASS"
+assert (
+    uniform_negative_shift_timing["phase_alignment"]["original_minus_candidate_frames"]
+    == -1000
+)
+assert (
+    uniform_negative_shift_timing["phase_alignment"]["anchor_onset_ordinal"]
+    == 1
+)
+assert all(
+    entry["first_onset_phase_delta_frames"] == -1000
+    and entry["relative_onset_frames_exact_match"] is True
+    for entry in uniform_negative_shift_timing["windows"].values()
+)
+
 fd_only_shift = copy.deepcopy(pair)
 fd_only_shift["original"]["analysis"]["onset_frames"][0] += 100
 sync_onset_beats(fd_only_shift["original"]["analysis"])
