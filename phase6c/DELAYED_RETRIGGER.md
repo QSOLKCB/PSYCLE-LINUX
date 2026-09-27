@@ -308,26 +308,33 @@ The timing scope is intentionally narrower than the delayed/retrigger contract:
 - only the already-established `FB 3F retrigger` beat-1 window and
   `FA 42 retrigger-continue` beat-2 window are parity-classifying;
 - each side's exact onset frames are retained;
-- within each command window, the first onset frame is subtracted from every
-  onset before comparison, producing a sample-exact **relative onset vector**;
+- one render-wide original-minus-candidate phase offset is derived from the
+  first observed onset on each side;
+- that single phase offset is applied to the original frames **before**
+  command-window membership is derived, so a fixed renderer/start latency
+  cannot move corresponding onsets into different nominal command windows;
 - window membership is derived from the retained onset frames at the pinned
   44.1 kHz / BPM 137 timing basis, and the duplicated `onset_beats` values
-  must rederive exactly from those frames;
-- each window's absolute first-onset phase delta is retained diagnostically;
-  one common original-minus-candidate phase delta may be ignored as fixed
-  renderer/start latency, but different deltas across FB and FA are themselves
-  a cross-command timing difference;
-- scoped `PASS` therefore requires exact equality of both FB/FA relative
-  vectors **and** one consistent first-onset phase delta across both windows;
-  any sample-level vector difference or command-specific phase skew yields
-  scoped `DIFFERENT`;
+  must rederive exactly from those raw frames;
+- after aligned membership is established, each side's first onset in the
+  command window is subtracted before comparison, producing a sample-exact
+  **relative onset vector**;
+- each window's original-minus-candidate first-onset phase delta is retained
+  diagnostically and must equal the render-wide offset; command-specific phase
+  skew is therefore itself a cross-command timing difference;
+- scoped `PASS` requires exact equality of both FB/FA relative vectors **and**
+  retention of that one render-wide phase delta in both windows; any
+  sample-level vector difference or command-specific phase skew yields scoped
+  `DIFFERENT`;
 - `FD 7F note-delay` and `FE 04 extended-command` remain explicitly
   unestablished by this witness.
 
 The interpreter refuses the frozen #80 observation because that receipt does not
-contain an original command-bearing pair. It also refuses scope expansion or an
-attempt to promote the whole delayed/retrigger row. Therefore every timing
-receipt retains:
+contain an original command-bearing pair. A classifiable pair must also record a
+successful `rendered-twice` original result, no inconclusive reason, an accepted
+fresh-render binding with no binding error, and no reference-process exit. It
+also refuses scope expansion or an attempt to promote the whole
+delayed/retrigger row. Therefore every timing receipt retains:
 
 - `whole_contract_parity_status: UNKNOWN`;
 - `whole_contract_classification_allowed: false`;
