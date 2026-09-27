@@ -195,6 +195,38 @@ already-frozen PR #69 one-beat callback schedule remains preservation evidence;
 it is not a like-for-like comparison partner for this separate four-beat
 sampled witness.
 
+## Hosted same-witness observation freeze
+
+The collection machinery and the versioned observation are deliberately
+separate. A successful Actions run is not itself a committed compatibility
+claim.
+
+`scripts/phase6c-delayed-retrigger-same-witness-observation.py` provides the
+fail-closed versioning boundary for the hosted candidate/original artifact pair.
+Before a projection can be committed it:
+
+- validates the candidate artifact through the maintained same-witness validator;
+- copies the hosted original artifact to temporary storage, removes only the
+  derived analysis/comparison receipts, and independently regenerates them;
+- requires the regenerated analysis and comparison to match the uploaded hosted
+  receipts exactly as JSON objects;
+- binds workflow run/head/event, candidate/original job IDs, artifact IDs and
+  artifact SHA-256 digests, plus raw candidate/original receipt hashes and the
+  derived original analysis/comparison hashes;
+- requires identical fixture bytes across both sides;
+- requires `parity_status: UNKNOWN`, `classification_allowed: false`, and
+  `exact_onset_timing_interpretation: deferred`;
+- refuses to claim a command-bearing runtime pair unless the original analysis
+  itself records command-bearing execution and both sides use the same onset
+  analyzer.
+
+The projection is written no-clobber below
+`phase6c/evidence/sequencer-delayed-retrigger-same-witness/`. If the hosted
+original remains inconclusive, the projection preserves that exact boundary and
+the roadmap item stays open. If a command-bearing pair is observed, the next
+rung is a **separately versioned onset-timing interpretation**; the freeze step
+still does not classify delayed/retrigger parity by itself.
+
 ## Original render-failure isolation
 
 The first full sampled-witness render ends in a pinned-reference access
