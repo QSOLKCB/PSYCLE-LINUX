@@ -60,6 +60,13 @@ def fixture_paths(root: Path, variant: str) -> tuple[Path, Path, Path]:
     )
 
 
+def canonical_source_sha256(path: Path) -> str:
+    data = path.read_bytes().replace(b"\r\n", b"\n")
+    if b"\r" in data:
+        raise ValueError(f"source contains unsupported carriage returns: {path}")
+    return hashlib.sha256(data).hexdigest()
+
+
 def source_hashes() -> dict[str, str]:
     paths = (
         "tests/phase6c_sampler_ps1_extended_timing_fixture.c",
@@ -71,7 +78,7 @@ def source_hashes() -> dict[str, str]:
         "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/playertimeinfo.cpp",
         "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.cpp",
     )
-    return {path: sha256(ROOT / path) for path in paths}
+    return {path: canonical_source_sha256(ROOT / path) for path in paths}
 
 
 def binding(root: Path, path: Path) -> dict:
