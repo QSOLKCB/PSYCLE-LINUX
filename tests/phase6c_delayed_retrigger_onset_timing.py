@@ -147,8 +147,12 @@ assert (
     == -1000
 )
 assert (
-    uniform_negative_shift_timing["phase_alignment"]["anchor_onset_ordinal"]
-    == 1
+    uniform_negative_shift_timing["phase_alignment"]["candidate_anchor_frame"]
+    == 20000
+)
+assert (
+    uniform_negative_shift_timing["phase_alignment"]["original_anchor_frame"]
+    == 19000
 )
 assert all(
     entry["first_onset_phase_delta_frames"] == -1000
@@ -175,6 +179,28 @@ assert all(
     entry["first_onset_phase_delta_frames"] == 0
     and entry["relative_onset_frames_exact_match"] is True
     for entry in fd_only_shift_timing["windows"].values()
+)
+
+fd_reordered = copy.deepcopy(pair)
+fd_reordered_analysis = fd_reordered["original"]["analysis"]
+fd_reordered_analysis["onset_frames"][0] = 62000
+fd_reordered_analysis["onset_frames"].sort()
+sync_onset_beats(fd_reordered_analysis)
+sync_window_counts(fd_reordered_analysis)
+fd_reordered_timing = m.derive_timing(
+    fd_reordered,
+    input_path="synthetic-qualified-observation.json",
+    input_sha256="c" * 64,
+)
+assert fd_reordered_timing["scoped_timing_status"] == "PASS"
+assert (
+    fd_reordered_timing["phase_alignment"]["original_minus_candidate_frames"]
+    == 0
+)
+assert all(
+    entry["first_onset_phase_delta_frames"] == 0
+    and entry["relative_onset_frames_exact_match"] is True
+    for entry in fd_reordered_timing["windows"].values()
 )
 
 different = copy.deepcopy(pair)
@@ -311,6 +337,12 @@ expect_value_error(
     "first-onset phase diagnostic is inconsistent",
 )
 
+verified_canonical, canonical_raw = m.load_archive_verified_observation(
+    m.CANONICAL_OBSERVATION_RELATIVE
+)
+assert verified_canonical == base
+assert canonical_raw == old_path.read_bytes()
+
 with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
     temporary_root = Path(temporary)
     bound_observation = temporary_root / "qualified-observation.json"
@@ -324,7 +356,18 @@ with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
         input_path=relative_bound_observation,
         input_sha256=m.digest(bound_raw),
     )
-    assert m.validate_bound_receipt(copy.deepcopy(bound_timing)) == bound_timing
+    assert (
+        m.validate_receipt_derivation(
+            copy.deepcopy(bound_timing),
+            pair,
+            bound_raw,
+        )
+        == bound_timing
+    )
+    expect_value_error(
+        lambda: m.validate_bound_receipt(copy.deepcopy(bound_timing)),
+        "canonical archive-verified observation",
+    )
 
     expect_value_error(
         lambda: m.derive_timing(
@@ -338,7 +381,7 @@ with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
     forged_hash = copy.deepcopy(bound_timing)
     forged_hash["input_observation"]["sha256"] = "f" * 64
     expect_value_error(
-        lambda: m.validate_bound_receipt(forged_hash),
+        lambda: m.validate_receipt_derivation(forged_hash, pair, bound_raw),
         "bound input observation hash mismatch",
     )
 
@@ -351,7 +394,11 @@ with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
     forged_receipt["phase_alignment"]["original_anchor_frame"] += 5
     assert m.validate_timing(forged_receipt) == forged_receipt
     expect_value_error(
-        lambda: m.validate_bound_receipt(forged_receipt),
+        lambda: m.validate_receipt_derivation(
+            forged_receipt,
+            pair,
+            bound_raw,
+        ),
         "differs from bound observation derivation",
     )
 
