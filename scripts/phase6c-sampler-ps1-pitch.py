@@ -27,6 +27,7 @@ REFERENCE_EXECUTABLE_SHA256 = (
 RENDERER_PROVENANCE = "renderer-provenance.json"
 ORIGINAL_FIXTURE = "fixture/phase6c-sampler-ps1-pitch-original.psy"
 CANDIDATE_FIXTURE = "fixture/phase6c-sampler-ps1-pitch-candidate.psy"
+CANDIDATE_PCM = "fixture/phase6c-sampler-ps1-pitch-candidate.pcm16le"
 CANDIDATE_RECEIPT = "candidate-sampler-ps1-pitch.json"
 ORIGINAL_RECEIPT = "original-sampler-ps1-pitch.json"
 AUTHORED_SAMPLE_RATE = 22050
@@ -83,6 +84,12 @@ def expected_renderer_provenance() -> dict:
             ROOT
             / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.cpp"
         ),
+        "engine_instrument_sha256": (
+            ROOT
+            / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/instrument.cpp"
+        ),
+        "compat_script_sha256": COMPAT_PATH,
+        "fixture_generator_sha256": ROOT / "tests/phase6c_sampler_ps1_pitch_fixture.c",
     }
     return {
         "schema_version": 1,
@@ -118,6 +125,25 @@ def child(root: Path, relative: str) -> Path:
     return path
 
 
+def read_last_json_object(path: Path) -> dict:
+    if not path.is_file():
+        raise ValueError(f"missing JSON log: {path}")
+    values = []
+    for line in path.read_text(encoding="utf-8", errors="strict").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("{"):
+            continue
+        try:
+            value = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            values.append(value)
+    if len(values) != 1:
+        raise ValueError(f"expected exactly one JSON object in log: {path}")
+    return values[0]
+
+
 def analyze_wave(path: Path) -> dict:
     with wave.open(str(path), "rb") as handle:
         channels = handle.getnchannels()
@@ -148,35 +174,77 @@ def analyze_wave(path: Path) -> dict:
     }
 
 
-def require_fixture_pair(root: Path) -> tuple[Path, Path, dict]:
+def require_fixture_pair(root: Path) -> tuple[Path, Path, Path, dict]:
     original_fixture = child(root, ORIGINAL_FIXTURE)
     candidate_fixture = child(root, CANDIDATE_FIXTURE)
-    if not original_fixture.is_file() or not candidate_fixture.is_file():
-        raise ValueError("Sampler pitch fixture pair is missing")
+    candidate_pcm = child(root, CANDIDATE_PCM)
+    if (
+        not original_fixture.is_file()
+        or not candidate_fixture.is_file()
+        or not candidate_pcm.is_file()
+    ):
+        raise ValueError("Sampler pitch fixture pair or PCM sidecar is missing")
     info = compat.inspect_pair(
         original_fixture.read_bytes(),
         candidate_fixture.read_bytes(),
+        candidate_pcm.read_bytes(),
     )
     if (
         info["authored_sample_rate"] != AUTHORED_SAMPLE_RATE
         or info["authored_sample_frames"] != AUTHORED_SAMPLE_FRAMES
+        or info["pcm16le_bytes"] != AUTHORED_SAMPLE_FRAMES * 2
+        or info["candidate_pre_injection_wave_state"] != "empty"
         or info["candidate_modern_sample_chunk_removed"] is not True
     ):
         raise ValueError("Sampler pitch fixture-pair semantic identity changed")
-    return original_fixture, candidate_fixture, info
+    return original_fixture, candidate_fixture, candidate_pcm, info
 
 def collect_candidate(root: Path) -> dict:
     root = root.resolve()
-    original_fixture, candidate_fixture, fixture_info = require_fixture_pair(root)
+    original_fixture, candidate_fixture, candidate_pcm, fixture_info = require_fixture_pair(root)
+    candidate_fixture_sha = sha256(candidate_fixture)
+    candidate_pcm_sha = sha256(candidate_pcm)
     renders = []
     for index in (1, 2):
         path = child(root, f"render/candidate-sampler-ps1-pitch-{index}.wav")
         if not path.is_file():
             raise ValueError("candidate pitch render is missing")
+        render_sha = sha256(path)
+        log_path = child(root, f"render/candidate-render-{index}.log")
+        execution = read_last_json_object(log_path)
+        expected_execution = {
+            "schema_version": 1,
+            "fixed_frame_render": True,
+            "sample_rate": OUTPUT_RATE,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "target_frames": OUTPUT_RATE,
+            "threads": 1,
+            "sequencer_work_calls": 1,
+            "input_sha256": candidate_fixture_sha,
+            "pcm_size_bytes": AUTHORED_SAMPLE_FRAMES * 2,
+            "pcm_sha256": candidate_pcm_sha,
+            "harness_sample_injection": True,
+            "pre_injection_wave_length": 0,
+            "injected_wave_length": AUTHORED_SAMPLE_FRAMES,
+            "injected_wave_volume": 100,
+            "injected_wave_tune": 0,
+            "injected_wave_finetune": 0,
+            "output_size_bytes": path.stat().st_size,
+            "output_sha256": render_sha,
+        }
+        for key, expected in expected_execution.items():
+            if not exact_equal(execution.get(key), expected):
+                raise ValueError(
+                    f"candidate pitch renderer execution binding changed: {key}"
+                )
         renders.append(
             {
                 "path": str(path.relative_to(root)),
-                "sha256": sha256(path),
+                "sha256": render_sha,
+                "log": str(log_path.relative_to(root)),
+                "log_sha256": sha256(log_path),
+                "execution": execution,
                 "analysis": analyze_wave(path),
             }
         )
@@ -203,7 +271,9 @@ def collect_candidate(root: Path) -> dict:
         "fixture": ORIGINAL_FIXTURE,
         "fixture_sha256": sha256(original_fixture),
         "candidate_fixture": CANDIDATE_FIXTURE,
-        "candidate_fixture_sha256": sha256(candidate_fixture),
+        "candidate_fixture_sha256": candidate_fixture_sha,
+        "candidate_pcm": CANDIDATE_PCM,
+        "candidate_pcm_sha256": candidate_pcm_sha,
         "fixture_semantics": fixture_info,
         "authored_sample": {
             "sample_rate": AUTHORED_SAMPLE_RATE,
@@ -243,6 +313,7 @@ def validate_candidate(root: Path, value: dict | None = None) -> dict:
         "snapshot": CANDIDATE_SNAPSHOT,
         "fixture": ORIGINAL_FIXTURE,
         "candidate_fixture": CANDIDATE_FIXTURE,
+        "candidate_pcm": CANDIDATE_PCM,
         "parity_status": "UNKNOWN",
         "deterministic": True,
         "repeat_count": 2,
@@ -254,11 +325,13 @@ def validate_candidate(root: Path, value: dict | None = None) -> dict:
     provenance = validate_renderer_provenance(root)
     if not exact_equal(value.get("renderer_provenance"), provenance):
         raise ValueError("candidate renderer provenance binding changed")
-    original_fixture, candidate_fixture, info = require_fixture_pair(root)
+    original_fixture, candidate_fixture, candidate_pcm, info = require_fixture_pair(root)
     if value.get("fixture_sha256") != sha256(original_fixture):
         raise ValueError("original-generation pitch fixture digest mismatch")
     if value.get("candidate_fixture_sha256") != sha256(candidate_fixture):
         raise ValueError("candidate-generation pitch fixture digest mismatch")
+    if value.get("candidate_pcm_sha256") != sha256(candidate_pcm):
+        raise ValueError("candidate pitch PCM sidecar digest mismatch")
     if not exact_equal(value.get("fixture_semantics"), info):
         raise ValueError("candidate pitch fixture-pair semantics changed")
     if not exact_equal(
@@ -288,11 +361,45 @@ def validate_candidate(root: Path, value: dict | None = None) -> dict:
         if not isinstance(render, dict):
             raise ValueError("candidate pitch render binding is invalid")
         expected_path = f"render/candidate-sampler-ps1-pitch-{index}.wav"
-        if render.get("path") != expected_path:
-            raise ValueError("candidate pitch render path changed")
+        expected_log = f"render/candidate-render-{index}.log"
+        if render.get("path") != expected_path or render.get("log") != expected_log:
+            raise ValueError("candidate pitch render/log path changed")
         path = child(root, expected_path)
-        if render.get("sha256") != sha256(path):
+        log_path = child(root, expected_log)
+        render_sha = sha256(path)
+        if render.get("sha256") != render_sha:
             raise ValueError("candidate pitch render digest mismatch")
+        if render.get("log_sha256") != sha256(log_path):
+            raise ValueError("candidate pitch render log digest mismatch")
+        execution = read_last_json_object(log_path)
+        if not exact_equal(render.get("execution"), execution):
+            raise ValueError("candidate pitch renderer execution record changed")
+        expected_execution = {
+            "schema_version": 1,
+            "fixed_frame_render": True,
+            "sample_rate": OUTPUT_RATE,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "target_frames": OUTPUT_RATE,
+            "threads": 1,
+            "sequencer_work_calls": 1,
+            "input_sha256": sha256(candidate_fixture),
+            "pcm_size_bytes": AUTHORED_SAMPLE_FRAMES * 2,
+            "pcm_sha256": sha256(candidate_pcm),
+            "harness_sample_injection": True,
+            "pre_injection_wave_length": 0,
+            "injected_wave_length": AUTHORED_SAMPLE_FRAMES,
+            "injected_wave_volume": 100,
+            "injected_wave_tune": 0,
+            "injected_wave_finetune": 0,
+            "output_size_bytes": path.stat().st_size,
+            "output_sha256": render_sha,
+        }
+        for key, expected in expected_execution.items():
+            if not exact_equal(execution.get(key), expected):
+                raise ValueError(
+                    f"candidate pitch renderer execution binding changed: {key}"
+                )
         analysis = analyze_wave(path)
         if not exact_equal(render.get("analysis"), analysis):
             raise ValueError("candidate pitch render analysis mismatch")
