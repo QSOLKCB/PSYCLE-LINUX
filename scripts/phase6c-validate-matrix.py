@@ -461,25 +461,56 @@ DELAYED_RETRIGGER_SAME_WITNESS_OBSERVATION = (
     / "sequencer-delayed-retrigger-same-witness"
     / "observation.json"
 )
-DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE = (
-    EVIDENCE_ROOT
-    / "sequencer-delayed-retrigger-same-witness"
-    / "canonical-raw.tar.gz.b64"
+DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_ROOT = (
+    EVIDENCE_ROOT / "sequencer-delayed-retrigger-same-witness"
 )
 DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_MANIFEST = (
-    EVIDENCE_ROOT
-    / "sequencer-delayed-retrigger-same-witness"
-    / "canonical-raw-manifest.json"
+    DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_ROOT / "canonical-raw-manifest.json"
 )
-EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_TEXT_SHA256 = (
-    "5f3f7472193847d8a375905b22baa46e1e873112459f6e176eab0765571439b5"
-)
-EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_MANIFEST_SHA256 = (
-    "d82ab70ffcf8c57223b801096866416485a7ec87a3beaed49baf300b0f2eceff"
-)
-EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_SHA256 = (
-    "2ffe29dd44a59b58f35163d84dd25604588617a14d21782b18482c47709de452"
-)
+EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_DURABLE_FILES = [
+    {
+        "encoded_path": "candidate-receipt.json.zlib.b64",
+        "encoding": "zlib+base64",
+        "path": "candidate/candidate-delayed-retrigger-sampulse-runtime.json",
+        "sha256": "c3da3133c4345a7dccf4fe596a6bad423f2405f96850db034fba0b0e22c7d251",
+        "size_bytes": 13594,
+    },
+    {
+        "encoded_path": "fixture.psy.zlib.b64",
+        "encoding": "zlib+base64",
+        "path": "candidate/delayed-retrigger/phase6c-delayed-retrigger-sampulse-execution.psy",
+        "sha256": "cfeb6dbcc1e68a063ed3c1a1cfa70e68e88a974209a3940070a184e5b31b6b05",
+        "size_bytes": 5653,
+    },
+    {
+        "encoded_path": "candidate-render-1.wav.zlib.b64",
+        "encoding": "zlib+base64",
+        "path": "candidate/delayed-retrigger-sampulse-runtime/candidate-delayed-retrigger-sampulse-runtime-1.wav",
+        "sha256": "7c0eb0461ee4d41c1f53e8421d30dc66b9b08d8ce0463d9b1de1d703f35b924b",
+        "size_bytes": 164212,
+    },
+    {
+        "encoded_path": "candidate-render-2.wav.zlib.b64",
+        "encoding": "zlib+base64",
+        "path": "candidate/delayed-retrigger-sampulse-runtime/candidate-delayed-retrigger-sampulse-runtime-2.wav",
+        "sha256": "7c0eb0461ee4d41c1f53e8421d30dc66b9b08d8ce0463d9b1de1d703f35b924b",
+        "size_bytes": 164212,
+    },
+    {
+        "encoded_path": "original-receipt.json.zlib.b64",
+        "encoding": "zlib+base64",
+        "path": "original/original-delayed-retrigger-sampulse-runtime.json",
+        "sha256": "b76bc3a8c3301daa6b3b9564403b8d8881a9f669adf5190f5500af42b55313d2",
+        "size_bytes": 15482,
+    },
+    {
+        "encoded_path": "original-render-1.wav.zlib.b64",
+        "encoding": "zlib+base64",
+        "path": "original/delayed-retrigger-sampulse-runtime/original-delayed-retrigger-sampulse-runtime-1.wav",
+        "sha256": "16eed8a40ee3a732b54fd9a09663a46b3fc929248de9ebf7c24f1ddd6fbd229a",
+        "size_bytes": 193004,
+    },
+]
 EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_OBSERVATION_SHA256 = (
     "74c309107bce3c2bb3a6320e9fac237b2d5f898a7be7a1806b965e6d69781b9a"
 )
@@ -1525,36 +1556,44 @@ def validate_delayed_retrigger_same_witness_observation() -> None:
     if not isinstance(observation, dict):
         die("delayed/retrigger same-witness observation must be an object")
 
-    archive_path = DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE
     manifest_path = DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_MANIFEST
-    if not archive_path.is_file() or not manifest_path.is_file():
-        die("delayed/retrigger same-witness durable raw evidence is missing")
-    if hashlib.sha256(archive_path.read_bytes()).hexdigest() != (
-        EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_TEXT_SHA256
-    ):
-        die("delayed/retrigger same-witness durable archive text changed")
-    manifest_raw = manifest_path.read_bytes()
-    if hashlib.sha256(manifest_raw).hexdigest() != (
-        EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_MANIFEST_SHA256
-    ):
-        die("delayed/retrigger same-witness durable archive manifest changed")
+    if not manifest_path.is_file():
+        die("delayed/retrigger same-witness durable raw manifest is missing")
     try:
-        archive_manifest = json.loads(manifest_raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        die(f"delayed/retrigger durable archive manifest is invalid JSON: {exc}")
+        archive_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        die(f"delayed/retrigger durable evidence manifest is invalid JSON: {exc}")
     if (
         not isinstance(archive_manifest, dict)
-        or archive_manifest.get("schema_version") != 1
+        or archive_manifest.get("schema_version") != 2
         or archive_manifest.get("contract")
         != "sequencer-delayed-retrigger-same-witness-render"
         or archive_manifest.get("canonical_workflow_run_id") != 36288494934
         or archive_manifest.get("workflow_head_sha")
         != "6ccb21adb0d4f237da763aff0d27803599ebb2b7"
-        or archive_manifest.get("archive", {}).get("decoded_sha256")
-        != EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_SHA256
-        or archive_manifest.get("archive", {}).get("decoded_size_bytes") != 11572
+        or archive_manifest.get("candidate_artifact")
+        != {
+            "id": 10921047089,
+            "digest": "sha256:fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae",
+        }
+        or archive_manifest.get("original_artifact")
+        != {
+            "id": 10921642971,
+            "digest": "sha256:1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba",
+        }
+        or archive_manifest.get("files")
+        != EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_DURABLE_FILES
     ):
-        die("delayed/retrigger durable archive manifest identity changed")
+        die("delayed/retrigger durable evidence manifest identity changed")
+    for item in EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_DURABLE_FILES:
+        encoded_path = (
+            DELAYED_RETRIGGER_SAME_WITNESS_ARCHIVE_ROOT / item["encoded_path"]
+        )
+        if not encoded_path.is_file():
+            die(
+                "delayed/retrigger durable encoded evidence is missing: "
+                + item["encoded_path"]
+            )
     if (
         observation.get("schema_version") != 1
         or observation.get("phase") != "6C"
