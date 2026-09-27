@@ -130,7 +130,11 @@ def validate_probe(value: object, variant: str) -> dict:
             if type(actual) not in (int, float) or isinstance(actual, bool):
                 raise ValueError(f"candidate timing probe field type changed: {key}")
             if not math.isclose(float(actual), wanted, rel_tol=0.0, abs_tol=1e-9):
-                raise ValueError(f"candidate timing probe field changed: {key}")
+                raise ValueError(
+                    f"candidate {variant} timing probe field changed: {key}; "
+                    f"actual={actual!r}, expected={wanted!r}, "
+                    f"delta={float(actual) - wanted:.17g}"
+                )
         elif actual != wanted or type(actual) is not type(wanted):
             raise ValueError(f"candidate timing probe field changed: {key}")
     return value
