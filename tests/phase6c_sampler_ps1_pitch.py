@@ -162,6 +162,14 @@ candidate = {
             "fixture_generator_sha256": "c" * 64,
         },
     },
+    "renderer_build_identity": {
+        "path": pitch.RENDERER_BUILD_MANIFEST,
+        "sha256": "7" * 64,
+        "git_head": "8" * 40,
+        "renderer_executable": pitch.RENDERER_EXECUTABLE,
+        "renderer_executable_sha256": "9" * 64,
+        "input_count": 123,
+    },
     "fixture_semantics": {
         "pcm_payload_identity": "decoded-SMSB-pcm16le-identical-sidecar",
     },
@@ -191,6 +199,9 @@ assert comparison["comparison_ready"] is True
 assert comparison["sampler_ps1_status"] == "UNKNOWN"
 assert comparison["candidate_snapshot"] == pitch.CANDIDATE_SNAPSHOT
 assert comparison["candidate_source_receipt_sha256"] == "9" * 64
+assert comparison["candidate_renderer_executable_sha256"] == "9" * 64
+assert comparison["candidate_build_input_manifest_sha256"] == "7" * 64
+assert comparison["candidate_build_input_git_head"] == "8" * 40
 assert comparison["candidate_render_sha256s"] == [candidate_render_sha] * 2
 assert comparison["original_reference_build"] == pitch.REFERENCE_BUILD
 assert comparison["original_executable_sha256"] == pitch.REFERENCE_EXECUTABLE_SHA256
@@ -240,6 +251,45 @@ with tempfile.TemporaryDirectory() as temporary:
         assert "does not match checked-out" in str(exc)
     else:
         raise AssertionError("modified compiled-renderer provenance must fail")
+
+with tempfile.TemporaryDirectory() as temporary:
+    evidence = Path(temporary)
+    executable = evidence / pitch.RENDERER_EXECUTABLE
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"sealed phase6c renderer")
+    manifest = {
+        "schema_version": 1,
+        "scope": pitch.RENDERER_BUILD_SCOPE,
+        "git_head": "1" * 40,
+        "renderer_executable": pitch.RENDERER_EXECUTABLE,
+        "renderer_executable_sha256": pitch.sha256(executable),
+        "inputs": [
+            {
+                "path": "tests/phase6c_sampler_ps1_pitch_render.cpp",
+                "sha256": "2" * 64,
+            }
+        ],
+    }
+    manifest_path = evidence / pitch.RENDERER_BUILD_MANIFEST
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    identity = pitch.validate_renderer_build_manifest(
+        evidence, verify_checkout_sources=False
+    )
+    assert identity["renderer_executable_sha256"] == pitch.sha256(executable)
+    assert identity["input_count"] == 1
+
+    executable.write_bytes(b"tampered phase6c renderer")
+    try:
+        pitch.validate_renderer_build_manifest(
+            evidence, verify_checkout_sources=False
+        )
+    except ValueError as exc:
+        assert "executable identity changed" in str(exc)
+    else:
+        raise AssertionError("tampered candidate renderer executable must fail")
 
 with tempfile.TemporaryDirectory() as temporary:
     evidence = Path(temporary)
