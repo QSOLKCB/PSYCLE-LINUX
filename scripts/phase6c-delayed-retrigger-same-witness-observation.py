@@ -180,7 +180,7 @@ def validate_archived_candidate(candidate_root: Path) -> dict:
 
 
 
-def derive_original_receipts(candidate: dict, original_root: Path) -> tuple[dict, dict, dict]:
+def derive_archived_original_receipts(candidate: dict, original_root: Path) -> tuple[dict, dict, dict]:
     original_root = original_root.resolve()
     receipt = read_json(original_root / same.ORIGINAL_RECEIPT)
     if (
@@ -637,7 +637,7 @@ def validate_archived_evidence(
     candidate_root = archive_root / "candidate"
     original_root = archive_root / "original"
     candidate = validate_archived_candidate(candidate_root)
-    original_receipt, original_analysis, comparison = derive_original_receipts(
+    original_receipt, original_analysis, comparison = derive_archived_original_receipts(
         candidate, original_root
     )
 
