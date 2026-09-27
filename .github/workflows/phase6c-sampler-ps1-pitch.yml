@@ -263,7 +263,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          python scripts/phase6c-sampler-ps1-pitch.py candidate-check `
+          python scripts/phase6c-sampler-ps1-pitch.py candidate-check-portable `
             phase6c-ps1-pitch-candidate
           if ($LASTEXITCODE -ne 0) { throw "candidate pitch validation failed" }
           python scripts/phase6c-sampler-ps1-pitch.py original-check `
