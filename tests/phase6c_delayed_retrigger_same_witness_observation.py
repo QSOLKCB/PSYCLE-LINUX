@@ -204,4 +204,45 @@ if m.OBSERVATION_PATH.is_file():
     committed = m.read_json(m.OBSERVATION_PATH)
     assert m.validate_projection(committed) == committed
 
+    evidence_root = m.OBSERVATION_PATH.parent
+    manifest_path = evidence_root / "canonical-raw-manifest.json"
+    archive_path = evidence_root / "canonical-raw.tar.gz.b64"
+    manifest = m.read_json(manifest_path)
+    temporary, archive_root = m.materialize_durable_archive(
+        archive_path, manifest
+    )
+    try:
+        assert (
+            m.validate_archived_evidence(archive_root, manifest, committed)
+            == committed
+        )
+    finally:
+        temporary.cleanup()
+
+    bad_manifest = copy.deepcopy(manifest)
+    bad_manifest["candidate_artifact"]["id"] += 1
+    temporary, archive_root = m.materialize_durable_archive(
+        archive_path, manifest
+    )
+    try:
+        expect_value_error(
+            lambda: m.validate_archive_manifest(
+                archive_root, bad_manifest, committed
+            ),
+            "candidate_artifact provenance mismatch",
+        )
+    finally:
+        temporary.cleanup()
+
+source = SCRIPT.read_text(encoding="utf-8")
+assert "candidate = same.validate_candidate(candidate_root)" in source
+assert "recomputed = same.validate_original(candidate_root, replay_root)" in source
+
+workflow_source = (
+    ROOT / ".github" / "workflows" / "phase6c-delayed-retrigger.yml"
+).read_text(encoding="utf-8")
+assert "canonical-raw.tar.gz.b64" in workflow_source
+assert "archive-check" in workflow_source
+assert "steps.canonical.outputs.run_id" not in workflow_source
+
 print("phase6c-delayed-retrigger-same-witness-observation: PASS")
