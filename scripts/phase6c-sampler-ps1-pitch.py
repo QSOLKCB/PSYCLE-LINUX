@@ -285,11 +285,22 @@ def original_observation(candidate_root: Path, original_root: Path) -> dict:
         }
 
     if outcome in {"reference-process-exited-during-render", "inconclusive"}:
-        if not attempts:
-            raise ValueError("blocked original pitch witness has no retained attempt")
-        last = attempts[-1]
-        if not isinstance(last, dict):
-            raise ValueError("blocked original pitch attempt is invalid")
+        pre_render = runtime.get("pre_render_load")
+        if not isinstance(pre_render, dict):
+            raise ValueError("blocked original pitch witness lacks pre-render load evidence")
+        if attempts:
+            last = attempts[-1]
+            if not isinstance(last, dict):
+                raise ValueError("blocked original pitch attempt is invalid")
+        else:
+            last = {}
+            if (
+                pre_render.get("clean_accepted_load") is True
+                and pre_render.get("load_warning_dismissed") is True
+            ):
+                raise ValueError(
+                    "clean accepted original pitch witness has no retained render attempt"
+                )
         if outcome == "reference-process-exited-during-render":
             if last.get("process_exited") is not True:
                 raise ValueError("original pitch process-exit outcome lacks exit evidence")

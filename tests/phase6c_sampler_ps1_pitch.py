@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import struct
+import subprocess
 import tempfile
 import wave
 
@@ -153,3 +154,25 @@ assert blocked["scoped_pitch_status"] == "UNKNOWN"
 assert blocked["comparison_ready"] is False
 
 print("phase6c-sampler-ps1-pitch: PASS")
+
+
+with tempfile.TemporaryDirectory() as temporary:
+    generated = Path(temporary) / "observer.ps1"
+    result = subprocess.run(
+        [
+            "python3",
+            str(ROOT / "scripts/phase6c-build-sampler-ps1-pitch-observer.py"),
+            str(ROOT / "scripts/phase6c-original-windows-fixtures-v2.ps1"),
+            str(generated),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    observer = generated.read_text(encoding="utf-8")
+    assert "[switch]$ObserveSamplerPs1Pitch" in observer
+    assert 'name = "sampler-ps1-pitch"' in observer
+    assert "Invoke-Phase6cAudioRender" in observer
+    assert "runtime_execution = $runtimeExecution" in observer
+
+print("phase6c-sampler-ps1-pitch-observer: PASS")

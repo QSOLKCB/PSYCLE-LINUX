@@ -12,6 +12,8 @@ param(
 
     [switch]$ObserveDelayedRetrigger,
 
+    [switch]$ObserveSamplerPs1Pitch,
+
     [switch]$CollectSamplerFaultLocation
 )
 
@@ -22,7 +24,12 @@ if ($CollectSamplerFaultLocation -and -not $ObserveDelayedRetrigger) {
 }
 
 $baseObserver = Join-Path $PSScriptRoot "phase6c-original-windows-fixtures-v2.ps1"
-if ($ObserveDelayedRetrigger) {
+if ($ObserveSamplerPs1Pitch) {
+    & $baseObserver `
+        -CandidateArtifactRoot $CandidateArtifactRoot `
+        -Out $Out `
+        -ObserveSamplerPs1Pitch
+} elseif ($ObserveDelayedRetrigger) {
     & $baseObserver `
         -CandidateArtifactRoot $CandidateArtifactRoot `
         -Out $Out `
@@ -71,7 +78,11 @@ if (-not (Test-Path -LiteralPath $runtimeReceipt -PathType Leaf)) {
 }
 Copy-Item -LiteralPath $runtimeReceipt -Destination (Join-Path $outRoot "vc90-runtime.txt")
 
-$receiptNames = @("psy2", "psy3")
+$receiptNames = if ($ObserveSamplerPs1Pitch) {
+    @("sampler-ps1-pitch")
+} else {
+    @("psy2", "psy3")
+}
 if ($ObserveSerialization -and (Test-Path -LiteralPath (Join-Path $outRoot "original-psy3-reopen.json"))) {
     $receiptNames += "psy3-reopen"
 }
