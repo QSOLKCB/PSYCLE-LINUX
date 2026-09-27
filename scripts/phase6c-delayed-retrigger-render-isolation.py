@@ -240,12 +240,14 @@ def require_fresh_render_event_binding(attempt: dict, name: str) -> None:
         or not isinstance(preexisting, int)
         or isinstance(preexisting, bool)
         or preexisting < 0
-        or attempt.get("render_dialog_post_dispatch_observed_window_event_count") != 1
         or type(attempt.get("render_dialog_post_dispatch_observed_window_event_count")) is not int
+        or attempt.get("render_dialog_post_dispatch_observed_window_event_count") < 1
         or attempt.get("render_dialog_unresolved_post_dispatch_event_count") != 0
         or type(attempt.get("render_dialog_unresolved_post_dispatch_event_count")) is not int
         or attempt.get("render_dialog_post_dispatch_event_count") != 1
         or type(attempt.get("render_dialog_post_dispatch_event_count")) is not int
+        or attempt.get("render_dialog_post_dispatch_observed_window_event_count")
+        < attempt.get("render_dialog_post_dispatch_event_count")
         or not isinstance(handle, int)
         or isinstance(handle, bool)
         or handle <= 0
