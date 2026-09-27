@@ -8,6 +8,7 @@ on:
     paths:
       - 'phase6c/DELAYED_RETRIGGER.md'
       - 'phase6c/evidence/sequencer-delayed-retrigger/**'
+      - 'phase6c/evidence/sequencer-delayed-retrigger-same-witness/**'
       - 'phase6c/evidence/sequencer-sampler-fault-location/**'
       - 'phase6c/evidence/sequencer-sampler-work-boundary/**'
       - 'phase6c/compatibility-matrix.json'
@@ -46,6 +47,7 @@ on:
     paths:
       - 'phase6c/DELAYED_RETRIGGER.md'
       - 'phase6c/evidence/sequencer-delayed-retrigger/**'
+      - 'phase6c/evidence/sequencer-delayed-retrigger-same-witness/**'
       - 'phase6c/evidence/sequencer-sampler-fault-location/**'
       - 'phase6c/evidence/sequencer-sampler-work-boundary/**'
       - 'phase6c/compatibility-matrix.json'
@@ -126,7 +128,9 @@ jobs:
         run: python3 tests/phase6c_sampler_fault_location.py
 
       - name: Check same-witness Sampulse render negative controls
-        run: python3 tests/phase6c_delayed_retrigger_same_witness.py
+        run: |
+          python3 tests/phase6c_delayed_retrigger_same_witness.py
+          python3 tests/phase6c_delayed_retrigger_same_witness_observation.py
 
       - name: Validate versioned compatibility matrix
         run: python3 scripts/phase6c-validate-matrix.py phase6c/compatibility-matrix.json
