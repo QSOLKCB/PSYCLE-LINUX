@@ -68,8 +68,8 @@ def exact_equal(actual: object, expected: object) -> bool:
     return actual == expected
 
 
-def expected_renderer_provenance() -> dict:
-    sources = {
+def renderer_provenance_sources() -> dict[str, Path]:
+    return {
         "renderer_source_sha256": ROOT / "tests/phase6c_sampler_ps1_pitch_render.cpp",
         "renderer_project_sha256": ROOT / "tests/phase6c_sampler_ps1_pitch_render.pro",
         "engine_sequencer_sha256": (
@@ -103,23 +103,45 @@ def expected_renderer_provenance() -> dict:
         "compat_script_sha256": COMPAT_PATH,
         "fixture_generator_sha256": ROOT / "tests/phase6c_sampler_ps1_pitch_fixture.c",
     }
+
+
+def expected_renderer_provenance() -> dict:
     return {
         "schema_version": 1,
-        **{name: sha256(path) for name, path in sources.items()},
+        **{
+            name: sha256(path)
+            for name, path in renderer_provenance_sources().items()
+        },
     }
 
 
-def validate_renderer_provenance(root: Path) -> dict:
+def validate_renderer_provenance(
+    root: Path, *, verify_checkout_sources: bool = True
+) -> dict:
     path = child(root, RENDERER_PROVENANCE)
     if not path.is_file():
         raise ValueError("candidate compiled-renderer provenance is missing")
     attestation = read_json(path)
-    expected = expected_renderer_provenance()
-    if not exact_equal(attestation, expected):
-        raise ValueError(
-            "candidate compiled-renderer provenance does not match checked-out "
-            "renderer/engine sources"
-        )
+    expected_keys = {"schema_version", *renderer_provenance_sources().keys()}
+    if set(attestation) != expected_keys:
+        raise ValueError("candidate compiled-renderer provenance field set changed")
+    if type(attestation.get("schema_version")) is not int or attestation["schema_version"] != 1:
+        raise ValueError("candidate compiled-renderer provenance schema changed")
+    for key in renderer_provenance_sources():
+        digest = attestation.get(key)
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(char not in "0123456789abcdef" for char in digest)
+        ):
+            raise ValueError(f"candidate compiled-renderer provenance digest is invalid: {key}")
+    if verify_checkout_sources:
+        expected = expected_renderer_provenance()
+        if not exact_equal(attestation, expected):
+            raise ValueError(
+                "candidate compiled-renderer provenance does not match checked-out "
+                "renderer/engine sources"
+            )
     return {
         "path": RENDERER_PROVENANCE,
         "sha256": sha256(path),
@@ -320,7 +342,12 @@ def collect_candidate(root: Path) -> dict:
     return value
 
 
-def validate_candidate(root: Path, value: dict | None = None) -> dict:
+def validate_candidate(
+    root: Path,
+    value: dict | None = None,
+    *,
+    verify_checkout_sources: bool = True,
+) -> dict:
     root = root.resolve()
     if value is None:
         value = read_json(root / CANDIDATE_RECEIPT)
@@ -342,7 +369,9 @@ def validate_candidate(root: Path, value: dict | None = None) -> dict:
     for key, expected in checks.items():
         if value.get(key) != expected or type(value.get(key)) is not type(expected):
             raise ValueError(f"candidate pitch receipt identity changed: {key}")
-    provenance = validate_renderer_provenance(root)
+    provenance = validate_renderer_provenance(
+        root, verify_checkout_sources=verify_checkout_sources
+    )
     if not exact_equal(value.get("renderer_provenance"), provenance):
         raise ValueError("candidate renderer provenance binding changed")
     original_fixture, candidate_fixture, candidate_pcm, info = require_fixture_pair(root)
@@ -529,7 +558,12 @@ def validate_completed_render_attempt(
 
 
 def original_observation(candidate_root: Path, original_root: Path) -> dict:
-    candidate = validate_candidate(candidate_root)
+    # Candidate build inputs were verified on the Linux builder before sealing the
+    # artifact. Cross-platform consumers verify the sealed provenance shape and
+    # hashes without re-hashing a checkout whose line-ending policy may differ.
+    candidate = validate_candidate(
+        candidate_root, verify_checkout_sources=False
+    )
     receipt_path = original_root / ORIGINAL_RECEIPT
     receipt = read_json(receipt_path)
     checks = {
@@ -806,6 +840,8 @@ def main() -> int:
     c.add_argument("root", type=Path)
     cc = sub.add_parser("candidate-check")
     cc.add_argument("root", type=Path)
+    ccp = sub.add_parser("candidate-check-portable")
+    ccp.add_argument("root", type=Path)
     o = sub.add_parser("original-check")
     o.add_argument("candidate_root", type=Path)
     o.add_argument("original_root", type=Path)
@@ -821,6 +857,8 @@ def main() -> int:
         write_new(target, value)
     elif args.mode == "candidate-check":
         value = validate_candidate(args.root)
+    elif args.mode == "candidate-check-portable":
+        value = validate_candidate(args.root, verify_checkout_sources=False)
     elif args.mode == "original-check":
         value = original_observation(args.candidate_root, args.original_root)
     else:
