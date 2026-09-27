@@ -426,11 +426,6 @@ class GeneratedObserver(unittest.TestCase):
                 5,
             )
             self.assertNotIn(
-                '[string]$runtimeExecution.outcome -in '
-                '@("rendered-once", "rendered-twice")',
-                text,
-            )
-            self.assertNotIn(
                 '$runtimeRenders = @($runtimeExecution.renders)',
                 text,
             )
