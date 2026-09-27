@@ -137,12 +137,25 @@ Runtime fixtures must still prove the externally visible behaviour.
 The next Sampler PS1 rungs are intentionally ordered by the strongest
 source-indicated risk:
 
-1. **Non-44.1-kHz pitch witness** — use one project-authored sample whose embedded
-   sample rate is not 44.1 kHz, render the same note under pinned original Psycle
-   and the frozen candidate, and compare pitch/duration with identity-bound
-   receipts.
-2. **PS1 extended timing witness** — exercise `E-Dx` and `E-Cx` on a dedicated
-   PS1 Sampler fixture and retain exact onset/off timing from both sides.
+1. **Non-44.1-kHz pitch witness** — the paired collector is implemented and
+   PR #84 workflow run `36323407398` is now versioned. The frozen candidate
+   produced a deterministic 11,025-frame active span, while pinned Psycle 1.12.0
+   accepted the exact fixture and then exited with `0xC0000005` after verified
+   offline-render dispatch. The scoped pitch result therefore remains `UNKNOWN`;
+   see `phase6c/evidence/sampler-ps1/pitch-hosted/observation.json`.
+2. **PS1 extended timing witness** — the dedicated paired collector now uses
+   separate `E-D3` and `E-C3` PSY3 fixtures. The candidate bridge removes only
+   modern `SMSB` storage, then the frozen candidate loads the bridged PSY3 and
+   injects the exact decoded PCM into the wave-empty legacy Instrument. The
+   candidate witness now renders the loaded fixture through the frozen
+   Sequencer/Player path, whose Player processing splits work at the historical
+   256-sample maximum, and records the resulting audible first/last active
+   frames. The source-derived 3/6-row value still truncates to semantic sample
+   2756, but it is not treated as an audible boundary unless production-block
+   playback actually produces it. Pinned original Psycle uses the same hardened
+   two-render observer; deterministic silent renders are retained explicitly
+   rather than treated as harness failures. A scoped verdict remains pending the
+   first hosted paired run.
 3. **Envelope / loop / panning / offset / volume / retrigger** — add one narrow
    fixture per behaviour rather than one opaque omnibus song.
 4. **Sampler state round trip** — save/reopen corrected-C4, slide mode,

@@ -14,6 +14,8 @@ param(
 
     [switch]$ObserveSamplerPs1Pitch,
 
+    [switch]$ObserveSamplerPs1ExtendedTiming,
+
     [switch]$CollectSamplerFaultLocation
 )
 
@@ -24,7 +26,12 @@ if ($CollectSamplerFaultLocation -and -not $ObserveDelayedRetrigger) {
 }
 
 $baseObserver = Join-Path $PSScriptRoot "phase6c-original-windows-fixtures-v2.ps1"
-if ($ObserveSamplerPs1Pitch) {
+if ($ObserveSamplerPs1ExtendedTiming) {
+    & $baseObserver `
+        -CandidateArtifactRoot $CandidateArtifactRoot `
+        -Out $Out `
+        -ObserveSamplerPs1ExtendedTiming
+} elseif ($ObserveSamplerPs1Pitch) {
     & $baseObserver `
         -CandidateArtifactRoot $CandidateArtifactRoot `
         -Out $Out `
@@ -78,7 +85,9 @@ if (-not (Test-Path -LiteralPath $runtimeReceipt -PathType Leaf)) {
 }
 Copy-Item -LiteralPath $runtimeReceipt -Destination (Join-Path $outRoot "vc90-runtime.txt")
 
-$receiptNames = if ($ObserveSamplerPs1Pitch) {
+$receiptNames = if ($ObserveSamplerPs1ExtendedTiming) {
+    @("sampler-ps1-extended-delay", "sampler-ps1-extended-noteoff")
+} elseif ($ObserveSamplerPs1Pitch) {
     @("sampler-ps1-pitch")
 } else {
     @("psy2", "psy3")
