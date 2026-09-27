@@ -28,9 +28,10 @@ BPM = 137
 EXPECTED_SAMPLE_RATE = 44100
 BEAT_FRAMES = EXPECTED_SAMPLE_RATE * 60.0 / BPM
 NORMALIZATION = (
-    "subtract each side's first onset in each command window, while requiring "
-    "one consistent original-minus-candidate first-onset phase delta across "
-    "all classified windows"
+    "derive one render-wide original-minus-candidate phase offset from the first "
+    "observed onset, apply it before command-window membership, then subtract each "
+    "side's first onset in each classified window and require every classified "
+    "window to retain that same render-wide phase delta"
 )
 WINDOWS = {
     "fb_retrigger_beat_1": {
@@ -123,7 +124,6 @@ def validate_analysis(analysis: object, role: str) -> dict:
         if (
             type(counts.get(key)) is not int
             or counts[key] != expected_count
-            or expected_count < 2
         ):
             raise ValueError(
                 f"{role} does not retain frame-derived command-bearing {key} onsets"
@@ -131,12 +131,19 @@ def validate_analysis(analysis: object, role: str) -> dict:
     return analysis
 
 
-def extract_window(analysis: dict, start: float, end: float, label: str) -> dict:
+def extract_window(
+    analysis: dict,
+    start: float,
+    end: float,
+    label: str,
+    *,
+    phase_alignment_frames: int = 0,
+) -> dict:
     frames = analysis["onset_frames"]
     selected = [
         frame
         for frame in frames
-        if start <= frame / BEAT_FRAMES < end
+        if start <= (frame - phase_alignment_frames) / BEAT_FRAMES < end
     ]
     if len(selected) < 2:
         raise ValueError(f"{label} does not contain multiple command onsets")
@@ -180,6 +187,18 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
             "same-witness timing interpretation requires a command-bearing runtime pair"
         )
 
+    if (
+        original.get("outcome") != "rendered-twice"
+        or original.get("inconclusive_reason") is not None
+        or original.get("fresh_render_event_binding") != "accepted"
+        or original.get("fresh_render_event_binding_error") is not None
+        or original.get("process_exit_code") is not None
+    ):
+        raise ValueError(
+            "same-witness timing interpretation requires a successful bound "
+            "original render pair"
+        )
+
     expected_scope = same.RUNTIME_COMMAND_EXECUTION_SCOPE
     if (
         candidate.get("runtime_command_execution_scope") != expected_scope
@@ -189,6 +208,10 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
 
     candidate_analysis = validate_analysis(candidate.get("analysis"), "candidate")
     original_analysis = validate_analysis(original.get("analysis"), "original")
+
+    candidate_anchor_frame = candidate_analysis["onset_frames"][0]
+    original_anchor_frame = original_analysis["onset_frames"][0]
+    global_phase_delta = original_anchor_frame - candidate_anchor_frame
 
     windows: dict[str, dict] = {}
     all_relative_exact = True
@@ -205,6 +228,7 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
             window["start_beat"],
             window["end_beat"],
             f"original {window['label']}",
+            phase_alignment_frames=global_phase_delta,
         )
         relative_exact = (
             candidate_window["relative_frames"]
@@ -237,14 +261,17 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
             "first_onset_phase_delta_frames": phase_delta,
         }
 
-    phase_delta_consistent = len(set(first_onset_phase_deltas)) == 1
+    phase_delta_consistent = all(
+        phase_delta == global_phase_delta
+        for phase_delta in first_onset_phase_deltas
+    )
     scoped_match = all_relative_exact and phase_delta_consistent
     scoped_status = "PASS" if scoped_match else "DIFFERENT"
     if scoped_match:
         interpretation = (
-            "The FB/FA command-bearing relative onset vectors match exactly at "
-            "44.1 kHz and share one original-minus-candidate first-onset phase "
-            "delta across both command windows."
+            "After one render-wide phase alignment, the FB/FA command-bearing "
+            "relative onset vectors match exactly at 44.1 kHz and each command "
+            "window retains that same original-minus-candidate phase delta."
         )
     elif not all_relative_exact:
         interpretation = (
@@ -253,9 +280,9 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
         )
     else:
         interpretation = (
-            "The FB/FA within-window relative onset vectors match, but their "
-            "first-onset phase deltas disagree across command windows; this is "
-            "not explainable by one fixed renderer/start latency."
+            "The FB/FA within-window relative onset vectors match, but at least "
+            "one command window does not retain the render-wide phase delta; "
+            "this is not explainable by one fixed renderer/start latency."
         )
 
     result = {
@@ -281,6 +308,12 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
             "sample_rate": EXPECTED_SAMPLE_RATE,
             "bpm": BPM,
         },
+        "phase_alignment": {
+            "anchor": "first-observed-onset",
+            "candidate_anchor_frame": candidate_anchor_frame,
+            "original_anchor_frame": original_anchor_frame,
+            "original_minus_candidate_frames": global_phase_delta,
+        },
         "windows": windows,
         "scoped_timing_status": scoped_status,
         "whole_contract_parity_status": "UNKNOWN",
@@ -289,9 +322,10 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
         "interpretation": interpretation,
         "interpretation_boundary": (
             "This receipt classifies only sample-exact relative onset geometry "
-            "for the already-established FB 3F and FA 42 effects. One common "
-            "first-onset phase delta may be ignored as fixed renderer/start latency, "
-            "but command-specific phase skew is a timing difference. Absolute phase "
+            "for the already-established FB 3F and FA 42 effects. One render-wide "
+            "phase delta, anchored by the first observed onset, is applied before "
+            "command-window membership and may be ignored as fixed renderer/start "
+            "latency, but command-specific phase skew is a timing difference. Absolute phase "
             "itself remains diagnostic rather than parity-classifying. FD 7F note-"
             "delay and FE 04 extended-command behavior remain outside "
             "this witness's established runtime scope, so sequencer-delayed-"
@@ -320,6 +354,8 @@ def validate_timing(value: object) -> dict:
     if (
         not isinstance(source, dict)
         or not isinstance(source.get("path"), str)
+        or not source.get("path")
+        or Path(source["path"]).is_absolute()
         or source.get("contract") != INPUT_CONTRACT
         or not isinstance(source.get("workflow_run_id"), int)
         or isinstance(source.get("workflow_run_id"), bool)
@@ -331,6 +367,7 @@ def validate_timing(value: object) -> dict:
     observation_module.require_sha256(
         source.get("sha256"), "input_observation.sha256"
     )
+    resolve_bound_observation_path(source["path"])
 
     scope = value.get("scope")
     if (
@@ -346,6 +383,21 @@ def validate_timing(value: object) -> dict:
         or scope.get("bpm") != BPM
     ):
         raise ValueError("same-witness onset-timing scope changed")
+
+    alignment = value.get("phase_alignment")
+    if (
+        not isinstance(alignment, dict)
+        or alignment.get("anchor") != "first-observed-onset"
+        or type(alignment.get("candidate_anchor_frame")) is not int
+        or alignment["candidate_anchor_frame"] < 0
+        or type(alignment.get("original_anchor_frame")) is not int
+        or alignment["original_anchor_frame"] < 0
+        or type(alignment.get("original_minus_candidate_frames")) is not int
+        or alignment["original_minus_candidate_frames"]
+        != alignment["original_anchor_frame"] - alignment["candidate_anchor_frame"]
+    ):
+        raise ValueError("same-witness onset-timing phase alignment is invalid")
+    global_phase_delta = alignment["original_minus_candidate_frames"]
 
     windows = value.get("windows")
     if not isinstance(windows, dict) or set(windows) != set(WINDOWS):
@@ -421,7 +473,9 @@ def validate_timing(value: object) -> dict:
             raise ValueError(f"{key} exact-match flag is inconsistent")
         exact_flags.append(exact)
 
-    phase_delta_consistent = len(set(phase_deltas)) == 1
+    phase_delta_consistent = all(
+        phase_delta == global_phase_delta for phase_delta in phase_deltas
+    )
     expected_status = (
         "PASS" if all(exact_flags) and phase_delta_consistent else "DIFFERENT"
     )
@@ -433,7 +487,7 @@ def validate_timing(value: object) -> dict:
 def resolve_bound_observation_path(source_path: str) -> Path:
     path = Path(source_path)
     if path.is_absolute():
-        return path
+        raise ValueError("input observation path must be repository-relative")
     root = ROOT.resolve()
     resolved = (root / path).resolve()
     try:
@@ -507,13 +561,17 @@ def main() -> int:
 
     args = parser.parse_args()
     if args.mode == "derive":
-        raw = args.observation.read_bytes()
+        observation_path = resolve_bound_observation_path(
+            args.observation.as_posix()
+        )
+        input_path = observation_path.relative_to(ROOT.resolve()).as_posix()
+        raw = observation_path.read_bytes()
         observation = json.loads(raw.decode("utf-8"))
         if not isinstance(observation, dict):
             raise ValueError("same-witness observation is not an object")
         value = derive_timing(
             observation,
-            input_path=args.observation.as_posix(),
+            input_path=input_path,
             input_sha256=digest(raw),
         )
         write_new(args.output, value)
