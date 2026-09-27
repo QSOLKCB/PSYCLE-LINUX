@@ -1648,6 +1648,10 @@ def validate_delayed_retrigger_deferred_comparison(
         "comparison": (
             "phase6c/evidence/sequencer-delayed-retrigger/comparison.json"
         ),
+        "same_witness_observation": (
+            "phase6c/evidence/sequencer-delayed-retrigger-same-witness/"
+            "observation.json"
+        ),
     }
     if original.get("observation") != expected_refs["original"]:
         die(f"{row_id} original receipt reference changed")
@@ -1657,6 +1661,11 @@ def validate_delayed_retrigger_deferred_comparison(
         die(f"{row_id} candidate receipt reference changed")
     if row.get("comparison") != expected_refs["comparison"]:
         die(f"{row_id} comparison receipt reference changed")
+    if (
+        row.get("same_witness_observation")
+        != expected_refs["same_witness_observation"]
+    ):
+        die(f"{row_id} same-witness observation reference changed")
 
     original_receipt = load_versioned_receipt(
         expected_refs["original"], f"{row_id}.original.observation"
