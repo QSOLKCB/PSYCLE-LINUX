@@ -309,7 +309,7 @@ The timing scope is intentionally narrower than the delayed/retrigger contract:
   `FA 42 retrigger-continue` beat-2 window are parity-classifying;
 - each side's exact onset frames are retained;
 - one render-wide original-minus-candidate phase offset is derived from the
-  first observed onset on each side;
+  first onset in the established `FB 3F retrigger` beat-1 window on each side;
 - that single phase offset is applied to the original frames **before**
   command-window membership is derived, so a fixed renderer/start latency
   cannot move corresponding onsets into different nominal command windows;
