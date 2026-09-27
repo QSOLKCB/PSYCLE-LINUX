@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 
@@ -90,6 +91,21 @@ assert committed["candidate"]["files"]["sampler.h"] == {
     "git_blob": m.CANDIDATE_HPP_BLOB,
 }
 
+assert committed["cpsycle"]["source_repository"] == "QSOLKCB/PSYCLE-LINUX"
+assert committed["cpsycle"]["snapshot"] == "cpsycle-r12005-baseline"
+assert committed["cpsycle"]["files"]["sampler.c"] == {
+    "path": "cpsycle/audio/src/sampler.c",
+    "git_blob": m.CPSYCLE_C_BLOB,
+}
+assert committed["cpsycle"]["files"]["sampler.h"] == {
+    "path": "cpsycle/audio/src/sampler.h",
+    "git_blob": m.CPSYCLE_H_BLOB,
+}
+assert committed["cpsycle"]["files"]["samplerdefs.h"] == {
+    "path": "cpsycle/audio/src/samplerdefs.h",
+    "git_blob": m.CPSYCLE_DEFS_BLOB,
+}
+
 forged_binding = copy.deepcopy(committed)
 forged_binding["original"]["source_repository"] = "example/other"
 expect_value_error(
@@ -111,11 +127,53 @@ expect_value_error(
     "nonzero E-Dx assignment changed",
 )
 
+forged_cpsycle_snapshot = copy.deepcopy(committed)
+forged_cpsycle_snapshot["cpsycle"]["snapshot"] = "other-baseline"
+expect_value_error(
+    lambda: m.validate(forged_cpsycle_snapshot),
+    "C-Psycle Sampler snapshot changed",
+)
+
+forged_cpsycle_path = copy.deepcopy(committed)
+forged_cpsycle_path["cpsycle"]["files"]["sampler.c"]["path"] = "sampler.c"
+expect_value_error(
+    lambda: m.validate(forged_cpsycle_path),
+    "C-Psycle Sampler source path/blob binding changed",
+)
+
 promoted = copy.deepcopy(committed)
 promoted["parity_status"] = "PASS"
 expect_value_error(
     lambda: m.validate(promoted),
     "source receipt envelope is invalid",
+)
+
+forged_schema_type = copy.deepcopy(committed)
+forged_schema_type["schema_version"] = True
+expect_value_error(
+    lambda: m.validate(forged_schema_type),
+    "schema_version must be integer 1",
+)
+
+forged_version_type = copy.deepcopy(committed)
+forged_version_type["candidate"]["sampler_machine_state_version"] = True
+expect_value_error(
+    lambda: m.validate(forged_version_type),
+    "candidate Sampler machine_state_version must be integer 1",
+)
+
+forged_polyphony_type = copy.deepcopy(committed)
+forged_polyphony_type["original"]["max_polyphony"] = True
+expect_value_error(
+    lambda: m.validate(forged_polyphony_type),
+    "original max_polyphony must be integer 16",
+)
+
+forged_lpb_type = copy.deepcopy(committed)
+forged_lpb_type["candidate"]["loaded_psy3_timing_evidence"]["derived_lpb"] = 8
+expect_value_error(
+    lambda: m.validate(forged_lpb_type),
+    "derived_lpb must be float 8.0",
 )
 
 forged_commands = copy.deepcopy(committed)
@@ -176,5 +234,56 @@ with tempfile.TemporaryDirectory() as temporary:
         lambda: m.derive(exact_cpp, mutated_hpp),
         "original Sampler.hpp blob mismatch",
     )
+
+
+matrix_path = ROOT / "phase6c/compatibility-matrix.json"
+matrix = m.json.loads(matrix_path.read_text(encoding="utf-8"))
+sampler_row_index = next(
+    index
+    for index, row in enumerate(matrix["contracts"])
+    if row["id"] == "sampler-ps1"
+)
+
+
+def expect_matrix_failure(field_path, phrase):
+    mutated = copy.deepcopy(matrix)
+    cursor = mutated["contracts"][sampler_row_index]
+    for key in field_path[:-1]:
+        cursor = cursor[key]
+    cursor[field_path[-1]] = "phase6c/evidence/sampler-ps1/nonexistent.json"
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".json", encoding="utf-8", delete=False
+    ) as handle:
+        m.json.dump(mutated, handle)
+        temp_matrix = Path(handle.name)
+    try:
+        result = subprocess.run(
+            [
+                "python3",
+                "scripts/phase6c-validate-matrix.py",
+                str(temp_matrix),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        temp_matrix.unlink(missing_ok=True)
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert phrase in result.stdout + result.stderr, result.stdout + result.stderr
+
+
+expect_matrix_failure(
+    ("original", "observation"),
+    "sampler-ps1 original observation reference changed",
+)
+expect_matrix_failure(
+    ("candidate", "observation"),
+    "sampler-ps1 candidate observation reference changed",
+)
+expect_matrix_failure(
+    ("cpsycle", "evidence"),
+    "sampler-ps1 C-Psycle evidence reference changed",
+)
 
 print("phase6c-sampler-ps1-contract: PASS")
