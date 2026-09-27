@@ -1,0 +1,117 @@
+name: Phase 6C Sampler PS1 source contract
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-6c/**'
+    paths:
+      - 'phase6c/SAMPLER_PS1.md'
+      - 'phase6c/evidence/sampler-ps1/**'
+      - 'phase6c/compatibility-matrix.json'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'ROADMAP.md'
+      - 'scripts/phase6c-sampler-ps1-contract.py'
+      - 'scripts/phase6c-validate-matrix.py'
+      - 'scripts/phase6d-validate-parity-report.py'
+      - 'tests/phase6c_sampler_ps1_contract.py'
+      - 'psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.cpp'
+      - 'psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.h'
+      - 'cpsycle/audio/src/sampler.c'
+      - 'cpsycle/audio/src/sampler.h'
+      - 'cpsycle/audio/src/samplerdefs.h'
+      - '.github/workflows/phase6c-sampler-ps1.yml'
+  pull_request:
+    paths:
+      - 'phase6c/SAMPLER_PS1.md'
+      - 'phase6c/evidence/sampler-ps1/**'
+      - 'phase6c/compatibility-matrix.json'
+      - 'PSYCLE_CORE_PARITY.md'
+      - 'ROADMAP.md'
+      - 'scripts/phase6c-sampler-ps1-contract.py'
+      - 'scripts/phase6c-validate-matrix.py'
+      - 'scripts/phase6d-validate-parity-report.py'
+      - 'tests/phase6c_sampler_ps1_contract.py'
+      - 'psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.cpp'
+      - 'psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.h'
+      - 'cpsycle/audio/src/sampler.c'
+      - 'cpsycle/audio/src/sampler.h'
+      - 'cpsycle/audio/src/samplerdefs.h'
+      - '.github/workflows/phase6c-sampler-ps1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6c-sampler-ps1-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Stage pinned original Sampler source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$RUNNER_TEMP/psycle-original-sampler-ps1"
+          rm -rf -- "$SRC"
+          mkdir -p "$SRC"
+
+          COMMIT='7ac6d2c3553e2ee8dda55814d8e689919c345478'
+          CPP_BLOB='6cc0bd7328d01131c3d41b68f4e5d4189959e364'
+          HPP_BLOB='46da9fa80757b11ed146a21a529c70dbc6364f12'
+
+          curl -fsSL --retry 3 \
+            "https://raw.githubusercontent.com/jpaquim/psycle/$COMMIT/psycle/src/psycle/host/Sampler.cpp" \
+            -o "$SRC/Sampler.cpp"
+          curl -fsSL --retry 3 \
+            "https://raw.githubusercontent.com/jpaquim/psycle/$COMMIT/psycle/src/psycle/host/Sampler.hpp" \
+            -o "$SRC/Sampler.hpp"
+
+          [[ "$(git hash-object "$SRC/Sampler.cpp")" == "$CPP_BLOB" ]] || {
+            echo "pinned original Sampler.cpp blob mismatch" >&2
+            exit 2
+          }
+          [[ "$(git hash-object "$SRC/Sampler.hpp")" == "$HPP_BLOB" ]] || {
+            echo "pinned original Sampler.hpp blob mismatch" >&2
+            exit 2
+          }
+
+          printf 'PSYCLE_PHASE6C_PS1_ORIGINAL_CPP=%s\n' "$SRC/Sampler.cpp" >> "$GITHUB_ENV"
+          printf 'PSYCLE_PHASE6C_PS1_ORIGINAL_HPP=%s\n' "$SRC/Sampler.hpp" >> "$GITHUB_ENV"
+
+      - name: Re-derive committed Sampler PS1 source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/phase6c-sampler-ps1-contract.py check \
+            "$PSYCLE_PHASE6C_PS1_ORIGINAL_CPP" \
+            "$PSYCLE_PHASE6C_PS1_ORIGINAL_HPP" \
+            phase6c/evidence/sampler-ps1/source-contract.json
+
+      - name: Check Sampler PS1 source-contract negative controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/phase6c_sampler_ps1_contract.py \
+            "$PSYCLE_PHASE6C_PS1_ORIGINAL_CPP" \
+            "$PSYCLE_PHASE6C_PS1_ORIGINAL_HPP"
+
+      - name: Validate compatibility matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/phase6c-validate-matrix.py phase6c/compatibility-matrix.json
+
+      - name: Validate human parity report projection
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/phase6d-validate-parity-report.py
