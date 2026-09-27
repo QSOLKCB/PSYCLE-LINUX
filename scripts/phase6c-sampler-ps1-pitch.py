@@ -511,6 +511,7 @@ def collect_candidate(root: Path) -> dict:
             "injected_wave_volume": 100,
             "injected_wave_tune": 0,
             "injected_wave_finetune": 0,
+            "output_frame_count": OUTPUT_RATE,
             "output_size_bytes": path.stat().st_size,
             "output_sha256": render_sha,
         }
@@ -697,6 +698,7 @@ def validate_candidate(
             "injected_wave_volume": 100,
             "injected_wave_tune": 0,
             "injected_wave_finetune": 0,
+            "output_frame_count": OUTPUT_RATE,
             "output_size_bytes": path.stat().st_size,
             "output_sha256": render_sha,
         }
