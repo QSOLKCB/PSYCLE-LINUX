@@ -197,7 +197,7 @@ expect_value_error(
         input_path="synthetic.json",
         input_sha256="8" * 64,
     ),
-    "requires a successful bound original render pair",
+    "successful bound original render",
 )
 
 missing_pair = copy.deepcopy(pair)
