@@ -2900,11 +2900,22 @@ def validate_original_inconclusive_runtime(
     ):
         raise ValueError("same-witness inconclusive render shape mismatch")
 
-    legacy_process_window_ambiguity = any(
+    has_observer_sealing_failure = any(
         isinstance(value, str)
-        and "multiple post-dispatch Psycle window-show events observed"
-        in value
+        and value.startswith(OBSERVER_SEALING_FAILURE_PREFIX)
         for value in diagnostics
+    )
+    legacy_process_window_ambiguity = (
+        not has_observer_sealing_failure
+        and attempt.get("render_dialog_post_dispatch_observed_window_event_count", 0) > 1
+        and attempt.get("render_dialog_unresolved_post_dispatch_event_count") == 0
+        and attempt.get("render_dialog_post_dispatch_event_count") == 1
+        and any(
+            isinstance(value, str)
+            and "multiple post-dispatch Psycle window-show events observed"
+            in value
+            for value in diagnostics
+        )
     )
     if legacy_process_window_ambiguity:
         # Preserve receipts produced by the pre-qualification harness. New
