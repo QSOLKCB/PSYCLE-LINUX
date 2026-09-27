@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -117,6 +118,92 @@ static std::string json_escape(const std::string& value) {
     return out.str();
 }
 
+static std::uint16_t le16(const unsigned char* data) {
+    return static_cast<std::uint16_t>(data[0])
+        | (static_cast<std::uint16_t>(data[1]) << 8);
+}
+
+static std::uint32_t le32(const unsigned char* data) {
+    return static_cast<std::uint32_t>(data[0])
+        | (static_cast<std::uint32_t>(data[1]) << 8)
+        | (static_cast<std::uint32_t>(data[2]) << 16)
+        | (static_cast<std::uint32_t>(data[3]) << 24);
+}
+
+static bool wav_pcm16_mono_frames(
+    const char* path,
+    std::uint32_t& frame_count
+) {
+    std::ifstream input(path, std::ios::binary);
+    unsigned char header[12];
+    input.read(reinterpret_cast<char*>(header), sizeof(header));
+    if (
+        !input
+        || std::memcmp(header, "RIFF", 4) != 0
+        || std::memcmp(header + 8, "WAVE", 4) != 0
+    ) {
+        return false;
+    }
+
+    bool have_fmt = false;
+    bool have_data = false;
+    std::uint16_t audio_format = 0;
+    std::uint16_t channels = 0;
+    std::uint16_t block_align = 0;
+    std::uint16_t bits_per_sample = 0;
+    std::uint32_t sample_rate = 0;
+    std::uint32_t data_size = 0;
+
+    while (input && (!have_fmt || !have_data)) {
+        unsigned char chunk_header[8];
+        input.read(reinterpret_cast<char*>(chunk_header), sizeof(chunk_header));
+        if (!input) return false;
+        const std::uint32_t chunk_size = le32(chunk_header + 4);
+
+        if (std::memcmp(chunk_header, "fmt ", 4) == 0) {
+            if (chunk_size < 16u) return false;
+            unsigned char format[16];
+            input.read(reinterpret_cast<char*>(format), sizeof(format));
+            if (!input) return false;
+            audio_format = le16(format);
+            channels = le16(format + 2);
+            sample_rate = le32(format + 4);
+            block_align = le16(format + 12);
+            bits_per_sample = le16(format + 14);
+            if (chunk_size > 16u) {
+                input.seekg(
+                    static_cast<std::streamoff>(chunk_size - 16u),
+                    std::ios::cur);
+            }
+            have_fmt = true;
+        } else if (std::memcmp(chunk_header, "data", 4) == 0) {
+            data_size = chunk_size;
+            input.seekg(static_cast<std::streamoff>(chunk_size), std::ios::cur);
+            have_data = true;
+        } else {
+            input.seekg(static_cast<std::streamoff>(chunk_size), std::ios::cur);
+        }
+        if (!input) return false;
+        if ((chunk_size & 1u) != 0u) input.seekg(1, std::ios::cur);
+        if (!input) return false;
+    }
+
+    if (
+        !have_fmt
+        || !have_data
+        || audio_format != 1u
+        || channels != 1u
+        || sample_rate != 44100u
+        || block_align != 2u
+        || bits_per_sample != 16u
+        || (data_size % block_align) != 0u
+    ) {
+        return false;
+    }
+    frame_count = data_size / block_align;
+    return true;
+}
+
 static void print_compiled_provenance() {
     std::cout
         << "{\"schema_version\":1"
@@ -155,6 +242,12 @@ int main(int argc, char** argv) {
         if (requested_threads == 0 || std::string(requested_threads) != "1") {
             std::cerr << "candidate render requires PSYCLE_THREADS=1\n";
             return 69;
+        }
+
+        const std::string renderer_executable_sha256 = sha256_file(argv[0]);
+        if (renderer_executable_sha256.size() != 64u) {
+            std::cerr << "candidate renderer executable SHA-256 failed\n";
+            return 76;
         }
 
         const std::string input_sha256 = sha256_file(argv[1]);
@@ -304,14 +397,26 @@ int main(int argc, char** argv) {
                         result = 67;
                     } else {
                         output.close();
-                        const std::string output_sha256=sha256_file(argv[3]);
-                        if (output_sha256.size()!=64u) {
-                            std::cerr << "candidate render SHA-256 failed\n";
-                            result=71;
+                        std::uint32_t output_frames = 0u;
+                        if (
+                            !wav_pcm16_mono_frames(argv[3], output_frames)
+                            || output_frames != static_cast<std::uint32_t>(target_frames)
+                        ) {
+                            std::cerr
+                                << "candidate render WAV is not an exact 44100-frame "
+                                << "PCM16 mono render\n";
+                            result = 75;
                         } else {
-                            std::cout
-                                << "{\"schema_version\":1"
-                                << ",\"fixed_frame_render\":true"
+                            const std::string output_sha256=sha256_file(argv[3]);
+                            if (output_sha256.size()!=64u) {
+                                std::cerr << "candidate render SHA-256 failed\n";
+                                result=71;
+                            } else {
+                                std::cout
+                                    << "{\"schema_version\":1"
+                                    << ",\"fixed_frame_render\":true"
+                                    << ",\"renderer_executable_sha256\":\""
+                                    << renderer_executable_sha256 << "\""
                                 << ",\"sample_rate\":44100"
                                 << ",\"channels\":1"
                                 << ",\"bits_per_sample\":16"
@@ -339,9 +444,11 @@ int main(int argc, char** argv) {
                                 << ",\"injected_wave_tune\":0"
                                 << ",\"injected_wave_finetune\":0"
                                 << ",\"output_path\":\"" << json_escape(argv[3]) << "\""
-                                << ",\"output_size_bytes\":" << static_cast<long long>(output_size)
-                                << ",\"output_sha256\":\"" << output_sha256 << "\""
-                                << "}" << std::endl;
+                                    << ",\"output_frame_count\":" << output_frames
+                                    << ",\"output_size_bytes\":" << static_cast<long long>(output_size)
+                                    << ",\"output_sha256\":\"" << output_sha256 << "\""
+                                    << "}" << std::endl;
+                            }
                         }
                     }
                 }
