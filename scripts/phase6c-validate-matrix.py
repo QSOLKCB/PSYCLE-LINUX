@@ -1570,6 +1570,10 @@ def validate_sampler_ps1_source_contract(row: dict[str, object]) -> None:
         die(f"{row_id} candidate observation reference changed")
     if cpsycle.get("evidence") != SAMPLER_PS1_RECEIPT_REF:
         die(f"{row_id} C-Psycle evidence reference changed")
+    if cpsycle.get("source_repository") != "QSOLKCB/PSYCLE-LINUX":
+        die(f"{row_id} C-Psycle source repository changed")
+    if cpsycle.get("snapshot") != "cpsycle-r12005-baseline":
+        die(f"{row_id} C-Psycle snapshot changed")
 
     if original.get("reference_build") != "Psycle 1.12.0 x86":
         die(f"{row_id} original reference build changed")
