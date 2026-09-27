@@ -16,6 +16,9 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MATRIX_PATH = ROOT / "phase6c" / "compatibility-matrix.json"
 REPORT_PATH = ROOT / "PSYCLE_CORE_PARITY.md"
+SAMPLER_RECEIPT_PATH = (
+    ROOT / "phase6c/evidence/sampler-ps1/source-contract.json"
+)
 
 EXPECTED_LABELS = {
     "project-io-psy2-parse": "PSY2 parsing",
@@ -333,6 +336,88 @@ def delayed_evidence_signature(value: str, context: str) -> dict[str, bool]:
     }
 
 
+def validate_sampler_projection(
+    row: dict, report_cells: list[str], receipt: dict
+) -> None:
+    expected_receipt = "phase6c/evidence/sampler-ps1/source-contract.json"
+
+    if receipt.get("contract") != "sampler-ps1-source-semantics":
+        die("Sampler PS1 receipt contract identity changed")
+    if receipt.get("parity_status") != "UNKNOWN":
+        die("Sampler PS1 receipt parity status changed")
+
+    original = row.get("original")
+    candidate = row.get("candidate")
+    cpsycle = row.get("cpsycle")
+    if not isinstance(original, dict) or original.get("observation") != expected_receipt:
+        die("sampler-ps1 matrix original receipt reference changed")
+    if not isinstance(candidate, dict) or candidate.get("observation") != expected_receipt:
+        die("sampler-ps1 matrix candidate receipt reference changed")
+    if not isinstance(cpsycle, dict) or cpsycle.get("evidence") != expected_receipt:
+        die("sampler-ps1 matrix C-Psycle receipt reference changed")
+
+    if expected_receipt not in report_cells[1]:
+        die("sampler-ps1 report original evidence is not bound to source-contract.json")
+    if "same receipt" not in report_cells[2].lower():
+        die("sampler-ps1 report candidate evidence is not bound to the same receipt")
+    cpsycle_cell = report_cells[3].lower()
+    if (
+        "shared-contract support only" not in cpsycle_cell
+        or "identity-bound in the receipt" not in cpsycle_cell
+    ):
+        die("sampler-ps1 report C-Psycle evidence role changed")
+
+    receipt_signature = {
+        "original_pitch": receipt.get("original", {}).get("pitch_sample_rate_basis"),
+        "candidate_pitch": receipt.get("candidate", {}).get("pitch_sample_rate_basis"),
+        "effective_timing": receipt.get("candidate", {}).get(
+            "loaded_psy3_extended_note_timing_basis"
+        ),
+        "classification_allowed": receipt.get("classification_allowed"),
+    }
+    expected_signature = {
+        "original_pitch": "wave-sample-rate/output-sample-rate",
+        "candidate_pitch": "44100/output-sample-rate",
+        "effective_timing": "row-interval/6",
+        "classification_allowed": False,
+    }
+    if receipt_signature != expected_signature:
+        die(
+            "sampler-ps1 canonical receipt semantics do not match the "
+            "human-projection contract"
+        )
+
+    next_step = normalize_evidence_text(report_cells[5])
+    required_patterns = (
+        r"\bnon\s+44\.1\s+khz\s+pitch\s+witness\b",
+        r"\boriginal\s+source\s+uses\s+sample\s+rate/output\s+rate\b",
+        r"\bcandidate\s+uses\s+a\s+44\.1\s+khz\s+basis\b",
+        r"\bps1\s+e\s+dx/e\s+cx\s+runtime\s+execution\b",
+        r"\bloaded\s+psy3\s+row/6\s+effective\s+interval\b",
+    )
+    for pattern in required_patterns:
+        if re.search(pattern, next_step, re.IGNORECASE) is None:
+            die(
+                "sampler-ps1 human projection no longer matches the "
+                f"canonical source-contract boundary: missing {pattern}"
+            )
+
+    for term in (
+        "envelope",
+        "loop",
+        "panning",
+        "offset",
+        "volume",
+        "retrigger",
+        "state roundtrip",
+    ):
+        if term not in next_step:
+            die(
+                "sampler-ps1 human projection dropped a required follow-up "
+                f"witness: {term}"
+            )
+
+
 def extract_matrix_table(report: str) -> dict[str, list[str]]:
     start_marker = "## Engine compatibility matrix"
     end_marker = "## UI-only gaps"
@@ -376,6 +461,15 @@ def main() -> int:
     except FileNotFoundError:
         die(f"missing report: {REPORT_PATH.relative_to(ROOT)}")
 
+    try:
+        sampler_receipt = json.loads(SAMPLER_RECEIPT_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        die(f"missing Sampler receipt: {SAMPLER_RECEIPT_PATH.relative_to(ROOT)}")
+    except json.JSONDecodeError as exc:
+        die(f"invalid Sampler receipt JSON: {exc}")
+    if not isinstance(sampler_receipt, dict):
+        die("Sampler receipt must be a JSON object")
+
     for heading in REQUIRED_REPORT_SECTIONS:
         if heading not in report:
             die(f"missing required report section: {heading}")
@@ -416,6 +510,9 @@ def main() -> int:
                 f"{row_id} report status {report_status!r} does not match "
                 f"matrix status {status!r}"
             )
+
+        if row_id == "sampler-ps1":
+            validate_sampler_projection(row, report_rows[label], sampler_receipt)
 
         if row_id == "sequencer-delayed-retrigger":
             matrix_signature = delayed_evidence_signature(

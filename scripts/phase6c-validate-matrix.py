@@ -455,6 +455,10 @@ EXPECTED_CANDIDATE_SOURCE_IDENTITIES[TIMING_CONTRACT_ID] = {
     "artifact_digest": "sha256:f1daf3100a8199335f4ba188519e17a0f6551ee3447f0d3dfee6bb11233f5eb8",
 }
 
+SAMPLER_PS1_CONTRACT_ID = "sampler-ps1"
+SAMPLER_PS1_RECEIPT_REF = "phase6c/evidence/sampler-ps1/source-contract.json"
+SAMPLER_PS1_SCRIPT = REPO_ROOT / "scripts/phase6c-sampler-ps1-contract.py"
+
 DELAYED_RETRIGGER_CONTRACT_ID = "sequencer-delayed-retrigger"
 DELAYED_RETRIGGER_SAME_WITNESS_OBSERVATION = (
     EVIDENCE_ROOT
@@ -1544,6 +1548,70 @@ def validate_timing_classification_semantics(
 
 
 
+def validate_sampler_ps1_source_contract(row: dict[str, object]) -> None:
+    """Bind the UNKNOWN Sampler PS1 matrix row to its canonical source receipt."""
+    row_id = SAMPLER_PS1_CONTRACT_ID
+    if row.get("status") != "UNKNOWN":
+        die(f"{row_id} must remain UNKNOWN until runtime evidence permits classification")
+
+    original = row.get("original")
+    candidate = row.get("candidate")
+    cpsycle = row.get("cpsycle")
+    if not all(isinstance(value, dict) for value in (original, candidate, cpsycle)):
+        die(f"{row_id} source-baseline mappings must be objects")
+
+    assert isinstance(original, dict)
+    assert isinstance(candidate, dict)
+    assert isinstance(cpsycle, dict)
+
+    if original.get("observation") != SAMPLER_PS1_RECEIPT_REF:
+        die(f"{row_id} original observation reference changed")
+    if candidate.get("observation") != SAMPLER_PS1_RECEIPT_REF:
+        die(f"{row_id} candidate observation reference changed")
+    if cpsycle.get("evidence") != SAMPLER_PS1_RECEIPT_REF:
+        die(f"{row_id} C-Psycle evidence reference changed")
+    if cpsycle.get("source_repository") != "QSOLKCB/PSYCLE-LINUX":
+        die(f"{row_id} C-Psycle source repository changed")
+    if cpsycle.get("snapshot") != "cpsycle-r12005-baseline":
+        die(f"{row_id} C-Psycle snapshot changed")
+
+    if original.get("reference_build") != "Psycle 1.12.0 x86":
+        die(f"{row_id} original reference build changed")
+    if original.get("source_repository") != "jpaquim/psycle":
+        die(f"{row_id} original source repository changed")
+    if (
+        original.get("source_commit")
+        != "7ac6d2c3553e2ee8dda55814d8e689919c345478"
+    ):
+        die(f"{row_id} original source commit changed")
+    if candidate.get("snapshot") != EXPECTED_CANDIDATE_BASELINE:
+        die(f"{row_id} candidate snapshot changed")
+    if cpsycle.get("reusable") != "shared-contract-support-only":
+        die(f"{row_id} C-Psycle evidence role changed")
+
+    receipt = load_versioned_receipt(
+        SAMPLER_PS1_RECEIPT_REF, f"{row_id}.source_contract"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "phase6c_sampler_ps1_contract", SAMPLER_PS1_SCRIPT
+    )
+    if spec is None or spec.loader is None:
+        die(f"{row_id} source-contract validator cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        module.validate(receipt)
+    except (ValueError, KeyError, TypeError) as exc:
+        die(f"{row_id} source-contract receipt is invalid: {exc}")
+
+    if receipt.get("contract") != "sampler-ps1-source-semantics":
+        die(f"{row_id} source-contract receipt identity changed")
+    if receipt.get("parity_status") != "UNKNOWN":
+        die(f"{row_id} source-contract receipt must retain UNKNOWN parity")
+    if receipt.get("classification_allowed") is not False:
+        die(f"{row_id} source-contract receipt must forbid classification")
+
+
 def validate_delayed_retrigger_same_witness_observation() -> None:
     path = DELAYED_RETRIGGER_SAME_WITNESS_OBSERVATION
     if not path.is_file():
@@ -2409,6 +2477,9 @@ def main() -> int:
         status = row["status"]
         if status not in ALLOWED_STATUS:
             die(f"{row_id} has invalid status: {status!r}")
+
+        if row_id == SAMPLER_PS1_CONTRACT_ID:
+            validate_sampler_ps1_source_contract(row)
 
         if row_id == DELAYED_RETRIGGER_CONTRACT_ID:
             validate_delayed_retrigger_deferred_comparison(row)
