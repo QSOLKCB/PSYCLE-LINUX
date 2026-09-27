@@ -641,6 +641,40 @@ def materialize_durable_evidence(
 
 
 
+def canonical_windows_receipt_bytes(value: dict) -> bytes:
+    """Serialize exactly like json.dump(..., indent=2, sort_keys=True) on Windows."""
+    text = json.dumps(value, indent=2, sort_keys=True) + "\n"
+    return text.replace("\n", "\r\n").encode("utf-8")
+
+
+def validate_derived_receipt_hashes(
+    original_analysis: dict, comparison: dict, observation: dict
+) -> None:
+    canonical = observation.get("canonical_observation")
+    if not isinstance(canonical, dict):
+        raise ValueError("canonical observation metadata is missing")
+    original_artifact = canonical.get("original_artifact")
+    if not isinstance(original_artifact, dict):
+        raise ValueError("canonical original artifact metadata is missing")
+
+    bindings = (
+        ("analysis_receipt", original_analysis),
+        ("comparison_receipt", comparison),
+    )
+    for field, value in bindings:
+        binding = original_artifact.get(field)
+        if not isinstance(binding, dict):
+            raise ValueError(f"canonical {field} binding is missing")
+        expected_hash = require_sha256(
+            binding.get("sha256"), f"canonical {field}.sha256"
+        )
+        actual_hash = digest(canonical_windows_receipt_bytes(value))
+        if actual_hash != expected_hash:
+            raise ValueError(
+                f"re-derived {field} hash differs from canonical receipt"
+            )
+
+
 def validate_archived_evidence(
     archive_root: Path, manifest: dict, observation: dict
 ) -> dict:
@@ -652,6 +686,9 @@ def validate_archived_evidence(
     candidate = validate_archived_candidate(candidate_root)
     original_receipt, original_analysis, comparison = derive_archived_original_receipts(
         candidate, original_root
+    )
+    validate_derived_receipt_hashes(
+        original_analysis, comparison, observation
     )
 
     canonical = observation["canonical_observation"]
