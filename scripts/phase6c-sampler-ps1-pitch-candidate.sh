@@ -59,14 +59,17 @@ run_logged "$OUT/fixture-authoring.log"     "$BUILD/phase6c_sampler_ps1_pitch_fi
 
 cp "$BUILD/phase6c-sampler-ps1-pitch-modern.psy" \
     "$OUT/fixture/phase6c-sampler-ps1-pitch-original.psy"
+PCM="$OUT/fixture/phase6c-sampler-ps1-pitch-candidate.pcm16le"
 run_logged "$OUT/fixture-compat.log" \
     python3 "$ROOT/scripts/phase6c-sampler-ps1-pitch-compat.py" convert \
     "$OUT/fixture/phase6c-sampler-ps1-pitch-original.psy" \
-    "$OUT/fixture/phase6c-sampler-ps1-pitch-candidate.psy"
+    "$OUT/fixture/phase6c-sampler-ps1-pitch-candidate.psy" \
+    "$PCM"
 run_logged "$OUT/fixture-validation.log" \
     python3 "$ROOT/scripts/phase6c-sampler-ps1-pitch-compat.py" check \
     "$OUT/fixture/phase6c-sampler-ps1-pitch-original.psy" \
-    "$OUT/fixture/phase6c-sampler-ps1-pitch-candidate.psy"
+    "$OUT/fixture/phase6c-sampler-ps1-pitch-candidate.psy" \
+    "$PCM"
 
 source_sha256() {
     local relative="$1"
@@ -85,6 +88,9 @@ cat >"$BUILD/phase6c-ps1-pitch-provenance.hpp" <<EOF
 #define PHASE6C_ENGINE_SEQUENCER_SHA256 "$(source_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sequencer.cpp)"
 #define PHASE6C_ENGINE_PSY3_LOADER_SHA256 "$(source_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/psy3filter.cpp)"
 #define PHASE6C_ENGINE_SAMPLER_SHA256 "$(source_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.cpp)"
+#define PHASE6C_ENGINE_INSTRUMENT_SHA256 "$(source_sha256 psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/instrument.cpp)"
+#define PHASE6C_COMPAT_SCRIPT_SHA256 "$(source_sha256 scripts/phase6c-sampler-ps1-pitch-compat.py)"
+#define PHASE6C_FIXTURE_GENERATOR_SHA256 "$(source_sha256 tests/phase6c_sampler_ps1_pitch_fixture.c)"
 EOF
 
 cp "$ROOT/tests/phase6c_sampler_ps1_pitch_render.pro" "$RENDER_STAGING/render.pro"
@@ -105,7 +111,7 @@ RENDER="$BUILD/phase6c-sampler-ps1-pitch-render"
 run_logged "$OUT/renderer-provenance.json"     "$RENDER" --phase6c-provenance
 
 for n in 1 2; do
-    run_logged "$OUT/render/candidate-render-$n.log"         env PSYCLE_THREADS=1 "$RENDER"         "$OUT/fixture/phase6c-sampler-ps1-pitch-candidate.psy"         "$OUT/render/candidate-sampler-ps1-pitch-$n.wav"
+    run_logged "$OUT/render/candidate-render-$n.log"         env PSYCLE_THREADS=1 "$RENDER"         "$OUT/fixture/phase6c-sampler-ps1-pitch-candidate.psy"         "$PCM"         "$OUT/render/candidate-sampler-ps1-pitch-$n.wav"
 done
 
 run_logged "$OUT/candidate-collect.log"     python3 "$ROOT/scripts/phase6c-sampler-ps1-pitch.py" candidate "$OUT"
