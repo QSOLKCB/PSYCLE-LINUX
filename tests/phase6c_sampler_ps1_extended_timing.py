@@ -138,6 +138,8 @@ assert timing.BOUNDARY_FIELDS == {
 }
 
 known_log = (
+    b"log:      52us: T: ps1-extended-timing: "
+    b"psycle: core: player: starting scheduler threads\n"
     b"log:      73us: I: ps1-extended-timing: "
     b"psycle: core: player: using 1 threads\n"
     b"log:     183us: W: ps1-extended-timing: "
@@ -146,6 +148,7 @@ known_log = (
 )
 assert timing.classify_probe_diagnostics(known_log) == [
     "player-thread-count",
+    "player-thread-start",
     "psy3-newer-version-warning",
 ]
 try:
