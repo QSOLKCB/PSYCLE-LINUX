@@ -1279,6 +1279,40 @@ with tempfile.TemporaryDirectory() as temporary:
         precommand_with_inspection_attempt["diagnostics"]
     )
 
+    preverification_root = root / "preverification-failure"
+    preverification_root.mkdir()
+    preverification_attempt = dict(precommand_attempt)
+    preverification_attempt.update(
+        {
+            "process_exited": False,
+            "process_exit_code": None,
+            "diagnostics": ["synthetic Render as Wav menu inspection failure"],
+        }
+    )
+    preverification_runtime = dict(inconclusive_runtime)
+    preverification_runtime["attempts"] = [preverification_attempt]
+    preverification = m.validate_original_inconclusive_runtime(
+        preverification_root, preverification_runtime
+    )
+    assert preverification["inconclusive_reason"] == (
+        "pre-command-verification-failure"
+    )
+    assert preverification["process_exit_code"] is None
+
+    late_exit_preverification_attempt = {
+        **preverification_attempt,
+        "process_exited": True,
+        "process_exit_code": -1073741819,
+    }
+    late_exit_preverification_runtime = dict(inconclusive_runtime)
+    late_exit_preverification_runtime["attempts"] = [
+        late_exit_preverification_attempt
+    ]
+    late_exit_preverification = m.validate_original_inconclusive_runtime(
+        preverification_root, late_exit_preverification_runtime
+    )
+    assert late_exit_preverification["process_exit_code"] == -1073741819
+
     no_event_root = root / "no-event-render-dialog"
     no_event_root.mkdir()
     no_event_attempt = dict(ambiguous_attempt)
@@ -1306,6 +1340,35 @@ with tempfile.TemporaryDirectory() as temporary:
     assert "post-dispatch dialog evidence" in no_event["binding_error"]
     assert no_event["observed_output"] is None
     assert no_event["retained_renders"] == []
+
+    vanished_root = root / "vanished-render-dialog"
+    vanished_root.mkdir()
+    vanished_attempt = dict(ambiguous_attempt)
+    vanished_attempt.update(
+        {
+            "dialog_verified": False,
+            "controls_configured": False,
+            "save_invoked": False,
+            "render_dialog_post_dispatch_observed_window_event_count": 1,
+            "render_dialog_unresolved_post_dispatch_event_count": 0,
+            "render_dialog_post_dispatch_event_count": 1,
+            "selected_render_dialog_native_handle": None,
+            "selected_render_dialog_runtime_id": [],
+            "dialog_discovery": None,
+            "diagnostics": [m.VANISHED_RENDER_DIALOG_DIAGNOSTIC],
+            "observed_output": None,
+        }
+    )
+    vanished_runtime = dict(inconclusive_runtime)
+    vanished_runtime["attempts"] = [vanished_attempt]
+    vanished = m.validate_original_inconclusive_runtime(
+        vanished_root, vanished_runtime
+    )
+    assert vanished["inconclusive_reason"] == (
+        "pre-save-render-automation-failure"
+    )
+    assert "post-dispatch dialog evidence" in vanished["binding_error"]
+    assert vanished["retained_renders"] == []
 
     first_binding = {
         "path": f"{m.NAME}/{original_path.name}",
@@ -1472,6 +1535,15 @@ with tempfile.TemporaryDirectory() as temporary:
     assert m.validate_original_predispatch_observer_failure(
         second_init_failure
     ) == second_init_failure["diagnostics"]
+    double_inspection_init_failure = dict(second_init_failure)
+    double_inspection_init_failure["diagnostics"] = [
+        second_init_failure["diagnostics"][0],
+        m.base.PROCESS_INSPECTION_FAILURE_PREFIX + " helper refresh failure",
+        m.base.PROCESS_INSPECTION_FAILURE_PREFIX + " outer refresh failure",
+    ]
+    assert m.validate_original_predispatch_observer_failure(
+        double_inspection_init_failure
+    ) == double_inspection_init_failure["diagnostics"]
     exited_second_init_failure = {
         **second_init_failure,
         "process_exited": True,
@@ -1801,6 +1873,11 @@ workflow_source = (
     ROOT / ".github" / "workflows" / "phase6c-delayed-retrigger.yml"
 ).read_text(encoding="utf-8")
 assert "tar -C phase6c-command-evidence -cf phase6c-command-evidence.tar ." in workflow_source
+pack_start = workflow_source.index("- name: Pack candidate command evidence")
+upload_start = workflow_source.index("- name: Upload candidate command evidence")
+pack_block = workflow_source[pack_start:upload_start]
+assert "if: always()" in pack_block
+assert "if [[ ! -d phase6c-command-evidence ]]; then" in pack_block
 assert "path: phase6c-command-evidence.tar" in workflow_source
 assert "path: phase6c-command-candidate-artifact" in workflow_source
 assert (
