@@ -78,11 +78,18 @@ def synthetic_psy3(rate: int = 22050) -> bytes:
     return bytes(output)
 
 
-hybrid = compat.convert(synthetic_psy3())
-info = compat.inspect_hybrid(hybrid)
+original_fixture = synthetic_psy3()
+candidate_fixture = compat.convert(original_fixture)
+info = compat.inspect_pair(original_fixture, candidate_fixture)
 assert info["authored_sample_rate"] == 22050
 assert info["authored_sample_frames"] == 11025
 assert info["pcm_payload_identity"] == "byte-identical-compressed-left-channel"
+assert info["candidate_modern_sample_chunk_removed"] is True
+
+_original_prefix, original_chunks = compat.parse_chunks(original_fixture)
+_candidate_prefix, candidate_chunks = compat.parse_chunks(candidate_fixture)
+assert any(fourcc == b"SMSB" for fourcc, _version, _payload in original_chunks)
+assert not any(fourcc == b"SMSB" for fourcc, _version, _payload in candidate_chunks)
 
 try:
     compat.convert(synthetic_psy3(rate=44100))
@@ -91,7 +98,7 @@ except ValueError as exc:
 else:
     raise AssertionError("44.1-kHz sample must not satisfy non-44.1 witness")
 
-prefix, chunks = compat.parse_chunks(hybrid)
+prefix, chunks = compat.parse_chunks(candidate_fixture)
 mutated = bytearray(prefix)
 for fourcc, version, payload in chunks:
     if fourcc == b"INSD":
@@ -102,11 +109,11 @@ for fourcc, version, payload in chunks:
         )
     mutated += fourcc + struct.pack("<II", version, len(payload)) + payload
 try:
-    compat.inspect_hybrid(bytes(mutated))
+    compat.inspect_pair(original_fixture, bytes(mutated))
 except ValueError as exc:
     assert "PCM payloads differ" in str(exc)
 else:
-    raise AssertionError("mismatched legacy/modern PCM must fail")
+    raise AssertionError("mismatched candidate/original PCM must fail")
 
 
 def write_wave(path: Path, active_frames: int, total_frames: int = 44100) -> None:
@@ -131,6 +138,10 @@ with tempfile.TemporaryDirectory() as temporary:
 
 candidate = {
     "fixture_sha256": "a" * 64,
+    "candidate_fixture_sha256": "b" * 64,
+    "fixture_semantics": {
+        "pcm_payload_identity": "byte-identical-compressed-left-channel",
+    },
     "runtime_pitch_observation": "fixed-44100-basis-compatible-duration",
     "renders": [{"analysis": {"active_span_frames": 11025}}],
 }
