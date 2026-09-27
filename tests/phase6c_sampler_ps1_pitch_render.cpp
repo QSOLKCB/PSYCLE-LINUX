@@ -193,20 +193,55 @@ int main(int argc, char** argv) {
         {
             psycle::core::CoreSong song;
             player.song(song);
-            if (!song.load(argv[1])) {
-                std::cerr << "PS1 pitch witness load failed\n";
+
+            psycle::core::Machine* master =
+                factory.CreateMachine(psycle::core::InternalKeys::master, MASTER_INDEX);
+            psycle::core::Machine* sampler =
+                factory.CreateMachine(psycle::core::InternalKeys::sampler, 0);
+            if (master == 0 || sampler == 0) {
+                std::cerr << "minimal candidate machine construction failed\n";
                 result = 65;
-            } else if (sha256_file(argv[1]) != input_sha256) {
-                std::cerr << "PS1 pitch witness changed during load\n";
-                result = 73;
-            } else if (
-                song._pInstrument[0] == 0
-                || song._pInstrument[0]->waveLength != 0
-                || song._pInstrument[0]->waveDataL != 0
-            ) {
-                std::cerr << "candidate pre-injection Instrument is not wave-empty\n";
-                result = 68;
             } else {
+                song.AddMachine(master, MASTER_INDEX);
+                song.AddMachine(sampler, 0);
+                if (song.InsertConnection(*sampler, *master) < 0) {
+                    std::cerr << "minimal candidate routing construction failed\n";
+                    result = 66;
+                }
+            }
+
+            if (result == 0) {
+                song.tracks(1);
+                song.bpm(120.0f);
+                song.tick_speed(4, false);
+
+                psycle::core::Pattern* pattern = new psycle::core::Pattern();
+                pattern->setID(0);
+                pattern->setName("Phase 6C PS1 pitch witness");
+                psycle::core::PatternEvent event;
+                event.setNote(60);
+                event.setInstrument(0);
+                event.setMachine(0);
+                pattern->insert(0.0, 0, event);
+                song.sequence().Add(*pattern);
+                psycle::core::SequenceLine& line = song.sequence().createNewLine();
+                line.createEntry(*pattern, 0.0);
+                song.is_ready(true);
+
+                if (sha256_file(argv[1]) != input_sha256) {
+                    std::cerr << "PS1 pitch witness fixture changed during setup\n";
+                    result = 73;
+                } else if (
+                    song._pInstrument[0] == 0
+                    || song._pInstrument[0]->waveLength != 0
+                    || song._pInstrument[0]->waveDataL != 0
+                ) {
+                    std::cerr << "candidate pre-injection Instrument is not wave-empty\n";
+                    result = 68;
+                }
+            }
+
+            if (result == 0) {
                 psycle::core::Instrument* instrument = song._pInstrument[0];
                 instrument->waveLength = 11025;
                 instrument->waveVolume = 100;
@@ -283,6 +318,14 @@ int main(int argc, char** argv) {
                                 << ",\"final_play_beat\":" << final_beat
                                 << ",\"input_path\":\"" << json_escape(argv[1]) << "\""
                                 << ",\"input_sha256\":\"" << input_sha256 << "\""
+                                << ",\"candidate_fixture_loader_bypassed\":true"
+                                << ",\"harness_song_topology\":\"sampler-0-to-master-one-note\""
+                                << ",\"harness_bpm\":120"
+                                << ",\"harness_lpb\":4"
+                                << ",\"harness_note\":60"
+                                << ",\"harness_track\":0"
+                                << ",\"harness_machine\":0"
+                                << ",\"harness_instrument\":0"
                                 << ",\"pcm_path\":\"" << json_escape(argv[2]) << "\""
                                 << ",\"pcm_size_bytes\":" << pcm_size
                                 << ",\"pcm_sha256\":\"" << pcm_sha256 << "\""
