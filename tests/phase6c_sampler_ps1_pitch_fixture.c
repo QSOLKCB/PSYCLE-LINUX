@@ -230,6 +230,9 @@ int main(int argc, char** argv)
         return 64;
     }
 
+    /* Match the established Phase 6C C-Psycle fixture lifecycle. */
+    psy_audio_init();
+
     psy_audio_machinecallback_init(&callback);
     psy_audio_plugincatcher_init(&catcher, NULL);
     psy_audio_machinefactory_init(&factory, &callback, &catcher, NULL);
@@ -281,5 +284,6 @@ int main(int argc, char** argv)
     psy_audio_song_deallocate(song);
     psy_audio_machinefactory_dispose(&factory);
     psy_audio_plugincatcher_dispose(&catcher);
+    psy_audio_dispose();
     return 0;
 }
