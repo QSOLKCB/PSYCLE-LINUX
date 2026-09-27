@@ -856,6 +856,9 @@ def validate_retained_render_bindings(
     root: Path,
     *,
     allow_incomplete_last_teardown: bool,
+    expected_path_prefix: str = (
+        "sampler-ps1-pitch/original-sampler-ps1-pitch"
+    ),
 ) -> list[str]:
     if len(renders) > 2 or len(attempts) > 2 or len(renders) > len(attempts):
         raise ValueError("original pitch retained render/attempt count is invalid")
@@ -864,7 +867,7 @@ def validate_retained_render_bindings(
     for index, render in enumerate(renders, 1):
         if not isinstance(render, dict):
             raise ValueError("original pitch retained render binding is invalid")
-        expected = f"sampler-ps1-pitch/original-sampler-ps1-pitch-{index}.wav"
+        expected = f"{expected_path_prefix}-{index}.wav"
         if render.get("path") != expected:
             raise ValueError("original pitch retained render path changed")
         path = child(root, expected)
