@@ -339,6 +339,72 @@ with tempfile.TemporaryDirectory() as temporary:
         evidence,
     )
 
+    binding = {
+        "path": "sampler-ps1-pitch/original-sampler-ps1-pitch-1.wav",
+        "sha256": render_sha,
+    }
+    partial = dict(attempt)
+    partial["dialog_closed"] = False
+    partial["close_uia_invoked"] = True
+    partial["diagnostics"] = [
+        "render output finalized and Close control was verified, but dialog teardown did not complete"
+    ]
+    pitch.validate_completed_render_attempt(
+        partial,
+        "sampler-ps1-pitch/original-sampler-ps1-pitch-1.wav",
+        render_sha,
+        evidence,
+        allow_incomplete_dialog_teardown=True,
+    )
+    retained = pitch.validate_retained_render_bindings(
+        [binding],
+        [partial],
+        evidence,
+        allow_incomplete_last_teardown=True,
+    )
+    assert retained == [render_sha]
+
+    try:
+        pitch.validate_completed_render_attempt(
+            partial,
+            "sampler-ps1-pitch/original-sampler-ps1-pitch-1.wav",
+            render_sha,
+            evidence,
+        )
+    except ValueError as exc:
+        assert "dialog_closed" in str(exc)
+    else:
+        raise AssertionError("partial dialog teardown must remain non-complete evidence")
+
+    retained_before_tamper = render_path.read_bytes()
+    render_path.write_bytes(retained_before_tamper + b"tamper")
+    try:
+        pitch.validate_retained_render_bindings(
+            [binding],
+            [partial],
+            evidence,
+            allow_incomplete_last_teardown=True,
+        )
+    except ValueError as exc:
+        assert "digest mismatch" in str(exc)
+    else:
+        raise AssertionError("tampered retained partial render must fail")
+    render_path.write_bytes(retained_before_tamper)
+
+    process_exit_attempt = {
+        "schema_version": 1,
+        "outcome": "inconclusive",
+        "process_exited": True,
+        "process_exit_code": 0xC0000005,
+    }
+    retained_before_exit = pitch.validate_retained_render_bindings(
+        [binding],
+        [attempt, process_exit_attempt],
+        evidence,
+        allow_incomplete_last_teardown=False,
+    )
+    assert retained_before_exit == [render_sha]
+
     bool_schema = dict(attempt)
     bool_schema["schema_version"] = True
     try:
