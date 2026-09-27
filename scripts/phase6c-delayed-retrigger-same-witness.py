@@ -2957,6 +2957,7 @@ def inconclusive_render_binding_status(quarantine: dict) -> str:
     if quarantine.get("inconclusive_reason") in {
         "render-observer-initialization-failure",
         "process-exit-before-render-command-verification",
+        "pre-command-verification-failure",
     }:
         return "not-dispatched"
     return "accepted" if quarantine.get("binding_error") is None else "rejected"
