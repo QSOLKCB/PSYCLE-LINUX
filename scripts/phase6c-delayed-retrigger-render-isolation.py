@@ -442,11 +442,22 @@ def validate_original(candidate_root: Path, original_root: Path) -> dict:
             except ValueError:
                 pass
             else:
+                if predispatch["process_exit_code"] is not None:
+                    if (
+                        load_result != "inconclusive"
+                        or receipt.get("observation")
+                        != "reference-process-exited-before-harness-termination"
+                        or receipt.get("exit_code_before_termination")
+                        != predispatch["process_exit_code"]
+                    ):
+                        raise ValueError(
+                            f"{name}: pre-dispatch observer exit receipt mismatch"
+                        )
                 results[name] = {
                     "outcome": "inconclusive",
                     "inconclusive_reason": predispatch["inconclusive_reason"],
                     "load_result": load_result,
-                    "process_exit_code": None,
+                    "process_exit_code": predispatch["process_exit_code"],
                     "diagnostics": predispatch["diagnostics"],
                 }
                 continue
