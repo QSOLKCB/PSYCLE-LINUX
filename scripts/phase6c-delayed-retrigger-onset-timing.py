@@ -29,9 +29,9 @@ EXPECTED_SAMPLE_RATE = 44100
 BEAT_FRAMES = EXPECTED_SAMPLE_RATE * 60.0 / BPM
 NORMALIZATION = (
     "derive one render-wide original-minus-candidate phase offset from the first "
-    "observed onset, apply it before command-window membership, then subtract each "
-    "side's first onset in each classified window and require every classified "
-    "window to retain that same render-wide phase delta"
+    "onset in the established FB 3F beat-1 window, apply it before command-window "
+    "membership, then subtract each side's first onset in each classified window "
+    "and require every classified window to retain that same render-wide phase delta"
 )
 WINDOWS = {
     "fb_retrigger_beat_1": {
@@ -45,6 +45,8 @@ WINDOWS = {
         "end_beat": 3.0,
     },
 }
+ALIGNMENT_ANCHOR_WINDOW = "fb_retrigger_beat_1"
+ALIGNMENT_ANCHOR = "first-established-fb-retrigger-onset"
 OUTPUT_PATH = (
     ROOT
     / "phase6c"
@@ -131,6 +133,20 @@ def validate_analysis(analysis: object, role: str) -> dict:
     return analysis
 
 
+def established_alignment_anchor(analysis: dict, role: str) -> int:
+    window = WINDOWS[ALIGNMENT_ANCHOR_WINDOW]
+    selected = [
+        frame
+        for frame in analysis["onset_frames"]
+        if window["start_beat"] <= frame / BEAT_FRAMES < window["end_beat"]
+    ]
+    if not selected:
+        raise ValueError(
+            f"{role} lacks an onset in the established {window['label']} anchor window"
+        )
+    return selected[0]
+
+
 def extract_window(
     analysis: dict,
     start: float,
@@ -209,8 +225,12 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
     candidate_analysis = validate_analysis(candidate.get("analysis"), "candidate")
     original_analysis = validate_analysis(original.get("analysis"), "original")
 
-    candidate_anchor_frame = candidate_analysis["onset_frames"][0]
-    original_anchor_frame = original_analysis["onset_frames"][0]
+    candidate_anchor_frame = established_alignment_anchor(
+        candidate_analysis, "candidate"
+    )
+    original_anchor_frame = established_alignment_anchor(
+        original_analysis, "original"
+    )
     global_phase_delta = original_anchor_frame - candidate_anchor_frame
 
     windows: dict[str, dict] = {}
@@ -309,7 +329,7 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
             "bpm": BPM,
         },
         "phase_alignment": {
-            "anchor": "first-observed-onset",
+            "anchor": ALIGNMENT_ANCHOR,
             "candidate_anchor_frame": candidate_anchor_frame,
             "original_anchor_frame": original_anchor_frame,
             "original_minus_candidate_frames": global_phase_delta,
@@ -323,8 +343,9 @@ def derive_timing(observation: dict, *, input_path: str, input_sha256: str) -> d
         "interpretation_boundary": (
             "This receipt classifies only sample-exact relative onset geometry "
             "for the already-established FB 3F and FA 42 effects. One render-wide "
-            "phase delta, anchored by the first observed onset, is applied before "
-            "command-window membership and may be ignored as fixed renderer/start "
+            "phase delta, anchored by the first onset in the established FB 3F "
+            "beat-1 window, is applied before command-window membership and may be "
+            "ignored as fixed renderer/start "
             "latency, but command-specific phase skew is a timing difference. Absolute phase "
             "itself remains diagnostic rather than parity-classifying. FD 7F note-"
             "delay and FE 04 extended-command behavior remain outside "
@@ -387,7 +408,7 @@ def validate_timing(value: object) -> dict:
     alignment = value.get("phase_alignment")
     if (
         not isinstance(alignment, dict)
-        or alignment.get("anchor") != "first-observed-onset"
+        or alignment.get("anchor") != ALIGNMENT_ANCHOR
         or type(alignment.get("candidate_anchor_frame")) is not int
         or alignment["candidate_anchor_frame"] < 0
         or type(alignment.get("original_anchor_frame")) is not int
