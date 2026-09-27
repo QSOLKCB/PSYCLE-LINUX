@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "scope": "sampler-ps1-pitch-hosted-raw-receipts",
+  "files": [
+    {
+      "path": "candidate-receipt.json.zlib.b64",
+      "decoded_sha256": "dc2bfc6514239271c236f7d7a801e109679b4979b8edb9e6d9da05dc3b9b5f43",
+      "decoded_size_bytes": 8245
+    },
+    {
+      "path": "original-receipt.json.zlib.b64",
+      "decoded_sha256": "b60b0e27f4224baf34c3b4489fc6de5c1b76e61f87dc4b0fb6aa3b75b12e4f00",
+      "decoded_size_bytes": 15242
+    }
+  ]
+}
