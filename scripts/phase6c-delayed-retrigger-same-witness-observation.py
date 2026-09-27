@@ -6,6 +6,7 @@ import argparse
 import base64
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path, PurePosixPath
 import re
@@ -577,6 +578,56 @@ def validate_archive_manifest(
         raise ValueError("durable same-witness archive file inventory changed")
 
 
+def materialize_durable_archive(
+    encoded_archive: Path, manifest: dict
+) -> tuple[tempfile.TemporaryDirectory, Path]:
+    archive_meta = manifest.get("archive")
+    if (
+        not isinstance(archive_meta, dict)
+        or archive_meta.get("encoding") != "base64-of-tar-gzip"
+        or not isinstance(archive_meta.get("decoded_size_bytes"), int)
+        or isinstance(archive_meta.get("decoded_size_bytes"), bool)
+    ):
+        raise ValueError("durable same-witness archive metadata is invalid")
+    expected_hash = require_sha256(
+        archive_meta.get("decoded_sha256"), "durable archive decoded_sha256"
+    )
+    try:
+        encoded = encoded_archive.read_text(encoding="ascii").strip()
+        raw = base64.b64decode(encoded, validate=True)
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise ValueError("durable same-witness archive encoding is invalid") from exc
+    if (
+        len(raw) != archive_meta["decoded_size_bytes"]
+        or digest(raw) != expected_hash
+    ):
+        raise ValueError("durable same-witness archive identity mismatch")
+
+    temporary = tempfile.TemporaryDirectory()
+    root = Path(temporary.name) / "raw"
+    root.mkdir()
+    try:
+        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
+            members = archive.getmembers()
+            for member in members:
+                pure = PurePosixPath(member.name)
+                if (
+                    pure.is_absolute()
+                    or ".." in pure.parts
+                    or member.issym()
+                    or member.islnk()
+                    or not (member.isdir() or member.isfile())
+                ):
+                    raise ValueError(
+                        "durable same-witness archive contains unsafe member"
+                    )
+            archive.extractall(root)
+    except Exception:
+        temporary.cleanup()
+        raise
+    return temporary, root
+
+
 def validate_archived_evidence(
     archive_root: Path, manifest: dict, observation: dict
 ) -> dict:
@@ -864,7 +915,7 @@ def main() -> int:
     check.add_argument("observation", type=Path, nargs="?", default=OBSERVATION_PATH)
 
     archive_check = sub.add_parser("archive-check")
-    archive_check.add_argument("archive_root", type=Path)
+    archive_check.add_argument("encoded_archive", type=Path)
     archive_check.add_argument("manifest", type=Path)
     archive_check.add_argument(
         "observation", type=Path, nargs="?", default=OBSERVATION_PATH
@@ -876,11 +927,18 @@ def main() -> int:
         value = projection_from_hosted(args.candidate_root, args.original_root, metadata)
         write_projection(args.output, value)
     elif args.mode == "archive-check":
-        value = validate_archived_evidence(
-            args.archive_root,
-            read_json(args.manifest),
-            read_json(args.observation),
+        manifest = read_json(args.manifest)
+        temporary, archive_root = materialize_durable_archive(
+            args.encoded_archive, manifest
         )
+        try:
+            value = validate_archived_evidence(
+                archive_root,
+                manifest,
+                read_json(args.observation),
+            )
+        finally:
+            temporary.cleanup()
     else:
         value = validate_projection(read_json(args.observation))
     print(json.dumps(value, sort_keys=True))
