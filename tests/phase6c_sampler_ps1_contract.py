@@ -210,7 +210,7 @@ forged_version = copy.deepcopy(committed)
 forged_version["candidate"]["sampler_machine_state_version"] = 2
 expect_value_error(
     lambda: m.validate(forged_version),
-    "candidate Sampler machine-state version changed",
+    "candidate Sampler machine_state_version must be integer 1",
 )
 
 with tempfile.TemporaryDirectory() as temporary:
