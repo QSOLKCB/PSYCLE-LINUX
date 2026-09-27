@@ -8,6 +8,7 @@ on:
     paths:
       - 'phase6c/SAMPLER_PS1.md'
       - 'phase6c/evidence/sampler-ps1/**'
+      - 'phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json'
       - 'phase6c/compatibility-matrix.json'
       - 'PSYCLE_CORE_PARITY.md'
       - 'ROADMAP.md'
@@ -25,6 +26,7 @@ on:
     paths:
       - 'phase6c/SAMPLER_PS1.md'
       - 'phase6c/evidence/sampler-ps1/**'
+      - 'phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json'
       - 'phase6c/compatibility-matrix.json'
       - 'PSYCLE_CORE_PARITY.md'
       - 'ROADMAP.md'
