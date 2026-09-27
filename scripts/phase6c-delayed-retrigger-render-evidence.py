@@ -579,6 +579,60 @@ def has_diagnostic_prefix(attempt: object, prefix: str) -> bool:
     )
 
 
+def validate_preverification_render_quarantine(attempt: object) -> dict:
+    if not isinstance(attempt, dict):
+        raise ValueError("pre-verification render quarantine attempt is not an object")
+    diagnostics = attempt.get("diagnostics")
+    exit_code = attempt.get("process_exit_code")
+    process_state_valid = (
+        (attempt.get("process_exited") is False and exit_code is None)
+        or (
+            attempt.get("process_exited") is True
+            and isinstance(exit_code, int)
+            and not isinstance(exit_code, bool)
+        )
+    )
+    preexisting_count = attempt.get("preexisting_render_dialog_count")
+    if (
+        attempt.get("outcome") != "inconclusive"
+        or attempt.get("command_verified") is not False
+        or attempt.get("command_dispatched") is not False
+        or attempt.get("dialog_verified") is not False
+        or attempt.get("controls_configured") is not False
+        or attempt.get("save_invoked") is not False
+        or attempt.get("render_dialog_native_event_hook_armed") is not False
+        or attempt.get("render_dialog_event_message_pump_started") is not False
+        or attempt.get("render_dialog_dispatch_boundary_set") is not False
+        or attempt.get("render_dialog_dispatch_boundary_tick") is not None
+        or not isinstance(preexisting_count, int)
+        or isinstance(preexisting_count, bool)
+        or preexisting_count < 0
+        or attempt.get("render_dialog_post_dispatch_observed_window_event_count") != 0
+        or attempt.get("render_dialog_unresolved_post_dispatch_event_count") != 0
+        or attempt.get("render_dialog_post_dispatch_event_count") != 0
+        or attempt.get("selected_render_dialog_native_handle") is not None
+        or attempt.get("selected_render_dialog_runtime_id") != []
+        or attempt.get("dialog_discovery") is not None
+        or attempt.get("output") is not None
+        or attempt.get("observed_output") is not None
+        or not process_state_valid
+        or not isinstance(diagnostics, list)
+        or not diagnostics
+        or any(not isinstance(value, str) for value in diagnostics)
+        or diagnostics[0] == PRECOMMAND_EXIT_DIAGNOSTIC
+    ):
+        raise ValueError("pre-verification render quarantine shape is invalid")
+    return {
+        "inconclusive_reason": "pre-command-verification-failure",
+        "completed_renders": [],
+        "completed_render_analyses": [],
+        "binding_error": None,
+        "diagnostics": diagnostics,
+        "process_exit_code": exit_code,
+        "observed_output": None,
+    }
+
+
 def validate_presave_render_quarantine(attempt: object) -> dict:
     if not isinstance(attempt, dict):
         raise ValueError("pre-Save render quarantine attempt is not an object")
@@ -639,16 +693,14 @@ def validate_predispatch_observer_failure(attempt: object) -> dict:
     diagnostics = attempt.get("diagnostics")
     diagnostics_valid = (
         isinstance(diagnostics, list)
-        and len(diagnostics) in (1, 2)
+        and 1 <= len(diagnostics) <= 3
         and all(isinstance(value, str) for value in diagnostics)
         and diagnostics[0].startswith(
             OBSERVER_INITIALIZATION_FAILURE_PREFIX
         )
-        and (
-            len(diagnostics) == 1
-            or diagnostics[1].startswith(
-                PROCESS_INSPECTION_FAILURE_PREFIX
-            )
+        and all(
+            value.startswith(PROCESS_INSPECTION_FAILURE_PREFIX)
+            for value in diagnostics[1:]
         )
     )
     exit_code = attempt.get("process_exit_code")
@@ -694,14 +746,12 @@ def validate_precommand_process_exit(attempt: object) -> dict:
     diagnostics = attempt.get("diagnostics")
     diagnostics_valid = (
         isinstance(diagnostics, list)
-        and len(diagnostics) in (1, 2)
+        and 1 <= len(diagnostics) <= 3
         and all(isinstance(value, str) for value in diagnostics)
         and diagnostics[0] == PRECOMMAND_EXIT_DIAGNOSTIC
-        and (
-            len(diagnostics) == 1
-            or diagnostics[1].startswith(
-                PROCESS_INSPECTION_FAILURE_PREFIX
-            )
+        and all(
+            value.startswith(PROCESS_INSPECTION_FAILURE_PREFIX)
+            for value in diagnostics[1:]
         )
     )
     if (
@@ -841,16 +891,14 @@ def validate_inconclusive_runtime(
         )
         if (
             isinstance(final_diagnostics, list)
-            and len(final_diagnostics) in (1, 2)
+            and 1 <= len(final_diagnostics) <= 3
             and all(isinstance(value, str) for value in final_diagnostics)
             and final_diagnostics[0].startswith(
                 OBSERVER_INITIALIZATION_FAILURE_PREFIX
             )
-            and (
-                len(final_diagnostics) == 1
-                or final_diagnostics[1].startswith(
-                    PROCESS_INSPECTION_FAILURE_PREFIX
-                )
+            and all(
+                value.startswith(PROCESS_INSPECTION_FAILURE_PREFIX)
+                for value in final_diagnostics[1:]
             )
         ):
             quarantine = validate_predispatch_observer_failure(
@@ -920,7 +968,6 @@ def validate_inconclusive_runtime(
     attempt_diagnostics = attempt.get("diagnostics")
     precommand_exit_candidate = (
         isinstance(attempt_diagnostics, list)
-        and len(attempt_diagnostics) in (1, 2)
         and attempt_diagnostics
         and attempt_diagnostics[0] == PRECOMMAND_EXIT_DIAGNOSTIC
     )
@@ -937,6 +984,32 @@ def validate_inconclusive_runtime(
             != quarantine["process_exit_code"]
         ):
             raise ValueError("pre-command primary process-exit code is inconsistent")
+        quarantine["completed_renders"] = completed
+        quarantine["completed_render_analyses"] = completed_analyses
+        quarantine["diagnostics"] = (
+            completed_diagnostics + quarantine["diagnostics"]
+        )
+        return quarantine
+
+    if (
+        attempt.get("command_verified") is False
+        and attempt.get("command_dispatched") is False
+    ):
+        quarantine = validate_preverification_render_quarantine(attempt)
+        expected_name = f"original-delayed-retrigger-execution-{attempt_number}.wav"
+        expected_path = child(
+            original_root, "delayed-retrigger-execution/" + expected_name
+        )
+        if expected_path.exists():
+            raise ValueError("pre-verification render failure created unbound output")
+        if (
+            quarantine["process_exit_code"] is not None
+            and receipt.get("exit_code_before_termination")
+            != quarantine["process_exit_code"]
+        ):
+            raise ValueError(
+                "pre-verification primary process-exit code is inconsistent"
+            )
         quarantine["completed_renders"] = completed
         quarantine["completed_render_analyses"] = completed_analyses
         quarantine["diagnostics"] = (
