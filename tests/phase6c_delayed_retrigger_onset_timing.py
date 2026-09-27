@@ -73,6 +73,24 @@ def sync_onset_beats(analysis: dict) -> None:
     ]
 
 
+def sync_window_counts(analysis: dict) -> None:
+    frames = analysis["onset_frames"]
+    analysis["window_onset_counts"] = {
+        "note_delay_beat_0": sum(
+            1 for frame in frames if 0.0 <= frame / m.BEAT_FRAMES < 1.0
+        ),
+        "retrigger_beat_1": sum(
+            1 for frame in frames if 1.0 <= frame / m.BEAT_FRAMES < 2.0
+        ),
+        "retr_cont_beat_2": sum(
+            1 for frame in frames if 2.0 <= frame / m.BEAT_FRAMES < 3.0
+        ),
+        "extended_marker_beat_3": sum(
+            1 for frame in frames if 3.0 <= frame / m.BEAT_FRAMES < 4.0
+        ),
+    }
+
+
 timing_pass = m.derive_timing(
     pair,
     input_path="synthetic-qualified-observation.json",
@@ -85,6 +103,30 @@ assert timing_pass["absolute_phase_is_parity_classifying"] is False
 for entry in timing_pass["windows"].values():
     assert entry["relative_onset_frames_exact_match"] is True
     assert all(value == 0 for value in entry["original_minus_candidate_relative_frames"])
+
+uniform_shift = copy.deepcopy(pair)
+candidate_frames = [1000, 20000, 30000, 38000, 39000, 48000, 57000, 60000]
+original_frames = [frame + 1000 for frame in candidate_frames]
+uniform_shift["candidate"]["analysis"]["onset_frames"] = candidate_frames
+uniform_shift["original"]["analysis"]["onset_frames"] = original_frames
+for role in ("candidate", "original"):
+    sync_onset_beats(uniform_shift[role]["analysis"])
+    sync_window_counts(uniform_shift[role]["analysis"])
+uniform_shift_timing = m.derive_timing(
+    uniform_shift,
+    input_path="synthetic-qualified-observation.json",
+    input_sha256="9" * 64,
+)
+assert uniform_shift_timing["scoped_timing_status"] == "PASS"
+assert (
+    uniform_shift_timing["phase_alignment"]["original_minus_candidate_frames"]
+    == 1000
+)
+assert all(
+    entry["first_onset_phase_delta_frames"] == 1000
+    and entry["relative_onset_frames_exact_match"] is True
+    for entry in uniform_shift_timing["windows"].values()
+)
 
 different = copy.deepcopy(pair)
 # Shift only a later FB onset by one sample. Beat membership stays unchanged,
@@ -139,6 +181,24 @@ assert len(
         for entry in phase_skew_timing["windows"].values()
     }
 ) == 2
+
+inconclusive_original = copy.deepcopy(pair)
+inconclusive_original["original"].update(
+    {
+        "outcome": "inconclusive",
+        "inconclusive_reason": "ambiguous-final-render-attempt",
+        "fresh_render_event_binding": "rejected",
+        "fresh_render_event_binding_error": "synthetic rejected binding",
+    }
+)
+expect_value_error(
+    lambda: m.derive_timing(
+        inconclusive_original,
+        input_path="synthetic.json",
+        input_sha256="8" * 64,
+    ),
+    "requires a successful bound original render pair",
+)
 
 missing_pair = copy.deepcopy(pair)
 missing_pair["comparison"]["command_bearing_runtime_pair_observed"] = False
@@ -202,19 +262,29 @@ expect_value_error(
     "first-onset phase diagnostic is inconsistent",
 )
 
-with tempfile.TemporaryDirectory() as temporary:
+with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
     temporary_root = Path(temporary)
     bound_observation = temporary_root / "qualified-observation.json"
     bound_raw = (
         json.dumps(pair, indent=2, sort_keys=True) + "\n"
     ).encode("utf-8")
     bound_observation.write_bytes(bound_raw)
+    relative_bound_observation = bound_observation.relative_to(ROOT).as_posix()
     bound_timing = m.derive_timing(
         pair,
-        input_path=bound_observation.as_posix(),
+        input_path=relative_bound_observation,
         input_sha256=m.digest(bound_raw),
     )
     assert m.validate_bound_receipt(copy.deepcopy(bound_timing)) == bound_timing
+
+    expect_value_error(
+        lambda: m.derive_timing(
+            pair,
+            input_path=bound_observation.resolve().as_posix(),
+            input_sha256=m.digest(bound_raw),
+        ),
+        "input binding is invalid",
+    )
 
     forged_hash = copy.deepcopy(bound_timing)
     forged_hash["input_observation"]["sha256"] = "f" * 64
