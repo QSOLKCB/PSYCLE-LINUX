@@ -82,6 +82,9 @@ jobs:
             libxml++2.6-dev zlib1g-dev libsoxr-dev libasound2-dev \
             libjack-jackd2-dev liblilv-dev liblua5.4-dev
 
+      - name: Check PS1 extended timing negative controls
+        run: python3 tests/phase6c_sampler_ps1_extended_timing.py
+
       - name: Validate Phase 6C matrix contract
         run: python3 scripts/phase6c-validate-matrix.py phase6c/compatibility-matrix.json
 
