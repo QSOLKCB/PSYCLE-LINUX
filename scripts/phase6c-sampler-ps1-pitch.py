@@ -16,7 +16,7 @@ CONTRACT = "sampler-ps1-pitch-runtime"
 COMPARISON_CONTRACT = "sampler-ps1-pitch-runtime-comparison"
 CANDIDATE_SNAPSHOT = "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a"
 REFERENCE_BUILD = "Psycle 1.12.0 x86"
-FIXTURE = "fixture/phase6c-sampler-ps1-pitch.psy"
+ORIGINAL_FIXTURE = "fixture/phase6c-sampler-ps1-pitch-original.psy"\nCANDIDATE_FIXTURE = "fixture/phase6c-sampler-ps1-pitch-candidate.psy"
 CANDIDATE_RECEIPT = "candidate-sampler-ps1-pitch.json"
 ORIGINAL_RECEIPT = "original-sampler-ps1-pitch.json"
 AUTHORED_SAMPLE_RATE = 22050
@@ -83,22 +83,26 @@ def analyze_wave(path: Path) -> dict:
     }
 
 
-def require_fixture(root: Path, relative: str = FIXTURE) -> tuple[Path, dict]:
-    fixture = child(root, relative)
-    if not fixture.is_file():
-        raise ValueError("Sampler pitch fixture is missing")
-    info = compat.inspect_hybrid(fixture.read_bytes())
+def require_fixture_pair(root: Path) -> tuple[Path, Path, dict]:
+    original_fixture = child(root, ORIGINAL_FIXTURE)
+    candidate_fixture = child(root, CANDIDATE_FIXTURE)
+    if not original_fixture.is_file() or not candidate_fixture.is_file():
+        raise ValueError("Sampler pitch fixture pair is missing")
+    info = compat.inspect_pair(
+        original_fixture.read_bytes(),
+        candidate_fixture.read_bytes(),
+    )
     if (
         info["authored_sample_rate"] != AUTHORED_SAMPLE_RATE
         or info["authored_sample_frames"] != AUTHORED_SAMPLE_FRAMES
+        or info["candidate_modern_sample_chunk_removed"] is not True
     ):
-        raise ValueError("Sampler pitch fixture semantic identity changed")
-    return fixture, info
-
+        raise ValueError("Sampler pitch fixture-pair semantic identity changed")
+    return original_fixture, candidate_fixture, info
 
 def collect_candidate(root: Path) -> dict:
     root = root.resolve()
-    fixture, fixture_info = require_fixture(root)
+    original_fixture, candidate_fixture, fixture_info = require_fixture_pair(root)
     renders = []
     for index in (1, 2):
         path = child(root, f"render/candidate-sampler-ps1-pitch-{index}.wav")
@@ -176,11 +180,13 @@ def validate_candidate(root: Path, value: dict | None = None) -> dict:
     for key, expected in checks.items():
         if value.get(key) != expected or type(value.get(key)) is not type(expected):
             raise ValueError(f"candidate pitch receipt identity changed: {key}")
-    fixture, info = require_fixture(root)
-    if value.get("fixture_sha256") != sha256(fixture):
-        raise ValueError("candidate pitch fixture digest mismatch")
+    original_fixture, candidate_fixture, info = require_fixture_pair(root)
+    if value.get("fixture_sha256") != sha256(original_fixture):
+        raise ValueError("original-generation pitch fixture digest mismatch")
+    if value.get("candidate_fixture_sha256") != sha256(candidate_fixture):
+        raise ValueError("candidate-generation pitch fixture digest mismatch")
     if value.get("fixture_semantics") != info:
-        raise ValueError("candidate pitch fixture semantics changed")
+        raise ValueError("candidate pitch fixture-pair semantics changed")
     if value.get("authored_sample") != {
         "sample_rate": AUTHORED_SAMPLE_RATE,
         "frames": AUTHORED_SAMPLE_FRAMES,
