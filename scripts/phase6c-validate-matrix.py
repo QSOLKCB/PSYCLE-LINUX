@@ -525,12 +525,16 @@ EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_RUN = {
         "id": 10921047089,
         "name": "phase6c-delayed-retrigger-candidate",
         "digest": "sha256:fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae",
+        "size_in_bytes": 1978866,
+        "source_archive_sha256": "fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae",
         "raw_receipt_sha256": "c3da3133c4345a7dccf4fe596a6bad423f2405f96850db034fba0b0e22c7d251",
     },
     "original_artifact": {
         "id": 10921642971,
         "name": "phase6c-delayed-retrigger-original",
         "digest": "sha256:1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba",
+        "size_in_bytes": 3110435,
+        "source_archive_sha256": "1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba",
         "raw_receipt_sha256": "b76bc3a8c3301daa6b3b9564403b8d8881a9f669adf5190f5500af42b55313d2",
         "analysis_receipt_sha256": "6509079d2368b7af2e2027a2ae8fbdcd858167b28d9c7ac721df80d20ce140cd",
         "comparison_receipt_sha256": "279bf08352776d8417808495ec11f23d5fc9917c2969122b6c73eb1fa7e78518",
@@ -1571,15 +1575,21 @@ def validate_delayed_retrigger_same_witness_observation() -> None:
         or archive_manifest.get("canonical_workflow_run_id") != 36288494934
         or archive_manifest.get("workflow_head_sha")
         != "6ccb21adb0d4f237da763aff0d27803599ebb2b7"
+        or archive_manifest.get("source_verification")
+        != "downloaded-by-pinned-artifact-id; local ZIP SHA-256 equals GitHub artifact digest"
         or archive_manifest.get("candidate_artifact")
         != {
             "id": 10921047089,
             "digest": "sha256:fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae",
+            "size_in_bytes": 1978866,
+            "source_archive_sha256": "fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae",
         }
         or archive_manifest.get("original_artifact")
         != {
             "id": 10921642971,
             "digest": "sha256:1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba",
+            "size_in_bytes": 3110435,
+            "source_archive_sha256": "1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba",
         }
         or archive_manifest.get("files")
         != EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_DURABLE_FILES
