@@ -31,10 +31,12 @@
     "source_commit": "7ac6d2c3553e2ee8dda55814d8e689919c345478",
     "files": {
       "Sampler.cpp": {
-        "git_blob": "6cc0bd7328d01131c3d41b68f4e5d4189959e364"
+        "git_blob": "6cc0bd7328d01131c3d41b68f4e5d4189959e364",
+        "path": "psycle/src/psycle/host/Sampler.cpp"
       },
       "Sampler.hpp": {
-        "git_blob": "46da9fa80757b11ed146a21a529c70dbc6364f12"
+        "git_blob": "46da9fa80757b11ed146a21a529c70dbc6364f12",
+        "path": "psycle/src/psycle/host/Sampler.hpp"
       }
     },
     "max_polyphony": 16,
@@ -58,7 +60,8 @@
     "normal_loop_wrap": "subtract-loop-length-at-loop-end",
     "panning_destination_cap": 0.5,
     "extended_note_timing_basis": "samples-per-row/6",
-    "nonzero_extended_note_delay_assignment": true
+    "nonzero_extended_note_delay_assignment": true,
+    "source_repository": "jpaquim/psycle"
   },
   "candidate": {
     "snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
@@ -90,8 +93,8 @@
     "envelope_sample_rate_basis": "44100/output-sample-rate",
     "normal_loop_wrap": "subtract-loop-length-at-loop-end",
     "panning_destination_cap": 0.5,
-    "extended_noteoff_timing_basis": "samples-per-tick/6",
-    "nonzero_extended_note_delay_assignment": false
+    "nonzero_extended_note_delay_assignment": true,
+    "extended_note_timing_basis": "samples-per-tick/6"
   },
   "cpsycle": {
     "role": "shared-contract supporting source only",
