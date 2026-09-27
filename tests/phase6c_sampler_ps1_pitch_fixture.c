@@ -5,8 +5,9 @@
  * The modern C-Psycle save is the authoritative authored fixture for pinned
  * Psycle 1.12.0. For the frozen r12005 candidate, a fail-closed bridge removes
  * only the unsupported modern SMSB chunk and extracts its exact decoded PCM16
- * bytes to a hash-bound sidecar. The candidate harness installs those bytes into
- * the already-loaded legacy Instrument before executing the untouched Sampler.
+ * bytes to a hash-bound sidecar. The candidate harness constructs a minimal one-note Sampler-to-Master song,
+ * installs those bytes into its fresh wave-empty legacy Instrument, and then
+ * executes the untouched frozen Sequencer/Sampler path.
  */
 #include <math.h>
 #include <stdint.h>
