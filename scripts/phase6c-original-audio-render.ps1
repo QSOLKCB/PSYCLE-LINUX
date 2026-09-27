@@ -497,10 +497,11 @@ public sealed class Phase6cRenderWindowOpenedObserver : IDisposable
                 throw new InvalidOperationException(
                     "unresolved post-dispatch Psycle window-show event observed"
                 );
-            if (postDispatchObservedWindowEventCount > 1)
-                throw new InvalidOperationException(
-                    "multiple post-dispatch Psycle window-show events observed"
-                );
+            // Other resolved process-owned top-level windows may legitimately
+            // appear after dispatch (for example while Save Wave is active).
+            // They remain counted diagnostically, but only unresolved events or
+            // multiple exact-title Render as Wav File events make attribution
+            // ambiguous.
             if (postDispatchEventCount > 1)
                 throw new InvalidOperationException(
                     "multiple post-dispatch Render as Wav File windows observed"
@@ -1268,10 +1269,12 @@ function Invoke-Phase6cAudioRender(
         $result.render_dialog_unresolved_post_dispatch_event_count = [int]$eventSnapshot[1]
         $result.render_dialog_post_dispatch_event_count = [int]$eventSnapshot[2]
         $dialogObserver = $null
-        if ($result.render_dialog_post_dispatch_observed_window_event_count -ne 1 -or
+        if ($result.render_dialog_post_dispatch_observed_window_event_count -lt 1 -or
             $result.render_dialog_post_dispatch_event_count -ne 1 -or
-            $result.render_dialog_unresolved_post_dispatch_event_count -ne 0) {
-            throw "offline render requires exactly one post-dispatch Render as Wav File event"
+            $result.render_dialog_unresolved_post_dispatch_event_count -ne 0 -or
+            $result.render_dialog_post_dispatch_observed_window_event_count -lt
+                $result.render_dialog_post_dispatch_event_count) {
+            throw "offline render requires one unique post-dispatch Render as Wav File event with no unresolved window events"
         }
         $result.output = [ordered]@{
             path = [System.IO.Path]::GetFileName($OutputPath)
