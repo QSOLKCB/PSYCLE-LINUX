@@ -9,6 +9,7 @@ on:
       - 'phase6c/DELAYED_RETRIGGER.md'
       - 'phase6c/evidence/sequencer-delayed-retrigger/**'
       - 'phase6c/evidence/sequencer-delayed-retrigger-same-witness/**'
+      - 'phase6c/evidence/sequencer-delayed-retrigger-qualified-same-witness/**'
       - 'phase6c/evidence/sequencer-sampler-fault-location/**'
       - 'phase6c/evidence/sequencer-sampler-work-boundary/**'
       - 'phase6c/compatibility-matrix.json'
@@ -48,6 +49,7 @@ on:
       - 'phase6c/DELAYED_RETRIGGER.md'
       - 'phase6c/evidence/sequencer-delayed-retrigger/**'
       - 'phase6c/evidence/sequencer-delayed-retrigger-same-witness/**'
+      - 'phase6c/evidence/sequencer-delayed-retrigger-qualified-same-witness/**'
       - 'phase6c/evidence/sequencer-sampler-fault-location/**'
       - 'phase6c/evidence/sequencer-sampler-work-boundary/**'
       - 'phase6c/compatibility-matrix.json'
@@ -131,6 +133,16 @@ jobs:
         run: |
           python3 tests/phase6c_delayed_retrigger_same_witness.py
           python3 tests/phase6c_delayed_retrigger_same_witness_observation.py
+          python3 tests/phase6c_delayed_retrigger_onset_timing.py
+
+      - name: Validate committed same-witness onset timing receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          receipt='phase6c/evidence/sequencer-delayed-retrigger-qualified-same-witness/onset-timing.json'
+          if [[ -f "$receipt" ]]; then
+            python3 scripts/phase6c-delayed-retrigger-onset-timing.py check "$receipt"
+          fi
 
       - name: Validate versioned compatibility matrix
         run: python3 scripts/phase6c-validate-matrix.py phase6c/compatibility-matrix.json

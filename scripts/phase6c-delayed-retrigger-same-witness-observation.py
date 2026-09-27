@@ -675,6 +675,24 @@ def validate_derived_receipt_hashes(
             )
 
 
+def normalize_original_analysis_state(original_analysis: dict) -> dict:
+    """Project successful hosted/archive analyses with explicit binding state."""
+    normalized = dict(original_analysis)
+    if normalized.get("outcome") is None:
+        renders = normalized.get("renders")
+        if not isinstance(renders, list) or len(renders) != 2:
+            raise ValueError(
+                "successful original analysis lacks deterministic repeated renders"
+            )
+        normalized["outcome"] = "rendered-twice"
+    if normalized.get("outcome") == "rendered-twice":
+        normalized.setdefault("inconclusive_reason", None)
+        normalized.setdefault("process_exit_code", None)
+        normalized.setdefault("fresh_render_event_binding", "accepted")
+        normalized.setdefault("fresh_render_event_binding_error", None)
+    return normalized
+
+
 def validate_archived_evidence(
     archive_root: Path, manifest: dict, observation: dict
 ) -> dict:
@@ -713,6 +731,7 @@ def validate_archived_evidence(
         raise ValueError("durable candidate evidence differs from projection")
 
     expected_original = observation["original"]
+    projected_original = normalize_original_analysis_state(original_analysis)
     for key in (
         "outcome",
         "inconclusive_reason",
@@ -724,7 +743,7 @@ def validate_archived_evidence(
         "fresh_render_event_binding",
         "fresh_render_event_binding_error",
     ):
-        if original_analysis.get(key) != expected_original.get(key):
+        if projected_original.get(key) != expected_original.get(key):
             raise ValueError(
                 f"durable original evidence differs from projection: {key}"
             )
@@ -754,7 +773,9 @@ def projection_from_hosted(
     metadata = validate_run_metadata(metadata)
     hosted = validate_stored_derivation(candidate_root, original_root)
     candidate = hosted["candidate"]
-    original_analysis = hosted["original_analysis"]
+    original_analysis = normalize_original_analysis_state(
+        hosted["original_analysis"]
+    )
     comparison = hosted["comparison"]
 
     pair_observed = comparison.get("command_bearing_runtime_pair_observed")
@@ -814,7 +835,7 @@ def projection_from_hosted(
             "analysis": candidate["analysis"],
         },
         "original": {
-            "outcome": original_analysis.get("outcome", "rendered-twice"),
+            "outcome": original_analysis.get("outcome"),
             "inconclusive_reason": original_analysis.get("inconclusive_reason"),
             "runtime_command_execution_observed": original_command,
             "runtime_command_execution_scope": original_analysis.get(
@@ -939,6 +960,16 @@ def validate_projection(value: object) -> dict:
     if pair:
         if original.get("runtime_command_execution_observed") is not True:
             raise ValueError("observed runtime pair lacks original command evidence")
+        if (
+            original.get("outcome") != "rendered-twice"
+            or original.get("inconclusive_reason") is not None
+            or original.get("fresh_render_event_binding") != "accepted"
+            or original.get("fresh_render_event_binding_error") is not None
+            or original.get("process_exit_code") is not None
+        ):
+            raise ValueError(
+                "observed runtime pair lacks a successful bound original render"
+            )
         require_sha256(original.get("render_sha256"), "original.render_sha256")
         if comparison.get("same_onset_analyzer") is not True:
             raise ValueError("observed runtime pair must use the same onset analyzer")

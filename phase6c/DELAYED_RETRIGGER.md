@@ -296,6 +296,63 @@ runtime pair may be claimed only if the rerun reaches deterministic completed
 original renders under this qualified binding and passes the existing full
 same-witness validators.
 
+## Scoped onset-timing interpretation
+
+Once a **new** hosted observation proves a command-bearing runtime pair on both
+sides with the same strict onset analyzer,
+`scripts/phase6c-delayed-retrigger-onset-timing.py` may derive the next
+receipt.
+
+The timing scope is intentionally narrower than the delayed/retrigger contract:
+
+- only the already-established `FB 3F retrigger` beat-1 window and
+  `FA 42 retrigger-continue` beat-2 window are parity-classifying;
+- each side's exact onset frames are retained;
+- one render-wide original-minus-candidate phase offset is derived by identifying
+  the candidate's first onset in the established `FB 3F retrigger` beat-1 window,
+  retaining cardinality-compatible original anchors, and choosing the **unique best**
+  match scored only against the aligned established FB/FA onset series; ties or
+  missing matches fail closed, while out-of-scope FD/FE timing cannot resolve the
+  anchor;
+- that single phase offset is applied to the original frames **before**
+  command-window membership is derived, so a fixed renderer/start latency
+  cannot move corresponding onsets into different nominal command windows;
+- window membership is derived from the retained onset frames at the pinned
+  44.1 kHz / BPM 137 timing basis, and the duplicated `onset_beats` values
+  must rederive exactly from those raw frames;
+- after aligned membership is established, each side's first onset in the
+  command window is subtracted before comparison, producing a sample-exact
+  **relative onset vector**;
+- each window's original-minus-candidate first-onset phase delta is retained
+  diagnostically and must equal the render-wide offset; command-specific phase
+  skew is therefore itself a cross-command timing difference;
+- scoped `PASS` requires exact equality of both FB/FA relative vectors **and**
+  retention of that one render-wide phase delta in both windows; any
+  sample-level vector difference or command-specific phase skew yields scoped
+  `DIFFERENT`;
+- `FD 7F note-delay` and `FE 04 extended-command` remain explicitly
+  unestablished by this witness.
+
+The interpreter refuses the frozen #80 observation because that receipt does not
+contain an original command-bearing pair. A classifiable pair must also record a
+successful `rendered-twice` original result, no inconclusive reason, an accepted
+fresh-render binding with no binding error, and no reference-process exit. It
+also refuses scope expansion or an attempt to promote the whole
+delayed/retrigger row. Therefore every timing receipt retains:
+
+- `whole_contract_parity_status: UNKNOWN`;
+- `whole_contract_classification_allowed: false`;
+- `absolute_phase_is_parity_classifying: false`.
+
+A real timing receipt is versioned only after a fresh qualified hosted rerun
+proves the required original+candidate pair. Production derive/check accepts only
+the canonical committed same-witness observation, replays its hash-pinned durable
+raw archive through the maintained archive validator, verifies the observation
+SHA-256 and workflow identity, and requires the complete timing receipt to equal
+a fresh derivation from those exact archive-verified observation bytes. Synthetic
+qualified pairs remain negative-control inputs only and cannot bind versioned
+timing evidence.
+
 ## Original render-failure isolation
 
 The first full sampled-witness render ends in a pinned-reference access
