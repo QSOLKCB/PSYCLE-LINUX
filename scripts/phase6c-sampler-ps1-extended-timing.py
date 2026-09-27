@@ -184,14 +184,22 @@ def classify_probe_diagnostics(data: bytes) -> list[str]:
                 f"candidate timing probe emitted unclassified diagnostic: {line}"
             )
         matches = [
-            name for name, marker in PROBE_DIAGNOSTIC_MARKERS
+            (name, marker) for name, marker in PROBE_DIAGNOSTIC_MARKERS
             if marker in line
         ]
-        if len(matches) != 1:
+        if not matches:
             raise ValueError(
                 f"candidate timing probe emitted unclassified diagnostic: {line}"
             )
-        classes.append(matches[0])
+        max_length = max(len(marker) for _, marker in matches)
+        most_specific = [
+            name for name, marker in matches if len(marker) == max_length
+        ]
+        if len(most_specific) != 1:
+            raise ValueError(
+                f"candidate timing probe diagnostic classification is ambiguous: {line}"
+            )
+        classes.append(most_specific[0])
     return sorted(set(classes))
 
 
