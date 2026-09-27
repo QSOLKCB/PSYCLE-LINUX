@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "scope": "sampler-ps1-non-44.1-khz-pitch-hosted-observation",
+  "status": "UNKNOWN",
+  "comparison_ready": false,
+  "source_pr": 84,
+  "workflow": {
+    "name": "Phase 6C Sampler PS1 non-44.1 kHz pitch witness",
+    "run_id": 36323407398,
+    "run_number": 96,
+    "head_sha": "c3fdb36313eb492d942dc68402bcc8053319dd4a",
+    "conclusion": "success"
+  },
+  "artifacts": {
+    "candidate": {
+      "id": 10933335960,
+      "digest": "sha256:880c68ea000885c9f440a9efd083fc253e58307bbcdb2e44f4fddf8c6f82462d"
+    },
+    "original": {
+      "id": 10933880104,
+      "digest": "sha256:b1fe99e1ad053b8c4dda50e9f376b26690de54a21d5438259b93847bf511f93d"
+    },
+    "comparison": {
+      "id": 10933351047,
+      "digest": "sha256:e7efd146d1c2a23be44b990e4cf7e18322be71e81ff0b5ab8df165490820d3b2"
+    }
+  },
+  "candidate": {
+    "receipt_sha256": "dc2bfc6514239271c236f7d7a801e109679b4979b8edb9e6d9da05dc3b9b5f43",
+    "original_fixture_sha256": "3e69cc09882bda5b2ea36ffd0b545e228d7974494f6b3dd0897f08e95ff6a3d0",
+    "bridge_fixture_sha256": "54e643c48d9e712ae7df38845e03668026bac2e8785ab859e198ef04fb0c71ba",
+    "pcm_sha256": "00deb095b798dc04f98536b2517208019ba80af696f53fe0e71fa3b412d22b58",
+    "renderer_executable_sha256": "e93d275c440ee74210475180679d6fbfc13da722791a062cd81d3dbc02129dd0",
+    "deterministic": true,
+    "render_sha256s": [
+      "0771e8a407b8fc6fe96603b66b75df2591f8e96530626c01367bd126fd8680c1",
+      "0771e8a407b8fc6fe96603b66b75df2591f8e96530626c01367bd126fd8680c1"
+    ],
+    "active_span_frames": 11025
+  },
+  "original": {
+    "receipt_sha256": "b60b0e27f4224baf34c3b4489fc6de5c1b76e61f87dc4b0fb6aa3b75b12e4f00",
+    "reference_build": "Psycle 1.12.0 x86",
+    "reference_executable_sha256": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+    "load_result": "accepted",
+    "stable_marker_polls": 34,
+    "outcome": "reference-process-exited-during-render",
+    "process_exit_code": -1073741819,
+    "process_exit_hex": "0xC0000005",
+    "render_sha256s": []
+  },
+  "blocker": "Pinned original Psycle accepted the exact fixture but exited with 0xC0000005 after verified offline-render dispatch, so no deterministic original render pair exists. The scoped pitch witness and broad Sampler PS1 contract remain UNKNOWN.",
+  "archive": {
+    "candidate_receipt": "candidate-receipt.json.zlib.b64",
+    "original_receipt": "original-receipt.json.zlib.b64",
+    "encoding": "base64(zlib(raw-bytes))"
+  }
+}
