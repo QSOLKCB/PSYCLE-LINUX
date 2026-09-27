@@ -200,4 +200,8 @@ with tempfile.TemporaryDirectory() as temporary:
     else:
         raise AssertionError("projection write must be no-clobber")
 
+if m.OBSERVATION_PATH.is_file():
+    committed = m.read_json(m.OBSERVATION_PATH)
+    assert m.validate_projection(committed) == committed
+
 print("phase6c-delayed-retrigger-same-witness-observation: PASS")
