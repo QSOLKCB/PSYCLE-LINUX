@@ -29,6 +29,10 @@ EXPECTED_TRIGGER = 2756
 OUTPUT_RATE = 44100
 ACTIVE_THRESHOLD = 64
 RENDER_FRAMES = 22050
+PROBE_IDENTITY = f"PSYCLE_PHASE6C_PS1_EXTENDED_TIMING_PROBE_V1_{SNAPSHOT}"
+PROBE_BUILD_CONTRACT = "sampler-ps1-extended-timing-probe-build"
+BOUNDARY_FIELDS = {"delay": "first_active_frame", "noteoff": "last_active_frame"}
+BOUNDARY_TOLERANCES_FRAMES = {"delay": 4, "noteoff": 6}
 
 _pitch_spec = importlib.util.spec_from_file_location(
     "phase6c_ps1_pitch", ROOT / "scripts/phase6c-sampler-ps1-pitch.py"
@@ -98,9 +102,64 @@ def binding(root: Path, path: Path) -> dict:
     }
 
 
+def verify_probe_executable(path: Path) -> None:
+    if not path.is_file():
+        raise ValueError("candidate timing probe executable is missing")
+    data = path.read_bytes()
+    if not data.startswith(b"\x7fELF"):
+        raise ValueError("candidate timing probe is not the audited ELF build")
+    if PROBE_IDENTITY.encode("ascii") not in data:
+        raise ValueError("candidate timing probe identity marker is missing")
+    if not os.access(path, os.X_OK):
+        raise ValueError("candidate timing probe is not executable")
+
+
+def expected_probe_attestation(probe: Path, root: Path) -> dict:
+    root = root.resolve()
+    project = ROOT / "tests/phase6c_sampler_ps1_extended_timing.pro"
+    logs = {}
+    for name in ("probe-qmake.log", "probe-build.log"):
+        path = root / name
+        if not path.is_file():
+            raise ValueError(f"candidate timing build log is missing: {name}")
+        logs[name] = binding(root, path)
+    return {
+        "schema_version": 1,
+        "contract": PROBE_BUILD_CONTRACT,
+        "snapshot": SNAPSHOT,
+        "probe_identity": PROBE_IDENTITY,
+        "probe_sha256": sha256(probe),
+        "probe_size_bytes": probe.stat().st_size,
+        "qmake_project_sha256": canonical_source_sha256(project),
+        "source_sha256": source_hashes(),
+        "build_logs": logs,
+    }
+
+
+def create_probe_attestation(probe: Path, root: Path, output: Path) -> dict:
+    probe = probe.resolve()
+    root = root.resolve()
+    verify_probe_executable(probe)
+    value = expected_probe_attestation(probe, root)
+    write_new(output, value)
+    return value
+
+
+def validate_probe_attestation(probe: Path, root: Path, path: Path) -> dict:
+    probe = probe.resolve()
+    root = root.resolve()
+    verify_probe_executable(probe)
+    actual = read_json(path)
+    expected = expected_probe_attestation(probe, root)
+    if not pitch.exact_equal(actual, expected):
+        raise ValueError("candidate timing probe build attestation changed")
+    return actual
+
+
 def expected_probe(variant: str) -> dict:
     base = {
         "schema_version": 1,
+        "probe_identity": PROBE_IDENTITY,
         "variant": variant,
         "load_returned": True,
         "bpm": 120,
@@ -181,12 +240,27 @@ def validate_probe(value: object, variant: str) -> dict:
 
 def collect_candidate(root: Path, probe_build: Path) -> dict:
     root = root.resolve()
+    probe_build = probe_build.resolve()
+    probe_attestation_build = probe_build.with_name(
+        probe_build.name + ".attestation.json"
+    )
+    verify_probe_executable(probe_build)
+    validate_probe_attestation(
+        probe_build, root, probe_attestation_build
+    )
+
     probe_dir = root / "probe"
     probe_dir.mkdir(parents=True, exist_ok=True)
     probe = probe_dir / "phase6c-sampler-ps1-extended-timing-probe"
-    if probe.exists():
+    probe_attestation = probe_dir / (
+        "phase6c-sampler-ps1-extended-timing-probe.attestation.json"
+    )
+    if probe.exists() or probe_attestation.exists():
         raise ValueError("refusing stale timing probe")
     shutil.copy2(probe_build, probe)
+    shutil.copy2(probe_attestation_build, probe_attestation)
+    verify_probe_executable(probe)
+    validate_probe_attestation(probe, root, probe_attestation)
 
     results = {}
     for variant in VARIANTS:
@@ -216,6 +290,12 @@ def collect_candidate(root: Path, probe_build: Path) -> dict:
                 f"stderr:\n{stderr or '(empty)'}\n"
                 f"stdout:\n{stdout or '(empty)'}"
             )
+        if process.stderr.strip():
+            stderr = process.stderr.decode("utf-8", errors="replace").strip()
+            raise ValueError(
+                f"candidate {variant} timing probe emitted unclassified diagnostics:\n"
+                f"{stderr}"
+            )
         value = validate_probe(json.loads(process.stdout), variant)
         receipt = {
             "schema_version": 1,
@@ -234,6 +314,7 @@ def collect_candidate(root: Path, probe_build: Path) -> dict:
             "candidate_pcm": pcm.relative_to(root).as_posix(),
             "candidate_pcm_sha256": sha256(pcm),
             "probe": binding(root, probe),
+            "probe_attestation": binding(root, probe_attestation),
             "raw_probe": binding(root, raw),
             "probe_log": binding(root, log),
             "source_sha256": source_hashes(),
@@ -289,9 +370,10 @@ def validate_candidate(root: Path) -> dict:
                 raise ValueError(f"candidate timing digest changed: {variant}:{key}")
 
         probe = receipt.get("probe")
+        attestation = receipt.get("probe_attestation")
         raw = receipt.get("raw_probe")
         log = receipt.get("probe_log")
-        for item in (probe, raw, log):
+        for item in (probe, attestation, raw, log):
             if not isinstance(item, dict):
                 raise ValueError("candidate timing binding missing")
             path = (root / item.get("path", "")).resolve()
@@ -302,6 +384,12 @@ def validate_candidate(root: Path) -> dict:
                 or item.get("size_bytes") != path.stat().st_size
             ):
                 raise ValueError("candidate timing binding mismatch")
+        probe_path = (root / probe["path"]).resolve()
+        attestation_path = (root / attestation["path"]).resolve()
+        verify_probe_executable(probe_path)
+        validate_probe_attestation(probe_path, root, attestation_path)
+        if (root / log["path"]).read_bytes().strip():
+            raise ValueError("candidate timing probe retained unclassified diagnostics")
         value = validate_probe(json.loads((root / raw["path"]).read_bytes()), variant)
         if not pitch.exact_equal(receipt.get("runtime_execution"), value):
             raise ValueError("candidate timing runtime receipt drift")
@@ -320,6 +408,10 @@ def analyze_timing_wave(path: Path) -> dict:
         raise ValueError("timing witness WAV format changed")
     if len(payload) != frames * 2:
         raise ValueError("timing witness WAV payload is truncated")
+    if frames < RENDER_FRAMES:
+        raise ValueError(
+            "timing witness WAV is shorter than the complete fixture interval"
+        )
     samples = struct.unpack("<" + "h" * frames, payload) if frames else ()
     active = [
         index for index, sample in enumerate(samples)
@@ -521,13 +613,54 @@ def compare(candidate_root: Path, original_root: Path) -> dict:
         variant: candidate["variants"][variant]["runtime_execution"]
         for variant in VARIANTS
     }
+    candidate_receipt_sha256s = {
+        variant: sha256(
+            candidate_root.resolve()
+            / f"candidate-sampler-ps1-extended-{variant}.json"
+        )
+        for variant in VARIANTS
+    }
+    candidate_inputs = {
+        variant: {
+            "receipt_sha256": candidate_receipt_sha256s[variant],
+            "fixture": {
+                "path": candidate["variants"][variant]["fixture"],
+                "sha256": candidate["variants"][variant]["fixture_sha256"],
+            },
+            "candidate_fixture": {
+                "path": candidate["variants"][variant]["candidate_fixture"],
+                "sha256": candidate["variants"][variant][
+                    "candidate_fixture_sha256"
+                ],
+            },
+            "candidate_pcm": {
+                "path": candidate["variants"][variant]["candidate_pcm"],
+                "sha256": candidate["variants"][variant]["candidate_pcm_sha256"],
+            },
+            "probe": candidate["variants"][variant]["probe"],
+            "probe_attestation": candidate["variants"][variant][
+                "probe_attestation"
+            ],
+        }
+        for variant in VARIANTS
+    }
     result = {
         "schema_version": 1,
         "phase": "6C",
         "contract": COMPARISON_CONTRACT,
         "scope": "ps1-e-dx-e-cx-runtime-timing",
         "candidate_snapshot": SNAPSHOT,
+        "candidate_receipt_sha256s": candidate_receipt_sha256s,
+        "candidate_inputs": candidate_inputs,
         "commands": ["E-D3", "E-C3"],
+        "boundary_comparison_contract": {
+            variant: {
+                "field": BOUNDARY_FIELDS[variant],
+                "tolerance_frames": BOUNDARY_TOLERANCES_FRAMES[variant],
+                "invariant": "abs(candidate_frame - original_frame) <= tolerance_frames",
+            }
+            for variant in VARIANTS
+        },
         "candidate_trigger_samples": {
             variant: candidate_runtime[variant]["trigger_samples"]
             for variant in VARIANTS
@@ -595,9 +728,15 @@ def compare(candidate_root: Path, original_root: Path) -> dict:
         "noteoff": noteoff,
     }
 
-    pairs = (
-        ("delay", candidate_delay, delay, "first_active_frame", 4),
-        ("noteoff", candidate_noteoff, noteoff, "last_active_frame", 6),
+    pairs = tuple(
+        (
+            variant,
+            candidate_runtime[variant],
+            {"delay": delay, "noteoff": noteoff}[variant],
+            BOUNDARY_FIELDS[variant],
+            BOUNDARY_TOLERANCES_FRAMES[variant],
+        )
+        for variant in VARIANTS
     )
     boundary_results: dict[str, bool | None] = {}
     for variant, candidate_audio, original_audio, field, tolerance in pairs:
@@ -640,6 +779,10 @@ def compare(candidate_root: Path, original_root: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="mode", required=True)
+    attest = sub.add_parser("attest-probe")
+    attest.add_argument("probe", type=Path)
+    attest.add_argument("root", type=Path)
+    attest.add_argument("output", type=Path)
     collect = sub.add_parser("collect")
     collect.add_argument("root", type=Path)
     collect.add_argument("probe", type=Path)
@@ -654,7 +797,9 @@ def main() -> int:
     comp.add_argument("output", type=Path)
     args = parser.parse_args()
 
-    if args.mode == "collect":
+    if args.mode == "attest-probe":
+        value = create_probe_attestation(args.probe, args.root, args.output)
+    elif args.mode == "collect":
         value = collect_candidate(args.root, args.probe)
     elif args.mode == "candidate-check":
         value = validate_candidate(args.root)
