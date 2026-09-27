@@ -425,9 +425,21 @@ class GeneratedObserver(unittest.TestCase):
                 text.count('$runtimeOutcome = if ($postRenderInspectionFailure) {'),
                 5,
             )
-            self.assertIn(
+            self.assertNotIn(
                 '[string]$runtimeExecution.outcome -in '
                 '@("rendered-once", "rendered-twice")',
+                text,
+            )
+            self.assertIn(
+                '$runtimeRenders = @($runtimeExecution.renders)',
+                text,
+            )
+            self.assertIn(
+                '$runtimeRenders.Count -eq $runtimeAttempts.Count',
+                text,
+            )
+            self.assertIn(
+                '[string]$lateExitAttempt.outcome -ceq "rendered"',
                 text,
             )
             self.assertIn(
