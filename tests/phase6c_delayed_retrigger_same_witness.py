@@ -1313,6 +1313,29 @@ with tempfile.TemporaryDirectory() as temporary:
     )
     assert late_exit_preverification["process_exit_code"] == -1073741819
 
+    dispatch_failure_root = root / "dispatch-failure"
+    dispatch_failure_root.mkdir()
+    dispatch_failure_attempt = dict(preverification_attempt)
+    dispatch_failure_attempt.update(
+        {
+            "command_verified": True,
+            "render_dialog_native_event_hook_armed": True,
+            "render_dialog_event_message_pump_started": True,
+            "diagnostics": [m.base.COMMAND_DISPATCH_FAILURE_DIAGNOSTIC],
+        }
+    )
+    dispatch_failure_runtime = dict(inconclusive_runtime)
+    dispatch_failure_runtime["attempts"] = [dispatch_failure_attempt]
+    dispatch_failure = m.validate_original_inconclusive_runtime(
+        dispatch_failure_root, dispatch_failure_runtime
+    )
+    assert dispatch_failure["inconclusive_reason"] == (
+        "render-command-dispatch-failure"
+    )
+    assert m.inconclusive_render_binding_status(dispatch_failure) == (
+        "not-dispatched"
+    )
+
     no_event_root = root / "no-event-render-dialog"
     no_event_root.mkdir()
     no_event_attempt = dict(ambiguous_attempt)
@@ -1687,6 +1710,31 @@ with tempfile.TemporaryDirectory() as temporary:
     assert crash["process_exit_code"] == -1073741819
     assert crash["observed_output"]["sha256"] == m.digest(valid_wave)
     assert crash["retained_renders"] == []
+    assert crash["binding_error"] is None
+
+    sealing_crash_attempt = dict(crash_attempt)
+    sealing_crash_attempt.update(
+        {
+            "render_dialog_post_dispatch_observed_window_event_count": 0,
+            "render_dialog_unresolved_post_dispatch_event_count": 0,
+            "render_dialog_post_dispatch_event_count": 0,
+            "diagnostics": [
+                m.base.PROCESS_EXIT_DIAGNOSTIC,
+                m.OBSERVER_SEALING_FAILURE_PREFIX
+                + " synthetic post-Save seal failure",
+            ],
+        }
+    )
+    sealing_crash_runtime = dict(crash_runtime)
+    sealing_crash_runtime["attempts"] = [sealing_crash_attempt]
+    sealing_crash = m.validate_original_process_exit_runtime(
+        root,
+        sealing_crash_runtime,
+        {"exit_code_before_termination": -1073741819},
+    )
+    assert sealing_crash["process_exit_code"] == -1073741819
+    assert sealing_crash["binding_error"] is not None
+    assert sealing_crash["diagnostics"] == sealing_crash_attempt["diagnostics"]
 
     early_ambiguous_attempt = dict(ambiguous_attempt)
     early_ambiguous_attempt.update(
