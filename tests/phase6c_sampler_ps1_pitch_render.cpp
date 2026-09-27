@@ -133,8 +133,9 @@ int main(int argc, char** argv) {
         print_compiled_provenance();
         return 0;
     }
-    if (argc != 3) {
-        std::cerr << "usage: " << argv[0] << " FIXTURE OUTPUT_WAV\n";
+    if (argc != 4) {
+        std::cerr << "usage: " << argv[0]
+                  << " FIXTURE PCM16LE OUTPUT_WAV\n";
         return 64;
     }
 
@@ -156,6 +157,30 @@ int main(int argc, char** argv) {
             return 72;
         }
 
+        std::ifstream pcm_input(argv[2], std::ios::binary | std::ios::ate);
+        const std::streamoff pcm_size =
+            pcm_input ? static_cast<std::streamoff>(pcm_input.tellg()) : -1;
+        if (!pcm_input || pcm_size != 11025 * 2) {
+            std::cerr << "candidate PCM sidecar size changed\n";
+            return 74;
+        }
+        pcm_input.seekg(0, std::ios::beg);
+        std::vector<unsigned char> pcm(
+            static_cast<std::size_t>(pcm_size), 0u);
+        pcm_input.read(
+            reinterpret_cast<char*>(pcm.data()),
+            static_cast<std::streamsize>(pcm.size()));
+        if (!pcm_input) {
+            std::cerr << "candidate PCM sidecar read failed\n";
+            return 74;
+        }
+        pcm_input.close();
+        const std::string pcm_sha256 = sha256_file(argv[2]);
+        if (pcm_sha256.size() != 64u) {
+            std::cerr << "candidate PCM sidecar SHA-256 failed\n";
+            return 74;
+        }
+
         psycle::core::Player& player = psycle::core::Player::singleton();
         psycle::core::MachineFactory& factory =
             psycle::core::MachineFactory::getInstance();
@@ -173,14 +198,31 @@ int main(int argc, char** argv) {
                 result = 73;
             } else if (
                 song._pInstrument[0] == 0
-                || song._pInstrument[0]->waveLength != 11025
-                || song._pInstrument[0]->waveDataL == 0
-                || song._pInstrument[0]->waveTune != 0
-                || song._pInstrument[0]->waveFinetune != 0
+                || song._pInstrument[0]->waveLength != 0
+                || song._pInstrument[0]->waveDataL != 0
             ) {
-                std::cerr << "legacy INSD/WAVE state did not load exactly\n";
+                std::cerr << "candidate pre-injection Instrument is not wave-empty\n";
                 result = 68;
             } else {
+                psycle::core::Instrument* instrument = song._pInstrument[0];
+                instrument->waveLength = 11025;
+                instrument->waveVolume = 100;
+                instrument->waveLoopStart = 0;
+                instrument->waveLoopEnd = 0;
+                instrument->waveTune = 0;
+                instrument->waveFinetune = 0;
+                instrument->waveLoopType = false;
+                instrument->waveStereo = false;
+                instrument->waveDataL = new std::int16_t[11025];
+                instrument->waveDataR = 0;
+                for (std::size_t frame = 0; frame < 11025u; ++frame) {
+                    const std::uint16_t bits =
+                        static_cast<std::uint16_t>(pcm[frame * 2u])
+                        | (static_cast<std::uint16_t>(pcm[frame * 2u + 1u]) << 8);
+                    instrument->waveDataL[frame] =
+                        static_cast<std::int16_t>(bits);
+                }
+
                 psycle::audiodrivers::AudioDriverSettings settings(
                     player.driver().playbackSettings());
                 settings.setSamplesPerSec(44100);
@@ -189,7 +231,7 @@ int main(int argc, char** argv) {
                 settings.setBlockFrames(2048);
                 player.driver().setPlaybackSettings(settings);
 
-                player.setFileName(argv[2]);
+                player.setFileName(argv[3]);
                 player.startRecording();
                 if (!player.recording()) {
                     std::cerr << "candidate recording did not start\n";
@@ -213,7 +255,7 @@ int main(int argc, char** argv) {
                     player.stop();
                     player.stopRecording();
 
-                    std::ifstream output(argv[2], std::ios::binary | std::ios::ate);
+                    std::ifstream output(argv[3], std::ios::binary | std::ios::ate);
                     const std::streamoff output_size =
                         output ? static_cast<std::streamoff>(output.tellg()) : -1;
                     if (!output || output_size <= 44) {
@@ -221,7 +263,7 @@ int main(int argc, char** argv) {
                         result = 67;
                     } else {
                         output.close();
-                        const std::string output_sha256=sha256_file(argv[2]);
+                        const std::string output_sha256=sha256_file(argv[3]);
                         if (output_sha256.size()!=64u) {
                             std::cerr << "candidate render SHA-256 failed\n";
                             result=71;
@@ -238,7 +280,16 @@ int main(int argc, char** argv) {
                                 << ",\"final_play_beat\":" << final_beat
                                 << ",\"input_path\":\"" << json_escape(argv[1]) << "\""
                                 << ",\"input_sha256\":\"" << input_sha256 << "\""
-                                << ",\"output_path\":\"" << json_escape(argv[2]) << "\""
+                                << ",\"pcm_path\":\"" << json_escape(argv[2]) << "\""
+                                << ",\"pcm_size_bytes\":" << pcm_size
+                                << ",\"pcm_sha256\":\"" << pcm_sha256 << "\""
+                                << ",\"harness_sample_injection\":true"
+                                << ",\"pre_injection_wave_length\":0"
+                                << ",\"injected_wave_length\":11025"
+                                << ",\"injected_wave_volume\":100"
+                                << ",\"injected_wave_tune\":0"
+                                << ",\"injected_wave_finetune\":0"
+                                << ",\"output_path\":\"" << json_escape(argv[3]) << "\""
                                 << ",\"output_size_bytes\":" << static_cast<long long>(output_size)
                                 << ",\"output_sha256\":\"" << output_sha256 << "\""
                                 << "}" << std::endl;
