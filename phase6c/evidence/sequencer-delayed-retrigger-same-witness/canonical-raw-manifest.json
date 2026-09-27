@@ -1,7 +1,9 @@
 {
   "candidate_artifact": {
     "digest": "sha256:fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae",
-    "id": 10921047089
+    "id": 10921047089,
+    "size_in_bytes": 1978866,
+    "source_archive_sha256": "fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae"
   },
   "canonical_workflow_run_id": 36288494934,
   "contract": "sequencer-delayed-retrigger-same-witness-render",
@@ -51,8 +53,11 @@
   ],
   "original_artifact": {
     "digest": "sha256:1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba",
-    "id": 10921642971
+    "id": 10921642971,
+    "size_in_bytes": 3110435,
+    "source_archive_sha256": "1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba"
   },
   "schema_version": 2,
-  "workflow_head_sha": "6ccb21adb0d4f237da763aff0d27803599ebb2b7"
+  "workflow_head_sha": "6ccb21adb0d4f237da763aff0d27803599ebb2b7",
+  "source_verification": "downloaded-by-pinned-artifact-id; local ZIP SHA-256 equals GitHub artifact digest"
 }
