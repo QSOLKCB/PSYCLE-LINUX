@@ -196,23 +196,41 @@ def inspect_original(data: bytes) -> dict:
     _prefix, chunks = parse_chunks(data)
     insd = [item for item in chunks if item[0] == b"INSD"]
     smsb = [item for item in chunks if item[0] == b"SMSB"]
+    if len(insd) != 1 or len(smsb) != 1:
+        raise ValueError("original witness must contain exactly one INSD and one SMSB chunk")
+    if insd[0][1] != 2 or smsb[0][1] != 2:
+        raise ValueError("unexpected original INSD/SMSB chunk version")
+    sample = parse_modern_sample(smsb[0][2])
+    return {
+        "sample": sample,
+        "chunk_ids": [item[0] for item in chunks],
+    }
+
+
+def inspect_candidate(
+    data: bytes, original: bytes, pcm16le: bytes | None = None
+) -> dict:
+    candidate_prefix, chunks = parse_chunks(data)
+    original_prefix, original_chunks = parse_chunks(original)
+    original_info = inspect_original(original)
+    sample = original_info["sample"]
+
+    insd = [item for item in chunks if item[0] == b"INSD"]
+    smsb = [item for item in chunks if item[0] == b"SMSB"]
     if len(insd) != 1 or smsb:
         raise ValueError("candidate witness must contain one INSD and no SMSB")
     if insd[0][1] != 2:
         raise ValueError("candidate INSD chunk version changed")
 
-    # The candidate load fixture differs only by omission of the unsupported
-    # modern SMSB chunk. Its INSD remains the exact original instrument body
-    # with numwaves=0; the candidate harness installs the separately bound PCM.
     expected_chunks = [item for item in original_chunks if item[0] != b"SMSB"]
     if chunks != expected_chunks:
         raise ValueError("candidate bridge changed PSY3 bytes beyond removing SMSB")
-    if bytes(_prefix) != bytes(original_prefix):
-        candidate_prefix = bytearray(_prefix)
-        source_prefix = bytearray(original_prefix)
-        struct.pack_into("<I", candidate_prefix, 16, 0)
-        struct.pack_into("<I", source_prefix, 16, 0)
-        if candidate_prefix != source_prefix:
+    if bytes(candidate_prefix) != bytes(original_prefix):
+        normalized_candidate = bytearray(candidate_prefix)
+        normalized_original = bytearray(original_prefix)
+        struct.pack_into("<I", normalized_candidate, 16, 0)
+        struct.pack_into("<I", normalized_original, 16, 0)
+        if normalized_candidate != normalized_original:
             raise ValueError("candidate bridge changed PSY3 SONG metadata")
 
     payload = insd[0][2]
@@ -247,9 +265,6 @@ def inspect_pair(
     inspect_original(original)
     return inspect_candidate(candidate, original, pcm16le)
 
-def inspect_pair(original: bytes, candidate: bytes) -> dict:
-    inspect_original(original)
-    return inspect_candidate(candidate, original)
 
 def convert(data: bytes) -> bytes:
     prefix, chunks = parse_chunks(data)
