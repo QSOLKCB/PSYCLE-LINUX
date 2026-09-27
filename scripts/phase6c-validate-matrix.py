@@ -456,6 +456,36 @@ EXPECTED_CANDIDATE_SOURCE_IDENTITIES[TIMING_CONTRACT_ID] = {
 }
 
 DELAYED_RETRIGGER_CONTRACT_ID = "sequencer-delayed-retrigger"
+DELAYED_RETRIGGER_SAME_WITNESS_OBSERVATION = (
+    EVIDENCE_ROOT
+    / "sequencer-delayed-retrigger-same-witness"
+    / "observation.json"
+)
+EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_OBSERVATION_SHA256 = (
+    "74c309107bce3c2bb3a6320e9fac237b2d5f898a7be7a1806b965e6d69781b9a"
+)
+EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_RUN = {
+    "workflow_name": "Phase 6C delayed retrigger observation",
+    "workflow_run_id": 36288494934,
+    "workflow_event": "push",
+    "workflow_head_sha": "6ccb21adb0d4f237da763aff0d27803599ebb2b7",
+    "candidate_job_id": 108533812401,
+    "original_job_id": 108534102974,
+    "candidate_artifact": {
+        "id": 10921047089,
+        "name": "phase6c-delayed-retrigger-candidate",
+        "digest": "sha256:fec8f35ab27846102343063f6b0b8fd515e424edb37d95974abbc0c00a65ccae",
+        "raw_receipt_sha256": "c3da3133c4345a7dccf4fe596a6bad423f2405f96850db034fba0b0e22c7d251",
+    },
+    "original_artifact": {
+        "id": 10921642971,
+        "name": "phase6c-delayed-retrigger-original",
+        "digest": "sha256:1ed19540c61d9b07d3f78ac087469a8ce7128c5cf7b96e401ca010abc6e4b9ba",
+        "raw_receipt_sha256": "b76bc3a8c3301daa6b3b9564403b8d8881a9f669adf5190f5500af42b55313d2",
+        "analysis_receipt_sha256": "6509079d2368b7af2e2027a2ae8fbdcd858167b28d9c7ac721df80d20ce140cd",
+        "comparison_receipt_sha256": "279bf08352776d8417808495ec11f23d5fc9917c2969122b6c73eb1fa7e78518",
+    },
+}
 EXPECTED_DELAYED_RETRIGGER_ATTRIBUTION = {
     "workflow": "Phase 6C delayed retrigger observation",
     "workflow_run_id": 35457374404,
@@ -1459,6 +1489,126 @@ def validate_timing_classification_semantics(
 
 
 
+
+def validate_delayed_retrigger_same_witness_observation() -> None:
+    path = DELAYED_RETRIGGER_SAME_WITNESS_OBSERVATION
+    if not path.is_file():
+        die("delayed/retrigger same-witness hosted observation is missing")
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != (
+        EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_OBSERVATION_SHA256
+    ):
+        die("delayed/retrigger same-witness hosted observation bytes changed")
+    try:
+        observation = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        die(f"delayed/retrigger same-witness observation is invalid JSON: {exc}")
+    if not isinstance(observation, dict):
+        die("delayed/retrigger same-witness observation must be an object")
+    if (
+        observation.get("schema_version") != 1
+        or observation.get("phase") != "6C"
+        or observation.get("contract")
+        != "sequencer-delayed-retrigger-same-witness-render"
+        or observation.get("parity_status") != "UNKNOWN"
+        or observation.get("classification_allowed") is not False
+        or observation.get("exact_onset_timing_interpretation") != "deferred"
+    ):
+        die("delayed/retrigger same-witness observation envelope changed")
+
+    fixture = observation.get("fixture")
+    if fixture != {
+        "path": "delayed-retrigger/phase6c-delayed-retrigger-sampulse-execution.psy",
+        "sha256": "cfeb6dbcc1e68a063ed3c1a1cfa70e68e88a974209a3940070a184e5b31b6b05",
+    }:
+        die("delayed/retrigger same-witness fixture identity changed")
+
+    canonical = observation.get("canonical_observation")
+    if not isinstance(canonical, dict):
+        die("delayed/retrigger same-witness canonical observation is missing")
+    expected = EXPECTED_DELAYED_RETRIGGER_SAME_WITNESS_RUN
+    for field in (
+        "workflow_name",
+        "workflow_run_id",
+        "workflow_event",
+        "workflow_head_sha",
+        "candidate_job_id",
+        "original_job_id",
+    ):
+        if canonical.get(field) != expected[field]:
+            die(f"delayed/retrigger same-witness canonical {field} changed")
+
+    candidate_artifact = canonical.get("candidate_artifact")
+    original_artifact = canonical.get("original_artifact")
+    if not isinstance(candidate_artifact, dict) or not isinstance(
+        original_artifact, dict
+    ):
+        die("delayed/retrigger same-witness artifact attribution is malformed")
+    for field in ("id", "name", "digest"):
+        if candidate_artifact.get(field) != expected["candidate_artifact"][field]:
+            die(f"delayed/retrigger candidate artifact {field} changed")
+        if original_artifact.get(field) != expected["original_artifact"][field]:
+            die(f"delayed/retrigger original artifact {field} changed")
+    if (
+        candidate_artifact.get("raw_receipt", {}).get("sha256")
+        != expected["candidate_artifact"]["raw_receipt_sha256"]
+    ):
+        die("delayed/retrigger candidate same-witness raw receipt changed")
+    for field, expected_field in (
+        ("raw_receipt", "raw_receipt_sha256"),
+        ("analysis_receipt", "analysis_receipt_sha256"),
+        ("comparison_receipt", "comparison_receipt_sha256"),
+    ):
+        binding = original_artifact.get(field)
+        if (
+            not isinstance(binding, dict)
+            or binding.get("sha256")
+            != expected["original_artifact"][expected_field]
+        ):
+            die(f"delayed/retrigger original {field} changed")
+
+    candidate = observation.get("candidate")
+    original = observation.get("original")
+    comparison = observation.get("comparison")
+    derived = observation.get("derived_observation")
+    if not all(
+        isinstance(value, dict)
+        for value in (candidate, original, comparison, derived)
+    ):
+        die("delayed/retrigger same-witness observation sections are malformed")
+    if (
+        candidate.get("runtime_command_execution_observed") is not True
+        or candidate.get("render_sha256")
+        != "7c0eb0461ee4d41c1f53e8421d30dc66b9b08d8ce0463d9b1de1d703f35b924b"
+    ):
+        die("delayed/retrigger candidate command-bearing render identity changed")
+    if (
+        original.get("outcome") != "inconclusive"
+        or original.get("inconclusive_reason") != "ambiguous-final-render-attempt"
+        or original.get("runtime_command_execution_observed") is not False
+        or original.get("fresh_render_event_binding") != "rejected"
+        or original.get("fresh_render_event_binding_error")
+        != "same-witness original render lacks bound post-dispatch dialog evidence"
+        or original.get("process_exit_code") is not None
+    ):
+        die("delayed/retrigger original hosted uncertainty boundary changed")
+    if (
+        comparison.get("same_fixture_bytes") is not True
+        or comparison.get("same_onset_analyzer") is not False
+        or comparison.get("command_bearing_runtime_pair_observed") is not False
+        or comparison.get("classification_allowed") is not False
+        or comparison.get("parity_status") != "UNKNOWN"
+    ):
+        die("delayed/retrigger same-witness comparison boundary changed")
+    if (
+        derived.get("candidate_command_execution_observed") is not True
+        or derived.get("original_command_execution_observed") is not False
+        or derived.get("command_bearing_runtime_pair_observed") is not False
+        or derived.get("timing_classification_permitted") is not False
+    ):
+        die("delayed/retrigger same-witness derived observation changed")
+
+
 def validate_delayed_retrigger_deferred_comparison(
     row: dict[str, object],
 ) -> None:
@@ -2154,6 +2304,7 @@ def main() -> int:
 
         if row_id == DELAYED_RETRIGGER_CONTRACT_ID:
             validate_delayed_retrigger_deferred_comparison(row)
+            validate_delayed_retrigger_same_witness_observation()
 
         if status != "UNKNOWN":
             non_unknown += 1
