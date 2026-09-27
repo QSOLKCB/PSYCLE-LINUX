@@ -824,7 +824,13 @@ def projection_from_hosted(
             "analysis": original_analysis.get("analysis"),
             "process_exit_code": original_analysis.get("process_exit_code"),
             "fresh_render_event_binding": original_analysis.get(
-                "fresh_render_event_binding"
+                "fresh_render_event_binding",
+                (
+                    "accepted"
+                    if original_analysis.get("outcome", "rendered-twice")
+                    == "rendered-twice"
+                    else None
+                ),
             ),
             "fresh_render_event_binding_error": original_analysis.get(
                 "fresh_render_event_binding_error"
@@ -939,6 +945,16 @@ def validate_projection(value: object) -> dict:
     if pair:
         if original.get("runtime_command_execution_observed") is not True:
             raise ValueError("observed runtime pair lacks original command evidence")
+        if (
+            original.get("outcome") != "rendered-twice"
+            or original.get("inconclusive_reason") is not None
+            or original.get("fresh_render_event_binding") != "accepted"
+            or original.get("fresh_render_event_binding_error") is not None
+            or original.get("process_exit_code") is not None
+        ):
+            raise ValueError(
+                "observed runtime pair lacks a successful bound original render"
+            )
         require_sha256(original.get("render_sha256"), "original.render_sha256")
         if comparison.get("same_onset_analyzer") is not True:
             raise ValueError("observed runtime pair must use the same onset analyzer")
