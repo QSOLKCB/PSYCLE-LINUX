@@ -128,6 +128,27 @@ assert all(
     for entry in uniform_shift_timing["windows"].values()
 )
 
+fd_only_shift = copy.deepcopy(pair)
+fd_only_shift["original"]["analysis"]["onset_frames"][0] += 100
+sync_onset_beats(fd_only_shift["original"]["analysis"])
+sync_window_counts(fd_only_shift["original"]["analysis"])
+fd_only_shift_timing = m.derive_timing(
+    fd_only_shift,
+    input_path="synthetic-qualified-observation.json",
+    input_sha256="a" * 64,
+)
+assert fd_only_shift_timing["scoped_timing_status"] == "PASS"
+assert fd_only_shift_timing["phase_alignment"]["anchor"] == m.ALIGNMENT_ANCHOR
+assert (
+    fd_only_shift_timing["phase_alignment"]["original_minus_candidate_frames"]
+    == 0
+)
+assert all(
+    entry["first_onset_phase_delta_frames"] == 0
+    and entry["relative_onset_frames_exact_match"] is True
+    for entry in fd_only_shift_timing["windows"].values()
+)
+
 different = copy.deepcopy(pair)
 # Shift only a later FB onset by one sample. Beat membership stays unchanged,
 # but the within-window relative timing vector must become DIFFERENT.
