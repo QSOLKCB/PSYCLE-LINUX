@@ -122,7 +122,7 @@ forged_commands = copy.deepcopy(committed)
 forged_commands["candidate"]["command_ids"]["OFFSET"] = 0x90
 expect_value_error(
     lambda: m.validate(forged_commands),
-    "candidate command table changed",
+    "candidate command identifier changed: OFFSET",
 )
 
 forged_boolean_command = copy.deepcopy(committed)
