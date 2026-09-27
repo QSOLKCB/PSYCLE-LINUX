@@ -146,10 +146,14 @@ def renderer_build_input_paths() -> list[Path]:
             if not candidate.is_file():
                 continue
             relative_parts = candidate.relative_to(ROOT).parts
+            name = candidate.name
             if (
                 "++qmake" in relative_parts
                 or ".git" in relative_parts
                 or "__pycache__" in relative_parts
+                or name == "Makefile"
+                or name.startswith("Makefile.")
+                or name.startswith(".qmake.")
             ):
                 continue
             paths.add(candidate)
@@ -227,7 +231,13 @@ def ensure_renderer_build_inputs_clean() -> None:
         if not raw:
             continue
         relative = raw.decode("utf-8", errors="strict")
-        if "++qmake/" in relative:
+        name = Path(relative).name
+        if (
+            "++qmake/" in relative
+            or name == "Makefile"
+            or name.startswith("Makefile.")
+            or name.startswith(".qmake.")
+        ):
             continue
         if relative == allowed_file or relative.startswith(allowed_prefix):
             continue
