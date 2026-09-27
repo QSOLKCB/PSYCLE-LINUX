@@ -1381,6 +1381,23 @@ work_boundary.validate_completed_render_attempt(
     teardown_only_completed_attempt, "release-no-active-voice"
 )
 
+late_exit_teardown_attempt = {
+    **teardown_only_completed_attempt,
+    "process_exited": True,
+    "process_exit_code": -1073741819,
+}
+for check, name in (
+    (isolation.validate_completed_render_attempt, "control"),
+    (substrate.validate_completed_render_attempt, "master-only"),
+    (startup.validate_completed_render_attempt, "note-sample-default-inst"),
+    (work_boundary.validate_completed_render_attempt, "release-no-active-voice"),
+):
+    check(
+        late_exit_teardown_attempt,
+        name,
+        allow_post_completion_exit=True,
+    )
+
 closed_without_close_evidence = dict(valid_completed_attempt)
 closed_without_close_evidence["close_control_seen"] = False
 closed_without_close_evidence["close_uia_invoked"] = False
