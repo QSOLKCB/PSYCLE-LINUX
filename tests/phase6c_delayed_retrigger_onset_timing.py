@@ -347,6 +347,8 @@ with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
         window = forged_receipt["windows"]["fb_retrigger_beat_1"][role]
         window["absolute_frames"] = [value + 5 for value in window["absolute_frames"]]
         window["first_onset_frame"] += 5
+    forged_receipt["phase_alignment"]["candidate_anchor_frame"] += 5
+    forged_receipt["phase_alignment"]["original_anchor_frame"] += 5
     assert m.validate_timing(forged_receipt) == forged_receipt
     expect_value_error(
         lambda: m.validate_bound_receipt(forged_receipt),
