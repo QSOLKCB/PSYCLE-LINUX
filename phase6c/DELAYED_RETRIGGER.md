@@ -215,7 +215,7 @@ Before a projection can be committed it:
   derived receipts exactly;
 - archives the minimal canonical raw evidence required for long-term independent
   re-derivation (candidate receipt + fixture + both WAVs, original receipt +
-  retained WAV) as a hash-pinned base64 tar/gzip bundle in the evidence tree;
+  retained WAV) as six hash-pinned per-file `zlib+base64` blobs in the evidence tree;
 - binds workflow run/head/event, candidate/original job IDs, artifact IDs and
   artifact SHA-256 digests, plus raw candidate/original receipt hashes and the
   derived original analysis/comparison hashes;
@@ -247,9 +247,8 @@ forbidden. The parent roadmap item stays open. A future successful original
 pair would advance only to a **separately versioned onset-timing
 interpretation**; this freeze step never classifies parity by itself.
 
-The durable files
-`canonical-raw.tar.gz.b64` and `canonical-raw-manifest.json` preserve the
-canonical re-derivation inputs after GitHub Actions retention expires. Normal CI
+The durable per-file `*.zlib.b64` inputs plus `canonical-raw-manifest.json`
+preserve the canonical re-derivation inputs after GitHub Actions retention expires. Normal CI
 uses only that committed bundle; it does not depend on run `36288494934`
 remaining downloadable.
 
