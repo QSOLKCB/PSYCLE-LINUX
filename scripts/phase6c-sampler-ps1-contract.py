@@ -462,8 +462,15 @@ def validate(value: object) -> dict:
         "loaded_psy3_extended_note_timing_basis_match_original_candidate": True,
         "source_correspondence_is_runtime_parity": False,
     }
-    if observations != required:
+    if set(observations) != set(required):
         raise ValueError("Sampler PS1 source observations changed")
+    for name, expected in required.items():
+        actual = observations.get(name)
+        if type(actual) is not bool or actual is not expected:
+            raise ValueError(
+                f"Sampler PS1 source observation {name} must be boolean "
+                f"{str(expected).lower()}"
+            )
     for role in ("original", "candidate", "cpsycle"):
         section = value.get(role)
         if not isinstance(section, dict):

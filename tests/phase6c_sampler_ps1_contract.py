@@ -155,6 +155,16 @@ expect_value_error(
     "schema_version must be integer 1",
 )
 
+for observation_name, expected in committed["source_observations"].items():
+    forged_observation_type = copy.deepcopy(committed)
+    forged_observation_type["source_observations"][observation_name] = (
+        1 if expected else 0
+    )
+    expect_value_error(
+        lambda value=forged_observation_type: m.validate(value),
+        f"source observation {observation_name} must be boolean",
+    )
+
 forged_version_type = copy.deepcopy(committed)
 forged_version_type["candidate"]["sampler_machine_state_version"] = True
 expect_value_error(
