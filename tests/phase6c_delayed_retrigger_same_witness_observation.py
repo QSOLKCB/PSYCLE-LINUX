@@ -182,6 +182,32 @@ valid_pair["derived_observation"]["original_command_execution_observed"] = True
 valid_pair["derived_observation"]["command_bearing_runtime_pair_observed"] = True
 assert m.validate_projection(valid_pair) == valid_pair
 
+inconclusive_pair = copy.deepcopy(valid_pair)
+inconclusive_pair["original"].update(
+    {
+        "outcome": "inconclusive",
+        "inconclusive_reason": "ambiguous-final-render-attempt",
+        "fresh_render_event_binding": "rejected",
+        "fresh_render_event_binding_error": "synthetic rejected binding",
+    }
+)
+expect_value_error(
+    lambda: m.validate_projection(inconclusive_pair),
+    "lacks a successful bound original render",
+)
+
+rejected_pair_binding = copy.deepcopy(valid_pair)
+rejected_pair_binding["original"].update(
+    {
+        "fresh_render_event_binding": "rejected",
+        "fresh_render_event_binding_error": "synthetic rejected binding",
+    }
+)
+expect_value_error(
+    lambda: m.validate_projection(rejected_pair_binding),
+    "lacks a successful bound original render",
+)
+
 wrong_analyzer = copy.deepcopy(valid_pair)
 wrong_analyzer["comparison"]["same_onset_analyzer"] = False
 expect_value_error(
