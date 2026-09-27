@@ -19,8 +19,10 @@ CANDIDATE_BASELINE = "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a
 
 ORIGINAL_CPP_BLOB = "6cc0bd7328d01131c3d41b68f4e5d4189959e364"
 ORIGINAL_HPP_BLOB = "46da9fa80757b11ed146a21a529c70dbc6364f12"
-CANDIDATE_CPP = ROOT / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.cpp"
-CANDIDATE_HPP = ROOT / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.h"
+CANDIDATE_CPP_PATH = "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.cpp"
+CANDIDATE_HPP_PATH = "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.h"
+CANDIDATE_CPP = ROOT / CANDIDATE_CPP_PATH
+CANDIDATE_HPP = ROOT / CANDIDATE_HPP_PATH
 CANDIDATE_CPP_BLOB = "9edc00fb9013fbfde0bb0977398b934265b9c463"
 CANDIDATE_HPP_BLOB = "f8df31889b2c0c4d89413db13fc5180fd5da4d53"
 CPSYCLE_C = ROOT / "cpsycle/audio/src/sampler.c"
@@ -31,6 +33,9 @@ CPSYCLE_H_BLOB = "e74dd3270f5581e17104006efe874299e974e94b"
 CPSYCLE_DEFS_BLOB = "88e4b0fa1d720e1dd567386270694052df0ecd61"
 
 OUTPUT = ROOT / "phase6c/evidence/sampler-ps1/source-contract.json"
+CANDIDATE_TIMING_RECEIPT = (
+    ROOT / "phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json"
+)
 
 COMMAND_IDS = {
     "NONE": 0x00,
@@ -159,6 +164,54 @@ def command_table(source: str, prefix: str = "SAMPLER_CMD_") -> dict[str, int]:
     }
 
 
+def require_exact_command_table(value: object, label: str) -> dict[str, int]:
+    if not isinstance(value, dict) or set(value) != set(COMMAND_IDS):
+        raise ValueError(f"Sampler PS1 {label} command table changed")
+    for name, expected in COMMAND_IDS.items():
+        actual = value.get(name)
+        if type(actual) is not int or actual != expected:
+            raise ValueError(
+                f"Sampler PS1 {label} command identifier changed: {name}"
+            )
+    return value
+
+
+def read_json(path: Path) -> dict:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"expected JSON object: {path}")
+    return value
+
+
+def validate_loaded_psy3_timing_receipt() -> dict:
+    receipt = read_json(CANDIDATE_TIMING_RECEIPT)
+    if (
+        receipt.get("contract") != "sequencer-bpm-lpb-tick"
+        or receipt.get("snapshot") != CANDIDATE_BASELINE
+        or receipt.get("observation") != "timing-model-observed"
+        or receipt.get("is_ticks") is not True
+        or type(receipt.get("tick_speed")) is not int
+        or type(receipt.get("derived_lpb")) not in (int, float)
+        or float(receipt["tick_speed"]) != float(receipt["derived_lpb"])
+    ):
+        raise ValueError("candidate loaded-PSY3 timing receipt identity changed")
+    sample_rates = receipt.get("sample_rates")
+    if not isinstance(sample_rates, list) or not sample_rates:
+        raise ValueError("candidate loaded-PSY3 timing samples are missing")
+    for row in sample_rates:
+        if not isinstance(row, dict):
+            raise ValueError("candidate loaded-PSY3 timing sample is invalid")
+        per_tick = row.get("samples_per_tick")
+        per_line = row.get("samples_per_fixture_line")
+        if type(per_tick) not in (int, float) or type(per_line) not in (int, float):
+            raise ValueError("candidate loaded-PSY3 timing interval is invalid")
+        if float(per_tick) != float(per_line):
+            raise ValueError(
+                "candidate loaded-PSY3 samplesPerTick is not the fixture line interval"
+            )
+    return receipt
+
+
 def polyphony(source: str, prefix: str = "SAMPLER_") -> tuple[int, int]:
     return (
         extract_define(source, "MAX_POLYPHONY", prefix),
@@ -213,6 +266,7 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
     original_version = extract_cpp_version(original_hpp_text)
     candidate_version = extract_cpp_version(candidate_hpp_text)
     cpsycle_version = extract_c_version(cpsycle_defs_text)
+    loaded_psy3_timing = validate_loaded_psy3_timing_receipt()
 
     result = {
         "schema_version": 1,
@@ -270,8 +324,14 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
         "candidate": {
             "snapshot": CANDIDATE_BASELINE,
             "files": {
-                "sampler.cpp": {"git_blob": CANDIDATE_CPP_BLOB},
-                "sampler.h": {"git_blob": CANDIDATE_HPP_BLOB},
+                "sampler.cpp": {
+                    "path": CANDIDATE_CPP_PATH,
+                    "git_blob": CANDIDATE_CPP_BLOB,
+                },
+                "sampler.h": {
+                    "path": CANDIDATE_HPP_PATH,
+                    "git_blob": CANDIDATE_HPP_BLOB,
+                },
             },
             "max_polyphony": candidate_max_polyphony,
             "default_polyphony": candidate_default_polyphony,
@@ -281,7 +341,14 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
             "envelope_sample_rate_basis": "44100/output-sample-rate",
             "normal_loop_wrap": "subtract-loop-length-at-loop-end",
             "panning_destination_cap": 0.5,
-            "extended_note_timing_basis": "samples-per-tick/6",
+            "extended_note_timing_expression": "samplesPerTick/6",
+            "loaded_psy3_extended_note_timing_basis": "row-interval/6",
+            "loaded_psy3_timing_evidence": {
+                "observation": "phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json",
+                "tick_speed": loaded_psy3_timing["tick_speed"],
+                "derived_lpb": loaded_psy3_timing["derived_lpb"],
+                "samples_per_tick_equals_fixture_line": True,
+            },
             "nonzero_extended_note_delay_assignment": (
                 "pVoice->_triggerNoteDelay = static_cast<int>( "
                 "(timeInfo.samplesPerTick()/6)*(pEntry.parameter() & 0x0f) );"
@@ -313,7 +380,8 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
                 original_version == candidate_version
             ),
             "pitch_sample_rate_basis_match_original_candidate": False,
-            "extended_note_timing_basis_match_original_candidate": False,
+            "extended_note_source_expression_names_match_original_candidate": False,
+            "loaded_psy3_extended_note_timing_basis_match_original_candidate": True,
             "source_correspondence_is_runtime_parity": False,
         },
         "next_evidence_boundary": {
@@ -323,8 +391,9 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
                 "sample-rate-aware pitch/duration without classifying from source alone"
             ),
             "priority_2": (
-                "observe PS1 E-Dx/E-Cx timing with a command-bearing runtime witness to "
-                "resolve the source-level samples-per-row versus samples-per-tick boundary"
+                "observe PS1 E-Dx/E-Cx execution with a command-bearing runtime witness; "
+                "the existing loaded-PSY3 timing receipt already establishes that the "
+                "candidate samplesPerTick interval equals the fixture row interval"
             ),
             "then": (
                 "add envelope, loop, panning, offset, volume, retrigger and state-roundtrip "
@@ -358,7 +427,8 @@ def validate(value: object) -> dict:
         "polyphony_defaults_match_original_candidate": True,
         "sampler_machine_state_version_match_original_candidate": False,
         "pitch_sample_rate_basis_match_original_candidate": False,
-        "extended_note_timing_basis_match_original_candidate": False,
+        "extended_note_source_expression_names_match_original_candidate": False,
+        "loaded_psy3_extended_note_timing_basis_match_original_candidate": True,
         "source_correspondence_is_runtime_parity": False,
     }
     if observations != required:
@@ -369,8 +439,7 @@ def validate(value: object) -> dict:
             raise ValueError(f"Sampler PS1 {role} section is missing")
         if section.get("max_polyphony") != 16 or section.get("default_polyphony") != 8:
             raise ValueError(f"Sampler PS1 {role} polyphony contract changed")
-        if section.get("command_ids") != COMMAND_IDS:
-            raise ValueError(f"Sampler PS1 {role} command table changed")
+        require_exact_command_table(section.get("command_ids"), role)
     original = value["original"]
     if original.get("reference_build") != REFERENCE_BUILD:
         raise ValueError("original Sampler reference build changed")
@@ -393,15 +462,31 @@ def validate(value: object) -> dict:
     if candidate.get("snapshot") != CANDIDATE_BASELINE:
         raise ValueError("candidate Sampler baseline changed")
     expected_candidate_files = {
-        "sampler.cpp": {"git_blob": CANDIDATE_CPP_BLOB},
-        "sampler.h": {"git_blob": CANDIDATE_HPP_BLOB},
+        "sampler.cpp": {
+            "path": CANDIDATE_CPP_PATH,
+            "git_blob": CANDIDATE_CPP_BLOB,
+        },
+        "sampler.h": {
+            "path": CANDIDATE_HPP_PATH,
+            "git_blob": CANDIDATE_HPP_BLOB,
+        },
     }
     if candidate.get("files") != expected_candidate_files:
         raise ValueError("candidate Sampler source blob binding changed")
     if candidate.get("sampler_machine_state_version") != 1:
         raise ValueError("candidate Sampler machine-state version changed")
-    if candidate.get("extended_note_timing_basis") != "samples-per-tick/6":
-        raise ValueError("candidate Sampler extended-note timing basis changed")
+    if candidate.get("extended_note_timing_expression") != "samplesPerTick/6":
+        raise ValueError("candidate Sampler extended-note timing expression changed")
+    if candidate.get("loaded_psy3_extended_note_timing_basis") != "row-interval/6":
+        raise ValueError("candidate Sampler loaded-PSY3 timing basis changed")
+    timing_evidence = candidate.get("loaded_psy3_timing_evidence")
+    if not isinstance(timing_evidence, dict) or timing_evidence != {
+        "observation": "phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json",
+        "tick_speed": 8,
+        "derived_lpb": 8.0,
+        "samples_per_tick_equals_fixture_line": True,
+    }:
+        raise ValueError("candidate Sampler loaded-PSY3 timing evidence changed")
     if candidate.get("nonzero_extended_note_delay_assignment") is not True:
         raise ValueError("candidate Sampler nonzero E-Dx assignment changed")
     if value["cpsycle"].get("sampler_machine_state_version") != 3:
