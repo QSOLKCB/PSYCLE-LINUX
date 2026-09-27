@@ -25,9 +25,14 @@ CANDIDATE_CPP = ROOT / CANDIDATE_CPP_PATH
 CANDIDATE_HPP = ROOT / CANDIDATE_HPP_PATH
 CANDIDATE_CPP_BLOB = "9edc00fb9013fbfde0bb0977398b934265b9c463"
 CANDIDATE_HPP_BLOB = "f8df31889b2c0c4d89413db13fc5180fd5da4d53"
-CPSYCLE_C = ROOT / "cpsycle/audio/src/sampler.c"
-CPSYCLE_H = ROOT / "cpsycle/audio/src/sampler.h"
-CPSYCLE_DEFS = ROOT / "cpsycle/audio/src/samplerdefs.h"
+CPSYCLE_SOURCE_REPOSITORY = "QSOLKCB/PSYCLE-LINUX"
+CPSYCLE_SNAPSHOT = "cpsycle-r12005-baseline"
+CPSYCLE_C_PATH = "cpsycle/audio/src/sampler.c"
+CPSYCLE_H_PATH = "cpsycle/audio/src/sampler.h"
+CPSYCLE_DEFS_PATH = "cpsycle/audio/src/samplerdefs.h"
+CPSYCLE_C = ROOT / CPSYCLE_C_PATH
+CPSYCLE_H = ROOT / CPSYCLE_H_PATH
+CPSYCLE_DEFS = ROOT / CPSYCLE_DEFS_PATH
 CPSYCLE_C_BLOB = "475c96cc0742091b3b34aad634bd8d989caf83c8"
 CPSYCLE_H_BLOB = "e74dd3270f5581e17104006efe874299e974e94b"
 CPSYCLE_DEFS_BLOB = "88e4b0fa1d720e1dd567386270694052df0ecd61"
@@ -162,6 +167,18 @@ def command_table(source: str, prefix: str = "SAMPLER_CMD_") -> dict[str, int]:
         name: extract_define(source, name, prefix)
         for name in COMMAND_IDS
     }
+
+
+def require_exact_int(value: object, expected: int, context: str) -> int:
+    if type(value) is not int or value != expected:
+        raise ValueError(f"{context} must be integer {expected}")
+    return value
+
+
+def require_exact_float(value: object, expected: float, context: str) -> float:
+    if type(value) is not float or value != expected:
+        raise ValueError(f"{context} must be float {expected}")
+    return value
 
 
 def require_exact_command_table(value: object, label: str) -> dict[str, int]:
@@ -357,10 +374,21 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
         },
         "cpsycle": {
             "role": "shared-contract supporting source only",
+            "source_repository": CPSYCLE_SOURCE_REPOSITORY,
+            "snapshot": CPSYCLE_SNAPSHOT,
             "files": {
-                "sampler.c": {"git_blob": CPSYCLE_C_BLOB},
-                "sampler.h": {"git_blob": CPSYCLE_H_BLOB},
-                "samplerdefs.h": {"git_blob": CPSYCLE_DEFS_BLOB},
+                "sampler.c": {
+                    "path": CPSYCLE_C_PATH,
+                    "git_blob": CPSYCLE_C_BLOB,
+                },
+                "sampler.h": {
+                    "path": CPSYCLE_H_PATH,
+                    "git_blob": CPSYCLE_H_BLOB,
+                },
+                "samplerdefs.h": {
+                    "path": CPSYCLE_DEFS_PATH,
+                    "git_blob": CPSYCLE_DEFS_BLOB,
+                },
             },
             "max_polyphony": cpsycle_max_polyphony,
             "default_polyphony": cpsycle_default_polyphony,
@@ -408,9 +436,11 @@ def derive(original_cpp: Path, original_hpp: Path) -> dict:
 def validate(value: object) -> dict:
     if not isinstance(value, dict):
         raise ValueError("Sampler PS1 source receipt is not an object")
+    require_exact_int(
+        value.get("schema_version"), 1, "Sampler PS1 schema_version"
+    )
     if (
-        value.get("schema_version") != 1
-        or value.get("phase") != "6C"
+        value.get("phase") != "6C"
         or value.get("contract") != CONTRACT
         or value.get("parity_status") != "UNKNOWN"
         or value.get("classification_allowed") is not False
@@ -437,9 +467,18 @@ def validate(value: object) -> dict:
         section = value.get(role)
         if not isinstance(section, dict):
             raise ValueError(f"Sampler PS1 {role} section is missing")
-        if section.get("max_polyphony") != 16 or section.get("default_polyphony") != 8:
-            raise ValueError(f"Sampler PS1 {role} polyphony contract changed")
+        require_exact_int(
+            section.get("max_polyphony"), 16, f"Sampler PS1 {role} max_polyphony"
+        )
+        require_exact_int(
+            section.get("default_polyphony"), 8, f"Sampler PS1 {role} default_polyphony"
+        )
         require_exact_command_table(section.get("command_ids"), role)
+        require_exact_float(
+            section.get("panning_destination_cap"),
+            0.5,
+            f"Sampler PS1 {role} panning_destination_cap",
+        )
     original = value["original"]
     if original.get("reference_build") != REFERENCE_BUILD:
         raise ValueError("original Sampler reference build changed")
@@ -456,8 +495,11 @@ def validate(value: object) -> dict:
     }
     if files != expected_original_files:
         raise ValueError("original Sampler source path/blob binding changed")
-    if original.get("sampler_machine_state_version") != 2:
-        raise ValueError("original Sampler machine-state version changed")
+    require_exact_int(
+        original.get("sampler_machine_state_version"),
+        2,
+        "original Sampler machine_state_version",
+    )
     candidate = value["candidate"]
     if candidate.get("snapshot") != CANDIDATE_BASELINE:
         raise ValueError("candidate Sampler baseline changed")
@@ -473,24 +515,56 @@ def validate(value: object) -> dict:
     }
     if candidate.get("files") != expected_candidate_files:
         raise ValueError("candidate Sampler source blob binding changed")
-    if candidate.get("sampler_machine_state_version") != 1:
-        raise ValueError("candidate Sampler machine-state version changed")
+    require_exact_int(
+        candidate.get("sampler_machine_state_version"),
+        1,
+        "candidate Sampler machine_state_version",
+    )
     if candidate.get("extended_note_timing_expression") != "samplesPerTick/6":
         raise ValueError("candidate Sampler extended-note timing expression changed")
     if candidate.get("loaded_psy3_extended_note_timing_basis") != "row-interval/6":
         raise ValueError("candidate Sampler loaded-PSY3 timing basis changed")
     timing_evidence = candidate.get("loaded_psy3_timing_evidence")
-    if not isinstance(timing_evidence, dict) or timing_evidence != {
-        "observation": "phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json",
-        "tick_speed": 8,
-        "derived_lpb": 8.0,
-        "samples_per_tick_equals_fixture_line": True,
-    }:
+    if not isinstance(timing_evidence, dict):
+        raise ValueError("candidate Sampler loaded-PSY3 timing evidence changed")
+    if timing_evidence.get("observation") != (
+        "phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json"
+    ):
+        raise ValueError("candidate Sampler loaded-PSY3 timing evidence changed")
+    require_exact_int(
+        timing_evidence.get("tick_speed"),
+        8,
+        "candidate Sampler loaded-PSY3 tick_speed",
+    )
+    require_exact_float(
+        timing_evidence.get("derived_lpb"),
+        8.0,
+        "candidate Sampler loaded-PSY3 derived_lpb",
+    )
+    if timing_evidence.get("samples_per_tick_equals_fixture_line") is not True:
         raise ValueError("candidate Sampler loaded-PSY3 timing evidence changed")
     if candidate.get("nonzero_extended_note_delay_assignment") is not True:
         raise ValueError("candidate Sampler nonzero E-Dx assignment changed")
-    if value["cpsycle"].get("sampler_machine_state_version") != 3:
-        raise ValueError("C-Psycle Sampler machine-state version changed")
+    cpsycle = value["cpsycle"]
+    if cpsycle.get("source_repository") != CPSYCLE_SOURCE_REPOSITORY:
+        raise ValueError("C-Psycle Sampler source repository changed")
+    if cpsycle.get("snapshot") != CPSYCLE_SNAPSHOT:
+        raise ValueError("C-Psycle Sampler snapshot changed")
+    expected_cpsycle_files = {
+        "sampler.c": {"path": CPSYCLE_C_PATH, "git_blob": CPSYCLE_C_BLOB},
+        "sampler.h": {"path": CPSYCLE_H_PATH, "git_blob": CPSYCLE_H_BLOB},
+        "samplerdefs.h": {
+            "path": CPSYCLE_DEFS_PATH,
+            "git_blob": CPSYCLE_DEFS_BLOB,
+        },
+    }
+    if cpsycle.get("files") != expected_cpsycle_files:
+        raise ValueError("C-Psycle Sampler source path/blob binding changed")
+    require_exact_int(
+        cpsycle.get("sampler_machine_state_version"),
+        3,
+        "C-Psycle Sampler machine_state_version",
+    )
     if not isinstance(value.get("next_evidence_boundary"), dict):
         raise ValueError("Sampler PS1 next evidence boundary is missing")
     return value
