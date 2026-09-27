@@ -13,6 +13,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import struct
+import tempfile
 import wave
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,12 @@ ACTIVE_THRESHOLD = 64
 RENDER_FRAMES = 22050
 PROBE_IDENTITY = f"PSYCLE_PHASE6C_PS1_EXTENDED_TIMING_PROBE_V1_{SNAPSHOT}"
 PROBE_BUILD_CONTRACT = "sampler-ps1-extended-timing-probe-build"
+PROBE_STAGING = (
+    ROOT
+    / "psycle-cpp-r12005-sanitized"
+    / "psycle-player"
+    / "phase6c-ps1-extended-timing-probe-build"
+)
 BOUNDARY_FIELDS = {"delay": "first_active_frame", "noteoff": "last_active_frame"}
 BOUNDARY_TOLERANCES_FRAMES = {"delay": 4, "noteoff": 6}
 PROBE_DIAGNOSTIC_MARKERS = (
@@ -130,25 +137,142 @@ def verify_probe_executable(path: Path) -> None:
         raise ValueError("candidate timing probe identity marker is missing")
 
 
+def write_bytes_new(path: Path, data: bytes) -> None:
+    with path.open("xb") as handle:
+        handle.write(data)
+
+
+def probe_verification_paths(root: Path) -> dict[str, Path]:
+    base = root / "probe-verification"
+    return {
+        "probe": base / "phase6c-sampler-ps1-extended-timing-probe",
+        "makefile": base / "Makefile",
+        "qmake_log": base / "qmake.log",
+        "build_log": base / "build.log",
+    }
+
+
+def rebuild_probe_from_audited_sources(root: Path, supplied_probe: Path) -> None:
+    root = root.resolve()
+    supplied_probe = supplied_probe.resolve()
+    project = ROOT / "tests/phase6c_sampler_ps1_extended_timing.pro"
+    staged_project = PROBE_STAGING / "probe.pro"
+    if not staged_project.is_file():
+        raise ValueError("candidate timing staged qmake project is missing")
+    if canonical_source_sha256(staged_project) != canonical_source_sha256(project):
+        raise ValueError("candidate timing staged qmake project is not audited")
+
+    paths = probe_verification_paths(root)
+    if any(path.exists() for path in paths.values()):
+        raise ValueError("refusing stale candidate timing verification outputs")
+    paths["probe"].parent.mkdir(parents=True, exist_ok=False)
+
+    with tempfile.TemporaryDirectory(prefix="phase6c-ps1-timing-rebuild-") as tmp:
+        build = Path(tmp).resolve()
+        qmake = shutil.which("qmake")
+        make = shutil.which("make")
+        if qmake is None or make is None:
+            raise ValueError("candidate timing verification build tools are missing")
+
+        qmake_process = subprocess.run(
+            [
+                qmake,
+                "CONFIG-=shared",
+                "CONFIG+=release",
+                f"PROBE_BUILD_DIR={build}",
+                f"REPO_ROOT={ROOT}",
+                "-o",
+                str(build / "Makefile"),
+                str(staged_project),
+            ],
+            cwd=PROBE_STAGING,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        write_bytes_new(paths["qmake_log"], qmake_process.stdout)
+        if qmake_process.returncode != 0:
+            raise ValueError(
+                "candidate timing independent qmake verification failed"
+            )
+
+        make_process = subprocess.run(
+            [make, "-C", str(build), "-j2"],
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        write_bytes_new(paths["build_log"], make_process.stdout)
+        if make_process.returncode != 0:
+            raise ValueError(
+                "candidate timing independent rebuild failed"
+            )
+
+        rebuilt = build / "phase6c-sampler-ps1-extended-timing-probe"
+        verify_probe_executable(rebuilt)
+        shutil.copy2(build / "Makefile", paths["makefile"])
+        shutil.copy2(rebuilt, paths["probe"])
+
+    verify_probe_executable(paths["probe"])
+    if sha256(paths["probe"]) != sha256(supplied_probe):
+        raise ValueError(
+            "candidate timing probe differs from independent audited rebuild"
+        )
+
+
 def expected_probe_attestation(probe: Path, root: Path) -> dict:
     root = root.resolve()
     project = ROOT / "tests/phase6c_sampler_ps1_extended_timing.pro"
-    logs = {}
+    primary_logs = {}
     for name in ("probe-qmake.log", "probe-build.log"):
-        path = root / name
-        if not path.is_file():
+        log_path = root / name
+        if not log_path.is_file():
             raise ValueError(f"candidate timing build log is missing: {name}")
-        logs[name] = binding(root, path)
+        primary_logs[name] = binding(root, log_path)
+
+    verification_paths = probe_verification_paths(root)
+    for item in verification_paths.values():
+        if not item.is_file():
+            raise ValueError("candidate timing independent rebuild evidence is missing")
+    verify_probe_executable(verification_paths["probe"])
+    supplied_sha = sha256(probe)
+    rebuilt_sha = sha256(verification_paths["probe"])
+    if supplied_sha != rebuilt_sha:
+        raise ValueError(
+            "candidate timing probe no longer matches independent audited rebuild"
+        )
+
+    makefile_text = verification_paths["makefile"].read_text(
+        encoding="utf-8", errors="replace"
+    )
+    for required in (
+        "phase6c_sampler_ps1_extended_timing.cpp",
+        "phase6c-sampler-ps1-extended-timing-probe",
+    ):
+        if required not in makefile_text:
+            raise ValueError(
+                "candidate timing verification Makefile lacks audited probe inputs"
+            )
+
     return {
         "schema_version": 1,
         "contract": PROBE_BUILD_CONTRACT,
         "snapshot": SNAPSHOT,
         "probe_identity": PROBE_IDENTITY,
-        "probe_sha256": sha256(probe),
+        "probe_sha256": supplied_sha,
         "probe_size_bytes": probe.stat().st_size,
         "qmake_project_sha256": canonical_source_sha256(project),
         "source_sha256": source_hashes(),
-        "build_logs": logs,
+        "primary_build_logs": primary_logs,
+        "independent_rebuild": {
+            "method": "clean-qmake-make-rebuild-byte-identical",
+            "probe": binding(root, verification_paths["probe"]),
+            "makefile": binding(root, verification_paths["makefile"]),
+            "qmake_log": binding(root, verification_paths["qmake_log"]),
+            "build_log": binding(root, verification_paths["build_log"]),
+            "byte_identical_to_supplied_probe": True,
+        },
     }
 
 
@@ -156,6 +280,7 @@ def create_probe_attestation(probe: Path, root: Path, output: Path) -> dict:
     probe = probe.resolve()
     root = root.resolve()
     verify_probe_executable(probe)
+    rebuild_probe_from_audited_sources(root, probe)
     value = expected_probe_attestation(probe, root)
     write_new(output, value)
     return value
