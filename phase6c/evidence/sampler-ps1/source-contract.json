@@ -67,9 +67,11 @@
     "snapshot": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
     "files": {
       "sampler.cpp": {
+        "path": "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.cpp",
         "git_blob": "9edc00fb9013fbfde0bb0977398b934265b9c463"
       },
       "sampler.h": {
+        "path": "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core/sampler.h",
         "git_blob": "f8df31889b2c0c4d89413db13fc5180fd5da4d53"
       }
     },
@@ -94,7 +96,14 @@
     "normal_loop_wrap": "subtract-loop-length-at-loop-end",
     "panning_destination_cap": 0.5,
     "nonzero_extended_note_delay_assignment": true,
-    "extended_note_timing_basis": "samples-per-tick/6"
+    "extended_note_timing_expression": "samplesPerTick/6",
+    "loaded_psy3_extended_note_timing_basis": "row-interval/6",
+    "loaded_psy3_timing_evidence": {
+      "observation": "phase6c/evidence/sequencer-bpm-lpb-tick/candidate-bpm-lpb-tick.json",
+      "tick_speed": 8,
+      "derived_lpb": 8,
+      "samples_per_tick_equals_fixture_line": true
+    }
   },
   "cpsycle": {
     "role": "shared-contract supporting source only",
@@ -134,12 +143,13 @@
     "polyphony_defaults_match_original_candidate": true,
     "sampler_machine_state_version_match_original_candidate": false,
     "pitch_sample_rate_basis_match_original_candidate": false,
-    "extended_note_timing_basis_match_original_candidate": false,
-    "source_correspondence_is_runtime_parity": false
+    "source_correspondence_is_runtime_parity": false,
+    "extended_note_source_expression_names_match_original_candidate": false,
+    "loaded_psy3_extended_note_timing_basis_match_original_candidate": true
   },
   "next_evidence_boundary": {
     "priority_1": "render the same project-authored PS1 note from at least one non-44100-Hz sample under pinned original Psycle and the frozen candidate; compare sample-rate-aware pitch/duration without classifying from source alone",
-    "priority_2": "observe PS1 E-Dx/E-Cx timing with a command-bearing runtime witness to resolve the source-level samples-per-row versus samples-per-tick boundary",
+    "priority_2": "observe PS1 E-Dx/E-Cx execution with a command-bearing runtime witness; the existing loaded-PSY3 timing receipt already establishes that the candidate samplesPerTick interval equals the fixture row interval",
     "then": "add envelope, loop, panning, offset, volume, retrigger and state-roundtrip fixtures before considering the broad Sampler PS1 row classifiable"
   }
 }
