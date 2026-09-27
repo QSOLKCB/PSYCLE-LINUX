@@ -86,14 +86,23 @@ original and candidate execution is captured.
 Pinned original Psycle expresses PS1 extended `Cx` / `Dx` timing in fixed
 sixths of a **row**.
 
-The frozen candidate's retained source assigns both nonzero extended
-`Cx` note-off and `Dx` note-delay timing in sixths of a **tick**. The early
-`VoiceTick` branch special-cases `E-D0`, while the later note-initialization
-path assigns `_triggerNoteDelay` for nonzero `E-Dx`.
+The frozen candidate source spells those calculations as
+`samplesPerTick()/6`. For **loaded PSY3 songs**, however, the retained loader
+places LPB in `tick_speed`, `PlayerTimeInfo` computes
+`samplesPerTick = samplesPerBeat / tick_speed`, and the committed BPM/LPB
+candidate receipt verifies at both 44.1 kHz and 48 kHz that
+`samples_per_tick == samples_per_fixture_line`. In that qualified input mode,
+the candidate's effective interval is therefore **row/6**, matching the original
+timing basis despite the different API name.
 
-C-Psycle's PS1 path uses row-based sixths.
+The early candidate `VoiceTick` branch special-cases `E-D0`; the later
+note-initialization path assigns `_triggerNoteDelay` for nonzero `E-Dx`.
 
-Again, this is a source boundary to test, not a runtime verdict.
+C-Psycle's PS1 path also uses row-based sixths.
+
+A dedicated `E-Dx` / `E-Cx` runtime witness is still useful to confirm command
+execution, but it is no longer justified as a row-versus-tick discrepancy for
+loaded PSY3 songs.
 
 ### Machine-state chunk generation
 
