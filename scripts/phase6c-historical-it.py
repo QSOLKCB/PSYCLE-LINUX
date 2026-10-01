@@ -169,6 +169,7 @@ def command_candidate(args: argparse.Namespace) -> None:
         "evidence_role": "candidate-observation",
         "source_sha256": identity["sha256"],
         "source_size_bytes": identity["size_bytes"],
+        "player": "candidate-psycle-player",
         "player_sha256": player_sha,
         "command": [
             "./candidate-psycle-player",
@@ -177,7 +178,17 @@ def command_candidate(args: argparse.Namespace) -> None:
             "--input-file",
             identity["filename"],
         ],
+        "working_directory": "artifact-root-with-private-input",
+        "replay_setup": ["chmod", "+x", "candidate-psycle-player"],
+        "private_input_required": True,
+        "private_input_filename": identity["filename"],
         "stdin": "/dev/null",
+        "procedure": (
+            "chmod +x candidate-psycle-player && ./candidate-psycle-player "
+            "--output-driver dummy --input-file d-503_-_sickmaate.it "
+            "</dev/null; historical IT bytes must be supplied privately and "
+            "verified before replay"
+        ),
         "exit_code": proc.returncode,
         "diagnostic_could_not_load_song_file": diagnostic,
         "raw_output_sha256": sha256_bytes(raw),
