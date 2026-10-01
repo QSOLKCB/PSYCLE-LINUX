@@ -85,6 +85,18 @@ with tempfile.TemporaryDirectory() as temporary:
     assert "vc90_runtime_sha256=$LegacyItVc90RuntimeSha256" in observer
     assert "vc90_runtime_version=$LegacyItVc90RuntimeVersion" in observer
     assert "vc90_runtime_receipt=$LegacyItVc90RuntimeReceipt" in observer
+    assert '$LegacyItVc90RuntimeArtifact = Join-Path $outRoot "vc90-runtime.txt"' in observer
+    assert 'Copy-Item -LiteralPath $LegacyItVc90RuntimeReceipt' in observer
+    assert '$environment["vc90_redistributable"] = [ordered]@{' in observer
+    assert 'redistributable_version = $LegacyItVc90RuntimeVersion' in observer
+    assert 'receipt = "vc90-runtime.txt"' in observer
+
+workflow_source = (
+    ROOT / ".github/workflows/phase6c-legacy-playback-import.yml"
+).read_text(encoding="utf-8")
+assert "github.event.pull_request.head.sha || github.sha" not in workflow_source
+assert "['git', 'rev-parse', 'HEAD']" in workflow_source
+assert "phase6c-generated/phase6c-legacy-it-loader" in workflow_source
 
 validator_source = (
     ROOT / "scripts/phase6c-validate-original-receipts-v2.py"
