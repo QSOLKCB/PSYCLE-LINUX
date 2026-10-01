@@ -185,11 +185,14 @@ jobs:
           cat phase6c-generated/phase6c-midi-synthetic.log
           if [[ "$rc" -ne 0 ]]; then
             gdb -batch \
+              -ex 'set pagination off' \
               -ex run \
               -ex 'thread apply all bt full' \
               --args phase6c-generated/phase6c-midi-corpus-probe \
                 phase6c-generated/phase6c-midi-synthetic.mid \
-                phase6c-generated/phase6c-midi-synthetic.wav || true
+                phase6c-generated/phase6c-midi-synthetic.wav \
+              > phase6c-generated/phase6c-midi-synthetic.gdb.log 2>&1 || true
+            cat phase6c-generated/phase6c-midi-synthetic.gdb.log
             exit "$rc"
           fi
           tail -n 1 phase6c-generated/phase6c-midi-synthetic.log \
@@ -222,6 +225,16 @@ jobs:
           rm -f \
             phase6c-generated/phase6c-midi-synthetic.mid \
             phase6c-generated/phase6c-midi-synthetic.wav
+
+      - name: Upload MIDI crash diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-midi-crash-diagnostics
+          path: |
+            phase6c-generated/phase6c-midi-synthetic.log
+            phase6c-generated/phase6c-midi-synthetic.gdb.log
+          if-no-files-found: warn
 
       - name: Build donor IT loader probe
         shell: bash
