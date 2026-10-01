@@ -15,9 +15,8 @@ on:
       - 'scripts/phase6c-validate-original-receipts-v2.py'
       - 'tests/phase6c_legacy_module_import.py'
       - 'tests/phase6c_legacy_it_loader.c'
-      - 'cpsycle/audio/src/itmodule2.*'
-      - 'cpsycle/audio/src/xmsampler*'
-      - 'cpsycle/audio/src/songio.c'
+      - 'cpsycle/**'
+      - 'psycle-cpp-r12005-sanitized/**'
       - '.github/workflows/phase6c-legacy-playback-import.yml'
       - 'ROADMAP.md'
       - 'README.md'
@@ -32,9 +31,8 @@ on:
       - 'scripts/phase6c-validate-original-receipts-v2.py'
       - 'tests/phase6c_legacy_module_import.py'
       - 'tests/phase6c_legacy_it_loader.c'
-      - 'cpsycle/audio/src/itmodule2.*'
-      - 'cpsycle/audio/src/xmsampler*'
-      - 'cpsycle/audio/src/songio.c'
+      - 'cpsycle/**'
+      - 'psycle-cpp-r12005-sanitized/**'
       - '.github/workflows/phase6c-legacy-playback-import.yml'
       - 'ROADMAP.md'
       - 'README.md'
@@ -138,9 +136,42 @@ jobs:
           assert data['title'] == 'PSYCLE IT import witness'
           assert data['bpm'] == 140
           assert data['lpb'] == 6
-          assert data['sample_frames'] == 256
-          assert data['z58'] == 'mapped'
+          assert data['sample_frames'] == 4096
+          assert data['sample_loop'] == '0-4096'
+          assert (data['pcm0'], data['pcm1'], data['pcm5']) == (-16128, -12800, 512)
+          for command in ('E10', 'F10', 'G08', 'V40', 'Z58', 'C00'):
+              assert data[command] == 'mapped'
           assert data['note_cut_254'] == 'release'
+          PY
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path('phase6c-generated')
+          fixture = root / 'phase6c-legacy-it-import.it'
+          probe = root / 'phase6c-legacy-it-loader'
+          log = root / 'cpsycle-donor.log'
+          observation = root / 'cpsycle-donor-observation.json'
+          receipt = {
+              'schema_version': 1,
+              'phase': '6C',
+              'contract': 'legacy-it-import-donor-runtime',
+              'evidence_role': 'cpsycle-donor',
+              'source_revision': os.environ['GITHUB_SHA'],
+              'fixture': fixture.name,
+              'fixture_sha256': hashlib.sha256(fixture.read_bytes()).hexdigest(),
+              'probe_executable': probe.name,
+              'probe_executable_sha256': hashlib.sha256(probe.read_bytes()).hexdigest(),
+              'raw_log': log.name,
+              'raw_log_sha256': hashlib.sha256(log.read_bytes()).hexdigest(),
+              'observation': observation.name,
+              'observation_sha256': hashlib.sha256(observation.read_bytes()).hexdigest(),
+              'exit_code': 0,
+              'procedure': 'build retained C-Psycle donor sequentially; compile the legacy IT loader probe; load the exact generated IMPM fixture through SongReader/ITModule2; verify decoded PCM, loop geometry, speed/tempo and command translations',
+          }
+          (root / 'cpsycle-donor-receipt.json').write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
           PY
 
       - name: Upload donor observation
@@ -151,6 +182,7 @@ jobs:
             phase6c-generated/phase6c-legacy-it-import.it
             phase6c-generated/cpsycle-donor.log
             phase6c-generated/cpsycle-donor-observation.json
+            phase6c-generated/cpsycle-donor-receipt.json
           if-no-files-found: error
 
   candidate-direct-import-boundary:
