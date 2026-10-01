@@ -325,17 +325,45 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p phase6c-historical-summary
+          mkdir -p \
+            phase6c-historical-summary/donor \
+            phase6c-historical-summary/candidate \
+            phase6c-historical-summary/original
+          cp -a phase6c-historical-summary-input/donor/. \
+            phase6c-historical-summary/donor/
+          cp -a phase6c-historical-summary-input/candidate/. \
+            phase6c-historical-summary/candidate/
+          cp -a phase6c-historical-summary-input/original/. \
+            phase6c-historical-summary/original/
           python3 scripts/phase6c-historical-it.py summary \
-            --donor phase6c-historical-summary-input/donor/cpsycle-historical-it.json \
-            --candidate phase6c-historical-summary-input/candidate/candidate-historical-it.json \
-            --original phase6c-historical-summary-input/original/original-historical-legacy-it.json \
+            --donor phase6c-historical-summary/donor/cpsycle-historical-it.json \
+            --candidate phase6c-historical-summary/candidate/candidate-historical-it.json \
+            --original phase6c-historical-summary/original/original-historical-legacy-it.json \
             --output phase6c-historical-summary/historical-sickmaate-three-way.json
-          cp phase6c-historical-summary-input/donor/cpsycle-historical-it.json phase6c-historical-summary/
-          cp phase6c-historical-summary-input/candidate/candidate-historical-it.json phase6c-historical-summary/
-          cp phase6c-historical-summary-input/original/original-historical-legacy-it.json phase6c-historical-summary/
-          printf '%s\n' 'private-input-required: PSYCLE_PHASE6C_HISTORICAL_IT_URL' 'historical module bytes are intentionally excluded from this artifact' > phase6c-historical-summary/private-input-required.txt
+          printf '%s\n' \
+            'private-input-required: PSYCLE_PHASE6C_HISTORICAL_IT_URL' \
+            'historical module bytes are intentionally excluded from this artifact' \
+            'component artifact roots: donor/ candidate/ original/' \
+            > phase6c-historical-summary/private-input-required.txt
           ! find phase6c-historical-summary -type f -iname '*.it' -print -quit | grep -q .
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          expected_sha = "cab23d8f66a6815b3248457e4f38de74f0a6d61c2691c47a78e582edb63cd432"
+          expected_size = 306462
+          leaks = []
+          for path in Path("phase6c-historical-summary").rglob("*"):
+              if not path.is_file() or path.stat().st_size != expected_size:
+                  continue
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              if digest == expected_sha:
+                  leaks.append(path.as_posix())
+          if leaks:
+              raise SystemExit(
+                  "historical module bytes leaked into combined artifact: "
+                  + ", ".join(leaks)
+              )
+          PY
 
       - name: Upload public-safe three-way summary
         uses: actions/upload-artifact@v4
