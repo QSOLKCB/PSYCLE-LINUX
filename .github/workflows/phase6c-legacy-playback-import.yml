@@ -11,6 +11,7 @@ on:
       - 'phase6c/reference-corpus/**'
       - 'scripts/phase6c-generate-it-import-fixture.py'
       - 'scripts/phase6c-build-legacy-it-observer.py'
+      - 'scripts/phase6c-original-windows-fixtures-v2.ps1'
       - 'scripts/phase6c-validate-legacy-it-original.py'
       - 'scripts/phase6c-validate-original-receipts-v2.py'
       - 'tests/phase6c_legacy_module_import.py'
@@ -27,6 +28,7 @@ on:
       - 'phase6c/reference-corpus/**'
       - 'scripts/phase6c-generate-it-import-fixture.py'
       - 'scripts/phase6c-build-legacy-it-observer.py'
+      - 'scripts/phase6c-original-windows-fixtures-v2.ps1'
       - 'scripts/phase6c-validate-legacy-it-original.py'
       - 'scripts/phase6c-validate-original-receipts-v2.py'
       - 'tests/phase6c_legacy_module_import.py'
@@ -143,6 +145,8 @@ jobs:
               assert data[command] == 'mapped'
           assert data['note_cut_254'] == 'release'
           PY
+          cp -- cpsycle/audio/src/itmodule2.c phase6c-generated/cpsycle-itmodule2.c
+          cmp --silent cpsycle/audio/src/itmodule2.c phase6c-generated/cpsycle-itmodule2.c
           python3 - <<'PY'
           import hashlib, json, subprocess
           from pathlib import Path
@@ -151,7 +155,7 @@ jobs:
           probe = root / 'phase6c-legacy-it-loader'
           log = root / 'cpsycle-donor.log'
           observation = root / 'cpsycle-donor-observation.json'
-          source_file = Path('cpsycle/audio/src/itmodule2.c')
+          source_file = root / 'cpsycle-itmodule2.c'
           source_revision = subprocess.check_output(
               ['git', 'rev-parse', 'HEAD'], text=True
           ).strip()
@@ -165,7 +169,8 @@ jobs:
               'contract': 'legacy-it-import-donor-runtime',
               'evidence_role': 'cpsycle-donor',
               'source_revision': source_revision,
-              'source_file': source_file.as_posix(),
+              'source_file': source_file.name,
+              'source_file_origin': 'cpsycle/audio/src/itmodule2.c',
               'source_file_sha256': hashlib.sha256(source_file.read_bytes()).hexdigest(),
               'fixture': fixture.name,
               'fixture_sha256': hashlib.sha256(fixture.read_bytes()).hexdigest(),
@@ -191,6 +196,7 @@ jobs:
           path: |
             phase6c-generated/phase6c-legacy-it-import.it
             phase6c-generated/phase6c-legacy-it-loader
+            phase6c-generated/cpsycle-itmodule2.c
             phase6c-generated/cpsycle-donor.log
             phase6c-generated/cpsycle-donor-observation.json
             phase6c-generated/cpsycle-donor-receipt.json
