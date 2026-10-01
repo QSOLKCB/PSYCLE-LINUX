@@ -180,6 +180,7 @@ for observer_builder in (
     "scripts/phase6c-build-sampler-ps1-pitch-observer.py",
     "scripts/phase6c-build-sampler-ps1-extended-timing-observer.py",
     "scripts/phase6c-build-delayed-retrigger-observer.py",
+    "scripts/phase6c-build-historical-it-observer.py",
 ):
     builder_source = (ROOT / observer_builder).read_text(encoding="utf-8")
     expected_line = next(
