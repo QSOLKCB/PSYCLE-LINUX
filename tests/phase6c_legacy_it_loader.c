@@ -5,7 +5,10 @@
 #include <string.h>
 
 #include <audioconfig.h>
+#include <instrument.h>
+#include <instruments.h>
 #include <machine.h>
+#include <machines.h>
 #include <pattern.h>
 #include <patternevent.h>
 #include <patterns.h>
@@ -45,6 +48,9 @@ int main(int argc, char** argv)
     psy_audio_Song* song;
     psy_audio_SongReader reader;
     psy_audio_Sample* sample;
+    psy_audio_Instrument* sample_mode_instrument;
+    psy_audio_Machine* sample_mode_virtual;
+    psy_audio_PatternEvent note0;
     psy_audio_PatternEvent e10;
     psy_audio_PatternEvent f10;
     psy_audio_PatternEvent g08;
@@ -95,6 +101,20 @@ int main(int argc, char** argv)
         sample->channels.samples[0][5] != 512.0f)
         return fail("signed 8-bit IT PCM decoded to unexpected values");
 
+    sample_mode_instrument = psy_audio_instruments_at(
+        psy_audio_song_instruments(song),
+        psy_audio_instrumentindex_make(1, 0));
+    if (!sample_mode_instrument)
+        return fail("sample-mode IT instrument mapping was not materialized");
+    note0 = event_at(song, 0);
+    if (note0.mach == 0 || note0.mach == 255)
+        return fail("sample-mode note did not route through a virtual generator");
+    sample_mode_virtual =
+        psy_audio_machines_at(psy_audio_song_machines(song), note0.mach);
+    if (!sample_mode_virtual ||
+        psy_audio_machine_type(sample_mode_virtual) != psy_audio_VIRTUALGENERATOR)
+        return fail("sample-mode virtual generator mapping is missing");
+
     e10 = event_at(song, 1);
     if (e10.cmd != XM_SAMPLER_CMD_PORTAMENTO_DOWN || e10.parameter != 0x10)
         return fail("E10 did not map to portamento down");
@@ -122,11 +142,14 @@ int main(int argc, char** argv)
         "\"title\":\"%s\",\"bpm\":%.0f,\"lpb\":%d,"
         "\"sample_frames\":4096,\"sample_loop\":\"0-4096\","
         "\"pcm0\":-16128,\"pcm1\":-12800,\"pcm5\":512,"
+        "\"sample_mode_mapping\":\"virtual-generator\","
+        "\"sample_mode_virtual_generator\":%u,"
         "\"E10\":\"mapped\",\"F10\":\"mapped\","
         "\"G08\":\"mapped\",\"V40\":\"mapped\","
         "\"Z58\":\"mapped\",\"C00\":\"mapped\","
         "\"note_cut_254\":\"release\"}\n",
-        psy_audio_song_title(song), psy_audio_song_bpm(song), psy_audio_song_lpb(song));
+        psy_audio_song_title(song), psy_audio_song_bpm(song),
+        psy_audio_song_lpb(song), (unsigned)note0.mach);
 
     psy_audio_song_deallocate(song);
     psy_audio_player_dispose(&player);
