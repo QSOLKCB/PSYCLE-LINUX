@@ -20,6 +20,7 @@ on:
       - 'scripts/phase6c-validate-original-receipts-v2.py'
       - 'tests/phase6c_legacy_module_import.py'
       - 'tests/phase6c_legacy_it_loader.c'
+      - 'tests/phase6c_legacy_it_decoder.c'
       - 'cpsycle/**'
       - 'psycle-cpp-r12005-sanitized/**'
       - '.github/workflows/phase6c-legacy-playback-import.yml'
@@ -41,6 +42,7 @@ on:
       - 'scripts/phase6c-validate-original-receipts-v2.py'
       - 'tests/phase6c_legacy_module_import.py'
       - 'tests/phase6c_legacy_it_loader.c'
+      - 'tests/phase6c_legacy_it_decoder.c'
       - 'cpsycle/**'
       - 'psycle-cpp-r12005-sanitized/**'
       - '.github/workflows/phase6c-legacy-playback-import.yml'
@@ -118,7 +120,9 @@ jobs:
       - name: Generate canonical IT fixture
         run: |
           mkdir -p phase6c-generated
-          python3 scripts/phase6c-generate-it-import-fixture.py             phase6c-generated/phase6c-legacy-it-import.it
+          python3 scripts/phase6c-generate-it-import-fixture.py \
+            phase6c-generated/phase6c-legacy-it-import.it \
+            --decoder-fixtures-dir phase6c-generated/decoder-fixtures
 
       - name: Build C-Psycle donor player libraries
         run: make -C cpsycle/player -j1
@@ -128,6 +132,38 @@ jobs:
         run: |
           set -euo pipefail
           gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer             -Wall -Wextra -Werror=implicit-function-declaration             -Icpsycle/script/src -Icpsycle/thread/src -Icpsycle/container/src             -Icpsycle/file/src -Icpsycle/diversalis/src -Icpsycle/src             -Icpsycle/audio/src -Icpsycle/dsp/src $(pkg-config --cflags lua)             tests/phase6c_legacy_it_loader.c             -o phase6c-generated/phase6c-legacy-it-loader             -Lcpsycle/thread/src -Lcpsycle/script/src -Lcpsycle/container/src             -Lcpsycle/dsp/src -Lcpsycle/audio/src -Lcpsycle/file/src             -Wl,--no-as-needed -laudio -lthread -llilv-0 -ldsp -lscript -lfile             -lm $(pkg-config --libs lua) -lpthread -ldl -lstdc++ -lcontainer
+
+      - name: Build donor IT decoder regression probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer \
+            -Wall -Wextra -Werror=implicit-function-declaration \
+            -Icpsycle/script/src -Icpsycle/thread/src -Icpsycle/container/src \
+            -Icpsycle/file/src -Icpsycle/diversalis/src -Icpsycle/src \
+            -Icpsycle/audio/src -Icpsycle/dsp/src $(pkg-config --cflags lua) \
+            tests/phase6c_legacy_it_decoder.c \
+            -o phase6c-generated/phase6c-legacy-it-decoder \
+            -Lcpsycle/thread/src -Lcpsycle/script/src -Lcpsycle/container/src \
+            -Lcpsycle/dsp/src -Lcpsycle/audio/src -Lcpsycle/file/src \
+            -Wl,--no-as-needed -laudio -lthread -llilv-0 -ldsp -lscript -lfile \
+            -lm $(pkg-config --libs lua) -lpthread -ldl -lstdc++ -lcontainer
+
+      - name: Exercise donor 8-bit IT decoder regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variant in \
+            signed \
+            unsigned \
+            signed-delta-wrap \
+            unsigned-delta-wrap \
+            stereo-signed-delta-reset
+          do
+            phase6c-generated/phase6c-legacy-it-decoder \
+              "$variant" \
+              "phase6c-generated/decoder-fixtures/phase6c-it-decoder-$variant.it"
+          done
 
       - name: Load generated IT through C-Psycle donor runtime
         shell: bash
