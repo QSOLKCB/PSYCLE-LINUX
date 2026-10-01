@@ -999,7 +999,6 @@ def candidate_boundary(
         **candidate_identity,
         "player": "candidate-psycle-player",
         "player_sha256": player_sha,
-        "clean_rebuild_sha256": candidate_identity["clean_rebuild_sha256"],
         "working_directory": "artifact-root-with-private-input",
         "procedure": (
             "for each corpus set, place the exact representative SMF beside the "
