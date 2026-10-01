@@ -399,7 +399,10 @@ def validate_set_aggregate(set_spec: dict[str, Any], stems: list[dict[str, Any]]
         "notes": sum(stem["analysis"]["note_ons"] for stem in stems),
         "same_note_overlaps": sum(stem["analysis"]["same_note_overlaps"] for stem in stems),
         "max_polyphony": max((stem["analysis"]["max_polyphony"] for stem in stems), default=0),
-        "tempo_events": sum(stem["analysis"]["tempo_events"] for stem in stems),
+        "tempo_events_total": sum(stem["analysis"]["tempo_events"] for stem in stems),
+        "tempo_events_per_stem": sorted(
+            {stem["analysis"]["tempo_events"] for stem in stems}
+        ),
         "tempo_min_bpm": min(
             stem["analysis"]["tempo_min_bpm"]
             for stem in stems if stem["analysis"]["tempo_min_bpm"] is not None
@@ -431,7 +434,6 @@ def validate_set_aggregate(set_spec: dict[str, Any], stems: list[dict[str, Any]]
         "notes": "notes",
         "same_note_overlaps": "same_note_overlaps",
         "max_polyphony": "max_polyphony",
-        "tempo_events": "tempo_events",
     }
     for actual_key, expected_key in exact_fields.items():
         expected_value = expected.get(expected_key)
@@ -442,6 +444,17 @@ def validate_set_aggregate(set_spec: dict[str, Any], stems: list[dict[str, Any]]
                 f"{set_spec['name']}: {actual_key} mismatch: "
                 f"expected={expected_value} actual={aggregate[actual_key]}"
             )
+    expected_tempo_per_stem = expected.get("tempo_events_per_stem")
+    if (
+        expected_tempo_per_stem is None
+        or aggregate["tempo_events_per_stem"] != [expected_tempo_per_stem]
+    ):
+        die(
+            f"{set_spec['name']}: per-stem tempo-map count changed: "
+            f"expected={expected_tempo_per_stem} "
+            f"actual={aggregate['tempo_events_per_stem']}"
+        )
+
     if aggregate["formats"] != [1] or aggregate["divisions"] != [480]:
         die(f"{set_spec['name']}: corpus files are not uniformly SMF1/480 PPQN")
     if not aggregate["balanced_note_pairs"]:
