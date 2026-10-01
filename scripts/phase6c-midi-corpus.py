@@ -660,6 +660,15 @@ def candidate_boundary(
         "evidence_role": "candidate-observation",
         "player": "candidate-psycle-player",
         "player_sha256": player_sha,
+        "working_directory": "artifact-root-with-private-input",
+        "private_input_required": True,
+        "procedure": (
+            "for each corpus set, place the exact representative SMF beside the "
+            "artifact candidate player under the private replay root, chmod +x the "
+            "player, invoke --output-driver dummy --input-file representative.mid "
+            "with stdin=/dev/null, retain only the sanitized result/hash, then delete "
+            "the private replay root"
+        ),
         "private_input_required": True,
         "progression_order": PROGRESSION,
         "sets": results,
@@ -675,6 +684,8 @@ def candidate_boundary(
 def donor_summary(
     analysis_path: pathlib.Path,
     observations_root: pathlib.Path,
+    probe_path: pathlib.Path,
+    source_path: pathlib.Path,
     output: pathlib.Path,
 ) -> None:
     analysis = load_json(analysis_path)
@@ -718,11 +729,22 @@ def donor_summary(
             "event_digest_fnv64": [item["import_event_digest_fnv64"] for item in observations],
             "render_sha256": [item["render_sha256"] for item in observations],
         })
+    if not probe_path.is_file() or not source_path.is_file():
+        die("donor MIDI corpus support files are missing")
+    source_revision = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], text=True
+    ).strip()
+
     receipt = {
         "schema_version": 1,
         "phase": "6C",
         "contract": DONOR_CONTRACT,
         "evidence_role": "cpsycle-donor-corpus-summary",
+        "source_revision": source_revision,
+        "source_file": source_path.name,
+        "source_file_sha256": sha256_file(source_path),
+        "probe_executable": probe_path.name,
+        "probe_executable_sha256": sha256_file(probe_path),
         "progression_order": PROGRESSION,
         "sets": set_summaries,
         "all_sets_imported": all(item["all_imported"] for item in set_summaries),
@@ -746,6 +768,25 @@ def corpus_summary(
 ) -> None:
     donor = load_json(donor_path)
     candidate = load_json(candidate_path)
+    def require_support(
+        receipt_path: pathlib.Path,
+        relative_name: Any,
+        expected_sha: Any,
+        label: str,
+    ) -> None:
+        if not isinstance(relative_name, str) or not relative_name:
+            die(f"{label} support path is missing")
+        relative = pathlib.PurePosixPath(relative_name)
+        if relative.is_absolute() or ".." in relative.parts:
+            die(f"{label} support path escapes its artifact root")
+        path = receipt_path.parent / pathlib.Path(*relative.parts)
+        if not path.is_file():
+            die(f"{label} support file is missing: {relative_name}")
+        if not isinstance(expected_sha, str) or len(expected_sha) != 64:
+            die(f"{label} support SHA-256 is invalid")
+        if sha256_file(path) != expected_sha.lower():
+            die(f"{label} support file hash mismatch: {relative_name}")
+
     if (
         donor.get("schema_version") != 1
         or donor.get("phase") != "6C"
@@ -756,6 +797,19 @@ def corpus_summary(
         or donor.get("all_sets_non_silent_projection") is not True
     ):
         die("donor MIDI corpus summary is incomplete or invalid")
+    require_support(
+        donor_path,
+        donor.get("source_file"),
+        donor.get("source_file_sha256"),
+        "donor source",
+    )
+    require_support(
+        donor_path,
+        donor.get("probe_executable"),
+        donor.get("probe_executable_sha256"),
+        "donor probe",
+    )
+
     if (
         candidate.get("schema_version") != 1
         or candidate.get("phase") != "6C"
@@ -766,6 +820,13 @@ def corpus_summary(
         or any(item.get("direct_midi_load") != "rejected" for item in candidate["sets"])
     ):
         die("candidate MIDI corpus boundary is incomplete or invalid")
+
+    require_support(
+        candidate_path,
+        candidate.get("player"),
+        candidate.get("player_sha256"),
+        "candidate player",
+    )
 
     summary = {
         "schema_version": 1,
@@ -867,10 +928,16 @@ def build_parser() -> argparse.ArgumentParser:
     donor = sub.add_parser("donor-summary")
     donor.add_argument("analysis", type=pathlib.Path)
     donor.add_argument("observations", type=pathlib.Path)
-    donor.add_argument("output", type=pathlib.Path)
+    donor.add_argument("--probe", type=pathlib.Path, required=True)
+    donor.add_argument("--source", type=pathlib.Path, required=True)
+    donor.add_argument("--output", type=pathlib.Path, required=True)
     donor.set_defaults(
         func=lambda args: donor_summary(
-            args.analysis.resolve(), args.observations.resolve(), args.output.resolve()
+            args.analysis.resolve(),
+            args.observations.resolve(),
+            args.probe.resolve(),
+            args.source.resolve(),
+            args.output.resolve(),
         )
     )
 
