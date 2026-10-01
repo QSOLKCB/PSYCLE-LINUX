@@ -457,11 +457,14 @@ def validate_pair(
     original_root: pathlib.Path,
     *,
     saved_fixture: bool = False,
+    external_fixture: bool = False,
 ) -> str:
     # A saved original output is an explicitly separate input role, never Linux
     # candidate evidence. This reuses all original observation integrity checks.
     if saved_fixture and (name != "psy3-reopen" or contract != "project-io-serialization-roundtrip"):
         die("saved-fixture mode is restricted to the original PSY3 reopen observation")
+    if saved_fixture and external_fixture:
+        die("saved-fixture and external-fixture modes are mutually exclusive")
     source_path = candidate_root / ("serialization/saved-fixture.json" if saved_fixture else f"candidate-{name}.json")
     candidate = load_json(source_path)
     original = load_json(original_root / f"original-{name}.json")
@@ -507,14 +510,25 @@ def validate_pair(
     if sha256(candidate_fixture) != candidate_fixture_hash:
         die(f"candidate-{name} fixture bytes do not match its claimed SHA-256")
 
-    original_fixture = resolve_artifact_path(
-        original_root, original.get("fixture"), f"original-{name}.fixture"
-    )
     original_fixture_hash = require_hash(
         original.get("fixture_sha256"), f"original-{name}.fixture_sha256"
     )
-    if sha256(original_fixture) != original_fixture_hash:
-        die(f"original-{name} fixture bytes do not match its claimed SHA-256")
+    if external_fixture:
+        expected_external_ref = (
+            "external/" + pathlib.PurePosixPath(candidate_fixture_ref).name
+        )
+        if original.get("fixture") != expected_external_ref:
+            die(f"original-{name} external fixture marker is not canonical")
+        if original.get("fixture_distribution") != "external-hash-bound":
+            die(f"original-{name} external fixture distribution is not explicit")
+        if original.get("fixture_redistributed") is not False:
+            die(f"original-{name} external fixture must record fixture_redistributed=false")
+    else:
+        original_fixture = resolve_artifact_path(
+            original_root, original.get("fixture"), f"original-{name}.fixture"
+        )
+        if sha256(original_fixture) != original_fixture_hash:
+            die(f"original-{name} fixture bytes do not match its claimed SHA-256")
     if original_fixture_hash != candidate_fixture_hash:
         die(f"original-{name} fixture bytes differ from the candidate artifact fixture")
 

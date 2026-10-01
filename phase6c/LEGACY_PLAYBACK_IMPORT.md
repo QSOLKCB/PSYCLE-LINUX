@@ -13,8 +13,8 @@ The priority is diagnostic, not architectural: use legacy formats to expose shar
 While the legacy lane is active, **this document is the working roadmap**. The broader repository roadmap remains background context and resumes after these gates are satisfied.
 
 1. [x] **Import/translation baseline** — canonical generated IT identity, donor import/decoder coverage, pinned-original acceptance observation, and frozen-candidate direct-import boundary.
-2. [ ] **Sample-mode playback witness — current phase** — restore the missing C-Psycle sample-mode instrument/virtual-generator mapping and prove two fresh renders of the canonical generated fixture are bit-identical and non-silent.
-3. [ ] **Historical `SickMaate` three-way summary** — run the hash-bound historical witness through the available original/candidate/donor observation paths without redistributing its samples.
+2. [x] **Sample-mode playback witness** — C-Psycle sample-mode instrument/virtual-generator mapping is restored and the canonical generated fixture has a deterministic non-silent donor playback witness.
+3. [ ] **Historical `SickMaate` three-way summary — current phase** — run the hash-bound historical witness through the available original/candidate/donor observation paths without redistributing its samples.
 4. [ ] **MIDI real-world playback corpus** — begin with the gentler baseline and then exercise dense timing/polyphony/routing cases.
 5. [ ] **Legacy-lane closeout** — isolate or hand off any remaining shared playback defects, then resume the deferred Phase 6C contract ladder.
 
@@ -38,6 +38,46 @@ High-value properties include:
 - 480 `Z58` MIDI/filter-macro events.
 
 The historical file is evidence input, not an oracle. Original-Psycle behavior must still be observed under the pinned 1.12.0 x86 reference.
+
+
+### Current historical-observation procedure
+
+The repository now includes a **manual private-input workflow** at
+`.github/workflows/phase6c-historical-it-private.yml`.
+
+The historical module is never committed and is never uploaded as a GitHub
+Actions artifact. To execute the three-way observation, the repository owner
+provides a private download URL through the masked repository secret:
+
+```text
+PSYCLE_PHASE6C_HISTORICAL_IT_URL
+```
+
+Each donor/candidate/original job downloads the file independently into runner
+temporary storage and first verifies all of the following before use:
+
+- filename identity from the manifest;
+- exact size: **306,462 bytes**;
+- exact SHA-256:
+  `cab23d8f66a6815b3248457e4f38de74f0a6d61c2691c47a78e582edb63cd432`;
+- `IMPM` file magic;
+- embedded title `SickMaate`.
+
+The donor job records import structure plus a non-silent Sampulse playback
+witness. The frozen C++ candidate records its direct-IT-load boundary. The
+native-Windows original-reference job uses a generated historical observer that
+copies the module only into its transient work root; the uploaded original
+evidence contains an `external/...` identity marker and hash, never module
+bytes.
+
+A final job combines the three sanitized receipts into
+`historical-sickmaate-three-way.json` with `parity_status: UNKNOWN`.
+That summary is descriptive evidence only and cannot promote a compatibility
+matrix row.
+
+**Current status:** the private-input workflow and validators are implemented;
+the historical three-way observation remains pending until that manual workflow
+is dispatched with the private URL secret configured.
 
 ## Redistributable CI fixture
 
@@ -136,7 +176,7 @@ Resume the previously deferred Phase 6C expansion after all of the following are
 - [x] C-Psycle donor importer loads and validates the generated fixture's import/translation contract;
 - [x] pinned original Psycle has a versioned generated-fixture acceptance observation;
 - [x] frozen C++ candidate has a versioned direct-import capability observation;
-- [ ] C-Psycle sample-mode import has a deterministic non-silent playback witness from the unchanged canonical fixture;
+- [x] C-Psycle sample-mode import has a deterministic non-silent playback witness from the unchanged canonical fixture;
 - [ ] the historical `SickMaate` witness has a hash-bound original/candidate/C-Psycle observation summary without redistributing its samples;
 - [ ] the contributor-supplied MIDI corpus has begun real-world playback observations after the minimal IT witness is stable;
 - [ ] any discovered shared playback defect has either been isolated or explicitly handed off to a narrow fix/evidence PR.
