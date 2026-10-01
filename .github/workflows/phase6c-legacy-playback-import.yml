@@ -530,6 +530,34 @@ jobs:
           qmake CONFIG-=shared CONFIG+=release psycle-player.pro
           make -j2
 
+      - name: Attest frozen C++ candidate player
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/phase6c-midi-corpus.py attest-candidate-player \
+            psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player \
+            phase6c-generated/candidate-player-attestation.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          receipt = json.loads(
+              Path("phase6c-generated/candidate-player-attestation.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          assert receipt["schema_version"] == 1
+          assert receipt["phase"] == "6C"
+          assert receipt["contract"] == "phase6b-candidate-player-clean-rebuild"
+          assert receipt["evidence_role"] == "candidate-build-attestation"
+          assert receipt["candidate_baseline_sha256"] == (
+              "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a"
+          )
+          assert receipt["source_revision"] == "SourceForge SVN r12005"
+          assert receipt["build_target"] == "psycle-player"
+          assert receipt["clean_rebuild_sha256"] == receipt["player_sha256"]
+          assert receipt["parity_status"] == "UNKNOWN"
+          PY
+
       - name: Observe direct IT import boundary
         shell: bash
         run: |
@@ -601,6 +629,7 @@ jobs:
             phase6c-generated/candidate-psycle-player
             phase6c-generated/candidate-direct-import.log
             phase6c-generated/candidate-direct-import.json
+            phase6c-generated/candidate-player-attestation.json
           if-no-files-found: error
 
 
