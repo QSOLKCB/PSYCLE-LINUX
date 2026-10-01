@@ -179,6 +179,18 @@ psyconf_source = PSYCONF.read_text(encoding="utf-8")
 assert "#define PSYCLE_USE_MIDI_FILE" in psyconf_source
 assert "/* #define PSYCLE_USE_MIDI_FILE */" not in psyconf_source
 
+helper_source = HELPER.read_text(encoding="utf-8")
+assert "candidate player does not match an immediate clean rebuild" in helper_source
+assert '["make", "clean"]' in helper_source
+assert '["make", "-j2"]' in helper_source
+
+midiloader_source = (ROOT / "cpsycle/audio/src/midiloader.c").read_text(
+    encoding="utf-8"
+)
+assert "static void midiloader_flushnoteoffs" in midiloader_source
+assert "midiloader_flushnoteoffs(self);" in midiloader_source
+assert "noteoff.note = psy_audio_NOTECOMMANDS_RELEASE;" in midiloader_source
+
 probe_source = PROBE.read_text(encoding="utf-8")
 assert '"\\\"phase\\\":\\\"6C\\\","' in probe_source
 assert '"\\\"contract\\\":\\\"legacy-midi-real-world-donor\\\","' in probe_source
@@ -373,6 +385,7 @@ assert "phase6c-midi-synthetic.mid" in legacy_workflow
 assert 'assert observation["sequence_tracks"] == 2' in legacy_workflow
 assert 'assert observation["machines_before_projection"] == 0' in legacy_workflow
 assert 'assert observation["projection_notes"] == 2' in legacy_workflow
+assert 'assert observation["releases"] == 2' in legacy_workflow
 assert 'assert observation["non_silent_projection"] is True' in legacy_workflow
 assert (
     "phase6c-generated/phase6c-midi-synthetic.mid \\\n"
@@ -481,6 +494,7 @@ with tempfile.TemporaryDirectory() as temporary:
         "build_target": "psycle-player",
         "player": candidate_player.name,
         "player_sha256": sha(candidate_player),
+        "clean_rebuild_sha256": sha(candidate_player),
         "private_input_required": True,
         "progression_order": helper.PROGRESSION,
         "sets": candidate_sets,
