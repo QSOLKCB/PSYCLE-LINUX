@@ -1450,6 +1450,25 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("root", type=pathlib.Path)
     audit.set_defaults(func=lambda args: audit_public_tree(args.root.resolve()))
 
+    attest = sub.add_parser("attest-candidate-player")
+    attest.add_argument("player", type=pathlib.Path)
+    attest.add_argument("output", type=pathlib.Path)
+    attest.set_defaults(
+        func=lambda args: write_json(
+            args.output.resolve(),
+            {
+                "schema_version": 1,
+                "phase": "6C",
+                "contract": "phase6b-candidate-player-clean-rebuild",
+                "evidence_role": "candidate-build-attestation",
+                **validate_frozen_candidate_player(args.player.resolve()),
+                "player": "candidate-psycle-player",
+                "player_sha256": sha256_file(args.player.resolve()),
+                "parity_status": "UNKNOWN",
+            },
+        )
+    )
+
     candidate = sub.add_parser("candidate-boundary")
     candidate.add_argument("analysis", type=pathlib.Path)
     candidate.add_argument("bundle", type=pathlib.Path)
