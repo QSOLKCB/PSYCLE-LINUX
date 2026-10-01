@@ -30,6 +30,26 @@ assert set(item["name"] for item in manifest["sets"]) == set(helper.PROGRESSION)
 assert manifest["private_workflow"]["bundle_url_secret"] == "PSYCLE_PHASE6C_MIDI_CORPUS_URL"
 assert manifest["shared_observation"]["ppqn"] == 480
 assert "deterministic Sampulse" in manifest["shared_observation"]["playback_boundary"]
+assert {
+    item["name"]: item["sha256"] for item in manifest["sets"]
+} == {
+    "Blue Glare": "b1297c44d138d71bbcfddaa4278e1b1fd4e5aac2c6a559276ab124f2b44db67f",
+    "Celestial Mechanics": "01596654e86bb8fe3b36d2b8ea30c5760521133b18fb27742c9d2f8d7f95fafd",
+    "Deterministic Pattern": "cfde1bcb71935718fc4a7e8e16b6aa77ceac44d8fb31d8dcadfee87a5b178b32",
+    "Polyrhythmic Patterns": "5e7a3a17569661f6817ab664411e5ca6d44b22c50306d4a82df0a0b984f2f6ce",
+    "NGC3603 Quantum Demoscene": "9fa0905ed0758dd23f61b144e22bf85150358c95f3a4268803a44351720af8c8",
+    "FM Doom": "c78d8addbc8e6e95d2232c1505d5e668c5ab7c6a9f987d5f56005a52d5de5674",
+}
+assert {
+    item["name"]: item["stems"] for item in manifest["sets"]
+} == {
+    "Blue Glare": 11,
+    "Celestial Mechanics": 10,
+    "Deterministic Pattern": 8,
+    "Polyrhythmic Patterns": 9,
+    "NGC3603 Quantum Demoscene": 12,
+    "FM Doom": 12,
+}
 
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
