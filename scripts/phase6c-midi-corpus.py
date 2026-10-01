@@ -761,9 +761,48 @@ def corpus_summary(
     write_json(output, summary)
 
 
+def midi_varlen(value: int) -> bytes:
+    if value < 0:
+        raise ValueError("MIDI variable length value must be non-negative")
+    buffer = value & 0x7F
+    out = bytearray([buffer])
+    while value >> 7:
+        value >>= 7
+        buffer = (value & 0x7F) | 0x80
+        out.insert(0, buffer)
+    return bytes(out)
+
+
+def write_synthetic_fixture(path: pathlib.Path) -> None:
+    conductor = bytearray()
+    conductor += midi_varlen(0) + b"\xff\x51\x03\x07\xa1\x20"
+    conductor += midi_varlen(0) + b"\xff\x59\x02\x09\x01"
+    conductor += midi_varlen(0) + b"\xff\x2f\x00"
+
+    notes = bytearray()
+    notes += midi_varlen(0) + bytes((0x90, 60, 100))
+    notes += midi_varlen(240) + bytes((0x91, 64, 96))
+    notes += midi_varlen(240) + bytes((0x80, 60, 0))
+    notes += midi_varlen(0) + bytes((0x81, 64, 0))
+    notes += midi_varlen(0) + b"\xff\x2f\x00"
+
+    payload = bytearray(b"MThd")
+    payload += struct.pack(">IHHH", 6, 1, 2, 480)
+    for track in (conductor, notes):
+        payload += b"MTrk" + struct.pack(">I", len(track)) + track
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
+
+    synthetic_fixture = sub.add_parser("write-synthetic")
+    synthetic_fixture.add_argument("output", type=pathlib.Path)
+    synthetic_fixture.set_defaults(
+        func=lambda args: write_synthetic_fixture(args.output.resolve())
+    )
 
     prepare = sub.add_parser("prepare-bundle")
     prepare.add_argument("bundle", type=pathlib.Path)
