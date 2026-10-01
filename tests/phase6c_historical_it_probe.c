@@ -45,10 +45,10 @@ static psy_audio_PatternEvent event_at(
     uintptr_t channel)
 {
     psy_audio_Pattern* pattern;
+    psy_audio_OrderIndex order_index = psy_audio_orderindex_make(0, order);
     psy_audio_SequenceCursor cursor =
         psy_audio_sequence_cursor(psy_audio_song_sequence(song));
-    psy_audio_sequencecursor_set_order_index(
-        &cursor, psy_audio_orderindex_make(0, order));
+    psy_audio_sequencecursor_set_order_index(&cursor, order_index);
     psy_audio_sequencecursor_set_channel(&cursor, channel);
     psy_audio_sequencecursor_set_offset(
         &cursor,
@@ -57,7 +57,7 @@ static psy_audio_PatternEvent event_at(
             psy_dsp_DEFAULT_PPQ));
     pattern = psy_audio_patterns_at(
         psy_audio_song_patterns(song),
-        psy_audio_sequence_patternindex(psy_audio_song_sequence(song), cursor.order_index));
+        psy_audio_sequence_patternindex(psy_audio_song_sequence(song), order_index));
     if (!pattern) {
         psy_audio_PatternEvent empty;
         psy_audio_patternevent_clear(&empty);
