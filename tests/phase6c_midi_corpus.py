@@ -13,6 +13,7 @@ HELPER = ROOT / "scripts/phase6c-midi-corpus.py"
 MANIFEST = ROOT / "phase6c/reference-corpus/manifest.json"
 PROBE = ROOT / "tests/phase6c_midi_corpus_probe.c"
 WORKFLOW = ROOT / ".github/workflows/phase6c-midi-corpus-private.yml"
+LEGACY_WORKFLOW = ROOT / ".github/workflows/phase6c-legacy-playback-import.yml"
 
 spec = importlib.util.spec_from_file_location("phase6c_midi_corpus_helper_test", HELPER)
 helper = importlib.util.module_from_spec(spec)
@@ -113,6 +114,32 @@ for upload_block in workflow.split("uses: actions/upload-artifact@v4")[1:]:
     assert ".mid" not in block.lower(), block
     assert ".midi" not in block.lower(), block
     assert ".zip" not in block.lower(), block
+
+legacy_workflow = LEGACY_WORKFLOW.read_text(encoding="utf-8")
+for path in (
+    "scripts/phase6c-midi-corpus.py",
+    "tests/phase6c_midi_corpus.py",
+    "tests/phase6c_midi_corpus_probe.c",
+    ".github/workflows/phase6c-midi-corpus-private.yml",
+):
+    assert legacy_workflow.count(f"      - '{path}'\n") == 2, path
+assert "python3 tests/phase6c_midi_corpus.py" in legacy_workflow
+assert "Build synthetic MIDI corpus execution probe" in legacy_workflow
+assert "Prove synthetic SMF import and non-silent projection" in legacy_workflow
+assert "tests/phase6c_midi_corpus_probe.c" in legacy_workflow
+assert "phase6c-midi-synthetic.mid" in legacy_workflow
+assert 'assert observation["sequence_tracks"] == 2' in legacy_workflow
+assert 'assert observation["machines_before_projection"] == 0' in legacy_workflow
+assert 'assert observation["projection_notes"] == 2' in legacy_workflow
+assert 'assert observation["non_silent_projection"] is True' in legacy_workflow
+assert (
+    "phase6c-generated/phase6c-midi-synthetic.mid \\\n"
+    "            phase6c-generated/phase6c-midi-synthetic.wav"
+) in legacy_workflow
+for upload_block in legacy_workflow.split("uses: actions/upload-artifact@v4")[1:]:
+    block = upload_block.split("\n      - name:", 1)[0]
+    assert "phase6c-midi-synthetic.mid" not in block
+    assert "phase6c-midi-synthetic.wav" not in block
 
 # Summary validation must reject malformed candidate progression evidence.
 with tempfile.TemporaryDirectory() as temporary:
