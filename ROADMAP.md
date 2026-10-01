@@ -270,6 +270,8 @@ At the start of Phase 6A the repository did **not** import the C++ engine family
 
 ### 6C — build a three-way compatibility matrix
 
+> **Current priority hold — legacy playback/import evidence.** After the Sampler PS1 E-D3/E-C3 lane, new Phase 6C expansion is temporarily deferred while the project establishes a legacy module import/playback baseline. Historical module import crosses song I/O, sequence construction, tracker-command translation, samples, loops, sampler state, timing and routing in one path, making it a high-value diagnostic for shared playback defects. The first lane uses a generated redistributable IT fixture plus the hash-bound external `SickMaate` historical witness and the contributor-supplied MIDI reference corpus. Existing receipts and matrix verdicts remain frozen. See [`phase6c/LEGACY_PLAYBACK_IMPORT.md`](phase6c/LEGACY_PLAYBACK_IMPORT.md).
+
 Compare:
 
 1. **pinned original Psycle reference build/version** — behavioural reference;

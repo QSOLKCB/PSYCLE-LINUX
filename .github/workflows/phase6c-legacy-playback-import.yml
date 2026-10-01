@@ -1,0 +1,492 @@
+name: Phase 6C legacy playback/import priority
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-6c/**'
+    paths:
+      - 'phase6c/LEGACY_PLAYBACK_IMPORT.md'
+      - 'phase6c/evidence/legacy-module-import/**'
+      - 'phase6c/reference-corpus/**'
+      - 'scripts/phase6c-generate-it-import-fixture.py'
+      - 'scripts/phase6c-build-legacy-it-observer.py'
+      - 'scripts/phase6c-original-windows-fixtures-v2.ps1'
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
+      - 'scripts/phase6b-verify-committed-source.sh'
+      - 'scripts/phase6b-verify-qmake-support.sh'
+      - 'scripts/phase6c-validate-legacy-it-original.py'
+      - 'scripts/phase6c-validate-original-receipts-v2.py'
+      - 'tests/phase6c_legacy_module_import.py'
+      - 'tests/phase6c_legacy_it_loader.c'
+      - 'tests/phase6c_legacy_it_decoder.c'
+      - 'cpsycle/**'
+      - 'psycle-cpp-r12005-sanitized/**'
+      - '.github/workflows/phase6c-legacy-playback-import.yml'
+      - 'ROADMAP.md'
+      - 'README.md'
+  pull_request:
+    paths:
+      - 'phase6c/LEGACY_PLAYBACK_IMPORT.md'
+      - 'phase6c/evidence/legacy-module-import/**'
+      - 'phase6c/reference-corpus/**'
+      - 'scripts/phase6c-generate-it-import-fixture.py'
+      - 'scripts/phase6c-build-legacy-it-observer.py'
+      - 'scripts/phase6c-original-windows-fixtures-v2.ps1'
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
+      - 'scripts/phase6b-verify-committed-source.sh'
+      - 'scripts/phase6b-verify-qmake-support.sh'
+      - 'scripts/phase6c-validate-legacy-it-original.py'
+      - 'scripts/phase6c-validate-original-receipts-v2.py'
+      - 'tests/phase6c_legacy_module_import.py'
+      - 'tests/phase6c_legacy_it_loader.c'
+      - 'tests/phase6c_legacy_it_decoder.c'
+      - 'cpsycle/**'
+      - 'psycle-cpp-r12005-sanitized/**'
+      - '.github/workflows/phase6c-legacy-playback-import.yml'
+      - 'ROADMAP.md'
+      - 'README.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6c-legacy-playback-import-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fixture-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate generated IT fixture contract
+        run: python3 tests/phase6c_legacy_module_import.py
+
+      - name: Generate canonical IT fixture
+        run: |
+          mkdir -p phase6c-generated
+          python3 scripts/phase6c-generate-it-import-fixture.py             phase6c-generated/phase6c-legacy-it-import.it
+          sha256sum phase6c-generated/phase6c-legacy-it-import.it
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          fixture = Path('phase6c-generated/phase6c-legacy-it-import.it')
+          receipt = {
+              'schema_version': 1,
+              'phase': '6C',
+              'contract': 'legacy-it-import-reference',
+              'evidence_role': 'candidate',
+              'fixture': fixture.name,
+              'fixture_sha256': hashlib.sha256(fixture.read_bytes()).hexdigest(),
+              'procedure': 'generate canonical project-owned IT input fixture; this receipt binds observation input only and makes no candidate parity claim',
+              'observation': 'generated-input-only',
+          }
+          Path('phase6c-generated/candidate-legacy-it.json').write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Upload generated fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-legacy-it-generated-fixture
+          path: |
+            phase6c-generated/phase6c-legacy-it-import.it
+            phase6c-generated/candidate-legacy-it.json
+          if-no-files-found: error
+
+  cpsycle-donor-import:
+    needs: fixture-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install donor build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             build-essential pkg-config liblua5.4-dev liblilv-dev
+
+      - name: Generate canonical IT fixture
+        run: |
+          mkdir -p phase6c-generated
+          python3 scripts/phase6c-generate-it-import-fixture.py \
+            phase6c-generated/phase6c-legacy-it-import.it \
+            --decoder-fixtures-dir phase6c-generated/decoder-fixtures
+
+      - name: Build C-Psycle donor player libraries
+        run: make -C cpsycle/player -j1
+
+      - name: Build donor IT loader probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer             -Wall -Wextra -Werror=implicit-function-declaration             -Icpsycle/script/src -Icpsycle/thread/src -Icpsycle/container/src             -Icpsycle/file/src -Icpsycle/diversalis/src -Icpsycle/src             -Icpsycle/audio/src -Icpsycle/dsp/src $(pkg-config --cflags lua)             tests/phase6c_legacy_it_loader.c             -o phase6c-generated/phase6c-legacy-it-loader             -Lcpsycle/thread/src -Lcpsycle/script/src -Lcpsycle/container/src             -Lcpsycle/dsp/src -Lcpsycle/audio/src -Lcpsycle/file/src             -Wl,--no-as-needed -laudio -lthread -llilv-0 -ldsp -lscript -lfile             -lm $(pkg-config --libs lua) -lpthread -ldl -lstdc++ -lcontainer
+
+      - name: Build donor IT decoder regression probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer \
+            -Wall -Wextra -Werror=implicit-function-declaration \
+            -Icpsycle/script/src -Icpsycle/thread/src -Icpsycle/container/src \
+            -Icpsycle/file/src -Icpsycle/diversalis/src -Icpsycle/src \
+            -Icpsycle/audio/src -Icpsycle/dsp/src $(pkg-config --cflags lua) \
+            tests/phase6c_legacy_it_decoder.c \
+            -o phase6c-generated/phase6c-legacy-it-decoder \
+            -Lcpsycle/thread/src -Lcpsycle/script/src -Lcpsycle/container/src \
+            -Lcpsycle/dsp/src -Lcpsycle/audio/src -Lcpsycle/file/src \
+            -Wl,--no-as-needed -laudio -lthread -llilv-0 -ldsp -lscript -lfile \
+            -lm $(pkg-config --libs lua) -lpthread -ldl -lstdc++ -lcontainer
+
+      - name: Exercise donor 8-bit IT decoder regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variant in \
+            signed \
+            unsigned \
+            signed-delta-wrap \
+            unsigned-delta-wrap \
+            stereo-signed-delta-reset
+          do
+            phase6c-generated/phase6c-legacy-it-decoder \
+              "$variant" \
+              "phase6c-generated/decoder-fixtures/phase6c-it-decoder-$variant.it"
+          done
+
+      - name: Load generated IT through C-Psycle donor runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          phase6c-generated/phase6c-legacy-it-loader phase6c-generated/phase6c-legacy-it-import.it \
+            | tee phase6c-generated/cpsycle-donor.log
+          tail -n 1 phase6c-generated/cpsycle-donor.log \
+            > phase6c-generated/cpsycle-donor-observation.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('phase6c-generated/cpsycle-donor-observation.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          assert data['contract'] == 'legacy-it-import-donor-runtime'
+          assert data['title'] == 'PSYCLE IT import witness'
+          assert data['bpm'] == 140
+          assert data['lpb'] == 6
+          assert data['sample_frames'] == 4096
+          assert data['sample_loop'] == '0-4096'
+          assert (data['pcm0'], data['pcm1'], data['pcm5']) == (-16128, -12800, 512)
+          for command in ('E10', 'F10', 'G08', 'V40', 'Z58', 'C00'):
+              assert data[command] == 'mapped'
+          assert data['note_cut_254'] == 'release'
+          PY
+          cp -- cpsycle/audio/src/itmodule2.c phase6c-generated/cpsycle-itmodule2.c
+          cmp --silent cpsycle/audio/src/itmodule2.c phase6c-generated/cpsycle-itmodule2.c
+          python3 - <<'PY'
+          import hashlib, json, subprocess
+          from pathlib import Path
+          root = Path('phase6c-generated')
+          fixture = root / 'phase6c-legacy-it-import.it'
+          probe = root / 'phase6c-legacy-it-loader'
+          log = root / 'cpsycle-donor.log'
+          observation = root / 'cpsycle-donor-observation.json'
+          source_file = root / 'cpsycle-itmodule2.c'
+          source_revision = subprocess.check_output(
+              ['git', 'rev-parse', 'HEAD'], text=True
+          ).strip()
+          if len(source_revision) != 40 or any(
+              ch not in '0123456789abcdef' for ch in source_revision
+          ):
+              raise SystemExit(f'invalid checked-out source revision: {source_revision!r}')
+          receipt = {
+              'schema_version': 1,
+              'phase': '6C',
+              'contract': 'legacy-it-import-donor-runtime',
+              'evidence_role': 'cpsycle-donor',
+              'source_revision': source_revision,
+              'source_file': source_file.name,
+              'source_file_origin': 'cpsycle/audio/src/itmodule2.c',
+              'source_file_sha256': hashlib.sha256(source_file.read_bytes()).hexdigest(),
+              'fixture': fixture.name,
+              'fixture_sha256': hashlib.sha256(fixture.read_bytes()).hexdigest(),
+              'probe_executable': probe.name,
+              'probe_executable_sha256': hashlib.sha256(probe.read_bytes()).hexdigest(),
+              'raw_log': log.name,
+              'raw_log_sha256': hashlib.sha256(log.read_bytes()).hexdigest(),
+              'observation': observation.name,
+              'observation_sha256': hashlib.sha256(observation.read_bytes()).hexdigest(),
+              'exit_code': 0,
+              'procedure': 'build retained C-Psycle donor sequentially; compile the legacy IT loader probe; load the exact generated IMPM fixture through SongReader/ITModule2; verify decoded PCM, loop geometry, speed/tempo and command translations',
+          }
+          (root / 'cpsycle-donor-receipt.json').write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Upload donor observation
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-legacy-it-cpsycle-donor-observation
+          path: |
+            phase6c-generated/phase6c-legacy-it-import.it
+            phase6c-generated/phase6c-legacy-it-loader
+            phase6c-generated/cpsycle-itmodule2.c
+            phase6c-generated/cpsycle-donor.log
+            phase6c-generated/cpsycle-donor-observation.json
+            phase6c-generated/cpsycle-donor-receipt.json
+          if-no-files-found: error
+
+  candidate-direct-import-boundary:
+    needs: fixture-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install candidate build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates curl subversion file build-essential pkg-config \
+            qt5-qmake qtbase5-dev libboost-thread-dev libboost-filesystem-dev \
+            libboost-system-dev libboost-chrono-dev libboost-date-time-dev \
+            libxml++2.6-dev zlib1g-dev libsoxr-dev libasound2-dev \
+            libjack-jackd2-dev liblilv-dev liblua5.4-dev
+
+      - name: Generate canonical IT fixture
+        run: |
+          mkdir -p phase6c-generated
+          python3 scripts/phase6c-generate-it-import-fixture.py \
+            phase6c-generated/phase6c-legacy-it-import.it
+
+      - name: Verify frozen Phase 6B source identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/phase6-upstream-audit.sh phase6-upstream-audit
+          bash scripts/phase6b-sanitized-manifest.sh \
+            phase6-upstream-audit phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-committed-source.sh \
+            psycle-cpp-r12005-sanitized phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-qmake-support.sh \
+            psycle-cpp-r12005-sanitized/build-systems/qmake
+
+      - name: Stage pinned historical plugin interface
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/psycle-plugins/src/psycle/plugin_interface.hpp'
+          ARCHIVE_COMMIT='1863c4177d38d37e8eba9e4eb8857e5023debe6d'
+          EXPECTED_BLOB='2cf4d8f756fa58098fd84b7b44d0ebe1350594c5'
+          test ! -e "$DEST"
+          mkdir -p "$(dirname "$DEST")"
+          curl -fsSL --retry 3 \
+            "https://raw.githubusercontent.com/QSOLKCB/PSYCLE-LINUX/$ARCHIVE_COMMIT/cpsycle/plugins/psycle/plugin_interface.hpp" \
+            -o "$DEST"
+          [[ "$(git hash-object "$DEST")" == "$EXPECTED_BLOB" ]]
+
+      - name: Stage pinned historical diversalis dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/diversalis'
+          test ! -e "$DEST"
+          exported=false
+          for attempt in 1 2 3 4; do
+            rm -rf -- "$DEST"
+            if svn export --quiet --force -r 12005 \
+              'https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005' "$DEST"; then
+              exported=true
+              break
+            fi
+            sleep "$((attempt * 2))"
+          done
+          [[ "$exported" == true ]]
+
+      - name: Build frozen C++ candidate player
+        shell: bash
+        working-directory: psycle-cpp-r12005-sanitized/psycle-player
+        run: |
+          set -euo pipefail
+          qmake CONFIG-=shared CONFIG+=release psycle-player.pro
+          make -j2
+
+      - name: Observe direct IT import boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          PLAYER='psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player'
+          PLAYER_ARTIFACT='phase6c-generated/candidate-psycle-player'
+          FIXTURE='phase6c-generated/phase6c-legacy-it-import.it'
+          LOG='phase6c-generated/candidate-direct-import.log'
+          cp -- "$PLAYER" "$PLAYER_ARTIFACT"
+          test -x "$PLAYER_ARTIFACT"
+          pushd phase6c-generated >/dev/null
+          chmod +x candidate-psycle-player
+          set +e
+          ./candidate-psycle-player --output-driver dummy --input-file phase6c-legacy-it-import.it </dev/null >candidate-direct-import.log 2>&1
+          rc=$?
+          set -e
+          popd >/dev/null
+          cat "$LOG"
+          [[ "$rc" -eq 2 ]] || {
+            echo "expected frozen candidate direct IT load rejection exit 2, got $rc" >&2
+            exit 1
+          }
+          grep -Fq 'could not load song file:' "$LOG"
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          root = pathlib.Path('.')
+          artifact_root = root / 'phase6c-generated'
+          fixture = artifact_root / 'phase6c-legacy-it-import.it'
+          player = artifact_root / 'candidate-psycle-player'
+          log = artifact_root / 'candidate-direct-import.log'
+          receipt = {
+              'schema_version': 1,
+              'contract': 'legacy-it-direct-import-candidate-boundary',
+              'candidate_baseline_sha256': '00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a',
+              'fixture': fixture.name,
+              'fixture_sha256': hashlib.sha256(fixture.read_bytes()).hexdigest(),
+              'player': player.name,
+              'player_sha256': hashlib.sha256(player.read_bytes()).hexdigest(),
+              'log': log.name,
+              'log_sha256': hashlib.sha256(log.read_bytes()).hexdigest(),
+              'command': [
+                  './candidate-psycle-player',
+                  '--output-driver',
+                  'dummy',
+                  '--input-file',
+                  'phase6c-legacy-it-import.it',
+              ],
+              'working_directory': 'artifact-root',
+              'replay_setup': ['chmod', '+x', 'candidate-psycle-player'],
+              'stdin': '/dev/null',
+              'stdout_stderr': log.name,
+              'procedure': 'chmod +x candidate-psycle-player && ./candidate-psycle-player --output-driver dummy --input-file phase6c-legacy-it-import.it </dev/null >candidate-direct-import.log 2>&1',
+              'exit_code': 2,
+              'direct_it_load': 'rejected',
+              'parity_status': 'UNKNOWN',
+              'interpretation': 'The frozen candidate historical player does not directly accept the generated IMPM fixture through CoreSong/SongSerializer. This records a host/song-I/O capability boundary only; it does not by itself classify original-Psycle parity or XMSampler semantics.'
+          }
+          (root / 'phase6c-generated/candidate-direct-import.json').write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+
+      - name: Upload candidate direct-import observation
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-legacy-it-candidate-direct-import
+          path: |
+            phase6c-generated/phase6c-legacy-it-import.it
+            phase6c-generated/candidate-psycle-player
+            phase6c-generated/candidate-direct-import.log
+            phase6c-generated/candidate-direct-import.json
+          if-no-files-found: error
+
+
+  original-legacy-it-observation:
+    needs: fixture-contract
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download exact generated legacy IT input
+        uses: actions/download-artifact@v4
+        with:
+          name: phase6c-legacy-it-generated-fixture
+          path: phase6c-legacy-it-input
+
+      - name: Install pinned Microsoft VC90 x86 runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x86.exe'
+          $expectedSha = '8742bcbf24ef328a72d2a27b693cc7071e38d3bb4b9b44dec42aa3d2c8d61d92'
+          $version = '9.0.30729.6161'
+          $runtime = Join-Path $env:RUNNER_TEMP 'psycle-vc90-vcredist_x86.exe'
+          $receipt = Join-Path $PWD 'phase6c-vc90-runtime.txt'
+
+          & curl.exe --fail --location --retry 3 --silent --show-error --output $runtime $url
+          if ($LASTEXITCODE -ne 0) { throw "VC90 runtime download failed" }
+          $actualSha = (Get-FileHash -LiteralPath $runtime -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha -ne $expectedSha) { throw "VC90 runtime SHA-256 mismatch" }
+          $signature = Get-AuthenticodeSignature -FilePath $runtime
+          if ($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate -or
+              $signature.SignerCertificate.Subject -notmatch '(?i)Microsoft') {
+            throw "VC90 runtime signature is not valid Microsoft Authenticode"
+          }
+          $process = Start-Process -FilePath $runtime -ArgumentList '/Q','/NORESTART' -Wait -PassThru
+          if ($process.ExitCode -notin @(0, 3010)) { throw "VC90 runtime install failed" }
+          @(
+            "runtime=Microsoft Visual C++ 2008 SP1 x86 Redistributable MFC Security Update"
+            "redistributable_version=$version"
+            "url=$url"
+            "sha256=$actualSha"
+            "authenticode_status=$($signature.Status)"
+            "signer_subject=$($signature.SignerCertificate.Subject)"
+            "installer_exit_code=$($process.ExitCode)"
+          ) | Set-Content -LiteralPath $receipt -Encoding utf8
+          Remove-Item -LiteralPath $runtime -Force
+          "PSYCLE_PHASE6C_VC90_RUNTIME_URL=$url" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PSYCLE_PHASE6C_VC90_RUNTIME_SHA256=$actualSha" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PSYCLE_PHASE6C_VC90_RUNTIME_VERSION=$version" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PSYCLE_PHASE6C_VC90_RUNTIME_RECEIPT=$receipt" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Generate one-fixture legacy IT original observer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $base = 'scripts/phase6c-original-windows-fixtures-v2.ps1'
+          $generated = 'scripts/phase6c-original-windows-fixtures-v2.legacy-it.generated.ps1'
+          python scripts/phase6c-build-legacy-it-observer.py $base $generated
+          if ($LASTEXITCODE -ne 0) { throw "legacy IT observer generation failed" }
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $generated).Path, [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw "legacy IT observer PowerShell parse failed"
+          }
+
+      - name: Observe pinned original Psycle legacy IT import
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./scripts/phase6c-original-windows-fixtures-v2.legacy-it.generated.ps1 `
+            -CandidateArtifactRoot 'phase6c-legacy-it-input' `
+            -Out 'phase6c-legacy-it-original' `
+            -ObserveLegacyIt
+
+      - name: Validate pinned original legacy IT observation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python scripts/phase6c-validate-legacy-it-original.py `
+            phase6c-legacy-it-input phase6c-legacy-it-original
+          if ($LASTEXITCODE -ne 0) { throw "legacy IT original validation failed" }
+
+      - name: Upload pinned original legacy IT observation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-legacy-it-original-observation
+          path: phase6c-legacy-it-original/
+          if-no-files-found: warn

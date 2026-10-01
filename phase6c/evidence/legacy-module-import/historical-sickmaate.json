@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "contract": "legacy-impulse-tracker-import-reference",
+  "status": "EXTERNAL_REFERENCE",
+  "source": {
+    "filename": "d-503_-_sickmaate.it",
+    "sha256": "cab23d8f66a6815b3248457e4f38de74f0a6d61c2691c47a78e582edb63cd432",
+    "size_bytes": 306462,
+    "archive_filename": "d-503_-_sickmaate.zip",
+    "archive_sha256": "cc6532f619f0aece23a298ca60c12ed1a323b56d128f45721688e0f60a7b1b05",
+    "title": "SickMaate",
+    "author": "Trent Slade",
+    "authorship_note": "Contributor states that the song/pattern arrangement is their own historical work.",
+    "redistribution": "not_committed",
+    "redistribution_reason": "The historical module embeds sample material carrying third-party source/credit names; redistribution rights for those PCM payloads are not established. Preserve by identity and observation only."
+  },
+  "forensic_summary": {
+    "orders": 81,
+    "playable_orders": 80,
+    "patterns": 19,
+    "instrument_count": 0,
+    "sample_slots": 48,
+    "samples_with_pcm": 25,
+    "used_pattern_channels": 20,
+    "initial_speed": 4,
+    "initial_tempo_bpm": 140,
+    "linear_slides": true,
+    "compressed_samples": 25,
+    "looped_samples": 11,
+    "ordinary_note_events": 481,
+    "note_cut_events": 138,
+    "effect_counts": {
+      "Cxx_pattern_break": 2,
+      "Exx_portamento_down": 266,
+      "Fxx_portamento_up": 88,
+      "Gxx_tone_portamento": 83,
+      "Vxx_global_volume": 108,
+      "Z58_midi_filter_macro": 480
+    },
+    "decoded_duration_seconds_approx": 189.68,
+    "edit_history_records": 25,
+    "edit_history_first_date": "2002-11-01",
+    "edit_history_last_date": "2003-04-11"
+  },
+  "evidence_boundary": {
+    "original_psycle": "Observation pending under pinned Psycle 1.12.0 x86. Historical user memory is useful context but is not a parity verdict.",
+    "candidate": "Observation pending. The sanitized C++ candidate contains IT/XMSampler semantics but no comparable IMPM import path has yet been established.",
+    "cpsycle": "Source contains a direct IMPM/ITModule2 importer with compressed-sample decoding and IT-command translation. Runtime fixture coverage is added separately by this lane.",
+    "classification": "No PASS/DIFFERENT/MISSING result is claimed from this historical file alone."
+  }
+}
