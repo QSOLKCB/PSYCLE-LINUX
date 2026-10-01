@@ -279,10 +279,13 @@ jobs:
         run: |
           set -euo pipefail
           PLAYER='psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player'
+          PLAYER_ARTIFACT='phase6c-generated/candidate-psycle-player'
           FIXTURE='phase6c-generated/phase6c-legacy-it-import.it'
           LOG='phase6c-generated/candidate-direct-import.log'
+          cp -- "$PLAYER" "$PLAYER_ARTIFACT"
+          test -x "$PLAYER_ARTIFACT"
           set +e
-          "$PLAYER" --output-driver dummy --input-file "$FIXTURE" </dev/null >"$LOG" 2>&1
+          "$PLAYER_ARTIFACT" --output-driver dummy --input-file "$FIXTURE" </dev/null >"$LOG" 2>&1
           rc=$?
           set -e
           cat "$LOG"
@@ -294,15 +297,19 @@ jobs:
           python3 - <<'PY'
           import hashlib, json, pathlib
           root = pathlib.Path('.')
-          fixture = root / 'phase6c-generated/phase6c-legacy-it-import.it'
-          player = root / 'psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player'
-          log = root / 'phase6c-generated/candidate-direct-import.log'
+          artifact_root = root / 'phase6c-generated'
+          fixture = artifact_root / 'phase6c-legacy-it-import.it'
+          player = artifact_root / 'candidate-psycle-player'
+          log = artifact_root / 'candidate-direct-import.log'
           receipt = {
               'schema_version': 1,
               'contract': 'legacy-it-direct-import-candidate-boundary',
               'candidate_baseline_sha256': '00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a',
+              'fixture': fixture.name,
               'fixture_sha256': hashlib.sha256(fixture.read_bytes()).hexdigest(),
+              'player': player.name,
               'player_sha256': hashlib.sha256(player.read_bytes()).hexdigest(),
+              'log': log.name,
               'log_sha256': hashlib.sha256(log.read_bytes()).hexdigest(),
               'exit_code': 2,
               'direct_it_load': 'rejected',
@@ -319,6 +326,8 @@ jobs:
         with:
           name: phase6c-legacy-it-candidate-direct-import
           path: |
+            phase6c-generated/phase6c-legacy-it-import.it
+            phase6c-generated/candidate-psycle-player
             phase6c-generated/candidate-direct-import.log
             phase6c-generated/candidate-direct-import.json
           if-no-files-found: error
