@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /* Runtime regressions for C-Psycle uncompressed 8-bit IT sample decoding. */
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
