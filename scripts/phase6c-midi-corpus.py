@@ -299,41 +299,108 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
     tempos = [item for track in tracks for item in track["tempo_events"]]
     bpms = [60_000_000.0 / usec for _, usec in tempos if usec]
 
-    merged_transitions = sorted(
-        (
-            tick,
-            track_index,
-            serial,
-            channel,
-            note,
-            is_on,
-        )
-        for track_index, track in enumerate(tracks)
-        for tick, serial, channel, note, is_on in track["note_transitions"]
+    transitions_by_tick: dict[
+        int, list[tuple[int, int, int, int, bool]]
+    ] = collections.defaultdict(list)
+    for track_index, track in enumerate(tracks):
+        for tick, serial, channel, note, is_on in track["note_transitions"]:
+            transitions_by_tick[tick].append(
+                (track_index, serial, channel, note, is_on)
+            )
+
+    active_notes: dict[
+        tuple[int, int], collections.deque[int]
+    ] = collections.defaultdict(collections.deque)
+    note_intervals: list[tuple[int, int, int, int]] = []
+    global_unmatched_note_offs = 0
+
+    for tick in sorted(transitions_by_tick):
+        events = sorted(transitions_by_tick[tick])
+        consumed_offs: set[tuple[int, int]] = set()
+
+        # Boundary rule: release notes that were already active before this tick
+        # before considering attacks at the same tick. This makes [start, end)
+        # interval metrics independent of MTrk chunk ordering.
+        for track_index, serial, channel, note, is_on in events:
+            if is_on:
+                continue
+            queue = active_notes[(channel, note)]
+            if queue and queue[0] < tick:
+                start_tick = queue.popleft()
+                note_intervals.append((channel, note, start_tick, tick))
+                consumed_offs.add((track_index, serial))
+
+        # Preserve within-track event order for events that are genuinely
+        # simultaneous, including zero-duration note-on/note-off pairs.
+        for track_index, serial, channel, note, is_on in events:
+            key = (channel, note)
+            if is_on:
+                active_notes[key].append(tick)
+                continue
+            if (track_index, serial) in consumed_offs:
+                continue
+            queue = active_notes[key]
+            if not queue:
+                global_unmatched_note_offs += 1
+                continue
+            start_tick = queue.popleft()
+            note_intervals.append((channel, note, start_tick, tick))
+
+    global_remaining = sum(len(queue) for queue in active_notes.values())
+    global_zero_duration_pairs = sum(
+        1 for _channel, _note, start_tick, end_tick in note_intervals
+        if start_tick == end_tick
     )
-    active_notes: dict[tuple[int, int], collections.deque[int]] = collections.defaultdict(collections.deque)
+    positive_intervals = [
+        interval for interval in note_intervals if interval[2] < interval[3]
+    ]
+
+    # Global polyphony is the maximum number of positive-duration half-open
+    # intervals active after all releases at a boundary and all attacks there.
+    interval_boundaries: dict[int, list[int]] = collections.defaultdict(
+        lambda: [0, 0]
+    )
+    for _channel, _note, start_tick, end_tick in positive_intervals:
+        interval_boundaries[start_tick][1] += 1
+        interval_boundaries[end_tick][0] += 1
     active_total = 0
     global_max_polyphony = 0
+    for tick in sorted(interval_boundaries):
+        ends, starts = interval_boundaries[tick]
+        active_total -= ends
+        if active_total < 0:
+            die(f"{label}: interval accounting underflow at tick {tick}")
+        active_total += starts
+        global_max_polyphony = max(global_max_polyphony, active_total)
+
+    # Same-note overlap counts note attacks that begin while the same
+    # channel/note interval is already active. Simultaneous starts count all
+    # but one when no earlier interval is active.
+    intervals_by_key: dict[
+        tuple[int, int], list[tuple[int, int]]
+    ] = collections.defaultdict(list)
+    for channel, note, start_tick, end_tick in positive_intervals:
+        intervals_by_key[(channel, note)].append((start_tick, end_tick))
     global_same_note_overlaps = 0
-    global_zero_duration_pairs = 0
-    global_unmatched_note_offs = 0
-    for tick, _track_index, _serial, channel, note, is_on in merged_transitions:
-        key = (channel, note)
-        queue = active_notes[key]
-        if is_on:
-            if queue:
-                global_same_note_overlaps += 1
-            queue.append(tick)
-            active_total += 1
-            global_max_polyphony = max(global_max_polyphony, active_total)
-        elif not queue:
-            global_unmatched_note_offs += 1
-        else:
-            start_tick = queue.popleft()
-            if start_tick == tick:
-                global_zero_duration_pairs += 1
-            active_total -= 1
-    global_remaining = sum(len(queue) for queue in active_notes.values())
+    for intervals in intervals_by_key.values():
+        boundaries: dict[int, list[int]] = collections.defaultdict(
+            lambda: [0, 0]
+        )
+        for start_tick, end_tick in intervals:
+            boundaries[start_tick][1] += 1
+            boundaries[end_tick][0] += 1
+        active_same = 0
+        for tick in sorted(boundaries):
+            ends, starts = boundaries[tick]
+            active_same -= ends
+            if active_same < 0:
+                die(f"{label}: same-note interval accounting underflow at tick {tick}")
+            if starts:
+                if active_same:
+                    global_same_note_overlaps += starts
+                elif starts > 1:
+                    global_same_note_overlaps += starts - 1
+                active_same += starts
     key_sigs = [pair for track in tracks for pair in track["key_signatures"]]
     channels = sorted({ch for track in tracks for ch in track["channels"]})
     end_tick = max((track["end_tick"] for track in tracks), default=0)
@@ -388,11 +455,116 @@ def find_outer_archive(bundle: zipfile.ZipFile, expected_name: str) -> zipfile.Z
     return matches[0]
 
 
-def validate_set_aggregate(set_spec: dict[str, Any], stems: list[dict[str, Any]]) -> dict[str, Any]:
+def validate_aggregate_against_manifest(
+    set_spec: dict[str, Any],
+    aggregate: dict[str, Any],
+) -> None:
     expected = set_spec.get("analysis_expectations")
     if not isinstance(expected, dict):
         die(f"{set_spec['name']}: missing analysis_expectations")
 
+    exact_fields = {
+        "stems": "stems",
+        "tracks": "tracks",
+        "notes": "notes",
+        "same_note_overlaps": "same_note_overlaps",
+        "max_polyphony": "max_polyphony",
+    }
+    for actual_key, expected_key in exact_fields.items():
+        expected_value = expected.get(expected_key)
+        if expected_value is None:
+            continue
+        if aggregate.get(actual_key) != expected_value:
+            die(
+                f"{set_spec['name']}: {actual_key} mismatch: "
+                f"expected={expected_value} actual={aggregate.get(actual_key)}"
+            )
+
+    expected_tempo_per_stem = expected.get("tempo_events_per_stem")
+    if (
+        expected_tempo_per_stem is None
+        or aggregate.get("tempo_events_per_stem") != [expected_tempo_per_stem]
+    ):
+        die(
+            f"{set_spec['name']}: per-stem tempo-map count changed: "
+            f"expected={expected_tempo_per_stem} "
+            f"actual={aggregate.get('tempo_events_per_stem')}"
+        )
+
+    if aggregate.get("formats") != [1] or aggregate.get("divisions") != [480]:
+        die(f"{set_spec['name']}: corpus files are not uniformly SMF1/480 PPQN")
+    if aggregate.get("balanced_note_pairs") is not True:
+        die(f"{set_spec['name']}: unbalanced note pairs detected")
+    for field in (
+        "sysex_events",
+        "pitch_bend_events",
+        "aftertouch_events",
+        "time_signature_events",
+    ):
+        if aggregate.get(field) != 0:
+            die(f"{set_spec['name']}: unexpected {field}={aggregate.get(field)}")
+
+    tempo_range = expected.get("tempo_range_bpm")
+    if not (
+        isinstance(tempo_range, list)
+        and len(tempo_range) == 2
+        and isinstance(aggregate.get("tempo_min_bpm"), (int, float))
+        and isinstance(aggregate.get("tempo_max_bpm"), (int, float))
+        and math.isclose(
+            aggregate["tempo_min_bpm"], float(tempo_range[0]), abs_tol=0.01
+        )
+        and math.isclose(
+            aggregate["tempo_max_bpm"], float(tempo_range[1]), abs_tol=0.01
+        )
+    ):
+        die(
+            f"{set_spec['name']}: tempo range changed: "
+            f"expected={tempo_range} actual="
+            f"{[aggregate.get('tempo_min_bpm'), aggregate.get('tempo_max_bpm')]}"
+        )
+
+    duration = aggregate.get("duration_seconds_max")
+    if not isinstance(duration, (int, float)) or not math.isclose(
+        duration,
+        float(expected.get("duration_seconds_max")),
+        abs_tol=0.02,
+    ):
+        die(
+            f"{set_spec['name']}: duration changed: "
+            f"expected={expected.get('duration_seconds_max')} actual={duration}"
+        )
+
+    expected_key = expected.get("malformed_key_signature")
+    expected_keys = [] if expected_key is None else [tuple(expected_key)]
+    actual_keys = [
+        tuple(pair) for pair in aggregate.get("malformed_key_signatures", [])
+    ]
+    if actual_keys != expected_keys:
+        die(
+            f"{set_spec['name']}: malformed key-signature observation changed: "
+            f"expected={expected_keys} actual={actual_keys}"
+        )
+
+    expected_zero = bool(expected.get("zero_duration_pairs_present"))
+    zero_pairs = aggregate.get("zero_duration_pairs")
+    if not isinstance(zero_pairs, int) or (zero_pairs > 0) != expected_zero:
+        die(f"{set_spec['name']}: zero-duration-pair observation changed")
+
+    expected_channels = expected.get("channels_used")
+    if (
+        expected_channels is not None
+        and aggregate.get("channels") != expected_channels
+    ):
+        die(
+            f"{set_spec['name']}: channel-use observation changed: "
+            f"expected={expected_channels} actual={aggregate.get('channels')}"
+        )
+
+
+def validate_set_aggregate(
+    set_spec: dict[str, Any],
+    stems: list[dict[str, Any]],
+) -> dict[str, Any]:
     aggregate = {
         "stems": len(stems),
         "tracks": sum(stem["analysis"]["tracks"] for stem in stems),
@@ -428,80 +600,7 @@ def validate_set_aggregate(set_spec: dict[str, Any], stems: list[dict[str, Any]]
         "divisions": sorted({stem["analysis"]["division"] for stem in stems}),
     }
 
-    exact_fields = {
-        "stems": "stems",
-        "tracks": "tracks",
-        "notes": "notes",
-        "same_note_overlaps": "same_note_overlaps",
-        "max_polyphony": "max_polyphony",
-    }
-    for actual_key, expected_key in exact_fields.items():
-        expected_value = expected.get(expected_key)
-        if expected_value is None:
-            continue
-        if aggregate[actual_key] != expected_value:
-            die(
-                f"{set_spec['name']}: {actual_key} mismatch: "
-                f"expected={expected_value} actual={aggregate[actual_key]}"
-            )
-    expected_tempo_per_stem = expected.get("tempo_events_per_stem")
-    if (
-        expected_tempo_per_stem is None
-        or aggregate["tempo_events_per_stem"] != [expected_tempo_per_stem]
-    ):
-        die(
-            f"{set_spec['name']}: per-stem tempo-map count changed: "
-            f"expected={expected_tempo_per_stem} "
-            f"actual={aggregate['tempo_events_per_stem']}"
-        )
-
-    if aggregate["formats"] != [1] or aggregate["divisions"] != [480]:
-        die(f"{set_spec['name']}: corpus files are not uniformly SMF1/480 PPQN")
-    if not aggregate["balanced_note_pairs"]:
-        die(f"{set_spec['name']}: unbalanced note pairs detected")
-    for field in ("sysex_events", "pitch_bend_events", "aftertouch_events", "time_signature_events"):
-        if aggregate[field] != 0:
-            die(f"{set_spec['name']}: unexpected {field}={aggregate[field]}")
-
-    tempo_range = expected.get("tempo_range_bpm")
-    if not (
-        isinstance(tempo_range, list) and len(tempo_range) == 2
-        and math.isclose(aggregate["tempo_min_bpm"], float(tempo_range[0]), abs_tol=0.01)
-        and math.isclose(aggregate["tempo_max_bpm"], float(tempo_range[1]), abs_tol=0.01)
-    ):
-        die(
-            f"{set_spec['name']}: tempo range changed: "
-            f"expected={tempo_range} actual="
-            f"{[aggregate['tempo_min_bpm'], aggregate['tempo_max_bpm']]}"
-        )
-    if not math.isclose(
-        aggregate["duration_seconds_max"],
-        float(expected.get("duration_seconds_max")),
-        abs_tol=0.02,
-    ):
-        die(
-            f"{set_spec['name']}: duration changed: "
-            f"expected={expected.get('duration_seconds_max')} "
-            f"actual={aggregate['duration_seconds_max']}"
-        )
-
-    expected_key = expected.get("malformed_key_signature")
-    expected_keys = [] if expected_key is None else [tuple(expected_key)]
-    if aggregate["malformed_key_signatures"] != expected_keys:
-        die(
-            f"{set_spec['name']}: malformed key-signature observation changed: "
-            f"expected={expected_keys} actual={aggregate['malformed_key_signatures']}"
-        )
-    expected_zero = bool(expected.get("zero_duration_pairs_present"))
-    if (aggregate["zero_duration_pairs"] > 0) != expected_zero:
-        die(f"{set_spec['name']}: zero-duration-pair observation changed")
-
-    expected_channels = expected.get("channels_used")
-    if expected_channels is not None and aggregate["channels"] != expected_channels:
-        die(
-            f"{set_spec['name']}: channel-use observation changed: "
-            f"expected={expected_channels} actual={aggregate['channels']}"
-        )
+    validate_aggregate_against_manifest(set_spec, aggregate)
     return aggregate
 
 
@@ -593,6 +692,71 @@ def prepare_bundle(bundle_path: pathlib.Path, root: pathlib.Path) -> dict[str, A
     return analysis_doc
 
 
+def validate_analysis_manifest_bindings(
+    analysis: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    manifest = corpus_manifest()
+    manifest_by_name = {item["name"]: item for item in manifest["sets"]}
+    sets = analysis.get("sets")
+    if (
+        analysis.get("schema_version") != 1
+        or analysis.get("phase") != "6C"
+        or analysis.get("contract") != CONTRACT
+        or analysis.get("evidence_role") != "private-input-analysis"
+        or analysis.get("progression_order") != PROGRESSION
+        or analysis.get("parity_status") != "UNKNOWN"
+        or not isinstance(sets, list)
+        or len(sets) != len(PROGRESSION)
+        or [item.get("name") for item in sets] != PROGRESSION
+    ):
+        die("MIDI corpus analysis is not the canonical private-input analysis")
+
+    for set_info in sets:
+        name = set_info["name"]
+        set_spec = manifest_by_name[name]
+        stems = set_info.get("stems")
+        representative = set_info.get("representative")
+        if (
+            set_info.get("slug") != slug(name)
+            or set_info.get("archive") != set_spec["archive"]
+            or set_info.get("archive_sha256") != set_spec["sha256"]
+            or set_info.get("role") != set_spec["role"]
+            or not isinstance(stems, list)
+            or len(stems) != set_spec["stems"]
+            or not isinstance(representative, dict)
+        ):
+            die(f"{name}: analysis is not bound to the manifest-pinned archive")
+
+        for stem in stems:
+            if (
+                stem.get("set_name") != name
+                or stem.get("set_slug") != slug(name)
+                or stem.get("archive") != set_spec["archive"]
+                or stem.get("archive_sha256") != set_spec["sha256"]
+                or not isinstance(stem.get("sha256"), str)
+                or len(stem["sha256"]) != 64
+                or not isinstance(stem.get("size_bytes"), int)
+                or stem["size_bytes"] <= 0
+                or not isinstance(stem.get("analysis"), dict)
+            ):
+                die(f"{name}: stem analysis is not archive-bound")
+
+        matches = [
+            stem for stem in stems
+            if (
+                stem.get("stem_id") == representative.get("stem_id")
+                and stem.get("relative_name") == representative.get("relative_name")
+                and stem.get("private_path") == representative.get("private_path")
+                and stem.get("sha256") == representative.get("sha256")
+                and stem.get("size_bytes") == representative.get("size_bytes")
+            )
+        ]
+        if len(matches) != 1:
+            die(f"{name}: representative is not one canonical analysed stem")
+        validate_aggregate_against_manifest(set_spec, set_info.get("aggregate", {}))
+    return manifest_by_name
+
+
 def audit_public_tree(root: pathlib.Path) -> None:
     leaks: list[str] = []
     for path in root.rglob("*"):
@@ -604,7 +768,10 @@ def audit_public_tree(root: pathlib.Path) -> None:
             continue
         with path.open("rb") as handle:
             prefix = handle.read(4)
-        if prefix in {b"MThd", b"PK\x03\x04"}:
+        if prefix == b"MThd":
+            leaks.append(relative)
+            continue
+        if prefix == b"PK\x03\x04" or zipfile.is_zipfile(path):
             leaks.append(relative)
     if leaks:
         die("public MIDI evidence contains raw corpus bytes: " + ", ".join(sorted(leaks)))
@@ -616,8 +783,7 @@ def candidate_boundary(
     output: pathlib.Path,
 ) -> None:
     analysis = load_json(analysis_path)
-    if analysis.get("contract") != CONTRACT:
-        die("candidate boundary received the wrong corpus analysis contract")
+    manifest_by_name = validate_analysis_manifest_bindings(analysis)
     if not player.is_file():
         die(f"candidate player is missing: {player}")
     player_sha = sha256_file(player)
@@ -653,9 +819,14 @@ def candidate_boundary(
         raw = proc.stdout
         diagnostic = b"could not load song file:" in raw
         direct = "rejected" if proc.returncode == 2 and diagnostic else "inconclusive"
+        set_spec = manifest_by_name[set_info["name"]]
         results.append({
             "set_name": set_info["name"],
+            "archive": set_spec["archive"],
+            "archive_sha256": set_spec["sha256"],
             "representative_stem_id": rep["stem_id"],
+            "representative_relative_name": rep["relative_name"],
+            "representative_size_bytes": rep["size_bytes"],
             "representative_sha256": rep["sha256"],
             "exit_code": proc.returncode,
             "diagnostic_could_not_load_song_file": diagnostic,
@@ -701,8 +872,7 @@ def donor_summary(
     output: pathlib.Path,
 ) -> None:
     analysis = load_json(analysis_path)
-    if analysis.get("contract") != CONTRACT:
-        die("donor summary received the wrong corpus analysis contract")
+    manifest_by_name = validate_analysis_manifest_bindings(analysis)
     set_summaries = []
     for set_info in analysis["sets"]:
         observations = []
@@ -762,11 +932,13 @@ def donor_summary(
             if obs.get("parity_status") != "UNKNOWN":
                 die(f"{stem['stem_id']}: donor observation attempted parity promotion")
             observations.append(obs)
+        set_spec = manifest_by_name[set_info["name"]]
         set_summaries.append({
             "name": set_info["name"],
             "slug": set_info["slug"],
             "role": set_info["role"],
-            "archive_sha256": set_info["archive_sha256"],
+            "archive": set_spec["archive"],
+            "archive_sha256": set_spec["sha256"],
             "source_aggregate": set_info["aggregate"],
             "observed_stems": len(observations),
             "all_imported": all(item.get("load_result") == "accepted" for item in observations),
@@ -846,6 +1018,47 @@ def corpus_summary(
         or [item.get("name") for item in donor["sets"]] != PROGRESSION
     ):
         die("donor MIDI corpus summary is incomplete or invalid")
+    manifest = corpus_manifest()
+    manifest_by_name = {item["name"]: item for item in manifest["sets"]}
+    for item in donor["sets"]:
+        name = item["name"]
+        set_spec = manifest_by_name[name]
+        observed_stems = item.get("observed_stems")
+        digests = item.get("event_digest_fnv64")
+        render_hashes = item.get("render_sha256")
+        if (
+            item.get("slug") != slug(name)
+            or item.get("role") != set_spec["role"]
+            or item.get("archive") != set_spec["archive"]
+            or item.get("archive_sha256") != set_spec["sha256"]
+            or observed_stems != set_spec["stems"]
+            or item.get("all_imported") is not True
+            or item.get("all_non_silent_projection") is not True
+            or not isinstance(item.get("source_aggregate"), dict)
+            or not isinstance(digests, list)
+            or len(digests) != observed_stems
+            or not isinstance(render_hashes, list)
+            or len(render_hashes) != observed_stems
+        ):
+            die(f"donor {name} per-set evidence is incomplete")
+        validate_aggregate_against_manifest(
+            set_spec, item["source_aggregate"]
+        )
+        for digest in digests:
+            if not isinstance(digest, str) or len(digest) != 16:
+                die(f"donor {name} event digest is invalid")
+            try:
+                int(digest, 16)
+            except ValueError:
+                die(f"donor {name} event digest is not hexadecimal")
+        for render_sha in render_hashes:
+            if not isinstance(render_sha, str) or len(render_sha) != 64:
+                die(f"donor {name} render SHA-256 is invalid")
+            try:
+                int(render_sha, 16)
+            except ValueError:
+                die(f"donor {name} render SHA-256 is not hexadecimal")
+
     require_support(
         donor_path,
         donor.get("source_file"),
@@ -875,8 +1088,12 @@ def corpus_summary(
     if [item.get("set_name") for item in candidate_sets] != PROGRESSION:
         die("candidate MIDI set order differs from the corpus progression")
     for item in candidate_sets:
+        set_name = item.get("set_name")
+        set_spec = manifest_by_name[set_name]
         if (
-            item.get("direct_midi_load") != "rejected"
+            item.get("archive") != set_spec["archive"]
+            or item.get("archive_sha256") != set_spec["sha256"]
+            or item.get("direct_midi_load") != "rejected"
             or item.get("exit_code") != 2
             or item.get("diagnostic_could_not_load_song_file") is not True
         ):
