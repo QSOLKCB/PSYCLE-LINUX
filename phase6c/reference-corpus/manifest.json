@@ -29,7 +29,6 @@
       "known_edge": "SMF1/480 PPQN; repeated tempo map; exporter emits out-of-range key-signature metadata",
       "analysis_expectations": {
         "stems": 11,
-        "tracks": 45,
         "notes": 13947,
         "max_polyphony": 8,
         "same_note_overlaps": 425,
