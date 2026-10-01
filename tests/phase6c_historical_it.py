@@ -35,6 +35,21 @@ historical_helper = importlib.util.module_from_spec(helper_spec)
 assert helper_spec.loader is not None
 helper_spec.loader.exec_module(historical_helper)
 
+assert historical_helper.MANIFEST.resolve() == MANIFEST.resolve()
+production_source = historical_helper.manifest_source()
+assert production_source["filename"] == "d-503_-_sickmaate.it"
+assert production_source["sha256"] == EXPECTED_SHA
+assert production_source["size_bytes"] == EXPECTED_SIZE
+assert production_source["title"] == "SickMaate"
+assert production_source["redistribution"] == "not_committed"
+
+historical_validator_spec = importlib.util.spec_from_file_location(
+    "phase6c_historical_original_validator_test", HISTORICAL_VALIDATOR
+)
+historical_validator = importlib.util.module_from_spec(historical_validator_spec)
+assert historical_validator_spec.loader is not None
+historical_validator_spec.loader.exec_module(historical_validator)
+
 with tempfile.TemporaryDirectory() as temporary:
     temporary_root = Path(temporary)
     synthetic_title = "SyntheticWitness"
@@ -94,6 +109,19 @@ with tempfile.TemporaryDirectory() as temporary:
         historical_helper.MANIFEST = original_manifest_path
 
 with tempfile.TemporaryDirectory() as temporary:
+    leak_root = Path(temporary)
+    renamed_payload = leak_root / "renamed-private.log"
+    synthetic_payload = b"IMPM" + b"renamed historical payload bytes"
+    renamed_payload.write_bytes(synthetic_payload)
+    synthetic_payload_sha = hashlib.sha256(synthetic_payload).hexdigest()
+    leaks = historical_validator.find_historical_payload_leaks(
+        leak_root,
+        expected_sha256=synthetic_payload_sha,
+        expected_size=len(synthetic_payload),
+    )
+    assert leaks == ["renamed-private.log"]
+
+with tempfile.TemporaryDirectory() as temporary:
     bad = Path(temporary) / "wrong.it"
     bad.write_bytes(b"IMPM" + b"not the historical witness")
     result = subprocess.run(
@@ -124,6 +152,10 @@ with tempfile.TemporaryDirectory() as temporary:
     assert '$fixtureReceiptPath = "external/' in observer
     assert 'fixture_distribution = if ($historicalExternal) { "external-hash-bound" }' in observer
     assert 'fixture_redistributed = (-not $historicalExternal)' in observer
+    assert "# Phase 6C Original Psycle Native-Windows Historical IT Evidence" in observer
+    assert "manifest-bound external SickMaate IT bytes are supplied privately" in observer
+    assert "Historical fixture policy:" in observer
+    assert "project-authored fixture bytes copied into this artifact" not in observer
 
 validator_source = VALIDATOR.read_text(encoding="utf-8")
 assert "external_fixture: bool = False" in validator_source
@@ -133,7 +165,55 @@ assert 'original.get("fixture_redistributed") is not False' in validator_source
 historical_validator_source = HISTORICAL_VALIDATOR.read_text(encoding="utf-8")
 assert EXPECTED_SHA in historical_validator_source
 assert 'external_fixture=True' in historical_validator_source
-assert "historical original artifact leaked IT bytes" in historical_validator_source
+assert "find_historical_payload_leaks" in historical_validator_source
+assert "manifest-bound IT bytes" in historical_validator_source
+
+for label, expected_role, wrong_role in (
+    ("donor", "cpsycle-donor-observation", "candidate-observation"),
+    ("candidate", "candidate-observation", "cpsycle-donor-observation"),
+    ("original", "original", "not-original"),
+):
+    malformed = {
+        "schema_version": 1,
+        "phase": "6C",
+        "contract": "legacy-impulse-tracker-import-reference",
+        "evidence_role": wrong_role,
+        "parity_status": "UNKNOWN",
+    }
+    try:
+        historical_helper.require_common_receipt(
+            malformed,
+            label=label,
+            evidence_role=expected_role,
+        )
+    except SystemExit as exc:
+        assert "evidence_role" in str(exc)
+    else:
+        raise AssertionError(f"{label} wrong-role receipt must be rejected")
+
+incomplete_donor = {
+    "schema_version": 1,
+    "phase": "6C",
+    "contract": "legacy-impulse-tracker-import-reference",
+    "evidence_role": "cpsycle-donor-observation",
+    "parity_status": "UNKNOWN",
+    "source_sha256": EXPECTED_SHA,
+    "source_size_bytes": EXPECTED_SIZE,
+}
+try:
+    historical_helper.validate_summary_components(
+        source=manifest["source"],
+        donor_path=Path("donor/cpsycle-historical-it.json"),
+        donor=incomplete_donor,
+        candidate_path=Path("candidate/candidate-historical-it.json"),
+        candidate={},
+        original_path=Path("original/original-historical-legacy-it.json"),
+        original={},
+    )
+except SystemExit as exc:
+    assert "load_result=accepted" in str(exc)
+else:
+    raise AssertionError("summary must reject donor receipt missing observation results")
 
 assert WORKFLOW.exists()
 workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -146,6 +226,10 @@ assert "tests/phase6c_historical_it_probe.c" in workflow
 assert "historical-sickmaate-three-way.json" in workflow
 assert "private-input-required" in workflow
 assert "private-root/" not in workflow
+assert "phase6c-historical-summary/donor/" in workflow
+assert "phase6c-historical-summary/candidate/" in workflow
+assert "phase6c-historical-summary/original/" in workflow
+assert "historical module bytes leaked into combined artifact" in workflow
 for upload_block in workflow.split("uses: actions/upload-artifact@v4")[1:]:
     block = upload_block.split("\n      - name:", 1)[0]
     assert ".it" not in block.lower(), block
