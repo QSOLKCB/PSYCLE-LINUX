@@ -86,7 +86,7 @@ jobs:
           python3 scripts/phase6c-generate-it-import-fixture.py             phase6c-generated/phase6c-legacy-it-import.it
 
       - name: Build C-Psycle donor player libraries
-        run: make -C cpsycle/player -j2
+        run: make -C cpsycle/player -j1
 
       - name: Build donor IT loader probe
         shell: bash
@@ -105,4 +105,132 @@ jobs:
           path: |
             phase6c-generated/phase6c-legacy-it-import.it
             phase6c-generated/cpsycle-donor-observation.json
+          if-no-files-found: error
+
+
+  candidate-direct-import-boundary:
+    needs: fixture-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install candidate build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates curl subversion file build-essential pkg-config \
+            qt5-qmake qtbase5-dev libboost-thread-dev libboost-filesystem-dev \
+            libboost-system-dev libboost-chrono-dev libboost-date-time-dev \
+            libxml++2.6-dev zlib1g-dev libsoxr-dev libasound2-dev \
+            libjack-jackd2-dev liblilv-dev liblua5.4-dev
+
+      - name: Generate canonical IT fixture
+        run: |
+          mkdir -p phase6c-generated
+          python3 scripts/phase6c-generate-it-import-fixture.py \
+            phase6c-generated/phase6c-legacy-it-import.it
+
+      - name: Verify frozen Phase 6B source identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/phase6-upstream-audit.sh phase6-upstream-audit
+          bash scripts/phase6b-sanitized-manifest.sh \
+            phase6-upstream-audit phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-committed-source.sh \
+            psycle-cpp-r12005-sanitized phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-qmake-support.sh \
+            psycle-cpp-r12005-sanitized/build-systems/qmake
+
+      - name: Stage pinned historical plugin interface
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/psycle-plugins/src/psycle/plugin_interface.hpp'
+          ARCHIVE_COMMIT='1863c4177d38d37e8eba9e4eb8857e5023debe6d'
+          EXPECTED_BLOB='2cf4d8f756fa58098fd84b7b44d0ebe1350594c5'
+          test ! -e "$DEST"
+          mkdir -p "$(dirname "$DEST")"
+          curl -fsSL --retry 3 \
+            "https://raw.githubusercontent.com/QSOLKCB/PSYCLE-LINUX/$ARCHIVE_COMMIT/cpsycle/plugins/psycle/plugin_interface.hpp" \
+            -o "$DEST"
+          [[ "$(git hash-object "$DEST")" == "$EXPECTED_BLOB" ]]
+
+      - name: Stage pinned historical diversalis dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/diversalis'
+          test ! -e "$DEST"
+          exported=false
+          for attempt in 1 2 3 4; do
+            rm -rf -- "$DEST"
+            if svn export --quiet --force -r 12005 \
+              'https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005' "$DEST"; then
+              exported=true
+              break
+            fi
+            sleep "$((attempt * 2))"
+          done
+          [[ "$exported" == true ]]
+
+      - name: Build frozen C++ candidate player
+        shell: bash
+        working-directory: psycle-cpp-r12005-sanitized/psycle-player
+        run: |
+          set -euo pipefail
+          qmake CONFIG-=shared CONFIG+=release psycle-player.pro
+          make -j2
+
+      - name: Observe direct IT import boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          PLAYER='psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player'
+          FIXTURE='phase6c-generated/phase6c-legacy-it-import.it'
+          LOG='phase6c-generated/candidate-direct-import.log'
+          set +e
+          "$PLAYER" --output-driver dummy --input-file "$FIXTURE" </dev/null >"$LOG" 2>&1
+          rc=$?
+          set -e
+          cat "$LOG"
+          [[ "$rc" -eq 2 ]] || {
+            echo "expected frozen candidate direct IT load rejection exit 2, got $rc" >&2
+            exit 1
+          }
+          grep -Fq 'could not load song file:' "$LOG"
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          root = pathlib.Path('.')
+          fixture = root / 'phase6c-generated/phase6c-legacy-it-import.it'
+          player = root / 'psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player'
+          log = root / 'phase6c-generated/candidate-direct-import.log'
+          receipt = {
+              'schema_version': 1,
+              'contract': 'legacy-it-direct-import-candidate-boundary',
+              'candidate_baseline_sha256': '00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a',
+              'fixture_sha256': hashlib.sha256(fixture.read_bytes()).hexdigest(),
+              'player_sha256': hashlib.sha256(player.read_bytes()).hexdigest(),
+              'log_sha256': hashlib.sha256(log.read_bytes()).hexdigest(),
+              'exit_code': 2,
+              'direct_it_load': 'rejected',
+              'parity_classification': 'NOT_CLASSIFIED',
+              'interpretation': 'The frozen candidate historical player does not directly accept the generated IMPM fixture through CoreSong/SongSerializer. This records a host/song-I/O capability boundary only; it does not by itself classify original-Psycle parity or XMSampler semantics.'
+          }
+          (root / 'phase6c-generated/candidate-direct-import.json').write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+
+      - name: Upload candidate direct-import observation
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-legacy-it-candidate-direct-import
+          path: |
+            phase6c-generated/candidate-direct-import.log
+            phase6c-generated/candidate-direct-import.json
           if-no-files-found: error
