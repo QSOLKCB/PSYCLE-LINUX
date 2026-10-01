@@ -1065,6 +1065,7 @@ bool itmodule2_loaditsampledata(ITModule2* self, psy_audio_Sample* _wave, uint32
 	int lobit = (convert & IT2_SAMPLE_CONVERTIS_MOTOROLA) ? 8 : 0;
 	int hibit = 8 - lobit;
 	uint32_t j, out;
+	uint8_t delta8;
 	psy_audio_Song* song;
 	PsyFile* fp;
 	unsigned char* smpbuf;
@@ -1095,27 +1096,34 @@ bool itmodule2_loaditsampledata(ITModule2* self, psy_audio_Sample* _wave, uint32
 			}
 		}
 	} else {
+		delta8 = 0;
 		for (j = 0; j < iLen; j++) {
 			if (convert & IT2_SAMPLE_CONVERTIS_DELTA) {
-				wNew = (signed char)(wNew + (signed char)smpbuf[j]);
-			} else if (convert & IT2_SAMPLE_CONVERT_IS_SIGNED) {
-				wNew = (signed char)smpbuf[j];
+				delta8 = (uint8_t)(delta8 + smpbuf[j]);
+				wNew = (convert & IT2_SAMPLE_CONVERT_IS_SIGNED)
+					? (int8_t)delta8
+					: delta8;
 			} else {
-				wNew = smpbuf[j];
+				wNew = (convert & IT2_SAMPLE_CONVERT_IS_SIGNED)
+					? (int8_t)smpbuf[j]
+					: smpbuf[j];
 			}
 			_wave->channels.samples[0][j] =
 				(float)((wNew * 256) + offset);
 		}
 		if (bstereo) {
 			psyfile_read(fp, smpbuf, iLen);
-			wNew = 0;
+			delta8 = 0;
 			for (j = 0; j < iLen; j++) {
 				if (convert & IT2_SAMPLE_CONVERTIS_DELTA) {
-					wNew = (signed char)(wNew + (signed char)smpbuf[j]);
-				} else if (convert & IT2_SAMPLE_CONVERT_IS_SIGNED) {
-					wNew = (signed char)smpbuf[j];
+					delta8 = (uint8_t)(delta8 + smpbuf[j]);
+					wNew = (convert & IT2_SAMPLE_CONVERT_IS_SIGNED)
+						? (int8_t)delta8
+						: delta8;
 				} else {
-					wNew = smpbuf[j];
+					wNew = (convert & IT2_SAMPLE_CONVERT_IS_SIGNED)
+						? (int8_t)smpbuf[j]
+						: smpbuf[j];
 				}
 				_wave->channels.samples[1][j] =
 					(float)((wNew * 256) + offset);
