@@ -1,0 +1,108 @@
+name: Phase 6C legacy playback/import priority
+
+on:
+  push:
+    branches:
+      - main
+      - 'phase-6c/**'
+    paths:
+      - 'phase6c/LEGACY_PLAYBACK_IMPORT.md'
+      - 'phase6c/evidence/legacy-module-import/**'
+      - 'phase6c/reference-corpus/**'
+      - 'scripts/phase6c-generate-it-import-fixture.py'
+      - 'tests/phase6c_legacy_module_import.py'
+      - 'tests/phase6c_legacy_it_loader.c'
+      - 'cpsycle/audio/src/itmodule2.*'
+      - 'cpsycle/audio/src/xmsampler*'
+      - 'cpsycle/audio/src/songio.c'
+      - '.github/workflows/phase6c-legacy-playback-import.yml'
+      - 'ROADMAP.md'
+      - 'README.md'
+  pull_request:
+    paths:
+      - 'phase6c/LEGACY_PLAYBACK_IMPORT.md'
+      - 'phase6c/evidence/legacy-module-import/**'
+      - 'phase6c/reference-corpus/**'
+      - 'scripts/phase6c-generate-it-import-fixture.py'
+      - 'tests/phase6c_legacy_module_import.py'
+      - 'tests/phase6c_legacy_it_loader.c'
+      - 'cpsycle/audio/src/itmodule2.*'
+      - 'cpsycle/audio/src/xmsampler*'
+      - 'cpsycle/audio/src/songio.c'
+      - '.github/workflows/phase6c-legacy-playback-import.yml'
+      - 'ROADMAP.md'
+      - 'README.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6c-legacy-playback-import-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fixture-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate generated IT fixture contract
+        run: python3 tests/phase6c_legacy_module_import.py
+
+      - name: Generate canonical IT fixture
+        run: |
+          mkdir -p phase6c-generated
+          python3 scripts/phase6c-generate-it-import-fixture.py             phase6c-generated/phase6c-legacy-it-import.it
+          sha256sum phase6c-generated/phase6c-legacy-it-import.it
+
+      - name: Upload generated fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-legacy-it-generated-fixture
+          path: phase6c-generated/phase6c-legacy-it-import.it
+          if-no-files-found: error
+
+  cpsycle-donor-import:
+    needs: fixture-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install donor build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             build-essential pkg-config liblua5.4-dev liblilv-dev
+
+      - name: Generate canonical IT fixture
+        run: |
+          mkdir -p phase6c-generated
+          python3 scripts/phase6c-generate-it-import-fixture.py             phase6c-generated/phase6c-legacy-it-import.it
+
+      - name: Build C-Psycle donor player libraries
+        run: make -C cpsycle/player -j2
+
+      - name: Build donor IT loader probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer             -Wall -Wextra -Werror=implicit-function-declaration             -Icpsycle/script/src -Icpsycle/thread/src -Icpsycle/container/src             -Icpsycle/file/src -Icpsycle/diversalis/src -Icpsycle/src             -Icpsycle/audio/src -Icpsycle/dsp/src $(pkg-config --cflags lua)             tests/phase6c_legacy_it_loader.c             -o phase6c-generated/phase6c-legacy-it-loader             -Lcpsycle/thread/src -Lcpsycle/script/src -Lcpsycle/container/src             -Lcpsycle/dsp/src -Lcpsycle/audio/src -Lcpsycle/file/src             -Wl,--no-as-needed -laudio -lthread -llilv-0 -ldsp -lscript -lfile             -lm $(pkg-config --libs lua) -lpthread -ldl -lstdc++ -lcontainer
+
+      - name: Load generated IT through C-Psycle donor runtime
+        run: |
+          phase6c-generated/phase6c-legacy-it-loader             phase6c-generated/phase6c-legacy-it-import.it             | tee phase6c-generated/cpsycle-donor-observation.json
+
+      - name: Upload donor observation
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-legacy-it-cpsycle-donor-observation
+          path: |
+            phase6c-generated/phase6c-legacy-it-import.it
+            phase6c-generated/cpsycle-donor-observation.json
+          if-no-files-found: error
