@@ -56,8 +56,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          RUNROOT="$RUNNER_TEMP/historical-donor-replay"
           RAW="$RUNNER_TEMP/cpsycle-historical-it.log"
-          phase6c-historical-public/phase6c-historical-it-probe "$HISTORICAL_IT" >"$RAW" 2>&1
+          rm -rf -- "$RUNROOT"
+          mkdir -p "$RUNROOT"
+          cp -- phase6c-historical-public/phase6c-historical-it-probe "$RUNROOT/phase6c-historical-it-probe"
+          cp -- "$HISTORICAL_IT" "$RUNROOT/d-503_-_sickmaate.it"
+          pushd "$RUNROOT" >/dev/null
+          chmod +x phase6c-historical-it-probe
+          ./phase6c-historical-it-probe d-503_-_sickmaate.it </dev/null >"$RAW" 2>&1
+          popd >/dev/null
           tail -n 1 "$RAW" > phase6c-historical-public/donor-observation.json
           python3 - <<'PY'
           import hashlib, json, os, pathlib, subprocess
@@ -85,12 +93,18 @@ jobs:
               "probe_executable": probe.name,
               "probe_executable_sha256": sha(probe),
               "raw_output_sha256": sha(raw),
+              "working_directory": "artifact-root-with-private-input",
+              "replay_setup": ["chmod", "+x", probe.name],
               "private_input_required": True,
+              "private_input_filename": "d-503_-_sickmaate.it",
+              "stdin": "/dev/null",
+              "command": ["./phase6c-historical-it-probe", "d-503_-_sickmaate.it"],
               "fixture_redistributed": False,
-              "procedure": "verify private historical IT identity; build retained C-Psycle donor sequentially; run public-safe historical probe; retain only metadata and hashes",
+              "procedure": "chmod +x phase6c-historical-it-probe && ./phase6c-historical-it-probe d-503_-_sickmaate.it </dev/null; historical IT bytes must be supplied privately and verified before replay",
           })
           (public / "cpsycle-historical-it.json").write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
           PY
+          rm -rf -- "$RUNROOT"
           rm -f -- "$HISTORICAL_IT" "$RAW"
           ! find phase6c-historical-public -type f -iname '*.it' -print -quit | grep -q .
 
@@ -174,10 +188,18 @@ jobs:
           set -euo pipefail
           mkdir -p phase6c-historical-public
           PLAYER='psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player'
+          RUNROOT="$RUNNER_TEMP/historical-candidate-replay"
+          rm -rf -- "$RUNROOT"
+          mkdir -p "$RUNROOT"
+          cp -- "$PLAYER" "$RUNROOT/candidate-psycle-player"
+          cp -- "$HISTORICAL_IT" "$RUNROOT/d-503_-_sickmaate.it"
           cp -- "$PLAYER" phase6c-historical-public/candidate-psycle-player
-          python3 scripts/phase6c-historical-it.py candidate "$HISTORICAL_IT" \
-            phase6c-historical-public/candidate-psycle-player \
+          chmod +x "$RUNROOT/candidate-psycle-player"
+          python3 scripts/phase6c-historical-it.py candidate \
+            "$RUNROOT/d-503_-_sickmaate.it" \
+            "$RUNROOT/candidate-psycle-player" \
             phase6c-historical-public/candidate-historical-it.json
+          rm -rf -- "$RUNROOT"
           rm -f -- "$HISTORICAL_IT"
           ! find phase6c-historical-public -type f -iname '*.it' -print -quit | grep -q .
 
