@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import struct
 import tempfile
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -86,6 +88,44 @@ with tempfile.TemporaryDirectory() as temporary:
     assert parsed["time_signature_events"] == 0
     assert abs(parsed["duration_seconds"] - 0.5) < 1e-9
 
+def boundary_smf(reverse_tracks: bool) -> bytes:
+    old_note = bytearray()
+    old_note += helper.midi_varlen(0) + bytes((0x90, 60, 100))
+    old_note += helper.midi_varlen(480) + bytes((0x80, 60, 0))
+    old_note += helper.midi_varlen(0) + b"\xff\x2f\x00"
+
+    new_note = bytearray()
+    new_note += helper.midi_varlen(480) + bytes((0x90, 60, 100))
+    new_note += helper.midi_varlen(480) + bytes((0x80, 60, 0))
+    new_note += helper.midi_varlen(0) + b"\xff\x2f\x00"
+
+    tracks = [bytes(old_note), bytes(new_note)]
+    if reverse_tracks:
+        tracks.reverse()
+    payload = bytearray(b"MThd")
+    payload += struct.pack(">IHHH", 6, 1, 2, 480)
+    for track in tracks:
+        payload += b"MTrk" + struct.pack(">I", len(track)) + track
+    return bytes(payload)
+
+boundary_forward = helper.parse_smf_bytes(
+    boundary_smf(False), label="boundary-forward"
+)
+boundary_reversed = helper.parse_smf_bytes(
+    boundary_smf(True), label="boundary-reversed"
+)
+for field in (
+    "same_note_overlaps",
+    "max_polyphony",
+    "zero_duration_pairs",
+    "balanced_note_pairs",
+):
+    assert boundary_forward[field] == boundary_reversed[field], field
+assert boundary_forward["same_note_overlaps"] == 0
+assert boundary_forward["max_polyphony"] == 1
+assert boundary_forward["zero_duration_pairs"] == 0
+assert boundary_forward["balanced_note_pairs"] is True
+
 with tempfile.TemporaryDirectory() as temporary:
     public = Path(temporary)
     disguised_midi = public / "renamed-midi.log"
@@ -99,14 +139,24 @@ with tempfile.TemporaryDirectory() as temporary:
 
 with tempfile.TemporaryDirectory() as temporary:
     public = Path(temporary)
-    disguised_zip = public / "renamed-archive.txt"
-    disguised_zip.write_bytes(b"PK\x03\x04" + b"synthetic zip marker")
+    embedded_midi = public / "private.mid"
+    helper.write_synthetic_fixture(embedded_midi)
+    ordinary_zip = public / "ordinary.zip"
+    with zipfile.ZipFile(ordinary_zip, "w", compression=zipfile.ZIP_STORED) as archive:
+        archive.write(embedded_midi, arcname="private.mid")
+    zip_bytes = ordinary_zip.read_bytes()
+    embedded_midi.unlink()
+    ordinary_zip.unlink()
+
+    disguised_zip = public / "evidence.txt"
+    disguised_zip.write_bytes(b"SFX-PREFIX" + zip_bytes)
+    assert zipfile.is_zipfile(disguised_zip)
     try:
         helper.audit_public_tree(public)
     except SystemExit as exc:
         assert "raw corpus bytes" in str(exc)
     else:
-        raise AssertionError("renamed ZIP payload must fail public-tree audit")
+        raise AssertionError("prefixed renamed ZIP payload must fail public-tree audit")
 
 psyconf_source = PSYCONF.read_text(encoding="utf-8")
 assert "#define PSYCLE_USE_MIDI_FILE" in psyconf_source
@@ -122,6 +172,100 @@ assert "psy_audio_create_fileout_driver" in probe_source
 assert "machines_before_projection" in probe_source
 assert "import_event_digest_fnv64" in probe_source
 assert "non_silent_projection" in probe_source
+
+def aggregate_for(set_spec):
+    expected = set_spec["analysis_expectations"]
+    malformed = expected.get("malformed_key_signature")
+    return {
+        "stems": set_spec["stems"],
+        "tracks": expected.get("tracks", 1),
+        "notes": expected["notes"],
+        "same_note_overlaps": expected["same_note_overlaps"],
+        "max_polyphony": expected["max_polyphony"],
+        "tempo_events_total": expected["tempo_events_per_stem"] * set_spec["stems"],
+        "tempo_events_per_stem": [expected["tempo_events_per_stem"]],
+        "tempo_min_bpm": expected["tempo_range_bpm"][0],
+        "tempo_max_bpm": expected["tempo_range_bpm"][1],
+        "duration_seconds_max": expected["duration_seconds_max"],
+        "channels": expected.get("channels_used", []),
+        "malformed_key_signatures": [] if malformed is None else [malformed],
+        "zero_duration_pairs": 1 if expected["zero_duration_pairs_present"] else 0,
+        "sysex_events": 0,
+        "pitch_bend_events": 0,
+        "aftertouch_events": 0,
+        "time_signature_events": 0,
+        "balanced_note_pairs": True,
+        "formats": [1],
+        "divisions": [480],
+    }
+
+
+def canonical_analysis(root: Path):
+    sets = []
+    manifest_by_name = {item["name"]: item for item in manifest["sets"]}
+    for name in helper.PROGRESSION:
+        set_spec = manifest_by_name[name]
+        set_slug = helper.slug(name)
+        stems = []
+        for index in range(set_spec["stems"]):
+            private_path = f"private/{set_slug}/{index:02d}.mid"
+            path = root / private_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            payload = f"{name}:{index}".encode()
+            path.write_bytes(payload)
+            stem_sha = hashlib.sha256(payload).hexdigest()
+            stems.append({
+                "stem_id": f"{set_slug}-{index:02d}-{stem_sha[:12]}",
+                "set_name": name,
+                "set_slug": set_slug,
+                "archive": set_spec["archive"],
+                "archive_sha256": set_spec["sha256"],
+                "relative_name": f"{index:02d}.mid",
+                "private_path": private_path,
+                "sha256": stem_sha,
+                "size_bytes": len(payload),
+                "analysis": {},
+            })
+        rep = stems[0]
+        sets.append({
+            "name": name,
+            "slug": set_slug,
+            "archive": set_spec["archive"],
+            "archive_sha256": set_spec["sha256"],
+            "role": set_spec["role"],
+            "aggregate": aggregate_for(set_spec),
+            "representative": {
+                "stem_id": rep["stem_id"],
+                "relative_name": rep["relative_name"],
+                "private_path": rep["private_path"],
+                "sha256": rep["sha256"],
+                "size_bytes": rep["size_bytes"],
+            },
+            "stems": stems,
+        })
+    return {
+        "schema_version": 1,
+        "phase": "6C",
+        "contract": helper.CONTRACT,
+        "evidence_role": "private-input-analysis",
+        "progression_order": helper.PROGRESSION,
+        "sets": sets,
+        "parity_status": "UNKNOWN",
+    }
+
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    analysis = canonical_analysis(root)
+    helper.validate_analysis_manifest_bindings(analysis)
+    bad_analysis = json.loads(json.dumps(analysis))
+    bad_analysis["sets"][0]["archive_sha256"] = "0" * 64
+    try:
+        helper.validate_analysis_manifest_bindings(bad_analysis)
+    except SystemExit as exc:
+        assert "manifest-pinned archive" in str(exc)
+    else:
+        raise AssertionError("bogus corpus archive identity must be rejected")
 
 # The sanitized C++ candidate has no retained Standard MIDI File loader entry point.
 candidate_core = ROOT / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core"
@@ -177,7 +321,8 @@ for upload_block in legacy_workflow.split("uses: actions/upload-artifact@v4")[1:
     assert "phase6c-midi-synthetic.mid" not in block
     assert "phase6c-midi-synthetic.wav" not in block
 
-# Summary validation must reject malformed candidate progression evidence.
+# Public summary validation must require complete per-set donor evidence and
+# manifest-bound candidate archive identities.
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     donor_dir = root / "donor"
@@ -192,6 +337,39 @@ with tempfile.TemporaryDirectory() as temporary:
     candidate_player.write_text("player", encoding="utf-8")
 
     sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+    manifest_by_name = {item["name"]: item for item in manifest["sets"]}
+    donor_sets = []
+    candidate_sets = []
+    for name in helper.PROGRESSION:
+        set_spec = manifest_by_name[name]
+        stem_count = set_spec["stems"]
+        donor_sets.append({
+            "name": name,
+            "slug": helper.slug(name),
+            "role": set_spec["role"],
+            "archive": set_spec["archive"],
+            "archive_sha256": set_spec["sha256"],
+            "source_aggregate": aggregate_for(set_spec),
+            "observed_stems": stem_count,
+            "all_imported": True,
+            "all_non_silent_projection": True,
+            "event_digest_fnv64": ["0123456789abcdef"] * stem_count,
+            "render_sha256": ["a" * 64] * stem_count,
+        })
+        candidate_sets.append({
+            "set_name": name,
+            "archive": set_spec["archive"],
+            "archive_sha256": set_spec["sha256"],
+            "representative_stem_id": f"{helper.slug(name)}-00-deadbeef0000",
+            "representative_relative_name": "00.mid",
+            "representative_size_bytes": 32,
+            "representative_sha256": "b" * 64,
+            "raw_output_sha256": "c" * 64,
+            "direct_midi_load": "rejected",
+            "exit_code": 2,
+            "diagnostic_could_not_load_song_file": True,
+        })
+
     donor = {
         "schema_version": 1,
         "phase": "6C",
@@ -202,7 +380,7 @@ with tempfile.TemporaryDirectory() as temporary:
         "probe_executable": donor_probe.name,
         "probe_executable_sha256": sha(donor_probe),
         "progression_order": helper.PROGRESSION,
-        "sets": [{"name": name} for name in helper.PROGRESSION],
+        "sets": donor_sets,
         "all_sets_imported": True,
         "all_sets_non_silent_projection": True,
         "parity_status": "UNKNOWN",
@@ -216,38 +394,39 @@ with tempfile.TemporaryDirectory() as temporary:
         "player_sha256": sha(candidate_player),
         "private_input_required": True,
         "progression_order": helper.PROGRESSION,
-        "sets": [
-            {
-                "set_name": name,
-                "representative_sha256": "a" * 64,
-                "raw_output_sha256": "b" * 64,
-                "direct_midi_load": "rejected",
-                "exit_code": 2,
-                "diagnostic_could_not_load_song_file": True,
-            }
-            for name in helper.PROGRESSION
-        ],
+        "sets": candidate_sets,
         "parity_status": "UNKNOWN",
     }
     donor_path = donor_dir / "donor-midi-corpus.json"
     candidate_path = candidate_dir / "candidate-midi-boundary.json"
     helper.write_json(donor_path, donor)
     helper.write_json(candidate_path, candidate)
+    helper.corpus_summary(donor_path, candidate_path, root / "summary.json")
+    assert (root / "summary.json").exists()
 
-    bad_candidate = dict(candidate)
-    bad_candidate["sets"] = list(candidate["sets"])
-    bad_candidate["sets"][0] = dict(bad_candidate["sets"][0])
-    bad_candidate["sets"][0]["direct_midi_load"] = "inconclusive"
+    incomplete_donor = json.loads(json.dumps(donor))
+    del incomplete_donor["sets"][0]["observed_stems"]
+    helper.write_json(donor_path, incomplete_donor)
+    try:
+        helper.corpus_summary(donor_path, candidate_path, root / "bad-donor.json")
+    except SystemExit as exc:
+        assert "per-set evidence is incomplete" in str(exc)
+    else:
+        raise AssertionError("incomplete donor per-set evidence must be rejected")
+
+    helper.write_json(donor_path, donor)
+    bad_candidate = json.loads(json.dumps(candidate))
+    bad_candidate["sets"][0]["archive_sha256"] = "0" * 64
     helper.write_json(candidate_path, bad_candidate)
     try:
         helper.corpus_summary(
             donor_path,
             candidate_path,
-            root / "summary.json",
+            root / "bad-candidate.json",
         )
     except SystemExit as exc:
-        assert "direct-load boundary" in str(exc)
+        assert "direct-load boundary is incomplete" in str(exc)
     else:
-        raise AssertionError("incomplete candidate MIDI boundary must be rejected")
+        raise AssertionError("wrong candidate archive identity must be rejected")
 
 print("phase6c-midi-corpus: PASS")
