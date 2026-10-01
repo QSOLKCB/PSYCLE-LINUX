@@ -142,6 +142,20 @@ assert historical.exists()
 reference = ROOT / "phase6c/reference-corpus/manifest.json"
 assert reference.exists()
 
+itmodule_source = (ROOT / "cpsycle/audio/src/itmodule2.c").read_text(encoding="utf-8")
+assert "IT sample mode uses the pattern instrument byte as a sample number." in itmodule_source
+assert "psy_audio_instrument_setindex(instr, i);" in itmodule_source
+assert "psy_audio_instrument_set_name(instr, psy_audio_sample_name(wave));" in itmodule_source
+assert "modtovirtual_set(&self->ittovirtual, i, virtualInst);" in itmodule_source
+assert "it doesn't use instruments" not in itmodule_source
+
+playback_probe = ROOT / "tests/phase6c_legacy_it_playback.c"
+assert playback_probe.exists()
+playback_probe_source = playback_probe.read_text(encoding="utf-8")
+assert "sample-mode playback witness is silent" in playback_probe_source
+assert "fresh playback witnesses are not bit-identical" in playback_probe_source
+assert "psy_audio_VIRTUALGENERATOR" in playback_probe_source
+assert "legacy-it-sample-mode-playback-donor" in playback_probe_source
 
 builder = ROOT / "scripts/phase6c-build-legacy-it-observer.py"
 base_observer = ROOT / "scripts/phase6c-original-windows-fixtures-v2.ps1"
@@ -192,6 +206,7 @@ for path in (
     "scripts/phase6b-verify-committed-source.sh",
     "scripts/phase6b-verify-qmake-support.sh",
     "tests/phase6c_legacy_it_decoder.c",
+    "tests/phase6c_legacy_it_playback.c",
 ):
     assert workflow_source.count(f"      - '{path}'\n") == 2, path
 
@@ -201,6 +216,13 @@ assert "Exercise donor 8-bit IT decoder regressions" in workflow_source
 for variant in decoder_fixtures:
     assert variant in workflow_source
 
+assert "Build donor IT sample-mode playback witness" in workflow_source
+assert "Prove non-silent deterministic IT sample-mode playback" in workflow_source
+assert "tests/phase6c_legacy_it_playback.c" in workflow_source
+assert "legacy-it-sample-mode-playback-donor" in workflow_source
+assert "'parity_status': 'UNKNOWN'" in workflow_source
+assert "donor sample-mode mapping plus deterministic non-silent playback only" in workflow_source
+
 donor_upload_marker = "      - name: Upload donor observation\n"
 donor_upload_start = workflow_source.index(donor_upload_marker)
 donor_upload_end = workflow_source.index(
@@ -209,6 +231,10 @@ donor_upload_end = workflow_source.index(
 donor_upload_block = workflow_source[donor_upload_start:donor_upload_end]
 assert "phase6c-generated/cpsycle-itmodule2.c" in donor_upload_block
 assert "phase6c-generated/phase6c-legacy-it-loader" in donor_upload_block
+assert "phase6c-generated/phase6c-legacy-it-playback" in donor_upload_block
+assert "phase6c-generated/cpsycle-donor-playback.log" in donor_upload_block
+assert "phase6c-generated/cpsycle-donor-playback.json" in donor_upload_block
+assert "phase6c-generated/cpsycle-donor-playback-receipt.json" in donor_upload_block
 assert "cp -- cpsycle/audio/src/itmodule2.c phase6c-generated/cpsycle-itmodule2.c" in workflow_source
 assert "'source_file': source_file.name" in workflow_source
 assert "'source_file_origin': 'cpsycle/audio/src/itmodule2.c'" in workflow_source
