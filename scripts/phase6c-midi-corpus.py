@@ -234,6 +234,25 @@ def validate_donor_probe_build(
     }
 
 
+def midi_channel_mask(channels: Any) -> int:
+    if not isinstance(channels, list):
+        die("MIDI channel coverage must be a list")
+    mask = 0
+    seen: set[int] = set()
+    for channel in channels:
+        if (
+            not isinstance(channel, int)
+            or isinstance(channel, bool)
+            or channel < 0
+            or channel > 15
+            or channel in seen
+        ):
+            die(f"invalid MIDI channel coverage: {channels!r}")
+        seen.add(channel)
+        mask |= 1 << channel
+    return mask
+
+
 def slug(name: str) -> str:
     out = []
     dash = False
@@ -1036,9 +1055,89 @@ def validate_frozen_candidate_player(player: pathlib.Path) -> dict[str, str]:
 
     initial_sha = sha256_file(player)
     player_root = CANDIDATE_SOURCE_ROOT / "psycle-player"
+
+    # The qmake build graph is generated and therefore untracked. Purge every
+    # generated Makefile/cache/build output from the sanitized tree before
+    # attesting the rebuild, then reject any other unexpected untracked input.
+    candidate_rel = str(CANDIDATE_SOURCE_ROOT.relative_to(ROOT))
+    untracked_proc = subprocess.run(
+        [
+            "git", "-C", str(ROOT), "ls-files", "--others",
+            "--exclude-standard", "--", candidate_rel,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if untracked_proc.returncode != 0:
+        die("cannot enumerate untracked candidate build inputs: " + untracked_proc.stdout[-1000:])
+
+    generated_dirs: set[pathlib.Path] = set()
+    for value in untracked_proc.stdout.splitlines():
+        relative = pathlib.PurePosixPath(value)
+        path = ROOT / pathlib.Path(*relative.parts)
+        if "++qmake" in relative.parts:
+            marker = relative.parts.index("++qmake")
+            generated_dirs.add(ROOT / pathlib.Path(*relative.parts[:marker + 1]))
+        elif relative.name.startswith("Makefile") or relative.name in {
+            ".qmake.stash", ".qmake.cache"
+        }:
+            if path.is_file() or path.is_symlink():
+                path.unlink()
+    for generated in sorted(
+        generated_dirs, key=lambda value: len(value.parts), reverse=True
+    ):
+        if generated.exists():
+            shutil.rmtree(generated)
+
+    untracked_after = subprocess.run(
+        [
+            "git", "-C", str(ROOT), "ls-files", "--others",
+            "--exclude-standard", "--", candidate_rel,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if untracked_after.returncode != 0:
+        die("cannot re-check untracked candidate inputs: " + untracked_after.stdout[-1000:])
+    allowed_plugin = (
+        CANDIDATE_SOURCE_ROOT
+        / "psycle-plugins/src/psycle/plugin_interface.hpp"
+    ).relative_to(ROOT).as_posix()
+    allowed_diversalis = (
+        CANDIDATE_SOURCE_ROOT / "diversalis"
+    ).relative_to(ROOT).as_posix() + "/"
+    unexpected = [
+        value for value in untracked_after.stdout.splitlines()
+        if value != allowed_plugin and not value.startswith(allowed_diversalis)
+    ]
+    if unexpected:
+        die(
+            "unexpected untracked frozen-candidate build input: "
+            + ", ".join(unexpected[:10])
+        )
+
+    qmake = subprocess.run(
+        [
+            "qmake", "-nocache", "CONFIG-=shared", "CONFIG+=release",
+            "psycle-player.pro",
+        ],
+        cwd=player_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    if qmake.returncode != 0:
+        die(
+            "qmake regeneration failed for frozen candidate player: "
+            + qmake.stdout.decode(errors="replace")[-1000:]
+        )
     makefile = player_root / "Makefile"
     if not makefile.is_file():
-        die("canonical candidate qmake Makefile is missing")
+        die("qmake did not regenerate the canonical candidate Makefile")
     clean = subprocess.run(
         ["make", "clean"],
         cwd=player_root,
@@ -1242,6 +1341,15 @@ def donor_summary(
             render_sha = obs.get("render_sha256")
             if not isinstance(render_sha, str) or len(render_sha) != 64:
                 die(f"{stem['stem_id']}: donor render SHA-256 is invalid")
+            source_channels = stem["analysis"].get("channels")
+            expected_channel_mask = midi_channel_mask(source_channels)
+            if obs.get("midi_channel_mask") != expected_channel_mask:
+                die(
+                    f"{stem['stem_id']}: imported MIDI channel coverage differs "
+                    f"from raw SMF: source={source_channels} "
+                    f"imported_mask={obs.get('midi_channel_mask')!r}"
+                )
+            obs["_source_channels"] = list(source_channels)
             if obs.get("imported_notes") != stem["analysis"]["note_ons"]:
                 die(
                     f"{stem['stem_id']}: imported note count differs from raw SMF: "
@@ -1262,6 +1370,8 @@ def donor_summary(
                 "source_sha256": item["source_sha256"],
                 "source_size_bytes": item["source_size_bytes"],
                 "source_analysis_sha256": item["source_analysis_sha256"],
+                "source_channels": item["_source_channels"],
+                "midi_channel_mask": item["midi_channel_mask"],
                 "import_event_digest_fnv64": item["import_event_digest_fnv64"],
                 "render_sha256": item["render_sha256"],
             }
@@ -1392,12 +1502,15 @@ def corpus_summary(
         seen_names: set[str] = set()
         expected_indexes = set(range(observed_stems))
         actual_indexes: set[int] = set()
+        observed_channels: set[int] = set()
         for record in stem_records:
             stem_id = record.get("stem_id")
             relative_name = record.get("source_relative_name")
             source_sha = record.get("source_sha256")
             source_size = record.get("source_size_bytes")
             analysis_sha = record.get("source_analysis_sha256")
+            source_channels = record.get("source_channels")
+            imported_channel_mask = record.get("midi_channel_mask")
             digest = record.get("import_event_digest_fnv64")
             render_sha = record.get("render_sha256")
             if (
@@ -1409,6 +1522,11 @@ def corpus_summary(
                 or source_size <= 0
                 or not isinstance(analysis_sha, str)
                 or len(analysis_sha) != 64
+                or not isinstance(source_channels, list)
+                or not isinstance(imported_channel_mask, int)
+                or isinstance(imported_channel_mask, bool)
+                or imported_channel_mask < 0
+                or imported_channel_mask > 0xFFFF
                 or not isinstance(digest, str)
                 or len(digest) != 16
                 or not isinstance(render_sha, str)
@@ -1427,6 +1545,10 @@ def corpus_summary(
                 die(f"donor {name} stem_id is not bound to source SHA-256")
             if stem_id in seen_ids or relative_name in seen_names:
                 die(f"donor {name} stem evidence is duplicated")
+            expected_channel_mask = midi_channel_mask(source_channels)
+            if imported_channel_mask != expected_channel_mask:
+                die(f"donor {name} stem MIDI channel coverage is inconsistent")
+            observed_channels.update(source_channels)
             seen_ids.add(stem_id)
             seen_names.add(relative_name)
             actual_indexes.add(stem_index)
@@ -1444,6 +1566,8 @@ def corpus_summary(
                     die(f"donor {name} {label} is not hexadecimal")
         if actual_indexes != expected_indexes:
             die(f"donor {name} stem indexes are incomplete or duplicated")
+        if sorted(observed_channels) != item["source_aggregate"].get("channels"):
+            die(f"donor {name} imported MIDI channel union differs from source analysis")
 
     require_support(
         donor_path,

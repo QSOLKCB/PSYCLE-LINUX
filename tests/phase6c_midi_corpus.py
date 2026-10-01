@@ -216,7 +216,7 @@ def aggregate_for(set_spec):
         "tempo_min_bpm": expected["tempo_range_bpm"][0],
         "tempo_max_bpm": expected["tempo_range_bpm"][1],
         "duration_seconds_max": expected["duration_seconds_max"],
-        "channels": expected.get("channels_used", []),
+        "channels": expected.get("channels_used", [0]),
         "malformed_key_signatures": [] if malformed is None else [malformed],
         "zero_duration_pairs": 1 if expected["zero_duration_pairs_present"] else 0,
         "sysex_events": 0,
@@ -363,6 +363,17 @@ assert "cp -- \"$PLAYER\" phase6c-midi-candidate-public/candidate-psycle-player"
 assert "audit-public" in workflow
 assert "phase6c-midi-real-world-corpus-summary" in workflow
 assert "original_psycle_1_12_0_x86" not in workflow
+
+helper_source = HELPER.read_text(encoding="utf-8")
+assert '"qmake", "-nocache", "CONFIG-=shared", "CONFIG+=release"' in helper_source
+assert '"ls-files", "--others",' in helper_source
+midiloader_source = (ROOT / "cpsycle/audio/src/midiloader.c").read_text(
+    encoding="utf-8"
+)
+assert "noteoff.mach = self->currtrack.channel;" not in midiloader_source
+assert (
+    "self->currtrack.channels[voice].tracknote.mach;" in midiloader_source
+)
 for upload_block in workflow.split("uses: actions/upload-artifact@v4")[1:]:
     block = upload_block.split("\n      - name:", 1)[0]
     assert ".mid" not in block.lower(), block
@@ -427,6 +438,10 @@ with tempfile.TemporaryDirectory() as temporary:
             source_sha = hashlib.sha256(
                 f"{name}:{index}".encode()
             ).hexdigest()
+            source_channels = set_spec["analysis_expectations"].get(
+                "channels_used", [0]
+            )
+            channel_mask = sum(1 << channel for channel in source_channels)
             stem_records.append({
                 "stem_id": (
                     f"{helper.slug(name)}-{index:02d}-{source_sha[:12]}"
@@ -437,6 +452,8 @@ with tempfile.TemporaryDirectory() as temporary:
                 "source_analysis_sha256": hashlib.sha256(
                     f"analysis:{name}:{index}".encode()
                 ).hexdigest(),
+                "source_channels": source_channels,
+                "midi_channel_mask": channel_mask,
                 "import_event_digest_fnv64": (
                     f"{index + 1:016x}"[-16:]
                 ),
@@ -528,6 +545,21 @@ with tempfile.TemporaryDirectory() as temporary:
     else:
         raise AssertionError(
             "donor evidence without checked-out source revision must be rejected"
+        )
+
+    helper.write_json(donor_path, donor)
+    missing_channels = json.loads(json.dumps(donor))
+    del missing_channels["sets"][0]["stems"][0]["midi_channel_mask"]
+    helper.write_json(donor_path, missing_channels)
+    try:
+        helper.corpus_summary(
+            donor_path, candidate_path, root / "missing-channel-mask.json"
+        )
+    except SystemExit as exc:
+        assert "stem evidence is malformed" in str(exc)
+    else:
+        raise AssertionError(
+            "donor stem without imported MIDI channel coverage must be rejected"
         )
 
     helper.write_json(donor_path, donor)
