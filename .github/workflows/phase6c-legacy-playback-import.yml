@@ -284,10 +284,12 @@ jobs:
           LOG='phase6c-generated/candidate-direct-import.log'
           cp -- "$PLAYER" "$PLAYER_ARTIFACT"
           test -x "$PLAYER_ARTIFACT"
+          pushd phase6c-generated >/dev/null
           set +e
-          "$PLAYER_ARTIFACT" --output-driver dummy --input-file "$FIXTURE" </dev/null >"$LOG" 2>&1
+          ./candidate-psycle-player --output-driver dummy --input-file phase6c-legacy-it-import.it </dev/null >candidate-direct-import.log 2>&1
           rc=$?
           set -e
+          popd >/dev/null
           cat "$LOG"
           [[ "$rc" -eq 2 ]] || {
             echo "expected frozen candidate direct IT load rejection exit 2, got $rc" >&2
@@ -311,9 +313,20 @@ jobs:
               'player_sha256': hashlib.sha256(player.read_bytes()).hexdigest(),
               'log': log.name,
               'log_sha256': hashlib.sha256(log.read_bytes()).hexdigest(),
+              'command': [
+                  './candidate-psycle-player',
+                  '--output-driver',
+                  'dummy',
+                  '--input-file',
+                  'phase6c-legacy-it-import.it',
+              ],
+              'working_directory': 'artifact-root',
+              'stdin': '/dev/null',
+              'stdout_stderr': log.name,
+              'procedure': './candidate-psycle-player --output-driver dummy --input-file phase6c-legacy-it-import.it </dev/null >candidate-direct-import.log 2>&1',
               'exit_code': 2,
               'direct_it_load': 'rejected',
-              'parity_classification': 'NOT_CLASSIFIED',
+              'parity_status': 'UNKNOWN',
               'interpretation': 'The frozen candidate historical player does not directly accept the generated IMPM fixture through CoreSong/SongSerializer. This records a host/song-I/O capability boundary only; it does not by itself classify original-Psycle parity or XMSampler semantics.'
           }
           (root / 'phase6c-generated/candidate-direct-import.json').write_text(
