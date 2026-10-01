@@ -874,6 +874,48 @@ def validate_frozen_candidate_player(player: pathlib.Path) -> dict[str, str]:
     )
     if diff.returncode != 0:
         die("tracked frozen candidate source differs from HEAD")
+
+    initial_sha = sha256_file(player)
+    player_root = CANDIDATE_SOURCE_ROOT / "psycle-player"
+    makefile = player_root / "Makefile"
+    if not makefile.is_file():
+        die("canonical candidate qmake Makefile is missing")
+    clean = subprocess.run(
+        ["make", "clean"],
+        cwd=player_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    if clean.returncode != 0:
+        die(
+            "clean rebuild preparation failed for frozen candidate player: "
+            + clean.stdout.decode(errors="replace")[-1000:]
+        )
+    if player.exists():
+        player.unlink()
+    rebuild = subprocess.run(
+        ["make", "-j2"],
+        cwd=player_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    if rebuild.returncode != 0 or not player.is_file():
+        die(
+            "clean rebuild failed for frozen candidate player: "
+            + rebuild.stdout.decode(errors="replace")[-1000:]
+        )
+    rebuilt_sha = sha256_file(player)
+    if rebuilt_sha != initial_sha:
+        die(
+            "candidate player does not match an immediate clean rebuild: "
+            f"initial={initial_sha} rebuilt={rebuilt_sha}"
+        )
+    with player.open("rb") as handle:
+        if handle.read(4) != b"\x7fELF":
+            die("clean rebuilt candidate player is not an ELF executable")
+
     repository_commit = subprocess.check_output(
         ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True
     ).strip()
@@ -882,6 +924,7 @@ def validate_frozen_candidate_player(player: pathlib.Path) -> dict[str, str]:
         "source_revision": EXPECTED_CANDIDATE_SOURCE_REVISION,
         "repository_commit": repository_commit,
         "build_target": "psycle-player",
+        "clean_rebuild_sha256": rebuilt_sha,
     }
 
 
@@ -956,6 +999,7 @@ def candidate_boundary(
         **candidate_identity,
         "player": "candidate-psycle-player",
         "player_sha256": player_sha,
+        "clean_rebuild_sha256": candidate_identity["clean_rebuild_sha256"],
         "working_directory": "artifact-root-with-private-input",
         "procedure": (
             "for each corpus set, place the exact representative SMF beside the "
@@ -1258,6 +1302,7 @@ def corpus_summary(
         or candidate.get("candidate_baseline_sha256") != EXPECTED_CANDIDATE_BASELINE
         or candidate.get("source_revision") != EXPECTED_CANDIDATE_SOURCE_REVISION
         or candidate.get("build_target") != "psycle-player"
+        or candidate.get("clean_rebuild_sha256") != candidate.get("player_sha256")
         or not isinstance(candidate.get("repository_commit"), str)
         or len(candidate["repository_commit"]) != 40
         or candidate.get("private_input_required") is not True
