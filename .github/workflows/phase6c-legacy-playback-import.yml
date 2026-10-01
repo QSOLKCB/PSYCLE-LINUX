@@ -121,8 +121,6 @@ jobs:
 
       - name: Load generated IT through C-Psycle donor runtime
         shell: bash
-        env:
-          SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           phase6c-generated/phase6c-legacy-it-loader phase6c-generated/phase6c-legacy-it-import.it \
@@ -146,7 +144,7 @@ jobs:
           assert data['note_cut_254'] == 'release'
           PY
           python3 - <<'PY'
-          import hashlib, json, os
+          import hashlib, json, subprocess
           from pathlib import Path
           root = Path('phase6c-generated')
           fixture = root / 'phase6c-legacy-it-import.it'
@@ -154,12 +152,19 @@ jobs:
           log = root / 'cpsycle-donor.log'
           observation = root / 'cpsycle-donor-observation.json'
           source_file = Path('cpsycle/audio/src/itmodule2.c')
+          source_revision = subprocess.check_output(
+              ['git', 'rev-parse', 'HEAD'], text=True
+          ).strip()
+          if len(source_revision) != 40 or any(
+              ch not in '0123456789abcdef' for ch in source_revision
+          ):
+              raise SystemExit(f'invalid checked-out source revision: {source_revision!r}')
           receipt = {
               'schema_version': 1,
               'phase': '6C',
               'contract': 'legacy-it-import-donor-runtime',
               'evidence_role': 'cpsycle-donor',
-              'source_revision': os.environ['SOURCE_REVISION'],
+              'source_revision': source_revision,
               'source_file': source_file.as_posix(),
               'source_file_sha256': hashlib.sha256(source_file.read_bytes()).hexdigest(),
               'fixture': fixture.name,
@@ -185,6 +190,7 @@ jobs:
           name: phase6c-legacy-it-cpsycle-donor-observation
           path: |
             phase6c-generated/phase6c-legacy-it-import.it
+            phase6c-generated/phase6c-legacy-it-loader
             phase6c-generated/cpsycle-donor.log
             phase6c-generated/cpsycle-donor-observation.json
             phase6c-generated/cpsycle-donor-receipt.json
