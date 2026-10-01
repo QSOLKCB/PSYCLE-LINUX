@@ -46,7 +46,7 @@ The historical file is evidence input, not an oracle. Original-Psycle behavior m
 It deliberately exercises:
 
 - sample-mode IT loading;
-- deterministic signed 8-bit PCM with a 4,096-frame forward loop, preserving enough sample data for a later playback witness without claiming that the current sample-mode importer starts a voice;
+- deterministic signed 8-bit PCM with a 4,096-frame forward loop, used by the current sample-mode playback witness after the missing instrument/virtual-generator mapping is restored;
 - speed 4 / tempo 140;
 - linear-slide mode;
 - `E10` portamento down;
