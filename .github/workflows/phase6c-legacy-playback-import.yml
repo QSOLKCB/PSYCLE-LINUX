@@ -12,6 +12,10 @@ on:
       - 'scripts/phase6c-generate-it-import-fixture.py'
       - 'scripts/phase6c-build-legacy-it-observer.py'
       - 'scripts/phase6c-original-windows-fixtures-v2.ps1'
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
+      - 'scripts/phase6b-verify-committed-source.sh'
+      - 'scripts/phase6b-verify-qmake-support.sh'
       - 'scripts/phase6c-validate-legacy-it-original.py'
       - 'scripts/phase6c-validate-original-receipts-v2.py'
       - 'tests/phase6c_legacy_module_import.py'
@@ -29,6 +33,10 @@ on:
       - 'scripts/phase6c-generate-it-import-fixture.py'
       - 'scripts/phase6c-build-legacy-it-observer.py'
       - 'scripts/phase6c-original-windows-fixtures-v2.ps1'
+      - 'scripts/phase6-upstream-audit.sh'
+      - 'scripts/phase6b-sanitized-manifest.sh'
+      - 'scripts/phase6b-verify-committed-source.sh'
+      - 'scripts/phase6b-verify-qmake-support.sh'
       - 'scripts/phase6c-validate-legacy-it-original.py'
       - 'scripts/phase6c-validate-original-receipts-v2.py'
       - 'tests/phase6c_legacy_module_import.py'
@@ -291,6 +299,7 @@ jobs:
           cp -- "$PLAYER" "$PLAYER_ARTIFACT"
           test -x "$PLAYER_ARTIFACT"
           pushd phase6c-generated >/dev/null
+          chmod +x candidate-psycle-player
           set +e
           ./candidate-psycle-player --output-driver dummy --input-file phase6c-legacy-it-import.it </dev/null >candidate-direct-import.log 2>&1
           rc=$?
@@ -327,9 +336,10 @@ jobs:
                   'phase6c-legacy-it-import.it',
               ],
               'working_directory': 'artifact-root',
+              'replay_setup': ['chmod', '+x', 'candidate-psycle-player'],
               'stdin': '/dev/null',
               'stdout_stderr': log.name,
-              'procedure': './candidate-psycle-player --output-driver dummy --input-file phase6c-legacy-it-import.it </dev/null >candidate-direct-import.log 2>&1',
+              'procedure': 'chmod +x candidate-psycle-player && ./candidate-psycle-player --output-driver dummy --input-file phase6c-legacy-it-import.it </dev/null >candidate-direct-import.log 2>&1',
               'exit_code': 2,
               'direct_it_load': 'rejected',
               'parity_status': 'UNKNOWN',
