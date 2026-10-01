@@ -71,6 +71,15 @@ def main() -> None:
         "fixture specification",
     )
 
+    text = replace_once(
+        text,
+        '            procedure = if ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',
+        '            procedure = if ($ObserveLegacyIt -and $spec.name -eq "legacy-it") {\n'
+        '                "$Procedure; require pinned Microsoft Visual C++ 2008 SP1 x86 runtime version 9.0.30729.6161 from the project-bound Microsoft URL with SHA-256 8742bcbf24ef328a72d2a27b693cc7071e38d3bb4b9b44dec42aa3d2c8d61d92; bind the live loaded VC90 module inventory and runtime receipt before accepting the legacy IT observation"\n'
+        '            } elseif ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',
+        "procedure runtime binding",
+    )
+
     args.output.write_text(text, encoding="utf-8", newline="\n")
 
 
