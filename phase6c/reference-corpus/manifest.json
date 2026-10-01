@@ -32,7 +32,6 @@
         "notes": 13947,
         "max_polyphony": 8,
         "same_note_overlaps": 425,
-        "tempo_events": 539,
         "tempo_range_bpm": [
           127.87751,
           133.422282
@@ -42,7 +41,8 @@
           9,
           1
         ],
-        "zero_duration_pairs_present": false
+        "zero_duration_pairs_present": false,
+        "tempo_events_per_stem": 539
       }
     },
     {
@@ -58,7 +58,6 @@
         "notes": 4338,
         "max_polyphony": 12,
         "same_note_overlaps": 205,
-        "tempo_events": 449,
         "tempo_range_bpm": [
           124.89592,
           130.321743
@@ -68,7 +67,8 @@
           8,
           1
         ],
-        "zero_duration_pairs_present": false
+        "zero_duration_pairs_present": false,
+        "tempo_events_per_stem": 449
       }
     },
     {
@@ -84,7 +84,6 @@
         "notes": 5381,
         "max_polyphony": 7,
         "same_note_overlaps": 241,
-        "tempo_events": 319,
         "tempo_range_bpm": [
           128.728017,
           131.348799
@@ -94,7 +93,8 @@
           17,
           1
         ],
-        "zero_duration_pairs_present": false
+        "zero_duration_pairs_present": false,
+        "tempo_events_per_stem": 319
       }
     },
     {
@@ -110,7 +110,6 @@
         "notes": 13728,
         "max_polyphony": 14,
         "same_note_overlaps": 505,
-        "tempo_events": 425,
         "tempo_range_bpm": [
           137.017584,
           141.810782
@@ -120,7 +119,8 @@
           9,
           1
         ],
-        "zero_duration_pairs_present": true
+        "zero_duration_pairs_present": true,
+        "tempo_events_per_stem": 425
       }
     },
     {
@@ -136,7 +136,6 @@
         "notes": 8986,
         "max_polyphony": 14,
         "same_note_overlaps": 162,
-        "tempo_events": 501,
         "tempo_range_bpm": [
           165.837479,
           183.936235
@@ -164,7 +163,8 @@
           13,
           14,
           15
-        ]
+        ],
+        "tempo_events_per_stem": 501
       }
     },
     {
@@ -180,7 +180,6 @@
         "notes": 3734,
         "max_polyphony": 6,
         "same_note_overlaps": 89,
-        "tempo_events": 379,
         "tempo_range_bpm": [
           142.348754,
           145.27845
@@ -190,7 +189,8 @@
           13,
           1
         ],
-        "zero_duration_pairs_present": false
+        "zero_duration_pairs_present": false,
+        "tempo_events_per_stem": 379
       }
     }
   ],
