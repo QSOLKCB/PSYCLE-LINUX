@@ -187,12 +187,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          chmod +x phase6c-generated/phase6c-legacy-it-playback
-          phase6c-generated/phase6c-legacy-it-playback \
-            phase6c-generated/phase6c-legacy-it-import.it \
-            | tee phase6c-generated/cpsycle-donor-playback.log
-          tail -n 1 phase6c-generated/cpsycle-donor-playback.log \
-            > phase6c-generated/cpsycle-donor-playback.json
+          pushd phase6c-generated >/dev/null
+          chmod +x phase6c-legacy-it-playback
+          set +e
+          ./phase6c-legacy-it-playback phase6c-legacy-it-import.it \
+            >cpsycle-donor-playback.log 2>&1
+          rc=$?
+          set -e
+          cat cpsycle-donor-playback.log
+          [[ "$rc" -eq 0 ]] || exit "$rc"
+          tail -n 1 cpsycle-donor-playback.log >cpsycle-donor-playback.json
+          popd >/dev/null
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -239,7 +244,10 @@ jobs:
               'observation': observation.name,
               'observation_sha256': hashlib.sha256(observation.read_bytes()).hexdigest(),
               'replay_setup': ['chmod', '+x', probe.name],
-              'procedure': 'chmod +x phase6c-legacy-it-playback && ./phase6c-legacy-it-playback phase6c-legacy-it-import.it >cpsycle-donor-playback.log',
+              'working_directory': 'artifact-root',
+              'stdin': '/dev/null',
+              'stdout_stderr': log.name,
+              'procedure': 'chmod +x phase6c-legacy-it-playback && ./phase6c-legacy-it-playback phase6c-legacy-it-import.it </dev/null >cpsycle-donor-playback.log 2>&1',
               'exit_code': 0,
               'claim_scope': 'donor sample-mode mapping plus deterministic non-silent playback only; no original-Psycle or frozen-candidate parity claim',
           }
