@@ -43,9 +43,17 @@
     "edit_history_last_date": "2003-04-11"
   },
   "evidence_boundary": {
-    "original_psycle": "Observation pending under pinned Psycle 1.12.0 x86. Historical user memory is useful context but is not a parity verdict.",
-    "candidate": "Observation pending. The sanitized C++ candidate contains IT/XMSampler semantics but no comparable IMPM import path has yet been established.",
-    "cpsycle": "Source contains a direct IMPM/ITModule2 importer with compressed-sample decoding and IT-command translation. Runtime fixture coverage is added separately by this lane.",
+    "original_psycle": "Private-input workflow implemented for pinned Psycle 1.12.0 x86. Historical observation remains pending until the manual workflow is dispatched with the manifest-bound external file.",
+    "candidate": "Private-input workflow records the frozen sanitized C++ candidate direct-IT-load boundary from the exact historical hash without uploading the module.",
+    "cpsycle": "Private-input workflow records C-Psycle import structure and a non-silent Sampulse playback witness from the exact historical hash without uploading the module.",
     "classification": "No PASS/DIFFERENT/MISSING result is claimed from this historical file alone."
+  },
+  "observation_workflow": {
+    "workflow": ".github/workflows/phase6c-historical-it-private.yml",
+    "trigger": "workflow_dispatch",
+    "private_url_secret": "PSYCLE_PHASE6C_HISTORICAL_IT_URL",
+    "public_artifact_policy": "identity-and-observation-metadata-only",
+    "module_bytes_uploaded": false,
+    "status": "IMPLEMENTED_NOT_YET_DISPATCHED"
   }
 }
