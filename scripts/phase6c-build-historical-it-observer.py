@@ -178,6 +178,31 @@ $Procedure = "$Procedure; pinned VC90 x86 runtime required and bound for replay;
         "VC90 structured environment binding",
     )
 
+    text = replace_once(
+        text,
+        "# Phase 6C Original Psycle Native-Windows Evidence",
+        "# Phase 6C Original Psycle Native-Windows Historical IT Evidence",
+        "historical summary title",
+    )
+    text = replace_once(
+        text,
+        "- Inputs: exact project-authored fixture bytes copied into this artifact and SHA-256-bound to the corresponding candidate receipts.",
+        "- Inputs: manifest-bound external SickMaate IT bytes are supplied privately, verified by exact size/SHA-256/title, copied only into the transient work root for observation, and excluded from this evidence artifact.",
+        "historical summary input policy",
+    )
+    text = replace_once(
+        text,
+        "- PSY3 fixture bootstrap: the project-authored PSY3 fixture is expected to trigger exactly one Psycle-owned Load Warning dialog whose message is exactly This file is from a newer version of Psycle! This process will try to load it anyway. The observer invokes only the sole verified OK button through UI Automation and verifies the modal closes before continuing load observation. Missing, ambiguous, or failed warning handling is sticky harness evidence and remains inconclusive rather than being treated as fixture rejection or acceptance.",
+        "- Historical fixture policy: the external SickMaate witness is not project-authored CI fixture material and is never copied into the public evidence root; the receipt records an external/hash-bound marker with fixture_redistributed=false while the transient private copy is deleted with the observer work root.",
+        "historical summary fixture policy",
+    )
+    text = replace_once(
+        text,
+        "- Configuration isolation: the post-install HKCU\\Software\\Psycle baseline is restored before each fixture so PSY2 cannot influence PSY3.",
+        "- Configuration isolation: the post-install HKCU\\Software\\Psycle baseline is restored before the historical witness so prior observations cannot influence this run.",
+        "historical summary configuration isolation",
+    )
+
     args.output.write_text(text, encoding="utf-8", newline="\n")
 
 
