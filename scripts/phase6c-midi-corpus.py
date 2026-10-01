@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import math
+import os
 import pathlib
 import shutil
 import struct
