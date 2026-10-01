@@ -191,7 +191,7 @@ jobs:
           chmod +x phase6c-legacy-it-playback
           set +e
           ./phase6c-legacy-it-playback phase6c-legacy-it-import.it \
-            >cpsycle-donor-playback.log 2>&1
+            </dev/null >cpsycle-donor-playback.log 2>&1
           rc=$?
           set -e
           cat cpsycle-donor-playback.log
