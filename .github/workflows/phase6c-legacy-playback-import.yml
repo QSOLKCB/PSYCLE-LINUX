@@ -206,7 +206,7 @@ jobs:
           assert data['repeat_render_bit_identical'] is True
           assert data['non_silent'] is True
           PY
-          test -f phase6c-generated/cpsycle-itmodule2.c
+          cp -- cpsycle/audio/src/itmodule2.c phase6c-generated/cpsycle-itmodule2.c
           cmp --silent cpsycle/audio/src/itmodule2.c phase6c-generated/cpsycle-itmodule2.c
           python3 - <<'PY'
           import hashlib, json, subprocess
@@ -275,7 +275,7 @@ jobs:
               assert data[command] == 'mapped'
           assert data['note_cut_254'] == 'release'
           PY
-          cp -- cpsycle/audio/src/itmodule2.c phase6c-generated/cpsycle-itmodule2.c
+          test -f phase6c-generated/cpsycle-itmodule2.c
           cmp --silent cpsycle/audio/src/itmodule2.c phase6c-generated/cpsycle-itmodule2.c
           python3 - <<'PY'
           import hashlib, json, subprocess
