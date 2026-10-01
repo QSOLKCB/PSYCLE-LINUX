@@ -72,6 +72,7 @@ jobs:
           public = pathlib.Path("phase6c-historical-public")
           observation_path = public / "donor-observation.json"
           observation = json.loads(observation_path.read_text(encoding="utf-8"))
+          assert observation["phase"] == "6C"
           assert observation["contract"] == "legacy-impulse-tracker-import-reference"
           assert observation["load_result"] == "accepted"
           assert observation["non_silent_playback"] is True
