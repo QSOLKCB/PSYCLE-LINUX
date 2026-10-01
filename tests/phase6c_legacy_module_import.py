@@ -73,6 +73,8 @@ with tempfile.TemporaryDirectory() as temporary:
     assert 'name = "legacy-it"' in observer
     assert 'candidate_receipt = "candidate-legacy-it.json"' in observer
     assert 'expected_contract = "legacy-it-import-reference"' in observer
+    assert "8742bcbf24ef328a72d2a27b693cc7071e38d3bb4b9b44dec42aa3d2c8d61d92" in observer
+    assert 'procedure = if ($ObserveLegacyIt -and $spec.name -eq "legacy-it") {' in observer
 
 validator_source = (
     ROOT / "scripts/phase6c-validate-original-receipts-v2.py"
