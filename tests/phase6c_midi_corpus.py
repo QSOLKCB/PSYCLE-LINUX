@@ -50,6 +50,17 @@ assert {
     "NGC3603 Quantum Demoscene": 12,
     "FM Doom": 12,
 }
+assert {
+    item["name"]: item["analysis_expectations"]["tempo_events_per_stem"]
+    for item in manifest["sets"]
+} == {
+    "Blue Glare": 539,
+    "Celestial Mechanics": 449,
+    "Deterministic Pattern": 319,
+    "Polyrhythmic Patterns": 425,
+    "NGC3603 Quantum Demoscene": 501,
+    "FM Doom": 379,
+}
 
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
