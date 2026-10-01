@@ -104,6 +104,28 @@ $Procedure = "$Procedure; pinned VC90 x86 runtime required and bound for replay;
         "VC90 procedure binding",
     )
 
+    vc90_environment_binding = r'''
+    $LegacyItVc90RuntimeArtifact = Join-Path $outRoot "vc90-runtime.txt"
+    if (-not (Test-Path -LiteralPath $LegacyItVc90RuntimeReceipt -PathType Leaf)) {
+        throw "legacy IT observer missing pinned VC90 runtime receipt: $LegacyItVc90RuntimeReceipt"
+    }
+    Copy-Item -LiteralPath $LegacyItVc90RuntimeReceipt -Destination $LegacyItVc90RuntimeArtifact -Force
+    $environment["vc90_redistributable"] = [ordered]@{
+        redistributable_version = $LegacyItVc90RuntimeVersion
+        url = $LegacyItVc90RuntimeUrl
+        sha256 = $LegacyItVc90RuntimeSha256
+        receipt = "vc90-runtime.txt"
+    }
+'''
+    text = replace_once(
+        text,
+        '        installer_framework = $installerFramework\n    }\n\n    $postInstallRegistryExists',
+        '        installer_framework = $installerFramework\n    }\n' +
+        vc90_environment_binding +
+        '\n    $postInstallRegistryExists',
+        "VC90 structured environment binding",
+    )
+
     args.output.write_text(text, encoding="utf-8", newline="\n")
 
 
