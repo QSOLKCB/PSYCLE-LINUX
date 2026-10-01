@@ -1733,7 +1733,7 @@ if ($preexistingPsycleRegistry) {
 }
 
 try {
-    & curl.exe --fail --location --retry 3 --silent --show-error --output $installerPath $ReferenceUrl
+    & curl.exe --ssl-revoke-best-effort --fail --location --retry 3 --silent --show-error --output $installerPath $ReferenceUrl
     if ($LASTEXITCODE -ne 0) {
         Fail "SourceForge installer download failed with curl exit $LASTEXITCODE"
     }
