@@ -16,6 +16,14 @@ module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
 
+validator_spec = importlib.util.spec_from_file_location(
+    "phase6c_original_validator",
+    ROOT / "scripts/phase6c-validate-original-receipts-v2.py",
+)
+validator = importlib.util.module_from_spec(validator_spec)
+assert validator_spec.loader is not None
+validator_spec.loader.exec_module(validator)
+
 payload = module.build_fixture()
 assert len(payload) == module.EXPECTED_SIZE
 assert hashlib.sha256(payload).hexdigest() == module.EXPECTED_SHA256
@@ -51,6 +59,57 @@ with tempfile.TemporaryDirectory() as temporary:
     out = Path(temporary) / "fixture.it"
     out.write_bytes(payload)
     assert out.read_bytes() == payload
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    arbitrary = root / "unrelated-private.it"
+    arbitrary.write_bytes(b"IMPM" + b"private")
+    try:
+        validator.validate_artifact_inventory(root)
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("global original-artifact validation must reject arbitrary .it files")
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    canonical = root / "fixtures/legacy-it/phase6c-legacy-it-import.it"
+    canonical.parent.mkdir(parents=True)
+    canonical.write_bytes(payload)
+    validator.validate_artifact_inventory(
+        root,
+        allowed_it={
+            "fixtures/legacy-it/phase6c-legacy-it-import.it": module.EXPECTED_SHA256
+        },
+    )
+
+    misplaced = root / "phase6c-legacy-it-import.it"
+    misplaced.write_bytes(payload)
+    try:
+        validator.validate_artifact_inventory(
+            root,
+            allowed_it={
+                "fixtures/legacy-it/phase6c-legacy-it-import.it": module.EXPECTED_SHA256
+            },
+        )
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("misplaced .it evidence must fail inventory validation")
+    misplaced.unlink()
+
+    canonical.write_bytes(b"IMPM" + b"changed")
+    try:
+        validator.validate_artifact_inventory(
+            root,
+            allowed_it={
+                "fixtures/legacy-it/phase6c-legacy-it-import.it": module.EXPECTED_SHA256
+            },
+        )
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("noncanonical .it bytes must fail inventory validation")
 
 historical = ROOT / "phase6c/evidence/legacy-module-import/historical-sickmaate.json"
 assert historical.exists()
@@ -97,6 +156,22 @@ workflow_source = (
 assert "github.event.pull_request.head.sha || github.sha" not in workflow_source
 assert "['git', 'rev-parse', 'HEAD']" in workflow_source
 assert "phase6c-generated/phase6c-legacy-it-loader" in workflow_source
+assert (
+    workflow_source.count("      - 'scripts/phase6c-original-windows-fixtures-v2.ps1'\n")
+    == 2
+)
+
+donor_upload_marker = "      - name: Upload donor observation\n"
+donor_upload_start = workflow_source.index(donor_upload_marker)
+donor_upload_end = workflow_source.index(
+    "\n\n  candidate-direct-import-boundary:", donor_upload_start
+)
+donor_upload_block = workflow_source[donor_upload_start:donor_upload_end]
+assert "phase6c-generated/cpsycle-itmodule2.c" in donor_upload_block
+assert "phase6c-generated/phase6c-legacy-it-loader" in donor_upload_block
+assert "cp -- cpsycle/audio/src/itmodule2.c phase6c-generated/cpsycle-itmodule2.c" in workflow_source
+assert "'source_file': source_file.name" in workflow_source
+assert "'source_file_origin': 'cpsycle/audio/src/itmodule2.c'" in workflow_source
 
 candidate_upload_marker = "      - name: Upload candidate direct-import observation\n"
 candidate_upload_start = workflow_source.index(candidate_upload_marker)
@@ -138,6 +213,15 @@ assert "1670e48dc761296e9c3497f6f3c6632fbc020b2f47bf46d97e3f9571b44b4f3e" not in
 validator_source = (
     ROOT / "scripts/phase6c-validate-original-receipts-v2.py"
 ).read_text(encoding="utf-8")
-assert '".it"' in validator_source
+assert '".psy"}' in validator_source
+assert '".psy", ".it"' not in validator_source
+
+legacy_validator_source = (
+    ROOT / "scripts/phase6c-validate-legacy-it-original.py"
+).read_text(encoding="utf-8")
+assert 'fixture_ref != "phase6c-legacy-it-import.it"' in legacy_validator_source
+assert "generator.EXPECTED_SHA256" in legacy_validator_source
+assert 'original_fixture_ref = f"fixtures/legacy-it/{fixture_ref}"' in legacy_validator_source
+assert "allowed_it={original_fixture_ref: generator.EXPECTED_SHA256}" in legacy_validator_source
 
 print("phase6c-legacy-module-import: PASS")
