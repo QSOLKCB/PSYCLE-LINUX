@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "corpus": "PSYCLE-LINUX contributor-supplied MIDI reference corpus",
+  "authorization": "The contributor/rightsholder explicitly authorized these materials to be used by PSYCLE-LINUX for compatibility research. This manifest does not independently declare public-domain status or alter third-party service terms.",
+  "storage": "archive identities are frozen here; raw contributor archives are not required by CI in this first lane",
+  "sets": [
+    {"name":"Blue Glare","archive":"Blue Glare MIDI.zip","sha256":"b1297c44d138d71bbcfddaa4278e1b1fd4e5aac2c6a559276ab124f2b44db67f","stems":11,"notes":13947,"role":"dense modern real-world MIDI workload and tempo-map stress reference","known_edge":"SMF1/480 PPQN; repeated tempo map; exporter emits out-of-range key-signature metadata"},
+    {"name":"Celestial Mechanics","archive":"Celestial Mechanics MIDI.zip","sha256":"01596654e86bb8fe3b36d2b8ea30c5760521133b18fb27742c9d2f8d7f95fafd","stems":10,"notes":4338,"max_polyphony":12,"same_note_overlaps":205,"tempo_events_per_stem":449,"tempo_range_bpm":[124.90,130.32],"role":"older real-world composition and fixed-tempo-export behavior reference"},
+    {"name":"Deterministic Pattern","archive":"Deterministic Pattern MIDI(1).zip","sha256":"cfde1bcb71935718fc4a7e8e16b6aa77ceac44d8fb31d8dcadfee87a5b178b32","stems":8,"notes":5381,"max_polyphony":7,"same_note_overlaps":241,"tempo_events_per_stem":319,"tempo_range_bpm":[128.73,131.35],"role":"controlled-generation MIDI reference; exposes follow-tempo exporter behavior"},
+    {"name":"Polyrhythmic Patterns","archive":"Polyrhythmic Patterns MIDI.zip","sha256":"5e7a3a17569661f6817ab664411e5ca6d44b22c50306d4a82df0a0b984f2f6ce","stems":9,"notes":13728,"max_polyphony":14,"same_note_overlaps":505,"tempo_events_per_stem":425,"tempo_range_bpm":[137.02,141.81],"role":"polyphony, overlap and event-ordering torture reference"},
+    {"name":"NGC3603 Quantum Demoscene","archive":"NGC3603 Quantum Demoscene MIDI(1).zip","sha256":"9fa0905ed0758dd23f61b144e22bf85150358c95f3a4268803a44351720af8c8","stems":12,"notes":8986,"max_polyphony":14,"same_note_overlaps":162,"tempo_events_per_stem":501,"tempo_range_bpm":[165.84,183.94],"role":"routing/channel stress reference; observed use spans all 16 MIDI channels"},
+    {"name":"FM Doom","archive":"FM Doom MIDI.zip","sha256":"c78d8addbc8e6e95d2232c1505d5e668c5ab7c6a9f987d5f56005a52d5de5674","stems":12,"notes":3734,"max_polyphony":6,"same_note_overlaps":89,"tempo_events_per_stem":379,"tempo_range_bpm":[142.35,145.28],"role":"gentler real-world MIDI import/playback reference"}
+  ],
+  "shared_observation": {
+    "format": "Standard MIDI File type 1",
+    "ppqn": 480,
+    "balanced_note_pairs": true,
+    "strict_parser_edge": "all inspected exporter files carry an out-of-range key-signature meta value; preserve this as a real-world robustness case rather than normalizing it away"
+  }
+}
