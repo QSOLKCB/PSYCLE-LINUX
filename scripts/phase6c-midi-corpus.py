@@ -126,6 +126,8 @@ def parse_track(track: bytes) -> dict[str, Any]:
     aftertouch = 0
     time_signatures = 0
     end_tick = 0
+    note_transitions: list[tuple[int, int, int, bool]] = []
+    event_serial = 0
 
     while pos < len(track):
         delta, pos = read_varlen(track, pos)
@@ -209,6 +211,7 @@ def parse_track(track: bytes) -> dict[str, Any]:
         is_note_off = kind == 0x80 or (kind == 0x90 and len(payload) == 2 and payload[1] == 0)
         if is_note_on:
             note = payload[0]
+            note_transitions.append((tick, event_serial, channel, note, True))
             key = (channel, note)
             queue = active[key]
             if queue:
@@ -219,6 +222,7 @@ def parse_track(track: bytes) -> dict[str, Any]:
             note_ons += 1
         elif is_note_off:
             note = payload[0]
+            note_transitions.append((tick, event_serial, channel, note, False))
             key = (channel, note)
             queue = active[key]
             note_offs += 1
@@ -229,6 +233,7 @@ def parse_track(track: bytes) -> dict[str, Any]:
                 if start_tick == tick:
                     zero_duration_pairs += 1
                 active_total -= 1
+        event_serial += 1
 
     remaining = sum(len(queue) for queue in active.values())
     return {
@@ -247,6 +252,7 @@ def parse_track(track: bytes) -> dict[str, Any]:
         "unmatched_note_offs": unmatched_note_offs,
         "remaining_active_notes": remaining,
         "end_tick": end_tick,
+        "note_transitions": note_transitions,
     }
 
 
@@ -292,6 +298,42 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
 
     tempos = [item for track in tracks for item in track["tempo_events"]]
     bpms = [60_000_000.0 / usec for _, usec in tempos if usec]
+
+    merged_transitions = sorted(
+        (
+            tick,
+            track_index,
+            serial,
+            channel,
+            note,
+            is_on,
+        )
+        for track_index, track in enumerate(tracks)
+        for tick, serial, channel, note, is_on in track["note_transitions"]
+    )
+    active_notes: dict[tuple[int, int], collections.deque[int]] = collections.defaultdict(collections.deque)
+    active_total = 0
+    global_max_polyphony = 0
+    global_same_note_overlaps = 0
+    global_zero_duration_pairs = 0
+    global_unmatched_note_offs = 0
+    for tick, _track_index, _serial, channel, note, is_on in merged_transitions:
+        key = (channel, note)
+        queue = active_notes[key]
+        if is_on:
+            if queue:
+                global_same_note_overlaps += 1
+            queue.append(tick)
+            active_total += 1
+            global_max_polyphony = max(global_max_polyphony, active_total)
+        elif not queue:
+            global_unmatched_note_offs += 1
+        else:
+            start_tick = queue.popleft()
+            if start_tick == tick:
+                global_zero_duration_pairs += 1
+            active_total -= 1
+    global_remaining = sum(len(queue) for queue in active_notes.values())
     key_sigs = [pair for track in tracks for pair in track["key_signatures"]]
     channels = sorted({ch for track in tracks for ch in track["channels"]})
     end_tick = max((track["end_tick"] for track in tracks), default=0)
@@ -301,9 +343,9 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
         "division": division,
         "note_ons": sum(track["note_ons"] for track in tracks),
         "note_offs": sum(track["note_offs"] for track in tracks),
-        "same_note_overlaps": sum(track["same_note_overlaps"] for track in tracks),
-        "zero_duration_pairs": sum(track["zero_duration_pairs"] for track in tracks),
-        "max_polyphony": max((track["max_polyphony"] for track in tracks), default=0),
+        "same_note_overlaps": global_same_note_overlaps,
+        "zero_duration_pairs": global_zero_duration_pairs,
+        "max_polyphony": global_max_polyphony,
         "tempo_events": len(tempos),
         "tempo_min_bpm": min(bpms) if bpms else None,
         "tempo_max_bpm": max(bpms) if bpms else None,
@@ -316,11 +358,10 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
         "pitch_bend_events": sum(track["pitch_bend_events"] for track in tracks),
         "aftertouch_events": sum(track["aftertouch_events"] for track in tracks),
         "time_signature_events": sum(track["time_signature_events"] for track in tracks),
-        "unmatched_note_offs": sum(track["unmatched_note_offs"] for track in tracks),
-        "remaining_active_notes": sum(track["remaining_active_notes"] for track in tracks),
-        "balanced_note_pairs": all(
-            track["unmatched_note_offs"] == 0 and track["remaining_active_notes"] == 0
-            for track in tracks
+        "unmatched_note_offs": global_unmatched_note_offs,
+        "remaining_active_notes": global_remaining,
+        "balanced_note_pairs": (
+            global_unmatched_note_offs == 0 and global_remaining == 0
         ),
         "duration_seconds": duration_seconds(end_tick, division, tempos),
     }
