@@ -6,7 +6,7 @@ import argparse
 import hashlib
 from pathlib import Path
 
-EXPECTED_BLOB = "90df1d48db76396a0a6a580efa426643cd612eb9"
+EXPECTED_BLOB = "4a10fb12805ff10a85cfedc0118443220a7dc32a"
 
 
 def git_blob(data: bytes) -> str:
