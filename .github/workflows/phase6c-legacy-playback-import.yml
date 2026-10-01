@@ -95,8 +95,26 @@ jobs:
           gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer             -Wall -Wextra -Werror=implicit-function-declaration             -Icpsycle/script/src -Icpsycle/thread/src -Icpsycle/container/src             -Icpsycle/file/src -Icpsycle/diversalis/src -Icpsycle/src             -Icpsycle/audio/src -Icpsycle/dsp/src $(pkg-config --cflags lua)             tests/phase6c_legacy_it_loader.c             -o phase6c-generated/phase6c-legacy-it-loader             -Lcpsycle/thread/src -Lcpsycle/script/src -Lcpsycle/container/src             -Lcpsycle/dsp/src -Lcpsycle/audio/src -Lcpsycle/file/src             -Wl,--no-as-needed -laudio -lthread -llilv-0 -ldsp -lscript -lfile             -lm $(pkg-config --libs lua) -lpthread -ldl -lstdc++ -lcontainer
 
       - name: Load generated IT through C-Psycle donor runtime
+        shell: bash
         run: |
-          phase6c-generated/phase6c-legacy-it-loader             phase6c-generated/phase6c-legacy-it-import.it             | tee phase6c-generated/cpsycle-donor-observation.json
+          set -euo pipefail
+          phase6c-generated/phase6c-legacy-it-loader phase6c-generated/phase6c-legacy-it-import.it \
+            | tee phase6c-generated/cpsycle-donor.log
+          tail -n 1 phase6c-generated/cpsycle-donor.log \
+            > phase6c-generated/cpsycle-donor-observation.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('phase6c-generated/cpsycle-donor-observation.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          assert data['contract'] == 'legacy-it-import-donor-runtime'
+          assert data['title'] == 'PSYCLE IT import witness'
+          assert data['bpm'] == 140
+          assert data['lpb'] == 6
+          assert data['sample_frames'] == 256
+          assert data['z58'] == 'mapped'
+          assert data['note_cut_254'] == 'release'
+          PY
 
       - name: Upload donor observation
         uses: actions/upload-artifact@v4
@@ -104,9 +122,9 @@ jobs:
           name: phase6c-legacy-it-cpsycle-donor-observation
           path: |
             phase6c-generated/phase6c-legacy-it-import.it
+            phase6c-generated/cpsycle-donor.log
             phase6c-generated/cpsycle-donor-observation.json
           if-no-files-found: error
-
 
   candidate-direct-import-boundary:
     needs: fixture-contract
