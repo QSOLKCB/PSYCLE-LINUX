@@ -14,6 +14,7 @@ MANIFEST = ROOT / "phase6c/reference-corpus/manifest.json"
 PROBE = ROOT / "tests/phase6c_midi_corpus_probe.c"
 WORKFLOW = ROOT / ".github/workflows/phase6c-midi-corpus-private.yml"
 LEGACY_WORKFLOW = ROOT / ".github/workflows/phase6c-legacy-playback-import.yml"
+PSYCONF = ROOT / "cpsycle/detail/psyconf.h"
 
 spec = importlib.util.spec_from_file_location("phase6c_midi_corpus_helper_test", HELPER)
 helper = importlib.util.module_from_spec(spec)
@@ -106,6 +107,10 @@ with tempfile.TemporaryDirectory() as temporary:
         assert "raw corpus bytes" in str(exc)
     else:
         raise AssertionError("renamed ZIP payload must fail public-tree audit")
+
+psyconf_source = PSYCONF.read_text(encoding="utf-8")
+assert "#define PSYCLE_USE_MIDI_FILE" in psyconf_source
+assert "/* #define PSYCLE_USE_MIDI_FILE */" not in psyconf_source
 
 probe_source = PROBE.read_text(encoding="utf-8")
 assert '"\\\"phase\\\":\\\"6C\\\","' in probe_source
