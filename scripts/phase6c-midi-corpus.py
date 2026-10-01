@@ -1001,6 +1001,10 @@ def donor_summary(
                 die(f"{stem['stem_id']}: donor observation contract changed")
             if obs.get("evidence_role") != "cpsycle-donor-observation":
                 die(f"{stem['stem_id']}: donor evidence_role changed")
+            if obs.get("stem_id") != stem["stem_id"]:
+                die(f"{stem['stem_id']}: donor stem identity changed")
+            if obs.get("source_relative_name") != stem["relative_name"]:
+                die(f"{stem['stem_id']}: donor source member changed")
             if obs.get("source_sha256") != stem["sha256"]:
                 die(f"{stem['stem_id']}: donor source identity changed")
             if obs.get("source_size_bytes") != stem["size_bytes"]:
@@ -1254,6 +1258,8 @@ def corpus_summary(
         or candidate.get("candidate_baseline_sha256") != EXPECTED_CANDIDATE_BASELINE
         or candidate.get("source_revision") != EXPECTED_CANDIDATE_SOURCE_REVISION
         or candidate.get("build_target") != "psycle-player"
+        or not isinstance(candidate.get("repository_commit"), str)
+        or len(candidate["repository_commit"]) != 40
         or candidate.get("private_input_required") is not True
         or candidate.get("progression_order") != PROGRESSION
         or not isinstance(candidate_sets, list)
@@ -1274,11 +1280,33 @@ def corpus_summary(
         ):
             die(f"candidate {item.get('set_name')} direct-load boundary is incomplete")
         rep_sha = item.get("representative_sha256")
+        rep_id = item.get("representative_stem_id")
+        rep_name = item.get("representative_relative_name")
+        rep_size = item.get("representative_size_bytes")
         raw_sha = item.get("raw_output_sha256")
         if not isinstance(rep_sha, str) or len(rep_sha) != 64:
             die(f"candidate {item.get('set_name')} representative SHA-256 is invalid")
+        try:
+            int(rep_sha, 16)
+        except ValueError:
+            die(f"candidate {item.get('set_name')} representative SHA-256 is not hexadecimal")
+        expected_prefix = f"{slug(item['set_name'])}-"
+        if (
+            not isinstance(rep_id, str)
+            or not rep_id.startswith(expected_prefix)
+            or not rep_id.endswith("-" + rep_sha[:12])
+            or not isinstance(rep_name, str)
+            or not rep_name
+            or not isinstance(rep_size, int)
+            or rep_size <= 0
+        ):
+            die(f"candidate {item.get('set_name')} representative identity is incomplete")
         if not isinstance(raw_sha, str) or len(raw_sha) != 64:
             die(f"candidate {item.get('set_name')} raw-output SHA-256 is invalid")
+        try:
+            int(raw_sha, 16)
+        except ValueError:
+            die(f"candidate {item.get('set_name')} raw-output SHA-256 is not hexadecimal")
 
     require_support(
         candidate_path,
