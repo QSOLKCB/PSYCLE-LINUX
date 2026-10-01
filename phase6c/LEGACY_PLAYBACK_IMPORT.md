@@ -48,8 +48,8 @@ It deliberately exercises:
 Canonical generated identity:
 
 ```text
-size:   599 bytes
-sha256: 1670e48dc761296e9c3497f6f3c6632fbc020b2f47bf46d97e3f9571b44b4f3e
+size:   4,439 bytes
+sha256: f02f5b8d1de98d4c6bcf00e2d6a04617e0714e4bcd7e299b5bc56d057526cae1
 ```
 
 The fixture is generated during CI rather than committed as an opaque binary.
