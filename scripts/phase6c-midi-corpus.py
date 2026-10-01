@@ -21,6 +21,17 @@ CONTRACT = "legacy-midi-real-world-corpus"
 DONOR_CONTRACT = "legacy-midi-real-world-donor"
 CANDIDATE_CONTRACT = "legacy-midi-real-world-candidate-boundary"
 SUMMARY_CONTRACT = "legacy-midi-real-world-summary"
+EXPECTED_CANDIDATE_BASELINE = (
+    "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a"
+)
+EXPECTED_CANDIDATE_SOURCE_REVISION = "SourceForge SVN r12005"
+CANDIDATE_SOURCE_ROOT = ROOT / "psycle-cpp-r12005-sanitized"
+CANDIDATE_PLAYER = (
+    CANDIDATE_SOURCE_ROOT / "psycle-player/++qmake/psycle-player"
+)
+CANDIDATE_BASELINE_RECEIPT = (
+    ROOT / "phase6b-sanitized-manifest/baseline.sha256"
+)
 
 PROGRESSION = [
     "FM Doom",
@@ -299,108 +310,70 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
     tempos = [item for track in tracks for item in track["tempo_events"]]
     bpms = [60_000_000.0 / usec for _, usec in tempos if usec]
 
-    transitions_by_tick: dict[
-        int, list[tuple[int, int, int, int, bool]]
-    ] = collections.defaultdict(list)
+    ordered_transitions: list[
+        tuple[int, int, int, int, int, int, bool]
+    ] = []
     for track_index, track in enumerate(tracks):
+        by_tick: dict[
+            int, list[tuple[int, int, int, bool]]
+        ] = collections.defaultdict(list)
         for tick, serial, channel, note, is_on in track["note_transitions"]:
-            transitions_by_tick[tick].append(
-                (track_index, serial, channel, note, is_on)
+            by_tick[tick].append((serial, channel, note, is_on))
+        for tick, events in by_tick.items():
+            events.sort()
+            first_attack = next(
+                (
+                    index for index, (_serial, _channel, _note, is_on)
+                    in enumerate(events)
+                    if is_on
+                ),
+                len(events),
             )
+            for index, (serial, channel, note, is_on) in enumerate(events):
+                # Leading releases on a track occur before cross-track attacks
+                # at the same tick. Once a track attacks, its remaining note
+                # events keep strict same-track serial order.
+                phase = index - first_attack
+                kind_priority = 1 if is_on else 0
+                ordered_transitions.append(
+                    (
+                        tick,
+                        phase,
+                        kind_priority,
+                        channel,
+                        note,
+                        track_index,
+                        is_on,
+                    )
+                )
 
+    ordered_transitions.sort()
     active_notes: dict[
         tuple[int, int], collections.deque[int]
     ] = collections.defaultdict(collections.deque)
-    note_intervals: list[tuple[int, int, int, int]] = []
-    global_unmatched_note_offs = 0
-
-    for tick in sorted(transitions_by_tick):
-        events = sorted(transitions_by_tick[tick])
-        consumed_offs: set[tuple[int, int]] = set()
-
-        # Boundary rule: release notes that were already active before this tick
-        # before considering attacks at the same tick. This makes [start, end)
-        # interval metrics independent of MTrk chunk ordering.
-        for track_index, serial, channel, note, is_on in events:
-            if is_on:
-                continue
-            queue = active_notes[(channel, note)]
-            if queue and queue[0] < tick:
-                start_tick = queue.popleft()
-                note_intervals.append((channel, note, start_tick, tick))
-                consumed_offs.add((track_index, serial))
-
-        # Preserve within-track event order for events that are genuinely
-        # simultaneous, including zero-duration note-on/note-off pairs.
-        for track_index, serial, channel, note, is_on in events:
-            key = (channel, note)
-            if is_on:
-                active_notes[key].append(tick)
-                continue
-            if (track_index, serial) in consumed_offs:
-                continue
-            queue = active_notes[key]
-            if not queue:
-                global_unmatched_note_offs += 1
-                continue
-            start_tick = queue.popleft()
-            note_intervals.append((channel, note, start_tick, tick))
-
-    global_remaining = sum(len(queue) for queue in active_notes.values())
-    global_zero_duration_pairs = sum(
-        1 for _channel, _note, start_tick, end_tick in note_intervals
-        if start_tick == end_tick
-    )
-    positive_intervals = [
-        interval for interval in note_intervals if interval[2] < interval[3]
-    ]
-
-    # Global polyphony is the maximum number of positive-duration half-open
-    # intervals active after all releases at a boundary and all attacks there.
-    interval_boundaries: dict[int, list[int]] = collections.defaultdict(
-        lambda: [0, 0]
-    )
-    for _channel, _note, start_tick, end_tick in positive_intervals:
-        interval_boundaries[start_tick][1] += 1
-        interval_boundaries[end_tick][0] += 1
     active_total = 0
     global_max_polyphony = 0
-    for tick in sorted(interval_boundaries):
-        ends, starts = interval_boundaries[tick]
-        active_total -= ends
-        if active_total < 0:
-            die(f"{label}: interval accounting underflow at tick {tick}")
-        active_total += starts
-        global_max_polyphony = max(global_max_polyphony, active_total)
-
-    # Same-note overlap counts note attacks that begin while the same
-    # channel/note interval is already active. Simultaneous starts count all
-    # but one when no earlier interval is active.
-    intervals_by_key: dict[
-        tuple[int, int], list[tuple[int, int]]
-    ] = collections.defaultdict(list)
-    for channel, note, start_tick, end_tick in positive_intervals:
-        intervals_by_key[(channel, note)].append((start_tick, end_tick))
     global_same_note_overlaps = 0
-    for intervals in intervals_by_key.values():
-        boundaries: dict[int, list[int]] = collections.defaultdict(
-            lambda: [0, 0]
-        )
-        for start_tick, end_tick in intervals:
-            boundaries[start_tick][1] += 1
-            boundaries[end_tick][0] += 1
-        active_same = 0
-        for tick in sorted(boundaries):
-            ends, starts = boundaries[tick]
-            active_same -= ends
-            if active_same < 0:
-                die(f"{label}: same-note interval accounting underflow at tick {tick}")
-            if starts:
-                if active_same:
-                    global_same_note_overlaps += starts
-                elif starts > 1:
-                    global_same_note_overlaps += starts - 1
-                active_same += starts
+    global_zero_duration_pairs = 0
+    global_unmatched_note_offs = 0
+    for tick, _phase, _kind, channel, note, _track_index, is_on in ordered_transitions:
+        key = (channel, note)
+        queue = active_notes[key]
+        if is_on:
+            if queue:
+                global_same_note_overlaps += 1
+            queue.append(tick)
+            active_total += 1
+            global_max_polyphony = max(global_max_polyphony, active_total)
+        elif not queue:
+            global_unmatched_note_offs += 1
+        else:
+            start_tick = queue.popleft()
+            if start_tick == tick:
+                global_zero_duration_pairs += 1
+            active_total -= 1
+
+    global_remaining = sum(len(queue) for queue in active_notes.values())
     key_sigs = [pair for track in tracks for pair in track["key_signatures"]]
     channels = sorted({ch for track in tracks for ch in track["channels"]})
     end_tick = max((track["end_tick"] for track in tracks), default=0)
@@ -777,15 +750,152 @@ def audit_public_tree(root: pathlib.Path) -> None:
         die("public MIDI evidence contains raw corpus bytes: " + ", ".join(sorted(leaks)))
 
 
+def verified_archive_members(
+    outer: zipfile.ZipFile,
+    set_spec: dict[str, Any],
+) -> dict[str, bytes]:
+    archive_info = find_outer_archive(outer, set_spec["archive"])
+    archive_bytes = outer.read(archive_info)
+    archive_sha = sha256_bytes(archive_bytes)
+    if archive_sha != set_spec["sha256"]:
+        die(
+            f"{set_spec['name']}: private archive SHA-256 mismatch during observation: "
+            f"expected={set_spec['sha256']} actual={archive_sha}"
+        )
+    members: dict[str, bytes] = {}
+    with zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as inner:
+        for info in inner.infolist():
+            if info.is_dir():
+                continue
+            rel = safe_zip_member(info.filename).as_posix()
+            if rel in members:
+                die(f"{set_spec['name']}: duplicate archive member {rel!r}")
+            members[rel] = inner.read(info)
+    return members
+
+
+def validate_analysis_against_bundle(
+    analysis: dict[str, Any],
+    bundle_path: pathlib.Path,
+    *,
+    representatives_only: bool,
+) -> dict[str, dict[str, Any]]:
+    manifest_by_name = validate_analysis_manifest_bindings(analysis)
+    if not bundle_path.is_file() or not zipfile.is_zipfile(bundle_path):
+        die("private MIDI corpus outer bundle is missing or invalid")
+    with zipfile.ZipFile(bundle_path, "r") as outer:
+        for set_info in analysis["sets"]:
+            name = set_info["name"]
+            set_spec = manifest_by_name[name]
+            members = verified_archive_members(outer, set_spec)
+            stems = (
+                [set_info["representative"]]
+                if representatives_only
+                else set_info["stems"]
+            )
+            for stem in stems:
+                relative_name = stem.get("relative_name")
+                if relative_name not in members:
+                    die(
+                        f"{name}: analysed stem {relative_name!r} is not present "
+                        "in the manifest-pinned archive"
+                    )
+                archive_bytes = members[relative_name]
+                archive_sha = sha256_bytes(archive_bytes)
+                if (
+                    archive_sha != stem.get("sha256")
+                    or len(archive_bytes) != stem.get("size_bytes")
+                ):
+                    die(
+                        f"{name}: analysed stem identity differs from its "
+                        "manifest-pinned archive member"
+                    )
+                private_path = analysis_path_for_private_stem(
+                    analysis, stem
+                )
+                if (
+                    not private_path.is_file()
+                    or private_path.read_bytes() != archive_bytes
+                ):
+                    die(
+                        f"{name}: extracted private stem differs from the "
+                        "verified archive member"
+                    )
+    return manifest_by_name
+
+
+def analysis_path_for_private_stem(
+    analysis: dict[str, Any],
+    stem: dict[str, Any],
+) -> pathlib.Path:
+    root_value = analysis.get("_analysis_root")
+    if not isinstance(root_value, str):
+        die("private corpus analysis root is not bound")
+    root = pathlib.Path(root_value)
+    relative = pathlib.PurePosixPath(stem.get("private_path", ""))
+    if relative.is_absolute() or ".." in relative.parts:
+        die("private stem path escapes the corpus analysis root")
+    return root / pathlib.Path(*relative.parts)
+
+
+def bind_analysis_root(
+    analysis: dict[str, Any],
+    analysis_path: pathlib.Path,
+) -> None:
+    analysis["_analysis_root"] = str(analysis_path.parent.resolve())
+
+
+def validate_frozen_candidate_player(player: pathlib.Path) -> dict[str, str]:
+    expected_player = CANDIDATE_PLAYER.resolve()
+    if player.resolve() != expected_player:
+        die(
+            "candidate player must be the canonical Phase 6B build output: "
+            f"{expected_player}"
+        )
+    if not CANDIDATE_BASELINE_RECEIPT.is_file():
+        die("Phase 6B sanitized baseline receipt is missing")
+    receipt = CANDIDATE_BASELINE_RECEIPT.read_text(
+        encoding="utf-8"
+    ).strip()
+    if receipt != EXPECTED_CANDIDATE_BASELINE:
+        die("Phase 6B sanitized baseline receipt identity changed")
+    if not player.is_file() or not os.access(player, os.X_OK):
+        die("canonical candidate player is missing or not executable")
+    with player.open("rb") as handle:
+        if handle.read(4) != b"\x7fELF":
+            die("canonical candidate player is not an ELF executable")
+    diff = subprocess.run(
+        [
+            "git", "-C", str(ROOT), "diff", "--quiet", "HEAD", "--",
+            str(CANDIDATE_SOURCE_ROOT.relative_to(ROOT)),
+        ],
+        check=False,
+    )
+    if diff.returncode != 0:
+        die("tracked frozen candidate source differs from HEAD")
+    repository_commit = subprocess.check_output(
+        ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True
+    ).strip()
+    return {
+        "candidate_baseline_sha256": EXPECTED_CANDIDATE_BASELINE,
+        "source_revision": EXPECTED_CANDIDATE_SOURCE_REVISION,
+        "repository_commit": repository_commit,
+        "build_target": "psycle-player",
+    }
+
+
 def candidate_boundary(
     analysis_path: pathlib.Path,
+    bundle_path: pathlib.Path,
     player: pathlib.Path,
     output: pathlib.Path,
 ) -> None:
     analysis = load_json(analysis_path)
-    manifest_by_name = validate_analysis_manifest_bindings(analysis)
-    if not player.is_file():
-        die(f"candidate player is missing: {player}")
+    bind_analysis_root(analysis, analysis_path)
+    manifest_by_name = validate_analysis_against_bundle(
+        analysis, bundle_path, representatives_only=True
+    )
+    candidate_identity = validate_frozen_candidate_player(player)
     player_sha = sha256_file(player)
     results = []
     for set_info in analysis["sets"]:
@@ -842,6 +952,7 @@ def candidate_boundary(
         "phase": "6C",
         "contract": CANDIDATE_CONTRACT,
         "evidence_role": "candidate-observation",
+        **candidate_identity,
         "player": "candidate-psycle-player",
         "player_sha256": player_sha,
         "working_directory": "artifact-root-with-private-input",
@@ -866,13 +977,17 @@ def candidate_boundary(
 
 def donor_summary(
     analysis_path: pathlib.Path,
+    bundle_path: pathlib.Path,
     observations_root: pathlib.Path,
     probe_path: pathlib.Path,
     source_path: pathlib.Path,
     output: pathlib.Path,
 ) -> None:
     analysis = load_json(analysis_path)
-    manifest_by_name = validate_analysis_manifest_bindings(analysis)
+    bind_analysis_root(analysis, analysis_path)
+    manifest_by_name = validate_analysis_against_bundle(
+        analysis, bundle_path, representatives_only=False
+    )
     set_summaries = []
     for set_info in analysis["sets"]:
         observations = []
@@ -933,6 +1048,18 @@ def donor_summary(
                 die(f"{stem['stem_id']}: donor observation attempted parity promotion")
             observations.append(obs)
         set_spec = manifest_by_name[set_info["name"]]
+        stem_records = [
+            {
+                "stem_id": item["stem_id"],
+                "source_relative_name": item["source_relative_name"],
+                "source_sha256": item["source_sha256"],
+                "source_size_bytes": item["source_size_bytes"],
+                "source_analysis_sha256": item["source_analysis_sha256"],
+                "import_event_digest_fnv64": item["import_event_digest_fnv64"],
+                "render_sha256": item["render_sha256"],
+            }
+            for item in observations
+        ]
         set_summaries.append({
             "name": set_info["name"],
             "slug": set_info["slug"],
@@ -941,10 +1068,15 @@ def donor_summary(
             "archive_sha256": set_spec["sha256"],
             "source_aggregate": set_info["aggregate"],
             "observed_stems": len(observations),
-            "all_imported": all(item.get("load_result") == "accepted" for item in observations),
-            "all_non_silent_projection": all(item["non_silent_projection"] is True for item in observations),
-            "event_digest_fnv64": [item["import_event_digest_fnv64"] for item in observations],
-            "render_sha256": [item["render_sha256"] for item in observations],
+            "all_imported": all(
+                item.get("load_result") == "accepted"
+                for item in observations
+            ),
+            "all_non_silent_projection": all(
+                item["non_silent_projection"] is True
+                for item in observations
+            ),
+            "stems": stem_records,
         })
     if not probe_path.is_file() or not source_path.is_file():
         die("donor MIDI corpus support files are missing")
@@ -1024,8 +1156,7 @@ def corpus_summary(
         name = item["name"]
         set_spec = manifest_by_name[name]
         observed_stems = item.get("observed_stems")
-        digests = item.get("event_digest_fnv64")
-        render_hashes = item.get("render_sha256")
+        stem_records = item.get("stems")
         if (
             item.get("slug") != slug(name)
             or item.get("role") != set_spec["role"]
@@ -1035,29 +1166,69 @@ def corpus_summary(
             or item.get("all_imported") is not True
             or item.get("all_non_silent_projection") is not True
             or not isinstance(item.get("source_aggregate"), dict)
-            or not isinstance(digests, list)
-            or len(digests) != observed_stems
-            or not isinstance(render_hashes, list)
-            or len(render_hashes) != observed_stems
+            or not isinstance(stem_records, list)
+            or len(stem_records) != observed_stems
         ):
             die(f"donor {name} per-set evidence is incomplete")
         validate_aggregate_against_manifest(
             set_spec, item["source_aggregate"]
         )
-        for digest in digests:
-            if not isinstance(digest, str) or len(digest) != 16:
-                die(f"donor {name} event digest is invalid")
-            try:
-                int(digest, 16)
-            except ValueError:
-                die(f"donor {name} event digest is not hexadecimal")
-        for render_sha in render_hashes:
-            if not isinstance(render_sha, str) or len(render_sha) != 64:
-                die(f"donor {name} render SHA-256 is invalid")
-            try:
-                int(render_sha, 16)
-            except ValueError:
-                die(f"donor {name} render SHA-256 is not hexadecimal")
+        seen_ids: set[str] = set()
+        seen_names: set[str] = set()
+        expected_indexes = set(range(observed_stems))
+        actual_indexes: set[int] = set()
+        for record in stem_records:
+            stem_id = record.get("stem_id")
+            relative_name = record.get("source_relative_name")
+            source_sha = record.get("source_sha256")
+            source_size = record.get("source_size_bytes")
+            analysis_sha = record.get("source_analysis_sha256")
+            digest = record.get("import_event_digest_fnv64")
+            render_sha = record.get("render_sha256")
+            if (
+                not isinstance(stem_id, str)
+                or not isinstance(relative_name, str)
+                or not isinstance(source_sha, str)
+                or len(source_sha) != 64
+                or not isinstance(source_size, int)
+                or source_size <= 0
+                or not isinstance(analysis_sha, str)
+                or len(analysis_sha) != 64
+                or not isinstance(digest, str)
+                or len(digest) != 16
+                or not isinstance(render_sha, str)
+                or len(render_sha) != 64
+            ):
+                die(f"donor {name} stem evidence is malformed")
+            prefix = f"{slug(name)}-"
+            if not stem_id.startswith(prefix):
+                die(f"donor {name} stem_id is outside the set namespace")
+            remainder = stem_id[len(prefix):]
+            parts = remainder.split("-", 1)
+            if len(parts) != 2 or not parts[0].isdigit():
+                die(f"donor {name} stem_id index is invalid")
+            stem_index = int(parts[0])
+            if parts[1] != source_sha[:12]:
+                die(f"donor {name} stem_id is not bound to source SHA-256")
+            if stem_id in seen_ids or relative_name in seen_names:
+                die(f"donor {name} stem evidence is duplicated")
+            seen_ids.add(stem_id)
+            seen_names.add(relative_name)
+            actual_indexes.add(stem_index)
+            for value, label, length in (
+                (source_sha, "source SHA-256", 64),
+                (analysis_sha, "analysis SHA-256", 64),
+                (render_sha, "render SHA-256", 64),
+                (digest, "event digest", 16),
+            ):
+                if len(value) != length:
+                    die(f"donor {name} {label} length changed")
+                try:
+                    int(value, 16)
+                except ValueError:
+                    die(f"donor {name} {label} is not hexadecimal")
+        if actual_indexes != expected_indexes:
+            die(f"donor {name} stem indexes are incomplete or duplicated")
 
     require_support(
         donor_path,
@@ -1079,6 +1250,9 @@ def corpus_summary(
         or candidate.get("contract") != CANDIDATE_CONTRACT
         or candidate.get("evidence_role") != "candidate-observation"
         or candidate.get("parity_status") != "UNKNOWN"
+        or candidate.get("candidate_baseline_sha256") != EXPECTED_CANDIDATE_BASELINE
+        or candidate.get("source_revision") != EXPECTED_CANDIDATE_SOURCE_REVISION
+        or candidate.get("build_target") != "psycle-player"
         or candidate.get("private_input_required") is not True
         or candidate.get("progression_order") != PROGRESSION
         or not isinstance(candidate_sets, list)
@@ -1111,6 +1285,10 @@ def corpus_summary(
         candidate.get("player_sha256"),
         "candidate player",
     )
+    candidate_artifact = candidate_path.parent / candidate["player"]
+    with candidate_artifact.open("rb") as handle:
+        if handle.read(4) != b"\x7fELF":
+            die("candidate player artifact is not an ELF executable")
 
     summary = {
         "schema_version": 1,
@@ -1201,16 +1379,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     candidate = sub.add_parser("candidate-boundary")
     candidate.add_argument("analysis", type=pathlib.Path)
+    candidate.add_argument("bundle", type=pathlib.Path)
     candidate.add_argument("player", type=pathlib.Path)
     candidate.add_argument("output", type=pathlib.Path)
     candidate.set_defaults(
         func=lambda args: candidate_boundary(
-            args.analysis.resolve(), args.player.resolve(), args.output.resolve()
+            args.analysis.resolve(),
+            args.bundle.resolve(),
+            args.player.resolve(),
+            args.output.resolve(),
         )
     )
 
     donor = sub.add_parser("donor-summary")
     donor.add_argument("analysis", type=pathlib.Path)
+    donor.add_argument("bundle", type=pathlib.Path)
     donor.add_argument("observations", type=pathlib.Path)
     donor.add_argument("--probe", type=pathlib.Path, required=True)
     donor.add_argument("--source", type=pathlib.Path, required=True)
@@ -1218,6 +1401,7 @@ def build_parser() -> argparse.ArgumentParser:
     donor.set_defaults(
         func=lambda args: donor_summary(
             args.analysis.resolve(),
+            args.bundle.resolve(),
             args.observations.resolve(),
             args.probe.resolve(),
             args.source.resolve(),
