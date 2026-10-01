@@ -45,8 +45,13 @@ int main(int argc, char** argv)
     psy_audio_Song* song;
     psy_audio_SongReader reader;
     psy_audio_Sample* sample;
+    psy_audio_PatternEvent e10;
+    psy_audio_PatternEvent f10;
+    psy_audio_PatternEvent g08;
+    psy_audio_PatternEvent v40;
     psy_audio_PatternEvent z58;
     psy_audio_PatternEvent cut;
+    psy_audio_PatternEvent c00;
     int status;
 
     if (argc != 2) {
@@ -80,21 +85,46 @@ int main(int argc, char** argv)
 
     sample = psy_audio_samples_at(
         psy_audio_song_samples(song), psy_audio_sampleindex_make(0, 0));
-    if (!sample || psy_audio_sample_num_frames(sample) != 256)
+    if (!sample || psy_audio_sample_num_frames(sample) != 4096)
         return fail("deterministic IT sample was not imported");
+    if (sample->loop.type != psy_audio_SAMPLE_LOOP_NORMAL ||
+        sample->loop.start != 0 || sample->loop.end != 4096)
+        return fail("deterministic IT sample loop geometry changed");
+    if (sample->channels.samples[0][0] != -16128.0f ||
+        sample->channels.samples[0][1] != -12800.0f ||
+        sample->channels.samples[0][5] != 512.0f)
+        return fail("signed 8-bit IT PCM decoded to unexpected values");
 
+    e10 = event_at(song, 1);
+    if (e10.cmd != XM_SAMPLER_CMD_PORTAMENTO_DOWN || e10.parameter != 0x10)
+        return fail("E10 did not map to portamento down");
+    f10 = event_at(song, 2);
+    if (f10.cmd != XM_SAMPLER_CMD_PORTAMENTO_UP || f10.parameter != 0x10)
+        return fail("F10 did not map to portamento up");
+    g08 = event_at(song, 3);
+    if (g08.cmd != XM_SAMPLER_CMD_PORTA2NOTE || g08.parameter != 0x08)
+        return fail("G08 did not map to tone portamento");
+    v40 = event_at(song, 4);
+    if (v40.cmd != XM_SAMPLER_CMD_SET_GLOBAL_VOLUME || v40.parameter != 0x40)
+        return fail("V40 did not map to global volume");
     z58 = event_at(song, 5);
     if (z58.cmd != XM_SAMPLER_CMD_MIDI_MACRO || z58.parameter != 0x58)
         return fail("Z58 did not map to the donor XMSampler MIDI-macro command");
-
     cut = event_at(song, 6);
     if (cut.note != psy_audio_NOTECOMMANDS_RELEASE)
         return fail("current donor note-cut-to-release mapping changed");
+    c00 = event_at(song, 15);
+    if (c00.cmd != psy_audio_PATTERNCMD_BREAK_TO_LINE || c00.parameter != 0x00)
+        return fail("C00 did not map to pattern break");
 
     printf(
-        "{\"contract\":\"legacy-it-import-donor-runtime\","
+        "{\"schema_version\":1,\"contract\":\"legacy-it-import-donor-runtime\","
         "\"title\":\"%s\",\"bpm\":%.0f,\"lpb\":%d,"
-        "\"sample_frames\":256,\"z58\":\"mapped\","
+        "\"sample_frames\":4096,\"sample_loop\":\"0-4096\","
+        "\"pcm0\":-16128,\"pcm1\":-12800,\"pcm5\":512,"
+        "\"E10\":\"mapped\",\"F10\":\"mapped\","
+        "\"G08\":\"mapped\",\"V40\":\"mapped\","
+        "\"Z58\":\"mapped\",\"C00\":\"mapped\","
         "\"note_cut_254\":\"release\"}\n",
         psy_audio_song_title(song), psy_audio_song_bpm(song), psy_audio_song_lpb(song));
 
