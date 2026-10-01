@@ -126,7 +126,7 @@ def parse_track(track: bytes) -> dict[str, Any]:
     aftertouch = 0
     time_signatures = 0
     end_tick = 0
-    note_transitions: list[tuple[int, int, int, bool]] = []
+    note_transitions: list[tuple[int, int, int, int, bool]] = []
     event_serial = 0
 
     while pos < len(track):
