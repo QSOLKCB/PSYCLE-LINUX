@@ -213,6 +213,7 @@ jobs:
           assert observation["sequence_tracks"] == 2
           assert observation["patterns"] == 2
           assert observation["imported_notes"] == 2
+          assert observation["releases"] == 2
           assert observation["machines_before_projection"] == 0
           assert observation["projection_notes"] == 2
           assert observation["projection_kind"] == "deterministic-sampulse"
