@@ -23,6 +23,40 @@ def load_module(name: str, path: pathlib.Path):
     return module
 
 
+def find_historical_payload_leaks(
+    root: pathlib.Path,
+    *,
+    expected_sha256: str = EXPECTED_SHA256,
+    expected_size: int = EXPECTED_SIZE,
+) -> list[str]:
+    leaks: list[str] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        if path.suffix.lower() == ".it":
+            leaks.append(relative)
+            continue
+        try:
+            if path.stat().st_size != expected_size:
+                continue
+        except OSError as exc:
+            raise SystemExit(f"cannot stat historical artifact candidate {relative}: {exc}")
+        if helper_sha256_file(path) == expected_sha256:
+            leaks.append(relative)
+    return sorted(set(leaks))
+
+
+def helper_sha256_file(path: pathlib.Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         raise SystemExit(
@@ -75,15 +109,11 @@ def main() -> int:
     if original.get("fixture_redistributed") is not False:
         raise SystemExit("historical original receipt redistribution flag changed")
 
-    historical_it_files = [
-        path.relative_to(original_root).as_posix()
-        for path in original_root.rglob("*")
-        if path.is_file() and path.suffix.lower() == ".it"
-    ]
-    if historical_it_files:
+    historical_payload_leaks = find_historical_payload_leaks(original_root)
+    if historical_payload_leaks:
         raise SystemExit(
-            "historical original artifact leaked IT bytes: "
-            + ", ".join(sorted(historical_it_files))
+            "historical original artifact leaked manifest-bound IT bytes: "
+            + ", ".join(historical_payload_leaks)
         )
 
     print(
