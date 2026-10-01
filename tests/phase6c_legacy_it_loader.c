@@ -6,8 +6,10 @@
 
 #include <audioconfig.h>
 #include <machine.h>
+#include <pattern.h>
 #include <patternevent.h>
 #include <patterns.h>
+#include <properties.h>
 #include <player.h>
 #include <sample.h>
 #include <samples.h>
