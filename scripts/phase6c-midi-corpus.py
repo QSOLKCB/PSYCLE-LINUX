@@ -10,6 +10,7 @@ import json
 import math
 import os
 import pathlib
+import shlex
 import shutil
 import struct
 import subprocess
@@ -33,6 +34,9 @@ CANDIDATE_PLAYER = (
 CANDIDATE_BASELINE_RECEIPT = (
     ROOT / "phase6b-sanitized-manifest/baseline.sha256"
 )
+DONOR_SOURCE = ROOT / "cpsycle/audio/src/midiloader.c"
+DONOR_PROBE_SOURCE = ROOT / "tests/phase6c_midi_corpus_probe.c"
+DONOR_BUILD_ROOT = ROOT / "cpsycle/player"
 
 PROGRESSION = [
     "FM Doom",
@@ -73,6 +77,161 @@ def sha256_file(path: pathlib.Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def repository_commit() -> str:
+    try:
+        revision = subprocess.check_output(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True
+        ).strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        die(f"cannot resolve repository revision: {exc}")
+    if len(revision) != 40:
+        die("repository revision is not a full commit SHA")
+    try:
+        int(revision, 16)
+    except ValueError:
+        die("repository revision is not hexadecimal")
+    return revision
+
+
+def _run_build(command: list[str], label: str) -> None:
+    proc = subprocess.run(
+        command,
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        die(f"{label} failed: " + proc.stdout[-2000:])
+
+
+def build_donor_probe(probe_path: pathlib.Path, *, clean: bool) -> None:
+    for required in (DONOR_SOURCE, DONOR_PROBE_SOURCE, DONOR_BUILD_ROOT):
+        if not required.exists():
+            die(f"donor build input is missing: {required.relative_to(ROOT)}")
+
+    diff = subprocess.run(
+        [
+            "git", "-C", str(ROOT), "diff", "--quiet", "HEAD", "--",
+            "cpsycle", "tests/phase6c_midi_corpus_probe.c",
+        ],
+        check=False,
+    )
+    if diff.returncode != 0:
+        die("tracked C-Psycle/probe source differs from HEAD")
+
+    if clean:
+        _run_build(
+            ["make", "-C", str(DONOR_BUILD_ROOT), "clean"],
+            "clean donor rebuild preparation",
+        )
+    _run_build(
+        ["make", "-C", str(DONOR_BUILD_ROOT), "-j1"],
+        "C-Psycle donor library build",
+    )
+
+    def pkg_config(option: str) -> list[str]:
+        proc = subprocess.run(
+            ["pkg-config", option, "lua"],
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            die("pkg-config lua lookup failed: " + proc.stdout[-1000:])
+        return shlex.split(proc.stdout)
+
+    probe_path.parent.mkdir(parents=True, exist_ok=True)
+    if probe_path.exists():
+        probe_path.unlink()
+    try:
+        output_arg = str(probe_path.relative_to(ROOT))
+    except ValueError:
+        output_arg = str(probe_path)
+
+    command = [
+        "gcc",
+        "-std=gnu11",
+        "-g",
+        "-O0",
+        "-fno-omit-frame-pointer",
+        "-Wall",
+        "-Wextra",
+        "-Werror=implicit-function-declaration",
+        "-Icpsycle/script/src",
+        "-Icpsycle/thread/src",
+        "-Icpsycle/container/src",
+        "-Icpsycle/file/src",
+        "-Icpsycle/diversalis/src",
+        "-Icpsycle/src",
+        "-Icpsycle/audio/src",
+        "-Icpsycle/dsp/src",
+        *pkg_config("--cflags"),
+        "tests/phase6c_midi_corpus_probe.c",
+        "-o",
+        output_arg,
+        "-Lcpsycle/thread/src",
+        "-Lcpsycle/script/src",
+        "-Lcpsycle/container/src",
+        "-Lcpsycle/dsp/src",
+        "-Lcpsycle/audio/src",
+        "-Lcpsycle/file/src",
+        "-Wl,--no-as-needed",
+        "-laudio",
+        "-lthread",
+        "-llilv-0",
+        "-ldsp",
+        "-lscript",
+        "-lfile",
+        "-lm",
+        *pkg_config("--libs"),
+        "-lpthread",
+        "-ldl",
+        "-lstdc++",
+        "-lcontainer",
+    ]
+    _run_build(command, "donor MIDI corpus probe build")
+    probe_path.chmod(0o755)
+
+
+def validate_donor_probe_build(
+    probe_path: pathlib.Path,
+    source_path: pathlib.Path,
+) -> dict[str, str]:
+    if not DONOR_SOURCE.is_file() or not DONOR_PROBE_SOURCE.is_file():
+        die("canonical donor source inputs are missing")
+    if not source_path.is_file() or source_path.read_bytes() != DONOR_SOURCE.read_bytes():
+        die("retained donor source does not match checked-out midiloader.c")
+    if not probe_path.is_file() or not os.access(probe_path, os.X_OK):
+        die("donor probe is missing or not executable")
+    with probe_path.open("rb") as handle:
+        if handle.read(4) != b"\x7fELF":
+            die("donor probe is not an ELF executable")
+
+    initial_sha = sha256_file(probe_path)
+    build_donor_probe(probe_path, clean=True)
+    rebuilt_sha = sha256_file(probe_path)
+    if rebuilt_sha != initial_sha:
+        die(
+            "donor probe does not match an immediate clean rebuild: "
+            f"initial={initial_sha} rebuilt={rebuilt_sha}"
+        )
+    with probe_path.open("rb") as handle:
+        if handle.read(4) != b"\x7fELF":
+            die("clean rebuilt donor probe is not an ELF executable")
+
+    return {
+        "source_revision": repository_commit(),
+        "probe_source": DONOR_PROBE_SOURCE.relative_to(ROOT).as_posix(),
+        "probe_source_sha256": sha256_file(DONOR_PROBE_SOURCE),
+        "build_target": "phase6c-midi-corpus-probe",
+        "clean_rebuild_sha256": rebuilt_sha,
+    }
 
 
 def slug(name: str) -> str:
@@ -1128,16 +1287,14 @@ def donor_summary(
         })
     if not probe_path.is_file() or not source_path.is_file():
         die("donor MIDI corpus support files are missing")
-    source_revision = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], text=True
-    ).strip()
+    build_identity = validate_donor_probe_build(probe_path, source_path)
 
     receipt = {
         "schema_version": 1,
         "phase": "6C",
         "contract": DONOR_CONTRACT,
         "evidence_role": "cpsycle-donor-corpus-summary",
-        "source_revision": source_revision,
+        **build_identity,
         "source_file": source_path.name,
         "source_file_sha256": sha256_file(source_path),
         "probe_executable": probe_path.name,
@@ -1184,11 +1341,21 @@ def corpus_summary(
         if sha256_file(path) != expected_sha.lower():
             die(f"{label} support file hash mismatch: {relative_name}")
 
+    current_revision = repository_commit()
+    canonical_donor_source_sha = sha256_file(DONOR_SOURCE)
+    canonical_probe_source_sha = sha256_file(DONOR_PROBE_SOURCE)
+
     if (
         donor.get("schema_version") != 1
         or donor.get("phase") != "6C"
         or donor.get("contract") != DONOR_CONTRACT
         or donor.get("evidence_role") != "cpsycle-donor-corpus-summary"
+        or donor.get("source_revision") != current_revision
+        or donor.get("source_file_sha256") != canonical_donor_source_sha
+        or donor.get("probe_source") != DONOR_PROBE_SOURCE.relative_to(ROOT).as_posix()
+        or donor.get("probe_source_sha256") != canonical_probe_source_sha
+        or donor.get("build_target") != "phase6c-midi-corpus-probe"
+        or donor.get("clean_rebuild_sha256") != donor.get("probe_executable_sha256")
         or donor.get("parity_status") != "UNKNOWN"
         or donor.get("all_sets_imported") is not True
         or donor.get("all_sets_non_silent_projection") is not True
@@ -1290,6 +1457,10 @@ def corpus_summary(
         donor.get("probe_executable_sha256"),
         "donor probe",
     )
+    donor_probe_artifact = donor_path.parent / donor["probe_executable"]
+    with donor_probe_artifact.open("rb") as handle:
+        if handle.read(4) != b"\x7fELF":
+            die("donor probe artifact is not an ELF executable")
 
     candidate_sets = candidate.get("sets")
     if (
@@ -1302,8 +1473,7 @@ def corpus_summary(
         or candidate.get("source_revision") != EXPECTED_CANDIDATE_SOURCE_REVISION
         or candidate.get("build_target") != "psycle-player"
         or candidate.get("clean_rebuild_sha256") != candidate.get("player_sha256")
-        or not isinstance(candidate.get("repository_commit"), str)
-        or len(candidate["repository_commit"]) != 40
+        or candidate.get("repository_commit") != current_revision
         or candidate.get("private_input_required") is not True
         or candidate.get("progression_order") != PROGRESSION
         or not isinstance(candidate_sets, list)
@@ -1481,6 +1651,12 @@ def build_parser() -> argparse.ArgumentParser:
             args.player.resolve(),
             args.output.resolve(),
         )
+    )
+
+    build_donor = sub.add_parser("build-donor-probe")
+    build_donor.add_argument("output", type=pathlib.Path)
+    build_donor.set_defaults(
+        func=lambda args: build_donor_probe(args.output.resolve(), clean=True)
     )
 
     donor = sub.add_parser("donor-summary")

@@ -410,11 +410,12 @@ with tempfile.TemporaryDirectory() as temporary:
     donor_source = donor_dir / "midiloader.c"
     donor_probe = donor_dir / "phase6c-midi-corpus-probe"
     candidate_player = candidate_dir / "candidate-psycle-player"
-    donor_source.write_text("source", encoding="utf-8")
-    donor_probe.write_text("probe", encoding="utf-8")
+    donor_source.write_bytes(helper.DONOR_SOURCE.read_bytes())
+    donor_probe.write_bytes(b"\x7fELF" + b"synthetic-donor-probe")
     candidate_player.write_bytes(b"\x7fELF" + b"candidate-player")
 
     sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+    current_revision = helper.repository_commit()
     manifest_by_name = {item["name"]: item for item in manifest["sets"]}
     donor_sets = []
     candidate_sets = []
@@ -476,10 +477,15 @@ with tempfile.TemporaryDirectory() as temporary:
         "phase": "6C",
         "contract": helper.DONOR_CONTRACT,
         "evidence_role": "cpsycle-donor-corpus-summary",
+        "source_revision": current_revision,
         "source_file": donor_source.name,
         "source_file_sha256": sha(donor_source),
+        "probe_source": helper.DONOR_PROBE_SOURCE.relative_to(helper.ROOT).as_posix(),
+        "probe_source_sha256": sha(helper.DONOR_PROBE_SOURCE),
+        "build_target": "phase6c-midi-corpus-probe",
         "probe_executable": donor_probe.name,
         "probe_executable_sha256": sha(donor_probe),
+        "clean_rebuild_sha256": sha(donor_probe),
         "progression_order": helper.PROGRESSION,
         "sets": donor_sets,
         "all_sets_imported": True,
@@ -493,7 +499,7 @@ with tempfile.TemporaryDirectory() as temporary:
         "evidence_role": "candidate-observation",
         "candidate_baseline_sha256": helper.EXPECTED_CANDIDATE_BASELINE,
         "source_revision": helper.EXPECTED_CANDIDATE_SOURCE_REVISION,
-        "repository_commit": "0" * 40,
+        "repository_commit": current_revision,
         "build_target": "psycle-player",
         "player": candidate_player.name,
         "player_sha256": sha(candidate_player),
@@ -510,6 +516,21 @@ with tempfile.TemporaryDirectory() as temporary:
     helper.corpus_summary(donor_path, candidate_path, root / "summary.json")
     assert (root / "summary.json").exists()
 
+    unbound_donor = json.loads(json.dumps(donor))
+    del unbound_donor["source_revision"]
+    helper.write_json(donor_path, unbound_donor)
+    try:
+        helper.corpus_summary(
+            donor_path, candidate_path, root / "unbound-donor.json"
+        )
+    except SystemExit as exc:
+        assert "donor MIDI corpus summary is incomplete or invalid" in str(exc)
+    else:
+        raise AssertionError(
+            "donor evidence without checked-out source revision must be rejected"
+        )
+
+    helper.write_json(donor_path, donor)
     incomplete_donor = json.loads(json.dumps(donor))
     del incomplete_donor["sets"][0]["observed_stems"]
     helper.write_json(donor_path, incomplete_donor)
