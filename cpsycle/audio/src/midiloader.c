@@ -930,9 +930,10 @@ void midiloader_writepatternevent(MidiLoader* self, psy_audio_PatternEvent ev)
         }
     }
     if (channelvoice != MAX_MIDIFILE_POLYPHONY) {
-		psy_audio_PatternEntry entry;        
-                            		
+		psy_audio_PatternEntry entry;
+
         self->currtrack.channels[channelvoice].tracknote = ev;
+        psy_audio_patternentry_init(&entry);
         psy_audio_patternentry_set_event(&entry, ev, 0);
         self->currtrack.patternnode = psy_audio_pattern_insert(
             self->currtrack.pattern, self->currtrack.patternnode,
