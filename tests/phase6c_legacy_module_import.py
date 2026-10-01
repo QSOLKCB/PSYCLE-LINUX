@@ -222,6 +222,21 @@ assert "tests/phase6c_legacy_it_playback.c" in workflow_source
 assert "legacy-it-sample-mode-playback-donor" in workflow_source
 assert "'parity_status': 'UNKNOWN'" in workflow_source
 assert "donor sample-mode mapping plus deterministic non-silent playback only" in workflow_source
+assert "pushd phase6c-generated >/dev/null" in workflow_source
+assert "chmod +x phase6c-legacy-it-playback" in workflow_source
+assert (
+    "./phase6c-legacy-it-playback phase6c-legacy-it-import.it \\\n"
+    "            </dev/null >cpsycle-donor-playback.log 2>&1"
+) in workflow_source
+assert "'replay_setup': ['chmod', '+x', probe.name]" in workflow_source
+assert "'working_directory': 'artifact-root'" in workflow_source
+assert "'stdin': '/dev/null'" in workflow_source
+assert "'stdout_stderr': log.name" in workflow_source
+assert (
+    "'procedure': 'chmod +x phase6c-legacy-it-playback && "
+    "./phase6c-legacy-it-playback phase6c-legacy-it-import.it "
+    "</dev/null >cpsycle-donor-playback.log 2>&1'"
+) in workflow_source
 
 donor_upload_marker = "      - name: Upload donor observation\n"
 donor_upload_start = workflow_source.index(donor_upload_marker)
