@@ -80,6 +80,30 @@ def main() -> None:
         "procedure runtime binding",
     )
 
+    vc90_procedure_binding = r'''
+$LegacyItVc90RuntimeUrl = $env:PSYCLE_PHASE6C_VC90_RUNTIME_URL
+$LegacyItVc90RuntimeSha256 = $env:PSYCLE_PHASE6C_VC90_RUNTIME_SHA256
+$LegacyItVc90RuntimeVersion = $env:PSYCLE_PHASE6C_VC90_RUNTIME_VERSION
+$LegacyItVc90RuntimeReceipt = $env:PSYCLE_PHASE6C_VC90_RUNTIME_RECEIPT
+foreach ($requiredVc90Value in @(
+    $LegacyItVc90RuntimeUrl,
+    $LegacyItVc90RuntimeSha256,
+    $LegacyItVc90RuntimeVersion,
+    $LegacyItVc90RuntimeReceipt
+)) {
+    if ([string]::IsNullOrWhiteSpace([string]$requiredVc90Value)) {
+        throw "legacy IT observer requires the pinned VC90 runtime provenance environment"
+    }
+}
+$Procedure = "$Procedure; pinned VC90 x86 runtime required and bound for replay; vc90_runtime_url=$LegacyItVc90RuntimeUrl; vc90_runtime_sha256=$LegacyItVc90RuntimeSha256; vc90_runtime_version=$LegacyItVc90RuntimeVersion; vc90_runtime_receipt=$LegacyItVc90RuntimeReceipt"
+'''
+    text = replace_once(
+        text,
+        "\nfunction Fail([string]$Message) {",
+        vc90_procedure_binding + "\nfunction Fail([string]$Message) {",
+        "VC90 procedure binding",
+    )
+
     args.output.write_text(text, encoding="utf-8", newline="\n")
 
 
