@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""Generate a legacy-IT-enabled copy of the mature Windows original observer."""
+from __future__ import annotations
+
+import argparse
+import hashlib
+from pathlib import Path
+
+EXPECTED_BLOB = "90df1d48db76396a0a6a580efa426643cd612eb9"
+
+
+def git_blob(data: bytes) -> str:
+    return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+
+
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(
+            f"legacy IT observer patch anchor {label!r} count={count}, expected=1"
+        )
+    return text.replace(old, new, 1)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("source", type=Path)
+    parser.add_argument("output", type=Path)
+    args = parser.parse_args()
+
+    data = args.source.read_bytes()
+    normalized = data.replace(b"\r\n", b"\n")
+    if b"\r" in normalized:
+        raise SystemExit("observer base contains unsupported carriage returns")
+    actual = git_blob(normalized)
+    if actual != EXPECTED_BLOB:
+        raise SystemExit(
+            "legacy IT observer base blob changed: "
+            f"expected={EXPECTED_BLOB} actual={actual}"
+        )
+    text = normalized.decode("utf-8")
+
+    text = replace_once(
+        text,
+        "    [switch]$ObserveSequenceOrder\n)",
+        "    [switch]$ObserveSequenceOrder,\n\n"
+        "    [switch]$ObserveLegacyIt\n)",
+        "parameter",
+    )
+
+    legacy_spec = r'''
+    if ($ObserveLegacyIt) {
+        # Legacy-IT mode is intentionally one-fixture-only. The generated
+        # fixture is an evidence input; no candidate parity claim is implied.
+        $fixtureSpecs = @(
+            [ordered]@{
+                name = "legacy-it"
+                candidate_receipt = "candidate-legacy-it.json"
+                expected_contract = "legacy-it-import-reference"
+                expected_song_title = "PSYCLE IT import witness"
+                load_warning_required = $false
+                expected_load_warning_message = $null
+            }
+        )
+    }
+'''
+    text = replace_once(
+        text,
+        "\n    foreach ($spec in $fixtureSpecs) {",
+        legacy_spec + "\n    foreach ($spec in $fixtureSpecs) {",
+        "fixture specification",
+    )
+
+    args.output.write_text(text, encoding="utf-8", newline="\n")
+
+
+if __name__ == "__main__":
+    main()
