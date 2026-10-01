@@ -146,15 +146,18 @@ def command_candidate(args: argparse.Namespace) -> None:
     if not player.is_file():
         die(f"candidate player is missing: {player}")
     player_sha = sha256_file(player)
+    if input_path.parent != player.parent:
+        die("candidate replay requires the private IT beside the candidate player")
     command = [
-        str(player),
+        f"./{player.name}",
         "--output-driver",
         "dummy",
         "--input-file",
-        str(input_path),
+        input_path.name,
     ]
     proc = subprocess.run(
         command,
+        cwd=player.parent,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
