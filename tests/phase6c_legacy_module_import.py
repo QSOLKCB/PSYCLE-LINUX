@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import struct
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -52,5 +53,27 @@ historical = ROOT / "phase6c/evidence/legacy-module-import/historical-sickmaate.
 assert historical.exists()
 reference = ROOT / "phase6c/reference-corpus/manifest.json"
 assert reference.exists()
+
+
+builder = ROOT / "scripts/phase6c-build-legacy-it-observer.py"
+base_observer = ROOT / "scripts/phase6c-original-windows-fixtures-v2.ps1"
+with tempfile.TemporaryDirectory() as temporary:
+    generated = Path(temporary) / "legacy-it-observer.ps1"
+    result = subprocess.run(
+        ["python3", str(builder), str(base_observer), str(generated)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    observer = generated.read_text(encoding="utf-8")
+    assert "[switch]$ObserveLegacyIt" in observer
+    assert 'name = "legacy-it"' in observer
+    assert 'candidate_receipt = "candidate-legacy-it.json"' in observer
+    assert 'expected_contract = "legacy-it-import-reference"' in observer
+
+validator_source = (
+    ROOT / "scripts/phase6c-validate-original-receipts-v2.py"
+).read_text(encoding="utf-8")
+assert '".it"' in validator_source
 
 print("phase6c-legacy-module-import: PASS")
