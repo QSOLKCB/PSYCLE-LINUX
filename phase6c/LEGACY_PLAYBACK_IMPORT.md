@@ -188,7 +188,9 @@ For every stem, the private-input analyser independently parses the Standard MID
 
 ### C-Psycle donor boundary
 
-C-Psycle has a real `MThd`/`MidiLoader` song-I/O path. Native MIDI import creates sequence tracks and tracker events, but it **does not choose or instantiate a sound-generating machine**. Therefore this lane records two different claims:
+C-Psycle has a real `MThd`/`MidiLoader` song-I/O path. At the start of this phase the retained loader source was already compiled into `libaudio`, but dispatch was disabled by the preserved `PSYCLE_USE_MIDI_FILE` feature gate in `cpsycle/detail/psyconf.h`. This lane restores that existing gate rather than adding a replacement MIDI importer.
+
+Native MIDI import creates sequence tracks and tracker events, but it **does not choose or instantiate a sound-generating machine**. Therefore this lane records two different claims:
 
 1. **native import evidence** — load acceptance plus a digest/count of the untouched imported event graph;
 2. **execution projection** — after the untouched graph is frozen, imported note/release/MIDI-CC events are routed through one deterministic project-owned Sampulse substrate and rendered through the production Player/FileOutDriver path.
