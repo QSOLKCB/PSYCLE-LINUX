@@ -36,7 +36,7 @@ sample_header_offset = struct.unpack_from("<I", payload, orders_offset + 2)[0]
 pattern_offset = struct.unpack_from("<I", payload, orders_offset + 6)[0]
 assert payload[sample_header_offset:sample_header_offset + 4] == b"IMPS"
 assert struct.unpack_from("<I", payload, sample_header_offset + 48)[0] == 4096
-assert struct.unpack_from("<I", payload, sample_header_offset + 52)[0] == 0\nassert struct.unpack_from("<I", payload, sample_header_offset + 56)[0] == 4096\nassert struct.unpack_from("<I", payload, sample_header_offset + 60)[0] == 8363\nassert payload[sample_header_offset + 17] & 0x10
+assert struct.unpack_from("<I", payload, sample_header_offset + 52)[0] == 0\nassert struct.unpack_from("<I", payload, sample_header_offset + 56)[0] == 4096\nassert struct.unpack_from("<I", payload, sample_header_offset + 60)[0] == 8363\nassert payload[sample_header_offset + 18] & 0x10
 
 packed_size, row_count = struct.unpack_from("<HH", payload, pattern_offset)
 assert row_count == 16
