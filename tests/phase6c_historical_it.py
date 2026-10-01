@@ -16,6 +16,7 @@ BUILDER = ROOT / "scripts/phase6c-build-historical-it-observer.py"
 BASE = ROOT / "scripts/phase6c-original-windows-fixtures-v2.ps1"
 VALIDATOR = ROOT / "scripts/phase6c-validate-original-receipts-v2.py"
 HISTORICAL_VALIDATOR = ROOT / "scripts/phase6c-validate-historical-it-original.py"
+PROBE = ROOT / "tests/phase6c_historical_it_probe.c"
 WORKFLOW = ROOT / ".github/workflows/phase6c-historical-it-private.yml"
 
 EXPECTED_SHA = "cab23d8f66a6815b3248457e4f38de74f0a6d61c2691c47a78e582edb63cd432"
@@ -42,6 +43,9 @@ assert production_source["sha256"] == EXPECTED_SHA
 assert production_source["size_bytes"] == EXPECTED_SIZE
 assert production_source["title"] == "SickMaate"
 assert production_source["redistribution"] == "not_committed"
+
+probe_source = PROBE.read_text(encoding="utf-8")
+assert '"\\\"phase\\\":\\\"6C\\\","' in probe_source
 
 historical_validator_spec = importlib.util.spec_from_file_location(
     "phase6c_historical_original_validator_test", HISTORICAL_VALIDATOR
@@ -156,6 +160,13 @@ with tempfile.TemporaryDirectory() as temporary:
     assert "manifest-bound external SickMaate IT bytes are supplied privately" in observer
     assert "Historical fixture policy:" in observer
     assert "project-authored fixture bytes copied into this artifact" not in observer
+    assert '$HistoricalProcedure = "download pinned Psycle 1.12.0 x86 installer;' in observer
+    assert (
+        'procedure = if ($ObserveHistoricalLegacyIt -and $spec.name -eq "historical-legacy-it") {\n'
+        '                $HistoricalProcedure'
+    ) in observer
+    assert "$Procedure; observe the manifest-bound external SickMaate" not in observer
+    assert "copy the historical module only into the transient observer work root" in observer
 
 validator_source = VALIDATOR.read_text(encoding="utf-8")
 assert "external_fixture: bool = False" in validator_source
@@ -191,6 +202,30 @@ for label, expected_role, wrong_role in (
     else:
         raise AssertionError(f"{label} wrong-role receipt must be rejected")
 
+correct_original_identity = {
+    "reference_build": historical_helper.EXPECTED_REFERENCE_BUILD,
+    "reference_file": historical_helper.EXPECTED_REFERENCE_FILE,
+    "reference_installer_sha256": historical_helper.EXPECTED_REFERENCE_INSTALLER_SHA256,
+    "reference_installer_size_bytes": historical_helper.EXPECTED_REFERENCE_INSTALLER_SIZE,
+    "reference_executable_sha256": historical_helper.EXPECTED_REFERENCE_EXECUTABLE_SHA256,
+}
+historical_helper.require_original_reference_identity(correct_original_identity)
+
+for field, bad_value, expected_message in (
+    ("reference_file", "wrong.exe", "installer file"),
+    ("reference_installer_sha256", "0" * 64, "installer SHA-256"),
+    ("reference_installer_size_bytes", 1, "installer size"),
+    ("reference_executable_sha256", "0" * 64, "executable SHA-256"),
+):
+    mutated = dict(correct_original_identity)
+    mutated[field] = bad_value
+    try:
+        historical_helper.require_original_reference_identity(mutated)
+    except SystemExit as exc:
+        assert expected_message in str(exc)
+    else:
+        raise AssertionError(f"wrong original reference {field} must be rejected")
+
 incomplete_donor = {
     "schema_version": 1,
     "phase": "6C",
@@ -225,6 +260,7 @@ assert "phase6c-validate-historical-it-original.py" in workflow
 assert "tests/phase6c_historical_it_probe.c" in workflow
 assert "historical-sickmaate-three-way.json" in workflow
 assert "private-input-required" in workflow
+assert 'assert observation["phase"] == "6C"' in workflow
 assert "private-root/" not in workflow
 assert "phase6c-historical-summary/donor/" in workflow
 assert "phase6c-historical-summary/candidate/" in workflow
