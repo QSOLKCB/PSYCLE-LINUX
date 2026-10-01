@@ -22,6 +22,12 @@ on:
       - 'tests/phase6c_legacy_it_loader.c'
       - 'tests/phase6c_legacy_it_decoder.c'
       - 'tests/phase6c_legacy_it_playback.c'
+      - 'tests/phase6c_historical_it.py'
+      - 'tests/phase6c_historical_it_probe.c'
+      - 'scripts/phase6c-historical-it.py'
+      - 'scripts/phase6c-build-historical-it-observer.py'
+      - 'scripts/phase6c-validate-historical-it-original.py'
+      - '.github/workflows/phase6c-historical-it-private.yml'
       - 'cpsycle/**'
       - 'psycle-cpp-r12005-sanitized/**'
       - '.github/workflows/phase6c-legacy-playback-import.yml'
@@ -45,6 +51,12 @@ on:
       - 'tests/phase6c_legacy_it_loader.c'
       - 'tests/phase6c_legacy_it_decoder.c'
       - 'tests/phase6c_legacy_it_playback.c'
+      - 'tests/phase6c_historical_it.py'
+      - 'tests/phase6c_historical_it_probe.c'
+      - 'scripts/phase6c-historical-it.py'
+      - 'scripts/phase6c-build-historical-it-observer.py'
+      - 'scripts/phase6c-validate-historical-it-original.py'
+      - '.github/workflows/phase6c-historical-it-private.yml'
       - 'cpsycle/**'
       - 'psycle-cpp-r12005-sanitized/**'
       - '.github/workflows/phase6c-legacy-playback-import.yml'
@@ -68,7 +80,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate generated IT fixture contract
-        run: python3 tests/phase6c_legacy_module_import.py
+        run: |
+          python3 tests/phase6c_legacy_module_import.py
+          python3 tests/phase6c_historical_it.py
 
       - name: Generate canonical IT fixture
         run: |
