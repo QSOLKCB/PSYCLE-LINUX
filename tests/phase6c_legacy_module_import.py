@@ -159,6 +159,36 @@ assert "legacy-it-sample-mode-playback-donor" in playback_probe_source
 
 builder = ROOT / "scripts/phase6c-build-legacy-it-observer.py"
 base_observer = ROOT / "scripts/phase6c-original-windows-fixtures-v2.ps1"
+
+base_observer_bytes = base_observer.read_bytes().replace(b"\r\n", b"\n")
+assert b"\r" not in base_observer_bytes
+base_observer_blob = hashlib.sha1(
+    b"blob " + str(len(base_observer_bytes)).encode() + b"\0" + base_observer_bytes
+).hexdigest()
+assert base_observer_blob == "4a10fb12805ff10a85cfedc0118443220a7dc32a"
+
+base_observer_source = base_observer_bytes.decode("utf-8")
+assert "--ssl-revoke-best-effort" in base_observer_source
+assert "--ssl-no-revoke" not in base_observer_source
+assert "--insecure" not in base_observer_source
+assert "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769" in base_observer_source
+assert "$ExpectedInstallerSize = 9322919" in base_observer_source
+
+for observer_builder in (
+    "scripts/phase6c-build-legacy-it-observer.py",
+    "scripts/phase6c-build-timing-observer.py",
+    "scripts/phase6c-build-sampler-ps1-pitch-observer.py",
+    "scripts/phase6c-build-sampler-ps1-extended-timing-observer.py",
+    "scripts/phase6c-build-delayed-retrigger-observer.py",
+):
+    builder_source = (ROOT / observer_builder).read_text(encoding="utf-8")
+    expected_line = next(
+        line for line in builder_source.splitlines()
+        if line.startswith("EXPECTED_BLOB = ")
+    )
+    pinned_blob = expected_line.split('"', 2)[1]
+    assert pinned_blob == base_observer_blob, observer_builder
+
 with tempfile.TemporaryDirectory() as temporary:
     generated = Path(temporary) / "legacy-it-observer.ps1"
     result = subprocess.run(
