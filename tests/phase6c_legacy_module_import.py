@@ -38,6 +38,18 @@ assert flags == 0x0009
 assert special == 0
 assert payload[48:54] == bytes((128, 128, 4, 140, 128, 0))
 
+decoder_fixtures = module.build_decoder_fixtures()
+assert set(decoder_fixtures) == {
+    "signed",
+    "unsigned",
+    "signed-delta-wrap",
+    "unsigned-delta-wrap",
+    "stereo-signed-delta-reset",
+}
+for name, decoder_payload in decoder_fixtures.items():
+    assert decoder_payload[:4] == b"IMPM", name
+    assert decoder_payload != payload, name
+
 orders_offset = 192
 assert payload[orders_offset:orders_offset + 2] == bytes((0, 255))
 sample_header_offset = struct.unpack_from("<I", payload, orders_offset + 2)[0]
@@ -48,6 +60,20 @@ assert struct.unpack_from("<I", payload, sample_header_offset + 52)[0] == 0
 assert struct.unpack_from("<I", payload, sample_header_offset + 56)[0] == 4096
 assert struct.unpack_from("<I", payload, sample_header_offset + 60)[0] == 8363
 assert payload[sample_header_offset + 18] & 0x10
+
+def decoder_header(name: str) -> tuple[int, int, int]:
+    decoder_payload = decoder_fixtures[name]
+    return (
+        decoder_payload[sample_header_offset + 18],
+        decoder_payload[sample_header_offset + 46],
+        struct.unpack_from("<I", decoder_payload, sample_header_offset + 48)[0],
+    )
+
+assert decoder_header("signed") == (0x01, 0x01, 3)
+assert decoder_header("unsigned") == (0x01, 0x00, 3)
+assert decoder_header("signed-delta-wrap") == (0x01, 0x05, 3)
+assert decoder_header("unsigned-delta-wrap") == (0x01, 0x04, 3)
+assert decoder_header("stereo-signed-delta-reset") == (0x05, 0x05, 3)
 
 packed_size, row_count = struct.unpack_from("<HH", payload, pattern_offset)
 assert row_count == 16
@@ -160,6 +186,20 @@ assert (
     workflow_source.count("      - 'scripts/phase6c-original-windows-fixtures-v2.ps1'\n")
     == 2
 )
+for path in (
+    "scripts/phase6-upstream-audit.sh",
+    "scripts/phase6b-sanitized-manifest.sh",
+    "scripts/phase6b-verify-committed-source.sh",
+    "scripts/phase6b-verify-qmake-support.sh",
+    "tests/phase6c_legacy_it_decoder.c",
+):
+    assert workflow_source.count(f"      - '{path}'\n") == 2, path
+
+assert "--decoder-fixtures-dir phase6c-generated/decoder-fixtures" in workflow_source
+assert "Build donor IT decoder regression probe" in workflow_source
+assert "Exercise donor 8-bit IT decoder regressions" in workflow_source
+for variant in decoder_fixtures:
+    assert variant in workflow_source
 
 donor_upload_marker = "      - name: Upload donor observation\n"
 donor_upload_start = workflow_source.index(donor_upload_marker)
@@ -196,8 +236,11 @@ assert "'phase6c-legacy-it-import.it'" in workflow_source
 assert "'stdin': '/dev/null'" in workflow_source
 assert "'stdout_stderr': log.name" in workflow_source
 assert "'working_directory': 'artifact-root'" in workflow_source
+assert "'replay_setup': ['chmod', '+x', 'candidate-psycle-player']" in workflow_source
+assert "chmod +x candidate-psycle-player" in workflow_source
 assert (
-    "'procedure': './candidate-psycle-player --output-driver dummy "
+    "'procedure': 'chmod +x candidate-psycle-player && "
+    "./candidate-psycle-player --output-driver dummy "
     "--input-file phase6c-legacy-it-import.it </dev/null "
     ">candidate-direct-import.log 2>&1'"
 ) in workflow_source
