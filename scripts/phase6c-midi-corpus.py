@@ -652,7 +652,7 @@ def candidate_boundary(
         shutil.rmtree(replay_root)
 
     if any(item["direct_midi_load"] != "rejected" for item in results):
-        die("frozen candidate historical MIDI boundary was not a scoped direct-load rejection")
+        die("frozen candidate real-world MIDI boundary was not a scoped direct-load rejection")
     receipt = {
         "schema_version": 1,
         "phase": "6C",
@@ -661,7 +661,6 @@ def candidate_boundary(
         "player": "candidate-psycle-player",
         "player_sha256": player_sha,
         "working_directory": "artifact-root-with-private-input",
-        "private_input_required": True,
         "procedure": (
             "for each corpus set, place the exact representative SMF beside the "
             "artifact candidate player under the private replay root, chmod +x the "
@@ -705,6 +704,39 @@ def donor_summary(
                 die(f"{stem['stem_id']}: donor evidence_role changed")
             if obs.get("source_sha256") != stem["sha256"]:
                 die(f"{stem['stem_id']}: donor source identity changed")
+            if obs.get("source_size_bytes") != stem["size_bytes"]:
+                die(f"{stem['stem_id']}: donor source size changed")
+            expected_analysis_sha = sha256_bytes(
+                json.dumps(
+                    stem["analysis"], sort_keys=True, separators=(",", ":")
+                ).encode()
+            )
+            if obs.get("source_analysis_sha256") != expected_analysis_sha:
+                die(f"{stem['stem_id']}: donor raw-SMF analysis binding changed")
+            if obs.get("load_result") != "accepted":
+                die(f"{stem['stem_id']}: donor load_result is not accepted")
+            if obs.get("machines_before_projection") != 0:
+                die(f"{stem['stem_id']}: MIDI importer unexpectedly created machines")
+            if not isinstance(obs.get("projection_notes"), int) or obs["projection_notes"] <= 0:
+                die(f"{stem['stem_id']}: donor projection contains no notes")
+            if not isinstance(obs.get("render_frames"), int) or obs["render_frames"] <= 0:
+                die(f"{stem['stem_id']}: donor projection rendered no frames")
+            if not isinstance(obs.get("render_peak"), int) or obs["render_peak"] <= 0:
+                die(f"{stem['stem_id']}: donor projection peak is invalid")
+            if obs.get("private_input_required") is not True:
+                die(f"{stem['stem_id']}: donor private-input flag changed")
+            if obs.get("fixture_redistributed") is not False:
+                die(f"{stem['stem_id']}: donor redistribution flag changed")
+            digest = obs.get("import_event_digest_fnv64")
+            if not isinstance(digest, str) or len(digest) != 16:
+                die(f"{stem['stem_id']}: donor event digest is invalid")
+            try:
+                int(digest, 16)
+            except ValueError:
+                die(f"{stem['stem_id']}: donor event digest is not hexadecimal")
+            render_sha = obs.get("render_sha256")
+            if not isinstance(render_sha, str) or len(render_sha) != 64:
+                die(f"{stem['stem_id']}: donor render SHA-256 is invalid")
             if obs.get("imported_notes") != stem["analysis"]["note_ons"]:
                 die(
                     f"{stem['stem_id']}: imported note count differs from raw SMF: "
@@ -795,6 +827,10 @@ def corpus_summary(
         or donor.get("parity_status") != "UNKNOWN"
         or donor.get("all_sets_imported") is not True
         or donor.get("all_sets_non_silent_projection") is not True
+        or donor.get("progression_order") != PROGRESSION
+        or not isinstance(donor.get("sets"), list)
+        or len(donor["sets"]) != 6
+        or [item.get("name") for item in donor["sets"]] != PROGRESSION
     ):
         die("donor MIDI corpus summary is incomplete or invalid")
     require_support(
@@ -810,16 +846,34 @@ def corpus_summary(
         "donor probe",
     )
 
+    candidate_sets = candidate.get("sets")
     if (
         candidate.get("schema_version") != 1
         or candidate.get("phase") != "6C"
         or candidate.get("contract") != CANDIDATE_CONTRACT
         or candidate.get("evidence_role") != "candidate-observation"
         or candidate.get("parity_status") != "UNKNOWN"
-        or len(candidate.get("sets", [])) != 6
-        or any(item.get("direct_midi_load") != "rejected" for item in candidate["sets"])
+        or candidate.get("private_input_required") is not True
+        or candidate.get("progression_order") != PROGRESSION
+        or not isinstance(candidate_sets, list)
+        or len(candidate_sets) != 6
     ):
         die("candidate MIDI corpus boundary is incomplete or invalid")
+    if [item.get("set_name") for item in candidate_sets] != PROGRESSION:
+        die("candidate MIDI set order differs from the corpus progression")
+    for item in candidate_sets:
+        if (
+            item.get("direct_midi_load") != "rejected"
+            or item.get("exit_code") != 2
+            or item.get("diagnostic_could_not_load_song_file") is not True
+        ):
+            die(f"candidate {item.get('set_name')} direct-load boundary is incomplete")
+        rep_sha = item.get("representative_sha256")
+        raw_sha = item.get("raw_output_sha256")
+        if not isinstance(rep_sha, str) or len(rep_sha) != 64:
+            die(f"candidate {item.get('set_name')} representative SHA-256 is invalid")
+        if not isinstance(raw_sha, str) or len(raw_sha) != 64:
+            die(f"candidate {item.get('set_name')} raw-output SHA-256 is invalid")
 
     require_support(
         candidate_path,
