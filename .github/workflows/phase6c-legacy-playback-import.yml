@@ -28,6 +28,10 @@ on:
       - 'scripts/phase6c-build-historical-it-observer.py'
       - 'scripts/phase6c-validate-historical-it-original.py'
       - '.github/workflows/phase6c-historical-it-private.yml'
+      - 'scripts/phase6c-midi-corpus.py'
+      - 'tests/phase6c_midi_corpus.py'
+      - 'tests/phase6c_midi_corpus_probe.c'
+      - '.github/workflows/phase6c-midi-corpus-private.yml'
       - 'cpsycle/**'
       - 'psycle-cpp-r12005-sanitized/**'
       - '.github/workflows/phase6c-legacy-playback-import.yml'
@@ -57,6 +61,10 @@ on:
       - 'scripts/phase6c-build-historical-it-observer.py'
       - 'scripts/phase6c-validate-historical-it-original.py'
       - '.github/workflows/phase6c-historical-it-private.yml'
+      - 'scripts/phase6c-midi-corpus.py'
+      - 'tests/phase6c_midi_corpus.py'
+      - 'tests/phase6c_midi_corpus_probe.c'
+      - '.github/workflows/phase6c-midi-corpus-private.yml'
       - 'cpsycle/**'
       - 'psycle-cpp-r12005-sanitized/**'
       - '.github/workflows/phase6c-legacy-playback-import.yml'
@@ -83,6 +91,7 @@ jobs:
         run: |
           python3 tests/phase6c_legacy_module_import.py
           python3 tests/phase6c_historical_it.py
+          python3 tests/phase6c_midi_corpus.py
 
       - name: Generate canonical IT fixture
         run: |
@@ -142,6 +151,65 @@ jobs:
 
       - name: Build C-Psycle donor player libraries
         run: make -C cpsycle/player -j1
+
+      - name: Build synthetic MIDI corpus execution probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/phase6c-midi-corpus.py write-synthetic \
+            phase6c-generated/phase6c-midi-synthetic.mid
+          gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer \
+            -Wall -Wextra -Werror=implicit-function-declaration \
+            -Icpsycle/script/src -Icpsycle/thread/src -Icpsycle/container/src \
+            -Icpsycle/file/src -Icpsycle/diversalis/src -Icpsycle/src \
+            -Icpsycle/audio/src -Icpsycle/dsp/src $(pkg-config --cflags lua) \
+            tests/phase6c_midi_corpus_probe.c \
+            -o phase6c-generated/phase6c-midi-corpus-probe \
+            -Lcpsycle/thread/src -Lcpsycle/script/src -Lcpsycle/container/src \
+            -Lcpsycle/dsp/src -Lcpsycle/audio/src -Lcpsycle/file/src \
+            -Wl,--no-as-needed -laudio -lthread -llilv-0 -ldsp -lscript -lfile \
+            -lm $(pkg-config --libs lua) -lpthread -ldl -lstdc++ -lcontainer
+
+      - name: Prove synthetic SMF import and non-silent projection
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x phase6c-generated/phase6c-midi-corpus-probe
+          phase6c-generated/phase6c-midi-corpus-probe \
+            phase6c-generated/phase6c-midi-synthetic.mid \
+            phase6c-generated/phase6c-midi-synthetic.wav \
+            > phase6c-generated/phase6c-midi-synthetic.log 2>&1
+          cat phase6c-generated/phase6c-midi-synthetic.log
+          tail -n 1 phase6c-generated/phase6c-midi-synthetic.log \
+            > phase6c-generated/phase6c-midi-synthetic.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          observation = json.loads(
+              Path("phase6c-generated/phase6c-midi-synthetic.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          assert observation["schema_version"] == 1
+          assert observation["phase"] == "6C"
+          assert observation["contract"] == "legacy-midi-real-world-donor"
+          assert observation["evidence_role"] == "cpsycle-donor-observation"
+          assert observation["load_result"] == "accepted"
+          assert observation["sequence_tracks"] == 2
+          assert observation["patterns"] == 2
+          assert observation["imported_notes"] == 2
+          assert observation["machines_before_projection"] == 0
+          assert observation["projection_notes"] == 2
+          assert observation["projection_kind"] == "deterministic-sampulse"
+          assert observation["render_frames"] > 0
+          assert observation["render_peak"] > 0
+          assert observation["non_silent_projection"] is True
+          assert observation["parity_status"] == "UNKNOWN"
+          assert len(observation["import_event_digest_fnv64"]) == 16
+          PY
+          rm -f \
+            phase6c-generated/phase6c-midi-synthetic.mid \
+            phase6c-generated/phase6c-midi-synthetic.wav
 
       - name: Build donor IT loader probe
         shell: bash
