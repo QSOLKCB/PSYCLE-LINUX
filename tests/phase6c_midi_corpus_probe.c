@@ -155,7 +155,7 @@ static int collect_import_stats(psy_audio_Song* song, ImportStats* stats)
     uintptr_t sequence_track;
 
     memset(stats, 0, sizeof(*stats));
-    stats->digest = UINT64_C(1469598103934665603);
+    stats->digest = UINT64_C(14695981039346656037);
     stats->sequence_tracks = psy_audio_sequence_num_tracks(sequence);
 
     for (sequence_track = 0;
