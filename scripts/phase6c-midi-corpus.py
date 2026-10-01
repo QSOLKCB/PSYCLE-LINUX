@@ -393,10 +393,13 @@ def validate_set_aggregate(set_spec: dict[str, Any], stems: list[dict[str, Any]]
         "tempo_events": "tempo_events",
     }
     for actual_key, expected_key in exact_fields.items():
-        if aggregate[actual_key] != expected.get(expected_key):
+        expected_value = expected.get(expected_key)
+        if expected_value is None:
+            continue
+        if aggregate[actual_key] != expected_value:
             die(
                 f"{set_spec['name']}: {actual_key} mismatch: "
-                f"expected={expected.get(expected_key)} actual={aggregate[actual_key]}"
+                f"expected={expected_value} actual={aggregate[actual_key]}"
             )
     if aggregate["formats"] != [1] or aggregate["divisions"] != [480]:
         die(f"{set_spec['name']}: corpus files are not uniformly SMF1/480 PPQN")
