@@ -342,34 +342,37 @@ int itmodule2_loaditmodule(ITModule2* self)
 		psy_audio_samples_insert(psy_audio_song_samples(self->songfile->song), wave,
 			psy_audio_sampleindex_make(i, 0));			
 		created = itmodule2_loaditsample(self, wave);
-		/* If this IT file doesn't use Instruments, we need to map the notes manually. */
-		if (created && !(self->fileheader.flags & IT2_FLAGS_USEINSTR))
-		{	
-			printf("it doesn't use instruments\n");
-		/*		
-		**	if (song.xminstruments.IsEnabled(i) == false) {
-		**		XMInstrument instr;
-		**		instr.Init();
-		**		song.xminstruments.SetInst(instr, i);
-		**	}
-		**	XMInstrument& instrument = song.xminstruments.get(i);
-		**	instrument.Name(wave.WaveName());
-		**	XMInstrument::NotePair npair;
-		**	npair.second = i;
-		**	for (int j = 0; j < XMInstrument::NOTE_MAP_SIZE; j++) {
-		**		npair.first = j;
-		**		instrument.NoteToSample(j, npair);
-		**	}
-		**	instrument.ValidateEnabled();
-
-		**	ittovirtual[i] = virtualInst;
-		**	song.SetVirtualInstrument(virtualInst++, 0, i);
-		*/
-		}	
-		/* create instrument entry */
 		instr = psy_audio_instruments_at(psy_audio_song_instruments(
 			self->songfile->song), psy_audio_instrumentindex_make(
 			INSTRUMENTGROUP, i));
+		/*
+		** IT sample mode uses the pattern instrument byte as a sample number.
+		** Sampulse still requires an instrument entry to select that sample,
+		** so materialize the missing one-to-one mapping and route it through
+		** the same virtual-generator path used by instrument-mode modules.
+		*/
+		if (created && !(self->fileheader.flags & IT2_FLAGS_USEINSTR)) {
+			if (!instr) {
+				instr = psy_audio_instrument_allocinit();
+				if (!instr) {
+					free(pointersi);
+					free(pointerss);
+					free(pointersp);
+					return PSY_ERRFILE;
+				}
+				psy_audio_instrument_setindex(instr, i);
+				psy_audio_instrument_set_name(instr, psy_audio_sample_name(wave));
+				psy_audio_instruments_insert(
+					psy_audio_song_instruments(self->songfile->song), instr,
+					psy_audio_instrumentindex_make(INSTRUMENTGROUP, i));
+			}
+			if (!psy_table_exists(&self->ittovirtual.table, i)) {
+				modtovirtual_set(&self->ittovirtual, i, virtualInst);
+				psy_audio_song_insert_virtual_generator(self->songfile->song,
+					virtualInst++, 0, i);
+			}
+		}
+		/* create instrument entry */
 		if (instr) {
 			psy_audio_instrument_clearentries(instr);
 			psy_audio_instrumententry_init(&instentry);
