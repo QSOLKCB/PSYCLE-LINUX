@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import subprocess
 import tempfile
@@ -27,14 +28,70 @@ assert manifest["source"]["sha256"] == EXPECTED_SHA
 assert manifest["source"]["size_bytes"] == EXPECTED_SIZE
 assert manifest["source"]["redistribution"] == "not_committed"
 
-helper_source = HELPER.read_text(encoding="utf-8")
-assert 'MANIFEST = ROOT / "phase6c/evidence/legacy-module-import/historical-sickmaate.json"' in helper_source
-assert 'source = manifest_source()' in helper_source
-assert 'expected_sha = source.get("sha256")' in helper_source
-assert "external-hash-bound" in helper_source
-assert "private/d-503_-_sickmaate.it" not in helper_source
-assert "parity_status" in helper_source
-assert '"UNKNOWN"' in helper_source
+helper_spec = importlib.util.spec_from_file_location(
+    "phase6c_historical_it_helper_test", HELPER
+)
+historical_helper = importlib.util.module_from_spec(helper_spec)
+assert helper_spec.loader is not None
+helper_spec.loader.exec_module(historical_helper)
+
+with tempfile.TemporaryDirectory() as temporary:
+    temporary_root = Path(temporary)
+    synthetic_title = "SyntheticWitness"
+    synthetic_bytes = (
+        b"IMPM"
+        + synthetic_title.encode("ascii").ljust(26, b"\0")
+        + bytes(range(64))
+    )
+    synthetic_file = temporary_root / "synthetic-witness.it"
+    synthetic_file.write_bytes(synthetic_bytes)
+    synthetic_sha = hashlib.sha256(synthetic_bytes).hexdigest()
+
+    synthetic_manifest = {
+        "schema_version": 1,
+        "contract": "legacy-impulse-tracker-import-reference",
+        "status": "EXTERNAL_REFERENCE",
+        "source": {
+            "filename": synthetic_file.name,
+            "sha256": synthetic_sha,
+            "size_bytes": len(synthetic_bytes),
+            "title": synthetic_title,
+            "redistribution": "not_committed",
+        },
+    }
+    synthetic_manifest_path = temporary_root / "historical-manifest.json"
+    synthetic_manifest_path.write_text(
+        json.dumps(synthetic_manifest, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    original_manifest_path = historical_helper.MANIFEST
+    try:
+        historical_helper.MANIFEST = synthetic_manifest_path
+        identity = historical_helper.validate_historical_file(synthetic_file)
+        assert identity == {
+            "filename": synthetic_file.name,
+            "sha256": synthetic_sha,
+            "size_bytes": len(synthetic_bytes),
+            "title": synthetic_title,
+            "redistribution": "external-hash-bound",
+        }
+
+        synthetic_manifest["source"]["sha256"] = "0" * 64
+        synthetic_manifest_path.write_text(
+            json.dumps(synthetic_manifest, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        try:
+            historical_helper.validate_historical_file(synthetic_file)
+        except SystemExit as exc:
+            assert "SHA-256 mismatch" in str(exc)
+        else:
+            raise AssertionError(
+                "historical helper must derive the expected SHA-256 from MANIFEST"
+            )
+    finally:
+        historical_helper.MANIFEST = original_manifest_path
 
 with tempfile.TemporaryDirectory() as temporary:
     bad = Path(temporary) / "wrong.it"
