@@ -1094,16 +1094,31 @@ bool itmodule2_loaditsampledata(ITModule2* self, psy_audio_Sample* _wave, uint32
 				out++;
 			}
 		}
-	} else {		
+	} else {
 		for (j = 0; j < iLen; j++) {
-			wNew = (convert & IT2_SAMPLE_CONVERTIS_DELTA) ? wNew + smpbuf[j] : smpbuf[j];			
-			_wave->channels.samples[0][j] = (float)((wNew << 8) + offset);			
+			if (convert & IT2_SAMPLE_CONVERTIS_DELTA) {
+				wNew = (signed char)(wNew + (signed char)smpbuf[j]);
+			} else if (convert & IT2_SAMPLE_CONVERT_IS_SIGNED) {
+				wNew = (signed char)smpbuf[j];
+			} else {
+				wNew = smpbuf[j];
+			}
+			_wave->channels.samples[0][j] =
+				(float)((wNew * 256) + offset);
 		}
-		if (bstereo) {			
+		if (bstereo) {
 			psyfile_read(fp, smpbuf, iLen);
+			wNew = 0;
 			for (j = 0; j < iLen; j++) {
-				wNew = (convert & IT2_SAMPLE_CONVERTIS_DELTA) ? wNew + smpbuf[j] : smpbuf[j];
-				_wave->channels.samples[1][j] = (float)((wNew << 8) + offset);					
+				if (convert & IT2_SAMPLE_CONVERTIS_DELTA) {
+					wNew = (signed char)(wNew + (signed char)smpbuf[j]);
+				} else if (convert & IT2_SAMPLE_CONVERT_IS_SIGNED) {
+					wNew = (signed char)smpbuf[j];
+				} else {
+					wNew = smpbuf[j];
+				}
+				_wave->channels.samples[1][j] =
+					(float)((wNew * 256) + offset);
 			}
 		}
 	}
