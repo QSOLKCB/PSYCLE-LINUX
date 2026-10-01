@@ -96,6 +96,7 @@ static int midiloader_readmeta_timesignature(MidiLoader*);
 static int midiloader_readmeta_keysignature(MidiLoader*);
 static int midiloader_readmeta_properietaryevent(MidiLoader*);
 /* Misc methods */
+static void midiloader_flushnoteoffs(MidiLoader*);
 static  void midiloader_writepatternevent(MidiLoader*, psy_audio_PatternEvent);
 static int midiloader_readchunk(MidiLoader*, MCHUNK* rv);
 static int midiloader_readbyte1(MidiLoader*, uint8_t* rv_int);
@@ -189,6 +190,7 @@ int midiloader_readtrk(MidiLoader* self, MCHUNK chunk, uintptr_t trackidx)
     if ((status = midiloader_readtrackevents(self, chunk, trackidx))) {
         return status;
     }
+    midiloader_flushnoteoffs(self);
     if (self->currtrack.pattern) {
         if (self->currtrack.patternnode) {
             psy_audio_PatternEntry* lastentry;
@@ -871,6 +873,56 @@ int midiloader_readbyte1(MidiLoader* self, uint8_t* rv)
         return status;
     }
     return PSY_OK;
+}
+
+void midiloader_flushnoteoffs(MidiLoader* self)
+{
+    uint16_t voice;
+
+    for (voice = 0; voice < MAX_MIDIFILE_POLYPHONY; ++voice) {
+        MidiChannel* channel;
+
+        channel = &self->currtrack.channels[voice];
+        if (!channel->noteoff) {
+            continue;
+        }
+        if (channel->time >= self->currtrack.patternoffset) {
+            psy_audio_PatternEvent noteoff;
+            psy_audio_PatternNode* node;
+            psy_audio_PatternNode* prev;
+
+            psy_audio_patternevent_init(&noteoff);
+            noteoff.note = psy_audio_NOTECOMMANDS_RELEASE;
+            noteoff.mach = channel->tracknote.mach;
+            node = psy_audio_pattern_find_node(
+                self->currtrack.pattern,
+                voice,
+                psy_dsp_beatpos_make_real(
+                    channel->time - self->currtrack.patternoffset,
+                    psy_dsp_DEFAULT_PPQ),
+                psy_dsp_beatpos_make_real(
+                    0.05, psy_dsp_DEFAULT_PPQ),
+                &prev);
+            if (!node) {
+                psy_audio_PatternEntry entry;
+
+                psy_audio_patternentry_init(&entry);
+                psy_audio_patternentry_set_event(&entry, noteoff, 0);
+                psy_audio_pattern_insert(
+                    self->currtrack.pattern,
+                    prev,
+                    voice,
+                    psy_dsp_beatpos_make_real(
+                        channel->time - self->currtrack.patternoffset,
+                        psy_dsp_DEFAULT_PPQ),
+                    &entry);
+                psy_audio_patternentry_dispose(&entry);
+                self->currtrack.patternnode =
+                    psy_audio_pattern_begin(self->currtrack.pattern)->tail;
+            }
+        }
+        channel->noteoff = FALSE;
+    }
 }
 
 void midiloader_writepatternevent(MidiLoader* self, psy_audio_PatternEvent ev)
