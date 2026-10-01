@@ -269,6 +269,8 @@ jobs:
           assert data['sample_frames'] == 4096
           assert data['sample_loop'] == '0-4096'
           assert (data['pcm0'], data['pcm1'], data['pcm5']) == (-16128, -12800, 512)
+          assert data['sample_mode_mapping'] == 'virtual-generator'
+          assert data['sample_mode_virtual_generator'] > 0
           for command in ('E10', 'F10', 'G08', 'V40', 'Z58', 'C00'):
               assert data[command] == 'mapped'
           assert data['note_cut_254'] == 'release'
