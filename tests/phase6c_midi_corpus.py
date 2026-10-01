@@ -380,6 +380,9 @@ for path in (
 assert "python3 tests/phase6c_midi_corpus.py" in legacy_workflow
 assert "Build synthetic MIDI corpus execution probe" in legacy_workflow
 assert "Prove synthetic SMF import and non-silent projection" in legacy_workflow
+assert "Attest frozen C++ candidate player" in legacy_workflow
+assert "attest-candidate-player" in legacy_workflow
+assert "candidate-player-attestation.json" in legacy_workflow
 assert "tests/phase6c_midi_corpus_probe.c" in legacy_workflow
 assert "phase6c-midi-synthetic.mid" in legacy_workflow
 assert 'assert observation["sequence_tracks"] == 2' in legacy_workflow
