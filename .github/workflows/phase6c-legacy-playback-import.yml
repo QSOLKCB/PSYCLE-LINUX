@@ -21,6 +21,7 @@ on:
       - 'tests/phase6c_legacy_module_import.py'
       - 'tests/phase6c_legacy_it_loader.c'
       - 'tests/phase6c_legacy_it_decoder.c'
+      - 'tests/phase6c_legacy_it_playback.c'
       - 'cpsycle/**'
       - 'psycle-cpp-r12005-sanitized/**'
       - '.github/workflows/phase6c-legacy-playback-import.yml'
@@ -43,6 +44,7 @@ on:
       - 'tests/phase6c_legacy_module_import.py'
       - 'tests/phase6c_legacy_it_loader.c'
       - 'tests/phase6c_legacy_it_decoder.c'
+      - 'tests/phase6c_legacy_it_playback.c'
       - 'cpsycle/**'
       - 'psycle-cpp-r12005-sanitized/**'
       - '.github/workflows/phase6c-legacy-playback-import.yml'
@@ -165,6 +167,88 @@ jobs:
               "phase6c-generated/decoder-fixtures/phase6c-it-decoder-$variant.it"
           done
 
+      - name: Build donor IT sample-mode playback witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer \
+            -Wall -Wextra -Werror=implicit-function-declaration \
+            -Icpsycle/script/src -Icpsycle/thread/src -Icpsycle/container/src \
+            -Icpsycle/file/src -Icpsycle/diversalis/src -Icpsycle/src \
+            -Icpsycle/audio/src -Icpsycle/dsp/src $(pkg-config --cflags lua) \
+            tests/phase6c_legacy_it_playback.c \
+            -o phase6c-generated/phase6c-legacy-it-playback \
+            -Lcpsycle/thread/src -Lcpsycle/script/src -Lcpsycle/container/src \
+            -Lcpsycle/dsp/src -Lcpsycle/audio/src -Lcpsycle/file/src \
+            -Wl,--no-as-needed -laudio -lthread -llilv-0 -ldsp -lscript -lfile \
+            -lm $(pkg-config --libs lua) -lpthread -ldl -lstdc++ -lcontainer
+
+      - name: Prove non-silent deterministic IT sample-mode playback
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x phase6c-generated/phase6c-legacy-it-playback
+          phase6c-generated/phase6c-legacy-it-playback \
+            phase6c-generated/phase6c-legacy-it-import.it \
+            | tee phase6c-generated/cpsycle-donor-playback.log
+          tail -n 1 phase6c-generated/cpsycle-donor-playback.log \
+            > phase6c-generated/cpsycle-donor-playback.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('phase6c-generated/cpsycle-donor-playback.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          assert data['contract'] == 'legacy-it-sample-mode-playback-donor'
+          assert data['frames'] == 512
+          assert data['virtual_generator'] > 0
+          assert data['nonzero_frames'] > 0
+          assert data['peak'] > 0
+          assert data['repeat_render_bit_identical'] is True
+          assert data['non_silent'] is True
+          PY
+          test -f phase6c-generated/cpsycle-itmodule2.c
+          cmp --silent cpsycle/audio/src/itmodule2.c phase6c-generated/cpsycle-itmodule2.c
+          python3 - <<'PY'
+          import hashlib, json, subprocess
+          from pathlib import Path
+          root = Path('phase6c-generated')
+          fixture = root / 'phase6c-legacy-it-import.it'
+          probe = root / 'phase6c-legacy-it-playback'
+          log = root / 'cpsycle-donor-playback.log'
+          observation = root / 'cpsycle-donor-playback.json'
+          source_file = root / 'cpsycle-itmodule2.c'
+          source_revision = subprocess.check_output(
+              ['git', 'rev-parse', 'HEAD'], text=True
+          ).strip()
+          receipt = {
+              'schema_version': 1,
+              'phase': '6C',
+              'contract': 'legacy-it-sample-mode-playback-donor',
+              'evidence_role': 'cpsycle-donor',
+              'parity_status': 'UNKNOWN',
+              'source_revision': source_revision,
+              'source_file': source_file.name,
+              'source_file_origin': 'cpsycle/audio/src/itmodule2.c',
+              'source_file_sha256': hashlib.sha256(source_file.read_bytes()).hexdigest(),
+              'fixture': fixture.name,
+              'fixture_sha256': hashlib.sha256(fixture.read_bytes()).hexdigest(),
+              'probe_executable': probe.name,
+              'probe_executable_sha256': hashlib.sha256(probe.read_bytes()).hexdigest(),
+              'raw_log': log.name,
+              'raw_log_sha256': hashlib.sha256(log.read_bytes()).hexdigest(),
+              'observation': observation.name,
+              'observation_sha256': hashlib.sha256(observation.read_bytes()).hexdigest(),
+              'replay_setup': ['chmod', '+x', probe.name],
+              'procedure': 'chmod +x phase6c-legacy-it-playback && ./phase6c-legacy-it-playback phase6c-legacy-it-import.it >cpsycle-donor-playback.log',
+              'exit_code': 0,
+              'claim_scope': 'donor sample-mode mapping plus deterministic non-silent playback only; no original-Psycle or frozen-candidate parity claim',
+          }
+          (root / 'cpsycle-donor-playback-receipt.json').write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          PY
+
       - name: Load generated IT through C-Psycle donor runtime
         shell: bash
         run: |
@@ -240,7 +324,11 @@ jobs:
           path: |
             phase6c-generated/phase6c-legacy-it-import.it
             phase6c-generated/phase6c-legacy-it-loader
+            phase6c-generated/phase6c-legacy-it-playback
             phase6c-generated/cpsycle-itmodule2.c
+            phase6c-generated/cpsycle-donor-playback.log
+            phase6c-generated/cpsycle-donor-playback.json
+            phase6c-generated/cpsycle-donor-playback-receipt.json
             phase6c-generated/cpsycle-donor.log
             phase6c-generated/cpsycle-donor-observation.json
             phase6c-generated/cpsycle-donor-receipt.json
