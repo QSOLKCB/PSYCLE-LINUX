@@ -213,6 +213,7 @@ int main(int argc, char** argv)
     printf(
         "{"
         "\"schema_version\":1,"
+        "\"phase\":\"6C\","
         "\"contract\":\"legacy-impulse-tracker-import-reference\","
         "\"evidence_role\":\"cpsycle-donor-observation\","
         "\"title\":\"%s\","
