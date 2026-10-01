@@ -34,7 +34,7 @@ The historical file is evidence input, not an oracle. Original-Psycle behavior m
 It deliberately exercises:
 
 - sample-mode IT loading;
-- deterministic signed 8-bit PCM with a 4,096-frame forward loop so command rows execute against a live voice;
+- deterministic signed 8-bit PCM with a 4,096-frame forward loop, preserving enough sample data for a later playback witness without claiming that the current sample-mode importer starts a voice;
 - speed 4 / tempo 140;
 - linear-slide mode;
 - `E10` portamento down;
@@ -64,7 +64,13 @@ It also contains an explicit compatibility compromise:
 IT note cut 254 -> Psycle release
 ```
 
-because the donor comments that Psycle has no distinct note-cut note. The generated runtime probe freezes that **donor observation only**. It does not claim that original Psycle behaved the same way.
+because the donor comments that Psycle has no distinct note-cut note. The generated runtime probe freezes that **donor import/translation observation only**. It does not claim that original Psycle behaved the same way.
+
+### Playback boundary
+
+This PR does **not** establish audible sample-mode playback. The retained importer creates IT instruments only when the source module contains IT instruments, while this fixture intentionally uses sample mode (`insNum == 0`); the historical sample-mode note-to-sample mapping block remains commented out. The current probe therefore proves file acceptance, decoded PCM, loop geometry, timing metadata and imported command translation, but it does not prove that those commands execute against a live XMSampler voice or produce non-silent output.
+
+That gap is explicitly handed off to a later narrow playback reproduction. The next playback witness must demonstrate a usable sample mapping or non-silent deterministic render before any donor playback claim is promoted.
 
 ## Candidate boundary
 
@@ -100,7 +106,7 @@ This gives the project two complementary layers:
 Resume the previously deferred Phase 6C expansion after all of the following are true:
 
 - [ ] generated IT fixture identity is CI-gated;
-- [ ] C-Psycle donor runtime loads and validates the generated fixture;
+- [ ] C-Psycle donor importer loads and validates the generated fixture's import/translation contract; audible sample-mode playback remains a separate handed-off witness;
 - [ ] pinned original Psycle has a versioned generated-fixture observation;
 - [ ] frozen C++ candidate has a versioned direct-import capability observation;
 - [ ] the historical `SickMaate` witness has a hash-bound original/candidate/C-Psycle observation summary without redistributing its samples;
