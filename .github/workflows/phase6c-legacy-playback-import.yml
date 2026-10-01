@@ -121,6 +121,8 @@ jobs:
 
       - name: Load generated IT through C-Psycle donor runtime
         shell: bash
+        env:
+          SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           phase6c-generated/phase6c-legacy-it-loader phase6c-generated/phase6c-legacy-it-import.it \
@@ -151,12 +153,15 @@ jobs:
           probe = root / 'phase6c-legacy-it-loader'
           log = root / 'cpsycle-donor.log'
           observation = root / 'cpsycle-donor-observation.json'
+          source_file = Path('cpsycle/audio/src/itmodule2.c')
           receipt = {
               'schema_version': 1,
               'phase': '6C',
               'contract': 'legacy-it-import-donor-runtime',
               'evidence_role': 'cpsycle-donor',
-              'source_revision': os.environ['GITHUB_SHA'],
+              'source_revision': os.environ['SOURCE_REVISION'],
+              'source_file': source_file.as_posix(),
+              'source_file_sha256': hashlib.sha256(source_file.read_bytes()).hexdigest(),
               'fixture': fixture.name,
               'fixture_sha256': hashlib.sha256(fixture.read_bytes()).hexdigest(),
               'probe_executable': probe.name,
