@@ -97,6 +97,17 @@ workflow_source = (
 assert "github.event.pull_request.head.sha || github.sha" not in workflow_source
 assert "['git', 'rev-parse', 'HEAD']" in workflow_source
 assert "phase6c-generated/phase6c-legacy-it-loader" in workflow_source
+assert "phase6c-generated/phase6c-legacy-it-import.it" in workflow_source
+assert "phase6c-generated/candidate-psycle-player" in workflow_source
+assert "'fixture': fixture.name" in workflow_source
+assert "'player': player.name" in workflow_source
+assert "'log': log.name" in workflow_source
+
+legacy_doc = (ROOT / "phase6c/LEGACY_PLAYBACK_IMPORT.md").read_text(encoding="utf-8")
+assert "size:   4,439 bytes" in legacy_doc
+assert module.EXPECTED_SHA256 in legacy_doc
+assert "size:   599 bytes" not in legacy_doc
+assert "1670e48dc761296e9c3497f6f3c6632fbc020b2f47bf46d97e3f9571b44b4f3e" not in legacy_doc
 
 validator_source = (
     ROOT / "scripts/phase6c-validate-original-receipts-v2.py"
