@@ -214,6 +214,164 @@ def receipt_sha(path: pathlib.Path) -> str:
     return sha256_file(path)
 
 
+def require_hash(value: Any, label: str) -> str:
+    if not isinstance(value, str) or len(value) != 64:
+        die(f"{label} must be a SHA-256 string")
+    try:
+        int(value, 16)
+    except ValueError:
+        die(f"{label} must be hexadecimal")
+    return value.lower()
+
+
+def require_common_receipt(
+    receipt: dict[str, Any],
+    *,
+    label: str,
+    evidence_role: str,
+) -> None:
+    if receipt.get("schema_version") != 1:
+        die(f"{label} receipt has unexpected schema_version")
+    if receipt.get("phase") != "6C":
+        die(f"{label} receipt has unexpected phase")
+    if receipt.get("contract") != EXPECTED_CONTRACT:
+        die(f"{label} receipt has unexpected contract")
+    if receipt.get("evidence_role") != evidence_role:
+        die(f"{label} receipt has unexpected evidence_role")
+    if receipt.get("parity_status") != "UNKNOWN":
+        die(f"{label} receipt attempted to promote parity")
+
+
+def require_public_support_file(
+    receipt_path: pathlib.Path,
+    relative_name: Any,
+    expected_sha: Any,
+    label: str,
+) -> None:
+    if not isinstance(relative_name, str) or not relative_name or pathlib.PurePosixPath(relative_name).is_absolute():
+        die(f"{label} support path is invalid")
+    relative = pathlib.PurePosixPath(relative_name)
+    if ".." in relative.parts:
+        die(f"{label} support path escapes its component root")
+    path = receipt_path.parent / pathlib.Path(*relative.parts)
+    if not path.is_file():
+        die(f"{label} support file is missing: {relative_name}")
+    expected = require_hash(expected_sha, f"{label} support hash")
+    if sha256_file(path) != expected:
+        die(f"{label} support file hash mismatch: {relative_name}")
+
+
+def validate_summary_components(
+    *,
+    source: dict[str, Any],
+    donor_path: pathlib.Path,
+    donor: dict[str, Any],
+    candidate_path: pathlib.Path,
+    candidate: dict[str, Any],
+    original_path: pathlib.Path,
+    original: dict[str, Any],
+) -> None:
+    expected_sha = source["sha256"]
+    expected_size = source["size_bytes"]
+
+    require_common_receipt(
+        donor,
+        label="donor",
+        evidence_role="cpsycle-donor-observation",
+    )
+    if donor.get("source_sha256") != expected_sha or donor.get("source_size_bytes") != expected_size:
+        die("donor receipt is not bound to the historical source identity")
+    if donor.get("load_result") != "accepted":
+        die("donor historical observation must record load_result=accepted")
+    if donor.get("non_silent_playback") is not True:
+        die("donor historical observation must record non_silent_playback=true")
+    if donor.get("fixture_redistributed") is not False:
+        die("donor historical receipt must record fixture_redistributed=false")
+    if donor.get("private_input_required") is not True:
+        die("donor historical receipt must record private_input_required=true")
+    require_public_support_file(
+        donor_path,
+        donor.get("source_file"),
+        donor.get("source_file_sha256"),
+        "donor source",
+    )
+    require_public_support_file(
+        donor_path,
+        donor.get("probe_executable"),
+        donor.get("probe_executable_sha256"),
+        "donor probe",
+    )
+    require_hash(donor.get("raw_output_sha256"), "donor raw_output_sha256")
+
+    require_common_receipt(
+        candidate,
+        label="candidate",
+        evidence_role="candidate-observation",
+    )
+    if candidate.get("source_sha256") != expected_sha or candidate.get("source_size_bytes") != expected_size:
+        die("candidate receipt is not bound to the historical source identity")
+    if candidate.get("direct_it_load") != "rejected":
+        die("candidate historical observation must record direct_it_load=rejected")
+    if candidate.get("diagnostic_could_not_load_song_file") is not True:
+        die("candidate historical rejection lacks its scoped load diagnostic")
+    if candidate.get("exit_code") != 2:
+        die("candidate historical direct-load rejection exit code changed")
+    if candidate.get("private_input_required") is not True:
+        die("candidate historical receipt must record private_input_required=true")
+    require_public_support_file(
+        candidate_path,
+        candidate.get("player"),
+        candidate.get("player_sha256"),
+        "candidate player",
+    )
+    require_hash(candidate.get("raw_output_sha256"), "candidate raw_output_sha256")
+
+    require_common_receipt(
+        original,
+        label="original",
+        evidence_role="original",
+    )
+    if original.get("fixture_sha256") != expected_sha:
+        die("original receipt is not bound to the historical source identity")
+    if original.get("fixture_distribution") != "external-hash-bound":
+        die("original historical receipt must record external-hash-bound distribution")
+    if original.get("fixture_redistributed") is not False:
+        die("original historical receipt must record fixture_redistributed=false")
+    if original.get("original_psycle_observed") is not True:
+        die("original receipt does not record original_psycle_observed=true")
+    if original.get("reference_build") != "Psycle 1.12.0 x86":
+        die("original historical receipt is bound to the wrong Psycle reference")
+    load_result = original.get("load_result")
+    if load_result not in {"accepted", "rejected", "inconclusive"}:
+        die("original historical receipt has an invalid load_result")
+    observation = original.get("observation")
+    if not isinstance(observation, str) or not observation.strip():
+        die("original historical receipt has no observation")
+    for field in ("stdout", "stderr", "ui_evidence"):
+        mapping = original.get(field)
+        if not isinstance(mapping, dict):
+            die(f"original historical receipt {field} must be an object")
+        require_public_support_file(
+            original_path,
+            mapping.get("path"),
+            mapping.get("sha256"),
+            f"original {field}",
+        )
+    environment = original.get("environment")
+    if not isinstance(environment, dict):
+        die("original historical receipt environment must be an object")
+    for inventory_key in ("loaded_vc90_runtime", "machine_plugin_inventory"):
+        inventory = environment.get(inventory_key)
+        if not isinstance(inventory, dict):
+            die(f"original historical receipt lacks {inventory_key}")
+        require_public_support_file(
+            original_path,
+            inventory.get("path"),
+            inventory.get("sha256"),
+            f"original {inventory_key}",
+        )
+
+
 def command_summary(args: argparse.Namespace) -> None:
     source = manifest_source()
     donor = load_json(args.donor)
@@ -221,19 +379,15 @@ def command_summary(args: argparse.Namespace) -> None:
     original = load_json(args.original)
     expected_sha = source["sha256"]
 
-    if donor.get("contract") != EXPECTED_CONTRACT or donor.get("source_sha256") != expected_sha:
-        die("donor receipt is not bound to the historical source")
-    if candidate.get("contract") != EXPECTED_CONTRACT or candidate.get("source_sha256") != expected_sha:
-        die("candidate receipt is not bound to the historical source")
-    if original.get("contract") != EXPECTED_CONTRACT or original.get("fixture_sha256") != expected_sha:
-        die("original receipt is not bound to the historical source")
-    if original.get("original_psycle_observed") is not True:
-        die("original receipt does not record original_psycle_observed=true")
-    if any(
-        item.get("parity_status") != "UNKNOWN"
-        for item in (donor, candidate, original)
-    ):
-        die("historical component receipt attempted to promote parity")
+    validate_summary_components(
+        source=source,
+        donor_path=args.donor,
+        donor=donor,
+        candidate_path=args.candidate,
+        candidate=candidate,
+        original_path=args.original,
+        original=original,
+    )
 
     summary = {
         "schema_version": 1,
@@ -248,18 +402,21 @@ def command_summary(args: argparse.Namespace) -> None:
         },
         "observations": {
             "cpsycle_donor": {
-                "receipt": args.donor.name,
+                "artifact_root": "donor",
+                "receipt": f"donor/{args.donor.name}",
                 "receipt_sha256": receipt_sha(args.donor),
                 "load_result": donor.get("load_result"),
                 "non_silent_playback": donor.get("non_silent_playback"),
             },
             "candidate": {
-                "receipt": args.candidate.name,
+                "artifact_root": "candidate",
+                "receipt": f"candidate/{args.candidate.name}",
                 "receipt_sha256": receipt_sha(args.candidate),
                 "direct_it_load": candidate.get("direct_it_load"),
             },
             "original_psycle_1_12_0_x86": {
-                "receipt": args.original.name,
+                "artifact_root": "original",
+                "receipt": f"original/{args.original.name}",
                 "receipt_sha256": receipt_sha(args.original),
                 "load_result": original.get("load_result"),
                 "observation": original.get("observation"),
