@@ -875,7 +875,7 @@ int midiloader_readbyte1(MidiLoader* self, uint8_t* rv)
     return PSY_OK;
 }
 
-void midiloader_flushnoteoffs(MidiLoader* self)
+static void midiloader_flushnoteoffs(MidiLoader* self)
 {
     uint16_t voice;
 
