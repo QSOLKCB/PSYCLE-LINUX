@@ -68,7 +68,7 @@ ACCEPTED_TERMINATION = {
     "closed-after-observation",
     "killed-after-close-error",
 }
-ALLOWED_ARTIFACT_SUFFIXES = {".json", ".txt", ".log", ".png", ".md", ".psy"}
+ALLOWED_ARTIFACT_SUFFIXES = {".json", ".txt", ".log", ".png", ".md", ".psy", ".it"}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
