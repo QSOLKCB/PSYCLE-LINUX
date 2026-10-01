@@ -142,9 +142,53 @@ assert historical.exists()
 reference = ROOT / "phase6c/reference-corpus/manifest.json"
 assert reference.exists()
 
+itmodule_source = (ROOT / "cpsycle/audio/src/itmodule2.c").read_text(encoding="utf-8")
+assert "IT sample mode uses the pattern instrument byte as a sample number." in itmodule_source
+assert "psy_audio_instrument_setindex(instr, i);" in itmodule_source
+assert "psy_audio_instrument_set_name(instr, psy_audio_sample_name(wave));" in itmodule_source
+assert "modtovirtual_set(&self->ittovirtual, i, virtualInst);" in itmodule_source
+assert "it doesn't use instruments" not in itmodule_source
+
+playback_probe = ROOT / "tests/phase6c_legacy_it_playback.c"
+assert playback_probe.exists()
+playback_probe_source = playback_probe.read_text(encoding="utf-8")
+assert "sample-mode playback witness is silent" in playback_probe_source
+assert "fresh playback witnesses are not bit-identical" in playback_probe_source
+assert "psy_audio_VIRTUALGENERATOR" in playback_probe_source
+assert "legacy-it-sample-mode-playback-donor" in playback_probe_source
 
 builder = ROOT / "scripts/phase6c-build-legacy-it-observer.py"
 base_observer = ROOT / "scripts/phase6c-original-windows-fixtures-v2.ps1"
+
+base_observer_bytes = base_observer.read_bytes().replace(b"\r\n", b"\n")
+assert b"\r" not in base_observer_bytes
+base_observer_blob = hashlib.sha1(
+    b"blob " + str(len(base_observer_bytes)).encode() + b"\0" + base_observer_bytes
+).hexdigest()
+assert base_observer_blob == "4a10fb12805ff10a85cfedc0118443220a7dc32a"
+
+base_observer_source = base_observer_bytes.decode("utf-8")
+assert "--ssl-revoke-best-effort" in base_observer_source
+assert "--ssl-no-revoke" not in base_observer_source
+assert "--insecure" not in base_observer_source
+assert "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769" in base_observer_source
+assert "$ExpectedInstallerSize = 9322919" in base_observer_source
+
+for observer_builder in (
+    "scripts/phase6c-build-legacy-it-observer.py",
+    "scripts/phase6c-build-timing-observer.py",
+    "scripts/phase6c-build-sampler-ps1-pitch-observer.py",
+    "scripts/phase6c-build-sampler-ps1-extended-timing-observer.py",
+    "scripts/phase6c-build-delayed-retrigger-observer.py",
+):
+    builder_source = (ROOT / observer_builder).read_text(encoding="utf-8")
+    expected_line = next(
+        line for line in builder_source.splitlines()
+        if line.startswith("EXPECTED_BLOB = ")
+    )
+    pinned_blob = expected_line.split('"', 2)[1]
+    assert pinned_blob == base_observer_blob, observer_builder
+
 with tempfile.TemporaryDirectory() as temporary:
     generated = Path(temporary) / "legacy-it-observer.ps1"
     result = subprocess.run(
@@ -192,6 +236,7 @@ for path in (
     "scripts/phase6b-verify-committed-source.sh",
     "scripts/phase6b-verify-qmake-support.sh",
     "tests/phase6c_legacy_it_decoder.c",
+    "tests/phase6c_legacy_it_playback.c",
 ):
     assert workflow_source.count(f"      - '{path}'\n") == 2, path
 
@@ -201,6 +246,36 @@ assert "Exercise donor 8-bit IT decoder regressions" in workflow_source
 for variant in decoder_fixtures:
     assert variant in workflow_source
 
+assert "Build donor IT sample-mode playback witness" in workflow_source
+assert "Prove non-silent deterministic IT sample-mode playback" in workflow_source
+assert "tests/phase6c_legacy_it_playback.c" in workflow_source
+
+donor_playback_marker = "      - name: Prove non-silent deterministic IT sample-mode playback\n"
+donor_playback_start = workflow_source.index(donor_playback_marker)
+donor_playback_end = workflow_source.index(
+    "\n      - name: Load generated IT through C-Psycle donor runtime",
+    donor_playback_start,
+)
+donor_playback_block = workflow_source[donor_playback_start:donor_playback_end]
+assert "legacy-it-sample-mode-playback-donor" in donor_playback_block
+assert "'parity_status': 'UNKNOWN'" in donor_playback_block
+assert "donor sample-mode mapping plus deterministic non-silent playback only" in donor_playback_block
+assert "pushd phase6c-generated >/dev/null" in donor_playback_block
+assert "chmod +x phase6c-legacy-it-playback" in donor_playback_block
+assert (
+    "./phase6c-legacy-it-playback phase6c-legacy-it-import.it \\\n"
+    "            </dev/null >cpsycle-donor-playback.log 2>&1"
+) in donor_playback_block
+assert "'replay_setup': ['chmod', '+x', probe.name]" in donor_playback_block
+assert "'working_directory': 'artifact-root'" in donor_playback_block
+assert "'stdin': '/dev/null'" in donor_playback_block
+assert "'stdout_stderr': log.name" in donor_playback_block
+assert (
+    "'procedure': 'chmod +x phase6c-legacy-it-playback && "
+    "./phase6c-legacy-it-playback phase6c-legacy-it-import.it "
+    "</dev/null >cpsycle-donor-playback.log 2>&1'"
+) in donor_playback_block
+
 donor_upload_marker = "      - name: Upload donor observation\n"
 donor_upload_start = workflow_source.index(donor_upload_marker)
 donor_upload_end = workflow_source.index(
@@ -209,6 +284,10 @@ donor_upload_end = workflow_source.index(
 donor_upload_block = workflow_source[donor_upload_start:donor_upload_end]
 assert "phase6c-generated/cpsycle-itmodule2.c" in donor_upload_block
 assert "phase6c-generated/phase6c-legacy-it-loader" in donor_upload_block
+assert "phase6c-generated/phase6c-legacy-it-playback" in donor_upload_block
+assert "phase6c-generated/cpsycle-donor-playback.log" in donor_upload_block
+assert "phase6c-generated/cpsycle-donor-playback.json" in donor_upload_block
+assert "phase6c-generated/cpsycle-donor-playback-receipt.json" in donor_upload_block
 assert "cp -- cpsycle/audio/src/itmodule2.c phase6c-generated/cpsycle-itmodule2.c" in workflow_source
 assert "'source_file': source_file.name" in workflow_source
 assert "'source_file_origin': 'cpsycle/audio/src/itmodule2.c'" in workflow_source
