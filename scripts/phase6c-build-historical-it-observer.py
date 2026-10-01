@@ -114,11 +114,7 @@ def main() -> None:
         text,
         '            procedure = if ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',
         '            procedure = if ($ObserveHistoricalLegacyIt -and $spec.name -eq "historical-legacy-it") {\n'
-        '                "$Procedure; observe the manifest-bound external SickMaate IT witness from a transient private copy only; require SHA-256 '
-        + EXPECTED_SHA256
-        + ' and size '
-        + str(EXPECTED_SIZE)
-        + '; do not copy historical module bytes into the evidence artifact; require pinned Microsoft Visual C++ 2008 SP1 x86 runtime version 9.0.30729.6161 with the project-bound runtime receipt"\n'
+        '                $HistoricalProcedure\n'
         '            } elseif ($ObserveSequenceOrder -and $spec.name -eq "sequence-order") {',
         "historical procedure",
     )
@@ -147,7 +143,7 @@ foreach ($requiredVc90Value in @(
         throw "historical IT observer requires the pinned VC90 runtime provenance environment"
     }
 }
-$Procedure = "$Procedure; pinned VC90 x86 runtime required and bound for replay; vc90_runtime_url=$HistoricalItVc90RuntimeUrl; vc90_runtime_sha256=$HistoricalItVc90RuntimeSha256; vc90_runtime_version=$HistoricalItVc90RuntimeVersion; vc90_runtime_receipt=$HistoricalItVc90RuntimeReceipt"
+$HistoricalProcedure = "download pinned Psycle 1.12.0 x86 installer; verify PE magic/SHA-256/size; require a clean pre-install HKCU\\Software\\Psycle state; detect a supported installer framework and perform only its documented unattended install into runner-temp; snapshot the post-install Psycle registry baseline and restore it before the historical witness; verify the manifest-bound external SickMaate IT by SHA-256 ${EXPECTED_SHA256} and size ${EXPECTED_SIZE}; copy the historical module only into the transient observer work root; launch installed psycle.exe with the transient private copy; apply only the maintained verified first-run and DirectSound bootstrap handling; inventory the installed payload, machine/plugin environment, and live VC90 modules; classify only fixture-associated load errors as rejection while unrelated application errors remain inconclusive; capture stdout/stderr/UI/screenshot evidence and hash-bound inventories; terminate the process; delete the installer, registry snapshot, installed payload, and transient historical module copy before artifact upload; never copy historical module bytes into the evidence artifact; require pinned Microsoft Visual C++ 2008 SP1 x86 runtime version $HistoricalItVc90RuntimeVersion with url=$HistoricalItVc90RuntimeUrl sha256=$HistoricalItVc90RuntimeSha256 receipt=$HistoricalItVc90RuntimeReceipt"
 '''
     text = replace_once(
         text,
