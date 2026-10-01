@@ -943,21 +943,21 @@ def midi_varlen(value: int) -> bytes:
 
 
 def write_synthetic_fixture(path: pathlib.Path) -> None:
-    conductor = bytearray()
-    conductor += midi_varlen(0) + b"\xff\x51\x03\x07\xa1\x20"
-    conductor += midi_varlen(0) + b"\xff\x59\x02\x09\x01"
-    conductor += midi_varlen(0) + b"\xff\x2f\x00"
+    track_zero = bytearray()
+    track_zero += midi_varlen(0) + b"\xff\x51\x03\x07\xa1\x20"
+    track_zero += midi_varlen(0) + b"\xff\x59\x02\x09\x01"
+    track_zero += midi_varlen(0) + bytes((0x90, 60, 100))
+    track_zero += midi_varlen(480) + bytes((0x80, 60, 0))
+    track_zero += midi_varlen(0) + b"\xff\x2f\x00"
 
-    notes = bytearray()
-    notes += midi_varlen(0) + bytes((0x90, 60, 100))
-    notes += midi_varlen(240) + bytes((0x91, 64, 96))
-    notes += midi_varlen(240) + bytes((0x80, 60, 0))
-    notes += midi_varlen(0) + bytes((0x81, 64, 0))
-    notes += midi_varlen(0) + b"\xff\x2f\x00"
+    track_one = bytearray()
+    track_one += midi_varlen(240) + bytes((0x91, 64, 96))
+    track_one += midi_varlen(240) + bytes((0x81, 64, 0))
+    track_one += midi_varlen(0) + b"\xff\x2f\x00"
 
     payload = bytearray(b"MThd")
     payload += struct.pack(">IHHH", 6, 1, 2, 480)
-    for track in (conductor, notes):
+    for track in (track_zero, track_one):
         payload += b"MTrk" + struct.pack(">I", len(track)) + track
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(payload)
