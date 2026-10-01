@@ -143,7 +143,7 @@
 #define PSYCLE_USE_PSY3
 #define PSYCLE_USE_PSY2
 #define PSYCLE_USE_XM
-/* #define PSYCLE_USE_MIDI_FILE */
+#define PSYCLE_USE_MIDI_FILE
 
 /*
 ** VST2 remains a supported feature. Microsoft builds retain Psycle's
