@@ -126,6 +126,23 @@ assert boundary_forward["max_polyphony"] == 1
 assert boundary_forward["zero_duration_pairs"] == 0
 assert boundary_forward["balanced_note_pairs"] is True
 
+same_track = bytearray()
+same_track += helper.midi_varlen(0) + bytes((0x90, 60, 100))
+same_track += helper.midi_varlen(10) + bytes((0x90, 60, 100))
+same_track += helper.midi_varlen(0) + bytes((0x80, 60, 0))
+same_track += helper.midi_varlen(10) + bytes((0x80, 60, 0))
+same_track += helper.midi_varlen(0) + b"\xff\x2f\x00"
+same_track_smf = bytearray(b"MThd")
+same_track_smf += struct.pack(">IHHH", 6, 1, 1, 480)
+same_track_smf += b"MTrk" + struct.pack(">I", len(same_track)) + same_track
+same_track_parsed = helper.parse_smf_bytes(
+    bytes(same_track_smf), label="same-track-shared-boundary"
+)
+assert same_track_parsed["same_note_overlaps"] == 1
+assert same_track_parsed["max_polyphony"] == 2
+assert same_track_parsed["zero_duration_pairs"] == 0
+assert same_track_parsed["balanced_note_pairs"] is True
+
 with tempfile.TemporaryDirectory() as temporary:
     public = Path(temporary)
     disguised_midi = public / "renamed-midi.log"
@@ -267,6 +284,48 @@ with tempfile.TemporaryDirectory() as temporary:
     else:
         raise AssertionError("bogus corpus archive identity must be rejected")
 
+    analysis_path = root / "corpus-analysis.json"
+    helper.write_json(analysis_path, analysis)
+    helper.bind_analysis_root(analysis, analysis_path)
+    outer_bundle = root / "fake-corpus-bundle.zip"
+    with zipfile.ZipFile(outer_bundle, "w", compression=zipfile.ZIP_STORED) as outer:
+        for set_info in analysis["sets"]:
+            inner_bytes_path = root / f"{set_info['slug']}.zip"
+            with zipfile.ZipFile(
+                inner_bytes_path, "w", compression=zipfile.ZIP_STORED
+            ) as inner:
+                for stem in set_info["stems"]:
+                    inner.write(
+                        root / stem["private_path"],
+                        arcname=stem["relative_name"],
+                    )
+            outer.write(
+                inner_bytes_path,
+                arcname=set_info["archive"],
+            )
+            inner_bytes_path.unlink()
+    try:
+        helper.validate_analysis_against_bundle(
+            analysis, outer_bundle, representatives_only=True
+        )
+    except SystemExit as exc:
+        assert "archive SHA-256 mismatch" in str(exc)
+    else:
+        raise AssertionError(
+            "self-declared stems must not pass without the pinned archive bytes"
+        )
+
+with tempfile.TemporaryDirectory() as temporary:
+    stub = Path(temporary) / "candidate-psycle-player"
+    stub.write_text("#!/bin/sh\nexit 2\n", encoding="utf-8")
+    stub.chmod(0o755)
+    try:
+        helper.validate_frozen_candidate_player(stub)
+    except SystemExit as exc:
+        assert "canonical Phase 6B build output" in str(exc)
+    else:
+        raise AssertionError("arbitrary candidate player stub must be rejected")
+
 # The sanitized C++ candidate has no retained Standard MIDI File loader entry point.
 candidate_core = ROOT / "psycle-cpp-r12005-sanitized/psycle-core/src/psycle/core"
 candidate_mthd_hits = []
@@ -286,6 +345,9 @@ assert "prepare-bundle" in workflow
 assert "tests/phase6c_midi_corpus_probe.c" in workflow
 assert "donor-summary" in workflow
 assert "candidate-boundary" in workflow
+assert "donor-summary             phase6c-midi-private/corpus-analysis.json             \"$MIDI_CORPUS_BUNDLE\"" in workflow
+assert "candidate-boundary             phase6c-midi-private/corpus-analysis.json             \"$MIDI_CORPUS_BUNDLE\"             \"$PLAYER\"" in workflow
+assert "cp -- \"$PLAYER\" phase6c-midi-candidate-public/candidate-psycle-player" in workflow
 assert "audit-public" in workflow
 assert "phase6c-midi-real-world-corpus-summary" in workflow
 assert "original_psycle_1_12_0_x86" not in workflow
@@ -334,7 +396,7 @@ with tempfile.TemporaryDirectory() as temporary:
     candidate_player = candidate_dir / "candidate-psycle-player"
     donor_source.write_text("source", encoding="utf-8")
     donor_probe.write_text("probe", encoding="utf-8")
-    candidate_player.write_text("player", encoding="utf-8")
+    candidate_player.write_bytes(b"\x7fELF" + b"candidate-player")
 
     sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
     manifest_by_name = {item["name"]: item for item in manifest["sets"]}
@@ -343,6 +405,28 @@ with tempfile.TemporaryDirectory() as temporary:
     for name in helper.PROGRESSION:
         set_spec = manifest_by_name[name]
         stem_count = set_spec["stems"]
+        stem_records = []
+        for index in range(stem_count):
+            source_sha = hashlib.sha256(
+                f"{name}:{index}".encode()
+            ).hexdigest()
+            stem_records.append({
+                "stem_id": (
+                    f"{helper.slug(name)}-{index:02d}-{source_sha[:12]}"
+                ),
+                "source_relative_name": f"{index:02d}.mid",
+                "source_sha256": source_sha,
+                "source_size_bytes": 32 + index,
+                "source_analysis_sha256": hashlib.sha256(
+                    f"analysis:{name}:{index}".encode()
+                ).hexdigest(),
+                "import_event_digest_fnv64": (
+                    f"{index + 1:016x}"[-16:]
+                ),
+                "render_sha256": hashlib.sha256(
+                    f"render:{name}:{index}".encode()
+                ).hexdigest(),
+            })
         donor_sets.append({
             "name": name,
             "slug": helper.slug(name),
@@ -353,8 +437,7 @@ with tempfile.TemporaryDirectory() as temporary:
             "observed_stems": stem_count,
             "all_imported": True,
             "all_non_silent_projection": True,
-            "event_digest_fnv64": ["0123456789abcdef"] * stem_count,
-            "render_sha256": ["a" * 64] * stem_count,
+            "stems": stem_records,
         })
         candidate_sets.append({
             "set_name": name,
@@ -390,6 +473,10 @@ with tempfile.TemporaryDirectory() as temporary:
         "phase": "6C",
         "contract": helper.CANDIDATE_CONTRACT,
         "evidence_role": "candidate-observation",
+        "candidate_baseline_sha256": helper.EXPECTED_CANDIDATE_BASELINE,
+        "source_revision": helper.EXPECTED_CANDIDATE_SOURCE_REVISION,
+        "repository_commit": "0" * 40,
+        "build_target": "psycle-player",
         "player": candidate_player.name,
         "player_sha256": sha(candidate_player),
         "private_input_required": True,
@@ -413,6 +500,24 @@ with tempfile.TemporaryDirectory() as temporary:
         assert "per-set evidence is incomplete" in str(exc)
     else:
         raise AssertionError("incomplete donor per-set evidence must be rejected")
+
+    duplicate_donor = json.loads(json.dumps(donor))
+    first_record = duplicate_donor["sets"][0]["stems"][0]
+    duplicate_donor["sets"][0]["stems"] = [
+        dict(first_record)
+        for _ in range(duplicate_donor["sets"][0]["observed_stems"])
+    ]
+    helper.write_json(donor_path, duplicate_donor)
+    try:
+        helper.corpus_summary(
+            donor_path, candidate_path, root / "duplicate-donor.json"
+        )
+    except SystemExit as exc:
+        assert "stem evidence is duplicated" in str(exc)
+    else:
+        raise AssertionError(
+            "one donor observation copied across N stems must be rejected"
+        )
 
     helper.write_json(donor_path, donor)
     bad_candidate = json.loads(json.dumps(candidate))
