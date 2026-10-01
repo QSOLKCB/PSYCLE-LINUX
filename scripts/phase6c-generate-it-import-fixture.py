@@ -10,8 +10,8 @@ from pathlib import Path
 
 SCHEMA_VERSION = 1
 TITLE = "PSYCLE IT import witness"
-EXPECTED_SHA256 = "1670e48dc761296e9c3497f6f3c6632fbc020b2f47bf46d97e3f9571b44b4f3e"
-EXPECTED_SIZE = 599
+EXPECTED_SHA256 = "f02f5b8d1de98d4c6bcf00e2d6a04617e0714e4bcd7e299b5bc56d057526cae1"
+EXPECTED_SIZE = 4439
 
 
 def p16(value: int) -> bytes:
@@ -86,7 +86,7 @@ def build_fixture() -> bytes:
     sample_header = bytearray()
     sample_header += b"IMPS"
     sample_header += b"psycle.raw".ljust(13, b"\x00")
-    sample_header += bytes((64, 0x01, 64))
+    sample_header += bytes((64, 0x11, 64))
     sample_header += b"PSYCLE deterministic pulse"[:26].ljust(26, b"\x00")
     sample_header += bytes((0x01, 32))
     sample_header += p32(256)
@@ -97,7 +97,7 @@ def build_fixture() -> bytes:
     sample_header += bytes((0, 0, 0, 0))
     assert len(sample_header) == 80
 
-    sample = bytes((((index * 13) % 127) - 63) & 0xFF for index in range(256))
+    sample = bytes((((index * 13) % 127) - 63) & 0xFF for index in range(4096))
     return bytes(header) + orders + p32(sample_header_offset) + p32(pattern_offset) + bytes(sample_header) + pattern + sample
 
 
