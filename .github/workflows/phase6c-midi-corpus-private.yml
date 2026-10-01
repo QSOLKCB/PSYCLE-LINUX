@@ -141,7 +141,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/phase6c-midi-corpus.py donor-summary             phase6c-midi-private/corpus-analysis.json             phase6c-midi-public/observations             --probe phase6c-midi-public/phase6c-midi-corpus-probe             --source phase6c-midi-public/midiloader.c             --output phase6c-midi-public/donor-midi-corpus.json
+          python3 scripts/phase6c-midi-corpus.py donor-summary             phase6c-midi-private/corpus-analysis.json             "$MIDI_CORPUS_BUNDLE"             phase6c-midi-public/observations             --probe phase6c-midi-public/phase6c-midi-corpus-probe             --source phase6c-midi-public/midiloader.c             --output phase6c-midi-public/donor-midi-corpus.json
           rm -rf -- phase6c-midi-private
           rm -f -- "$MIDI_CORPUS_BUNDLE"
           python3 scripts/phase6c-midi-corpus.py audit-public phase6c-midi-public
@@ -230,9 +230,10 @@ jobs:
           set -euo pipefail
           mkdir -p phase6c-midi-candidate-public
           PLAYER='psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player'
+          chmod +x "$PLAYER"
+          python3 scripts/phase6c-midi-corpus.py candidate-boundary             phase6c-midi-private/corpus-analysis.json             "$MIDI_CORPUS_BUNDLE"             "$PLAYER"             phase6c-midi-candidate-public/candidate-midi-boundary.json
           cp -- "$PLAYER" phase6c-midi-candidate-public/candidate-psycle-player
           chmod +x phase6c-midi-candidate-public/candidate-psycle-player
-          python3 scripts/phase6c-midi-corpus.py candidate-boundary             phase6c-midi-private/corpus-analysis.json             phase6c-midi-candidate-public/candidate-psycle-player             phase6c-midi-candidate-public/candidate-midi-boundary.json
           rm -rf -- phase6c-midi-private
           rm -f -- "$MIDI_CORPUS_BUNDLE"
           python3 scripts/phase6c-midi-corpus.py audit-public             phase6c-midi-candidate-public
