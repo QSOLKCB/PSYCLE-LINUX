@@ -219,24 +219,32 @@ for variant in decoder_fixtures:
 assert "Build donor IT sample-mode playback witness" in workflow_source
 assert "Prove non-silent deterministic IT sample-mode playback" in workflow_source
 assert "tests/phase6c_legacy_it_playback.c" in workflow_source
-assert "legacy-it-sample-mode-playback-donor" in workflow_source
-assert "'parity_status': 'UNKNOWN'" in workflow_source
-assert "donor sample-mode mapping plus deterministic non-silent playback only" in workflow_source
-assert "pushd phase6c-generated >/dev/null" in workflow_source
-assert "chmod +x phase6c-legacy-it-playback" in workflow_source
+
+donor_playback_marker = "      - name: Prove non-silent deterministic IT sample-mode playback\n"
+donor_playback_start = workflow_source.index(donor_playback_marker)
+donor_playback_end = workflow_source.index(
+    "\n      - name: Load generated IT through C-Psycle donor runtime",
+    donor_playback_start,
+)
+donor_playback_block = workflow_source[donor_playback_start:donor_playback_end]
+assert "legacy-it-sample-mode-playback-donor" in donor_playback_block
+assert "'parity_status': 'UNKNOWN'" in donor_playback_block
+assert "donor sample-mode mapping plus deterministic non-silent playback only" in donor_playback_block
+assert "pushd phase6c-generated >/dev/null" in donor_playback_block
+assert "chmod +x phase6c-legacy-it-playback" in donor_playback_block
 assert (
     "./phase6c-legacy-it-playback phase6c-legacy-it-import.it \\\n"
     "            </dev/null >cpsycle-donor-playback.log 2>&1"
-) in workflow_source
-assert "'replay_setup': ['chmod', '+x', probe.name]" in workflow_source
-assert "'working_directory': 'artifact-root'" in workflow_source
-assert "'stdin': '/dev/null'" in workflow_source
-assert "'stdout_stderr': log.name" in workflow_source
+) in donor_playback_block
+assert "'replay_setup': ['chmod', '+x', probe.name]" in donor_playback_block
+assert "'working_directory': 'artifact-root'" in donor_playback_block
+assert "'stdin': '/dev/null'" in donor_playback_block
+assert "'stdout_stderr': log.name" in donor_playback_block
 assert (
     "'procedure': 'chmod +x phase6c-legacy-it-playback && "
     "./phase6c-legacy-it-playback phase6c-legacy-it-import.it "
     "</dev/null >cpsycle-donor-playback.log 2>&1'"
-) in workflow_source
+) in donor_playback_block
 
 donor_upload_marker = "      - name: Upload donor observation\n"
 donor_upload_start = workflow_source.index(donor_upload_marker)
