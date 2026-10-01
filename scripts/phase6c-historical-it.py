@@ -15,6 +15,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "phase6c/evidence/legacy-module-import/historical-sickmaate.json"
 EXPECTED_CONTRACT = "legacy-impulse-tracker-import-reference"
 SUMMARY_CONTRACT = "legacy-impulse-tracker-three-way-summary"
+EXPECTED_REFERENCE_BUILD = "Psycle 1.12.0 x86"
+EXPECTED_REFERENCE_FILE = "PsycleInstallerx86-1.12.0.exe"
+EXPECTED_REFERENCE_INSTALLER_SHA256 = (
+    "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769"
+)
+EXPECTED_REFERENCE_INSTALLER_SIZE = 9322919
+EXPECTED_REFERENCE_EXECUTABLE_SHA256 = (
+    "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6"
+)
 
 
 def die(message: str) -> "NoReturn":
@@ -261,6 +270,19 @@ def require_public_support_file(
         die(f"{label} support file hash mismatch: {relative_name}")
 
 
+def require_original_reference_identity(original: dict[str, Any]) -> None:
+    if original.get("reference_build") != EXPECTED_REFERENCE_BUILD:
+        die("original historical receipt is bound to the wrong Psycle reference build")
+    if original.get("reference_file") != EXPECTED_REFERENCE_FILE:
+        die("original historical receipt is bound to the wrong Psycle installer file")
+    if original.get("reference_installer_sha256") != EXPECTED_REFERENCE_INSTALLER_SHA256:
+        die("original historical receipt is bound to the wrong Psycle installer SHA-256")
+    if original.get("reference_installer_size_bytes") != EXPECTED_REFERENCE_INSTALLER_SIZE:
+        die("original historical receipt is bound to the wrong Psycle installer size")
+    if original.get("reference_executable_sha256") != EXPECTED_REFERENCE_EXECUTABLE_SHA256:
+        die("original historical receipt is bound to the wrong Psycle executable SHA-256")
+
+
 def validate_summary_components(
     *,
     source: dict[str, Any],
@@ -339,8 +361,7 @@ def validate_summary_components(
         die("original historical receipt must record fixture_redistributed=false")
     if original.get("original_psycle_observed") is not True:
         die("original receipt does not record original_psycle_observed=true")
-    if original.get("reference_build") != "Psycle 1.12.0 x86":
-        die("original historical receipt is bound to the wrong Psycle reference")
+    require_original_reference_identity(original)
     load_result = original.get("load_result")
     if load_result not in {"accepted", "rejected", "inconclusive"}:
         die("original historical receipt has an invalid load_result")
