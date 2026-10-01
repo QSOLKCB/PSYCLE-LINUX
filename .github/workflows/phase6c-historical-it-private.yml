@@ -1,0 +1,323 @@
+name: Phase 6C historical SickMaate private observation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6c-historical-sickmaate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cpsycle-donor-historical:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Acquire exact private historical IT input
+        shell: bash
+        env:
+          HISTORICAL_IT_URL: ${{ secrets.PSYCLE_PHASE6C_HISTORICAL_IT_URL }}
+        run: |
+          set -euo pipefail
+          [[ -n "$HISTORICAL_IT_URL" ]] || { echo "PSYCLE_PHASE6C_HISTORICAL_IT_URL secret is not configured" >&2; exit 2; }
+          INPUT="$RUNNER_TEMP/d-503_-_sickmaate.it"
+          curl -fsSL --retry 3 --output "$INPUT" "$HISTORICAL_IT_URL"
+          python3 scripts/phase6c-historical-it.py verify "$INPUT"
+          echo "HISTORICAL_IT=$INPUT" >> "$GITHUB_ENV"
+
+      - name: Install donor build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config liblua5.4-dev liblilv-dev
+
+      - name: Build C-Psycle donor and historical probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -C cpsycle/player -j1
+          mkdir -p phase6c-historical-public
+          gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer -Wall -Wextra -Werror=implicit-function-declaration \
+            -Icpsycle/script/src -Icpsycle/thread/src -Icpsycle/container/src -Icpsycle/file/src \
+            -Icpsycle/diversalis/src -Icpsycle/src -Icpsycle/audio/src -Icpsycle/dsp/src \
+            $(pkg-config --cflags lua) tests/phase6c_historical_it_probe.c \
+            -o phase6c-historical-public/phase6c-historical-it-probe \
+            -Lcpsycle/thread/src -Lcpsycle/script/src -Lcpsycle/container/src -Lcpsycle/dsp/src \
+            -Lcpsycle/audio/src -Lcpsycle/file/src -Wl,--no-as-needed -laudio -lthread -llilv-0 \
+            -ldsp -lscript -lfile -lm $(pkg-config --libs lua) -lpthread -ldl -lstdc++ -lcontainer
+
+      - name: Observe donor historical import and playback
+        shell: bash
+        run: |
+          set -euo pipefail
+          RAW="$RUNNER_TEMP/cpsycle-historical-it.log"
+          phase6c-historical-public/phase6c-historical-it-probe "$HISTORICAL_IT" >"$RAW" 2>&1
+          tail -n 1 "$RAW" > phase6c-historical-public/donor-observation.json
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          public = pathlib.Path("phase6c-historical-public")
+          observation_path = public / "donor-observation.json"
+          observation = json.loads(observation_path.read_text(encoding="utf-8"))
+          assert observation["contract"] == "legacy-impulse-tracker-import-reference"
+          assert observation["load_result"] == "accepted"
+          assert observation["non_silent_playback"] is True
+          assert observation["parity_status"] == "UNKNOWN"
+          source = pathlib.Path("cpsycle/audio/src/itmodule2.c")
+          staged_source = public / "cpsycle-itmodule2.c"
+          staged_source.write_bytes(source.read_bytes())
+          probe = public / "phase6c-historical-it-probe"
+          private_input = pathlib.Path(os.environ["HISTORICAL_IT"])
+          raw = pathlib.Path(os.environ["RUNNER_TEMP"]) / "cpsycle-historical-it.log"
+          sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+          receipt = dict(observation)
+          receipt.update({
+              "source_sha256": sha(private_input),
+              "source_size_bytes": private_input.stat().st_size,
+              "source_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+              "source_file": staged_source.name,
+              "source_file_sha256": sha(staged_source),
+              "probe_executable": probe.name,
+              "probe_executable_sha256": sha(probe),
+              "raw_output_sha256": sha(raw),
+              "private_input_required": True,
+              "fixture_redistributed": False,
+              "procedure": "verify private historical IT identity; build retained C-Psycle donor sequentially; run public-safe historical probe; retain only metadata and hashes",
+          })
+          (public / "cpsycle-historical-it.json").write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+          rm -f -- "$HISTORICAL_IT" "$RAW"
+          ! find phase6c-historical-public -type f -iname '*.it' -print -quit | grep -q .
+
+      - name: Upload sanitized donor historical evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-historical-sickmaate-donor
+          path: phase6c-historical-public/
+          if-no-files-found: error
+
+  candidate-historical:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Acquire exact private historical IT input
+        shell: bash
+        env:
+          HISTORICAL_IT_URL: ${{ secrets.PSYCLE_PHASE6C_HISTORICAL_IT_URL }}
+        run: |
+          set -euo pipefail
+          [[ -n "$HISTORICAL_IT_URL" ]] || { echo "PSYCLE_PHASE6C_HISTORICAL_IT_URL secret is not configured" >&2; exit 2; }
+          INPUT="$RUNNER_TEMP/d-503_-_sickmaate.it"
+          curl -fsSL --retry 3 --output "$INPUT" "$HISTORICAL_IT_URL"
+          python3 scripts/phase6c-historical-it.py verify "$INPUT"
+          echo "HISTORICAL_IT=$INPUT" >> "$GITHUB_ENV"
+
+      - name: Install candidate build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ca-certificates curl subversion file build-essential pkg-config \
+            qt5-qmake qtbase5-dev libboost-thread-dev libboost-filesystem-dev libboost-system-dev \
+            libboost-chrono-dev libboost-date-time-dev libxml++2.6-dev zlib1g-dev libsoxr-dev \
+            libasound2-dev libjack-jackd2-dev liblilv-dev liblua5.4-dev
+
+      - name: Verify frozen candidate identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/phase6-upstream-audit.sh phase6-upstream-audit
+          bash scripts/phase6b-sanitized-manifest.sh phase6-upstream-audit phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-committed-source.sh psycle-cpp-r12005-sanitized phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-qmake-support.sh psycle-cpp-r12005-sanitized/build-systems/qmake
+
+      - name: Stage pinned historical candidate dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/psycle-plugins/src/psycle/plugin_interface.hpp'
+          ARCHIVE_COMMIT='1863c4177d38d37e8eba9e4eb8857e5023debe6d'
+          EXPECTED_BLOB='2cf4d8f756fa58098fd84b7b44d0ebe1350594c5'
+          test ! -e "$DEST"
+          mkdir -p "$(dirname "$DEST")"
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/QSOLKCB/PSYCLE-LINUX/$ARCHIVE_COMMIT/cpsycle/plugins/psycle/plugin_interface.hpp" -o "$DEST"
+          [[ "$(git hash-object "$DEST")" == "$EXPECTED_BLOB" ]]
+          DEST='psycle-cpp-r12005-sanitized/diversalis'
+          test ! -e "$DEST"
+          exported=false
+          for attempt in 1 2 3 4; do
+            rm -rf -- "$DEST"
+            if svn export --quiet --force -r 12005 'https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005' "$DEST"; then exported=true; break; fi
+            sleep "$((attempt * 2))"
+          done
+          [[ "$exported" == true ]]
+
+      - name: Build frozen candidate player
+        shell: bash
+        working-directory: psycle-cpp-r12005-sanitized/psycle-player
+        run: |
+          set -euo pipefail
+          qmake CONFIG-=shared CONFIG+=release psycle-player.pro
+          make -j2
+
+      - name: Observe candidate historical direct-import boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase6c-historical-public
+          PLAYER='psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player'
+          cp -- "$PLAYER" phase6c-historical-public/candidate-psycle-player
+          python3 scripts/phase6c-historical-it.py candidate "$HISTORICAL_IT" \
+            phase6c-historical-public/candidate-psycle-player \
+            phase6c-historical-public/candidate-historical-it.json
+          rm -f -- "$HISTORICAL_IT"
+          ! find phase6c-historical-public -type f -iname '*.it' -print -quit | grep -q .
+
+      - name: Upload sanitized candidate historical evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-historical-sickmaate-candidate
+          path: phase6c-historical-public/
+          if-no-files-found: error
+
+  original-historical:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Acquire exact private historical IT input
+        shell: pwsh
+        env:
+          HISTORICAL_IT_URL: ${{ secrets.PSYCLE_PHASE6C_HISTORICAL_IT_URL }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:HISTORICAL_IT_URL)) { throw "PSYCLE_PHASE6C_HISTORICAL_IT_URL secret is not configured" }
+          $inputPath = Join-Path $env:RUNNER_TEMP 'd-503_-_sickmaate.it'
+          & curl.exe --ssl-revoke-best-effort --fail --location --retry 3 --silent --show-error --output $inputPath $env:HISTORICAL_IT_URL
+          if ($LASTEXITCODE -ne 0) { throw "private historical IT download failed" }
+          python scripts/phase6c-historical-it.py verify $inputPath
+          if ($LASTEXITCODE -ne 0) { throw "historical IT identity verification failed" }
+          "HISTORICAL_IT=$inputPath" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Install pinned Microsoft VC90 x86 runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x86.exe'
+          $expectedSha = '8742bcbf24ef328a72d2a27b693cc7071e38d3bb4b9b44dec42aa3d2c8d61d92'
+          $version = '9.0.30729.6161'
+          $runtime = Join-Path $env:RUNNER_TEMP 'psycle-vc90-vcredist_x86.exe'
+          $receipt = Join-Path $PWD 'phase6c-vc90-runtime.txt'
+          & curl.exe --ssl-revoke-best-effort --fail --location --retry 3 --silent --show-error --output $runtime $url
+          if ($LASTEXITCODE -ne 0) { throw "VC90 runtime download failed" }
+          $actualSha = (Get-FileHash -LiteralPath $runtime -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha -ne $expectedSha) { throw "VC90 runtime SHA-256 mismatch" }
+          $signature = Get-AuthenticodeSignature -FilePath $runtime
+          if ($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate -or $signature.SignerCertificate.Subject -notmatch '(?i)Microsoft') { throw "VC90 runtime signature is not valid Microsoft Authenticode" }
+          $process = Start-Process -FilePath $runtime -ArgumentList '/Q','/NORESTART' -Wait -PassThru
+          if ($process.ExitCode -notin @(0, 3010)) { throw "VC90 runtime install failed" }
+          @("runtime=Microsoft Visual C++ 2008 SP1 x86 Redistributable MFC Security Update","redistributable_version=$version","url=$url","sha256=$actualSha","authenticode_status=$($signature.Status)","signer_subject=$($signature.SignerCertificate.Subject)","installer_exit_code=$($process.ExitCode)") | Set-Content -LiteralPath $receipt -Encoding utf8
+          Remove-Item -LiteralPath $runtime -Force
+          "PSYCLE_PHASE6C_VC90_RUNTIME_URL=$url" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PSYCLE_PHASE6C_VC90_RUNTIME_SHA256=$actualSha" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PSYCLE_PHASE6C_VC90_RUNTIME_VERSION=$version" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PSYCLE_PHASE6C_VC90_RUNTIME_RECEIPT=$receipt" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Prepare private historical observer input
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python scripts/phase6c-historical-it.py prepare-private $env:HISTORICAL_IT phase6c-historical-private
+          if ($LASTEXITCODE -ne 0) { throw "historical private-root preparation failed" }
+
+      - name: Generate and parse historical original observer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $base = 'scripts/phase6c-original-windows-fixtures-v2.ps1'
+          $generated = 'scripts/phase6c-original-windows-fixtures-v2.historical-it.generated.ps1'
+          python scripts/phase6c-build-historical-it-observer.py $base $generated
+          if ($LASTEXITCODE -ne 0) { throw "historical observer generation failed" }
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $generated).Path, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) { $errors | ForEach-Object { Write-Error $_.Message }; throw "historical observer PowerShell parse failed" }
+
+      - name: Observe pinned original Psycle with historical IT
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./scripts/phase6c-original-windows-fixtures-v2.historical-it.generated.ps1 -CandidateArtifactRoot 'phase6c-historical-private' -Out 'phase6c-historical-original' -ObserveHistoricalLegacyIt
+
+      - name: Validate and sanitize original historical evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python scripts/phase6c-validate-historical-it-original.py phase6c-historical-private phase6c-historical-original
+          if ($LASTEXITCODE -ne 0) { throw "historical original validation failed" }
+          Remove-Item -LiteralPath phase6c-historical-private -Recurse -Force
+          Remove-Item -LiteralPath $env:HISTORICAL_IT -Force
+          $leaked = @(Get-ChildItem -LiteralPath phase6c-historical-original -Recurse -File | Where-Object { $_.Extension -ieq '.it' })
+          if ($leaked.Count -ne 0) { throw "historical IT bytes leaked into original evidence" }
+
+      - name: Upload sanitized original historical evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-historical-sickmaate-original
+          path: phase6c-historical-original/
+          if-no-files-found: error
+
+  historical-three-way-summary:
+    needs: [cpsycle-donor-historical, candidate-historical, original-historical]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download sanitized donor evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: phase6c-historical-sickmaate-donor
+          path: phase6c-historical-summary-input/donor
+      - name: Download sanitized candidate evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: phase6c-historical-sickmaate-candidate
+          path: phase6c-historical-summary-input/candidate
+      - name: Download sanitized original evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: phase6c-historical-sickmaate-original
+          path: phase6c-historical-summary-input/original
+
+      - name: Build public-safe three-way historical summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase6c-historical-summary
+          python3 scripts/phase6c-historical-it.py summary \
+            --donor phase6c-historical-summary-input/donor/cpsycle-historical-it.json \
+            --candidate phase6c-historical-summary-input/candidate/candidate-historical-it.json \
+            --original phase6c-historical-summary-input/original/original-historical-legacy-it.json \
+            --output phase6c-historical-summary/historical-sickmaate-three-way.json
+          cp phase6c-historical-summary-input/donor/cpsycle-historical-it.json phase6c-historical-summary/
+          cp phase6c-historical-summary-input/candidate/candidate-historical-it.json phase6c-historical-summary/
+          cp phase6c-historical-summary-input/original/original-historical-legacy-it.json phase6c-historical-summary/
+          printf '%s\n' 'private-input-required: PSYCLE_PHASE6C_HISTORICAL_IT_URL' 'historical module bytes are intentionally excluded from this artifact' > phase6c-historical-summary/private-input-required.txt
+          ! find phase6c-historical-summary -type f -iname '*.it' -print -quit | grep -q .
+
+      - name: Upload public-safe three-way summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-historical-sickmaate-three-way-summary
+          path: phase6c-historical-summary/
+          if-no-files-found: error
