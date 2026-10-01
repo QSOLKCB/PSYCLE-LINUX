@@ -68,7 +68,7 @@ ACCEPTED_TERMINATION = {
     "closed-after-observation",
     "killed-after-close-error",
 }
-ALLOWED_ARTIFACT_SUFFIXES = {".json", ".txt", ".log", ".png", ".md", ".psy", ".it"}
+ALLOWED_ARTIFACT_SUFFIXES = {".json", ".txt", ".log", ".png", ".md", ".psy"}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -1128,26 +1128,59 @@ def validate_pair(
     return result
 
 
-def validate_artifact_inventory(original_root: pathlib.Path) -> None:
+def validate_artifact_inventory(
+    original_root: pathlib.Path,
+    *,
+    allowed_it: dict[str, str] | None = None,
+) -> None:
+    permitted_it = {} if allowed_it is None else dict(allowed_it)
+    seen_it: set[str] = set()
+
+    for relative_value, expected_hash in permitted_it.items():
+        relative = pathlib.PurePosixPath(relative_value)
+        if (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or relative.suffix.lower() != ".it"
+        ):
+            die(f"invalid permitted .it artifact path: {relative_value!r}")
+        require_hash(expected_hash, f"permitted .it hash for {relative.as_posix()}")
+
     for path in original_root.rglob("*"):
         if not path.is_file():
             continue
+        relative = path.relative_to(original_root)
+        relative_posix = relative.as_posix()
         suffix = path.suffix.lower()
+
+        if suffix == ".it":
+            expected_hash = permitted_it.get(relative_posix)
+            if expected_hash is None:
+                die(f"unexpected .it evidence artifact: {relative_posix}")
+            if relative_posix in seen_it:
+                die(f"duplicate permitted .it evidence artifact: {relative_posix}")
+            if sha256(path) != expected_hash:
+                die(f"permitted .it evidence artifact hash mismatch: {relative_posix}")
+            data = path.read_bytes()
+            if len(data) < 4 or data[:4] != b"IMPM":
+                die(f"permitted .it evidence artifact lacks IMPM header: {relative_posix}")
+            seen_it.add(relative_posix)
+            continue
+
         if suffix not in ALLOWED_ARTIFACT_SUFFIXES:
             die(
                 "original evidence artifact contains a prohibited/unexpected file "
-                f"type: {path.relative_to(original_root)}"
+                f"type: {relative}"
             )
         if suffix == ".psy":
-            relative = path.relative_to(original_root)
             if not relative.parts or relative.parts[0] != "fixtures":
-                if relative.as_posix() != "serialization/original-saved.psy":
+                if relative_posix != "serialization/original-saved.psy":
                     die(f"unexpected .psy evidence output location: {relative}")
                 saved = load_json(original_root / "serialization/saved-fixture.json")
                 expected = {"schema_version": 1, "phase": "6C",
                             "contract": "project-io-serialization-roundtrip",
                             "evidence_role": "original-saved-fixture",
-                            "fixture": relative.as_posix()}
+                            "fixture": relative_posix}
                 if any(type(saved.get(k)) is not type(v) or saved[k] != v
                        for k, v in expected.items()):
                     die("serialization output lacks its explicit saved-fixture identity")
@@ -1155,6 +1188,10 @@ def validate_artifact_inventory(original_root: pathlib.Path) -> None:
                 data = path.read_bytes()
                 if sha256(path) != expected_hash or len(data) <= 8 or data[:8] != b"PSY3SONG":
                     die("serialization output hash/header does not match its saved-fixture identity")
+
+    missing_it = sorted(set(permitted_it) - seen_it)
+    if missing_it:
+        die(f"missing permitted .it evidence artifact: {missing_it[0]}")
 
 
 def main() -> int:
