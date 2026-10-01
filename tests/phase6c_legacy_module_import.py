@@ -76,6 +76,16 @@ with tempfile.TemporaryDirectory() as temporary:
     assert "8742bcbf24ef328a72d2a27b693cc7071e38d3bb4b9b44dec42aa3d2c8d61d92" in observer
     assert 'procedure = if ($ObserveLegacyIt -and $spec.name -eq "legacy-it") {' in observer
 
+    assert "$env:PSYCLE_PHASE6C_VC90_RUNTIME_URL" in observer
+    assert "$env:PSYCLE_PHASE6C_VC90_RUNTIME_SHA256" in observer
+    assert "$env:PSYCLE_PHASE6C_VC90_RUNTIME_VERSION" in observer
+    assert "$env:PSYCLE_PHASE6C_VC90_RUNTIME_RECEIPT" in observer
+    assert "pinned VC90 x86 runtime required and bound for replay" in observer
+    assert "vc90_runtime_url=$LegacyItVc90RuntimeUrl" in observer
+    assert "vc90_runtime_sha256=$LegacyItVc90RuntimeSha256" in observer
+    assert "vc90_runtime_version=$LegacyItVc90RuntimeVersion" in observer
+    assert "vc90_runtime_receipt=$LegacyItVc90RuntimeReceipt" in observer
+
 validator_source = (
     ROOT / "scripts/phase6c-validate-original-receipts-v2.py"
 ).read_text(encoding="utf-8")
