@@ -443,7 +443,7 @@ with tempfile.TemporaryDirectory() as temporary:
             "set_name": name,
             "archive": set_spec["archive"],
             "archive_sha256": set_spec["sha256"],
-            "representative_stem_id": f"{helper.slug(name)}-00-deadbeef0000",
+            "representative_stem_id": f"{helper.slug(name)}-00-{"b" * 12}",
             "representative_relative_name": "00.mid",
             "representative_size_bytes": 32,
             "representative_sha256": "b" * 64,
