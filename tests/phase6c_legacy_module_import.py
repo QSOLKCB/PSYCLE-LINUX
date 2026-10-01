@@ -97,11 +97,37 @@ workflow_source = (
 assert "github.event.pull_request.head.sha || github.sha" not in workflow_source
 assert "['git', 'rev-parse', 'HEAD']" in workflow_source
 assert "phase6c-generated/phase6c-legacy-it-loader" in workflow_source
-assert "phase6c-generated/phase6c-legacy-it-import.it" in workflow_source
-assert "phase6c-generated/candidate-psycle-player" in workflow_source
+
+candidate_upload_marker = "      - name: Upload candidate direct-import observation\n"
+candidate_upload_start = workflow_source.index(candidate_upload_marker)
+candidate_upload_end = workflow_source.index(
+    "\n\n\n  original-legacy-it-observation:", candidate_upload_start
+)
+candidate_upload_block = workflow_source[candidate_upload_start:candidate_upload_end]
+assert "phase6c-generated/phase6c-legacy-it-import.it" in candidate_upload_block
+assert "phase6c-generated/candidate-psycle-player" in candidate_upload_block
+assert "phase6c-generated/candidate-direct-import.log" in candidate_upload_block
+assert "phase6c-generated/candidate-direct-import.json" in candidate_upload_block
+
 assert "'fixture': fixture.name" in workflow_source
 assert "'player': player.name" in workflow_source
 assert "'log': log.name" in workflow_source
+assert "'command': [" in workflow_source
+assert "'./candidate-psycle-player'" in workflow_source
+assert "'--output-driver'" in workflow_source
+assert "'dummy'" in workflow_source
+assert "'--input-file'" in workflow_source
+assert "'phase6c-legacy-it-import.it'" in workflow_source
+assert "'stdin': '/dev/null'" in workflow_source
+assert "'stdout_stderr': log.name" in workflow_source
+assert "'working_directory': 'artifact-root'" in workflow_source
+assert (
+    "'procedure': './candidate-psycle-player --output-driver dummy "
+    "--input-file phase6c-legacy-it-import.it </dev/null "
+    ">candidate-direct-import.log 2>&1'"
+) in workflow_source
+assert "'parity_status': 'UNKNOWN'" in workflow_source
+assert "'parity_classification': 'NOT_CLASSIFIED'" not in workflow_source
 
 legacy_doc = (ROOT / "phase6c/LEGACY_PLAYBACK_IMPORT.md").read_text(encoding="utf-8")
 assert "size:   4,439 bytes" in legacy_doc
