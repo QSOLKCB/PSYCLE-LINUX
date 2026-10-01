@@ -140,7 +140,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             build-essential pkg-config liblua5.4-dev liblilv-dev
+          sudo apt-get install -y --no-install-recommends             build-essential gdb pkg-config liblua5.4-dev liblilv-dev
 
       - name: Generate canonical IT fixture
         run: |
@@ -183,7 +183,15 @@ jobs:
           rc=$?
           set -e
           cat phase6c-generated/phase6c-midi-synthetic.log
-          [[ "$rc" -eq 0 ]] || exit "$rc"
+          if [[ "$rc" -ne 0 ]]; then
+            gdb -batch \
+              -ex run \
+              -ex 'thread apply all bt full' \
+              --args phase6c-generated/phase6c-midi-corpus-probe \
+                phase6c-generated/phase6c-midi-synthetic.mid \
+                phase6c-generated/phase6c-midi-synthetic.wav || true
+            exit "$rc"
+          fi
           tail -n 1 phase6c-generated/phase6c-midi-synthetic.log \
             > phase6c-generated/phase6c-midi-synthetic.json
           python3 - <<'PY'
