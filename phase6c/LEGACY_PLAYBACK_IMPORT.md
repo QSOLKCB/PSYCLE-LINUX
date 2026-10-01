@@ -29,12 +29,12 @@ The historical file is evidence input, not an oracle. Original-Psycle behavior m
 
 ## Redistributable CI fixture
 
-`scripts/phase6c-generate-it-import-fixture.py` generates a 599-byte, project-owned IT 2.14 fixture from first principles. It contains no historical sample bytes.
+`scripts/phase6c-generate-it-import-fixture.py` generates a 4,439-byte, project-owned IT 2.14 fixture from first principles. It contains no historical sample bytes.
 
 It deliberately exercises:
 
 - sample-mode IT loading;
-- deterministic signed 8-bit PCM;
+- deterministic signed 8-bit PCM with a 4,096-frame forward loop so command rows execute against a live voice;
 - speed 4 / tempo 140;
 - linear-slide mode;
 - `E10` portamento down;
