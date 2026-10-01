@@ -28,7 +28,9 @@ assert manifest["source"]["size_bytes"] == EXPECTED_SIZE
 assert manifest["source"]["redistribution"] == "not_committed"
 
 helper_source = HELPER.read_text(encoding="utf-8")
-assert EXPECTED_SHA in helper_source
+assert 'MANIFEST = ROOT / "phase6c/evidence/legacy-module-import/historical-sickmaate.json"' in helper_source
+assert 'source = manifest_source()' in helper_source
+assert 'expected_sha = source.get("sha256")' in helper_source
 assert "external-hash-bound" in helper_source
 assert "private/d-503_-_sickmaate.it" not in helper_source
 assert "parity_status" in helper_source
