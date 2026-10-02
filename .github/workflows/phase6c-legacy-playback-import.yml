@@ -216,7 +216,7 @@ jobs:
           assert observation["releases"] == 2
           assert observation["machines_before_projection"] == 0
           assert observation["projection_notes"] == 2
-          assert observation["projection_kind"] == "deterministic-sampulse"
+          assert observation["projection_kind"] == "deterministic-sampler"
           assert observation["render_frames"] > 0
           assert observation["render_peak"] > 0
           assert observation["non_silent_projection"] is True

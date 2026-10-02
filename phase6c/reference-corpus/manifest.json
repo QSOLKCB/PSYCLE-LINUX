@@ -205,6 +205,6 @@
       "time signature"
     ],
     "strict_parser_edge": "All inspected exporter files carry an out-of-range key-signature meta value; preserve this as a real-world robustness case rather than normalizing it away.",
-    "playback_boundary": "SMF import itself selects no sound-generating machine. Playback evidence therefore freezes the untouched imported event digest first, then attaches a project-owned deterministic Sampulse execution substrate; that projection is evidence of engine execution, not native MIDI instrument-selection semantics."
+    "playback_boundary": "SMF import itself selects no sound-generating machine. Playback evidence therefore freezes the untouched imported event digest first, then attaches a project-owned deterministic classic Sampler execution substrate; that projection is evidence of engine execution, not native MIDI instrument-selection semantics."
   }
 }

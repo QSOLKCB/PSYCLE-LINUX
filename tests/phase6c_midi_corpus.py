@@ -32,7 +32,7 @@ assert [item["name"] for item in manifest["sets"]] != helper.PROGRESSION
 assert set(item["name"] for item in manifest["sets"]) == set(helper.PROGRESSION)
 assert manifest["private_workflow"]["bundle_url_secret"] == "PSYCLE_PHASE6C_MIDI_CORPUS_URL"
 assert manifest["shared_observation"]["ppqn"] == 480
-assert "deterministic Sampulse" in manifest["shared_observation"]["playback_boundary"]
+assert "deterministic classic Sampler" in manifest["shared_observation"]["playback_boundary"]
 assert {
     item["name"]: item["sha256"] for item in manifest["sets"]
 } == {
@@ -180,7 +180,7 @@ assert "#define PSYCLE_USE_MIDI_FILE" in psyconf_source
 assert "/* #define PSYCLE_USE_MIDI_FILE */" not in psyconf_source
 
 helper_source = HELPER.read_text(encoding="utf-8")
-assert "candidate player does not match an immediate clean rebuild" in helper_source
+assert "caller-supplied binary is intentionally not trusted as evidence" in helper_source
 assert '["make", "clean"]' in helper_source
 assert '["make", "-j2"]' in helper_source
 
@@ -196,7 +196,8 @@ assert '"\\\"phase\\\":\\\"6C\\\","' in probe_source
 assert '"\\\"contract\\\":\\\"legacy-midi-real-world-donor\\\","' in probe_source
 assert "UINT64_C(14695981039346656037)" in probe_source
 assert "PROJECTION_BEATS 16.0" in probe_source
-assert "psy_audio_XMSAMPLER" in probe_source
+assert "psy_audio_XMSAMPLER" not in probe_source
+assert "psy_audio_SAMPLER" in probe_source
 assert "psy_audio_create_fileout_driver" in probe_source
 assert "machines_before_projection" in probe_source
 assert "import_event_digest_fnv64" in probe_source

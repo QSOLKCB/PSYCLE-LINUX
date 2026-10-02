@@ -4,7 +4,7 @@
 **
 ** Loads an external SMF through the retained C-Psycle MidiLoader, freezes a
 ** digest of the untouched imported event graph, then attaches a deterministic
-** project-owned Sampulse substrate and renders a bounded 16-beat execution
+** project-owned classic Sampler substrate and renders a bounded 16-beat execution
 ** projection through the production Player/FileOutDriver path.
 **
 ** The projection is not a claim about native MIDI instrument selection.
@@ -42,7 +42,7 @@
 #define PROJECTION_SAMPLE_RATE 44100u
 #define PROJECTION_SAMPLE_FRAMES 2048u
 #define PROJECTION_MACHINE 0u
-#define PROJECTION_INSTRUMENT_GROUP 1u
+#define PROJECTION_INSTRUMENT_GROUP 0u
 #define PROJECTION_INSTRUMENT 0u
 #define RENDER_TIMEOUT_TICKS 1500u
 #define RENDER_WAIT_US 10000u
@@ -248,12 +248,12 @@ static int install_projection_substrate(
 
     sampler = psy_audio_machinefactory_make_machine_from_path(
         &player->machinefactory,
-        psy_audio_XMSAMPLER,
+        psy_audio_SAMPLER,
         NULL,
         0,
         psy_INDEX_INVALID);
     if (!sampler)
-        return fail("could not create deterministic Sampulse projection machine");
+        return fail("could not create deterministic classic Sampler projection machine");
     psy_audio_machines_insert(machines, PROJECTION_MACHINE, sampler);
     psy_audio_machines_connect(
         machines,
@@ -560,7 +560,7 @@ int main(int argc, char** argv)
             "\"machines_before_projection\":%lu,"
             "\"projection_notes\":%lu,"
             "\"projection_beats\":%.0f,"
-            "\"projection_kind\":\"deterministic-sampulse\","
+            "\"projection_kind\":\"deterministic-sampler\","
             "\"import_event_digest_fnv64\":\"%016llx\","
             "\"render_frames\":%u,"
             "\"render_peak\":%d,"

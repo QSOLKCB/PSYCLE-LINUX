@@ -193,7 +193,7 @@ C-Psycle has a real `MThd`/`MidiLoader` song-I/O path. At the start of this phas
 Native MIDI import creates sequence tracks and tracker events, but it **does not choose or instantiate a sound-generating machine**. Therefore this lane records two different claims:
 
 1. **native import evidence** — load acceptance plus a digest/count of the untouched imported event graph;
-2. **execution projection** — after the untouched graph is frozen, imported note/release/MIDI-CC events are routed through one deterministic project-owned Sampulse substrate and rendered through the production Player/FileOutDriver path.
+2. **execution projection** — after the untouched graph is frozen, imported note/release/MIDI-CC events are routed through one deterministic project-owned classic Sampler substrate and rendered through the production Player/FileOutDriver path.
 
 The projection keeps imported note numbers, event offsets, track geometry and tempo commands intact. It supplies only the missing sound source needed for audibility and is explicitly **not** evidence of native MIDI instrument-selection semantics.
 
@@ -214,7 +214,7 @@ Ordinary PR CI does not need the private corpus. It generates a small project-ow
 ```text
 SongReader / MidiLoader
   -> untouched event-graph digest
-  -> deterministic Sampulse projection
+  -> deterministic classic Sampler projection
   -> Player
   -> FileOutDriver
   -> non-silent WAV validation

@@ -127,7 +127,7 @@ jobs:
                       "projection_boundary": (
                           "untouched imported event graph was digested before "
                           "retargeting notes/releases/MIDI CC to a deterministic "
-                          "project-owned Sampulse substrate for a 16-beat FileOut render"
+                          "project-owned classic Sampler substrate for a 16-beat FileOut render"
                       ),
                   })
                   (observations / f"{stem['stem_id']}.json").write_text(

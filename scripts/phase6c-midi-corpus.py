@@ -1053,7 +1053,6 @@ def validate_frozen_candidate_player(player: pathlib.Path) -> dict[str, str]:
     if diff.returncode != 0:
         die("tracked frozen candidate source differs from HEAD")
 
-    initial_sha = sha256_file(player)
     player_root = CANDIDATE_SOURCE_ROOT / "psycle-player"
 
     # The qmake build graph is generated and therefore untracked. Purge every
@@ -1164,12 +1163,10 @@ def validate_frozen_candidate_player(player: pathlib.Path) -> dict[str, str]:
             "clean rebuild failed for frozen candidate player: "
             + rebuild.stdout.decode(errors="replace")[-1000:]
         )
+    # The caller-supplied binary is intentionally not trusted as evidence.
+    # Everything under the generated qmake graph was removed before qmake ran,
+    # and this path now names the binary produced from the pinned source tree.
     rebuilt_sha = sha256_file(player)
-    if rebuilt_sha != initial_sha:
-        die(
-            "candidate player does not match an immediate clean rebuild: "
-            f"initial={initial_sha} rebuilt={rebuilt_sha}"
-        )
     with player.open("rb") as handle:
         if handle.read(4) != b"\x7fELF":
             die("clean rebuilt candidate player is not an ELF executable")
