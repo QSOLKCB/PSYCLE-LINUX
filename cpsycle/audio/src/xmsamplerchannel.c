@@ -285,10 +285,13 @@ void psy_audio_xmsamplerchannel_setforegroundvoice(psy_audio_XMSamplerChannel* s
 
 void psy_audio_xmsamplerchannel_setnote(psy_audio_XMSamplerChannel* self, int note)
 {
+	psy_audio_XMSamplerVoice* foreground;
+
 	self->m_Note = note;
-	if (psy_audio_xmsamplerchannel_foregroundvoice(self)) {
+	foreground = psy_audio_xmsamplerchannel_foregroundvoice(self);
+	if (foreground && psy_audio_xmsamplervoice_isplaying(foreground)) {
 		self->m_Period = psy_audio_xmsamplervoice_notetoperiod(
-			psy_audio_xmsamplerchannel_foregroundvoice(self), note, TRUE);
+			foreground, note, TRUE);
 	}
 }
 
