@@ -440,9 +440,10 @@ midiloader_source = (ROOT / "cpsycle/audio/src/midiloader.c").read_text(
     encoding="utf-8"
 )
 assert "noteoff.mach = self->currtrack.channel;" not in midiloader_source
-assert (
-    "self->currtrack.channels[voice].tracknote.mach;" in midiloader_source
-)
+assert "noteoff.mach = channel->tracknote.mach;" in midiloader_source
+assert "channel->tracknote.mach == self->currtrack.channel" in midiloader_source
+assert "psy_audio_patternentry_add_event(" in midiloader_source
+assert "midiloader_playablenote(note)" in midiloader_source
 for upload_block in workflow.split("uses: actions/upload-artifact@v4")[1:]:
     block = upload_block.split("\n      - name:", 1)[0]
     assert ".mid" not in block.lower(), block
