@@ -311,6 +311,8 @@ def parse_track(track: bytes) -> dict[str, Any]:
     tempos: list[tuple[int, int]] = []
     key_signatures: list[tuple[int, int]] = []
     channels: set[int] = set()
+    note_on_channels: set[int] = set()
+    note_off_channels: set[int] = set()
     sysex = 0
     pitch_bend = 0
     aftertouch = 0
@@ -401,6 +403,7 @@ def parse_track(track: bytes) -> dict[str, Any]:
         is_note_off = kind == 0x80 or (kind == 0x90 and len(payload) == 2 and payload[1] == 0)
         if is_note_on:
             note = payload[0]
+            note_on_channels.add(channel)
             note_transitions.append((tick, event_serial, channel, note, True))
             key = (channel, note)
             queue = active[key]
@@ -412,6 +415,7 @@ def parse_track(track: bytes) -> dict[str, Any]:
             note_ons += 1
         elif is_note_off:
             note = payload[0]
+            note_off_channels.add(channel)
             note_transitions.append((tick, event_serial, channel, note, False))
             key = (channel, note)
             queue = active[key]
@@ -435,6 +439,8 @@ def parse_track(track: bytes) -> dict[str, Any]:
         "tempo_events": tempos,
         "key_signatures": key_signatures,
         "channels": sorted(channels),
+        "note_on_channels": sorted(note_on_channels),
+        "note_off_channels": sorted(note_off_channels),
         "sysex_events": sysex,
         "pitch_bend_events": pitch_bend,
         "aftertouch_events": aftertouch,
@@ -555,6 +561,12 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
     global_remaining = sum(len(queue) for queue in active_notes.values())
     key_sigs = [pair for track in tracks for pair in track["key_signatures"]]
     channels = sorted({ch for track in tracks for ch in track["channels"]})
+    note_on_channels = sorted({
+        ch for track in tracks for ch in track["note_on_channels"]
+    })
+    note_off_channels = sorted({
+        ch for track in tracks for ch in track["note_off_channels"]
+    })
     end_tick = max((track["end_tick"] for track in tracks), default=0)
     return {
         "format": fmt,
@@ -573,6 +585,8 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
             set((sf, mi) for sf, mi in key_sigs if sf < -7 or sf > 7 or mi not in (0, 1))
         ),
         "channels": channels,
+        "note_on_channels": note_on_channels,
+        "note_off_channels": note_off_channels,
         "sysex_events": sum(track["sysex_events"] for track in tracks),
         "pitch_bend_events": sum(track["pitch_bend_events"] for track in tracks),
         "aftertouch_events": sum(track["aftertouch_events"] for track in tracks),
@@ -909,6 +923,49 @@ def validate_analysis_manifest_bindings(
     return manifest_by_name
 
 
+def contains_structural_smf(data: bytes) -> bool:
+    search_from = 0
+    while True:
+        offset = data.find(b"MThd", search_from)
+        if offset < 0:
+            return False
+        payload = data[offset:]
+        if len(payload) >= 14:
+            header_len = int.from_bytes(payload[4:8], "big")
+            if header_len >= 6 and 8 + header_len <= len(payload):
+                fmt, ntracks, division = struct.unpack(">HHH", payload[8:14])
+                if (
+                    fmt in (0, 1, 2)
+                    and ntracks > 0
+                    and division != 0
+                    and not (division & 0x8000)
+                ):
+                    pos = 8 + header_len
+                    valid = True
+                    for _index in range(ntracks):
+                        if (
+                            pos + 8 > len(payload)
+                            or payload[pos:pos + 4] != b"MTrk"
+                        ):
+                            valid = False
+                            break
+                        length = int.from_bytes(payload[pos + 4:pos + 8], "big")
+                        start = pos + 8
+                        end = start + length
+                        if end > len(payload):
+                            valid = False
+                            break
+                        try:
+                            parse_track(payload[start:end])
+                        except SystemExit:
+                            valid = False
+                            break
+                        pos = end
+                    if valid:
+                        return True
+        search_from = offset + 1
+
+
 def audit_public_tree(root: pathlib.Path) -> None:
     leaks: list[str] = []
     for path in root.rglob("*"):
@@ -918,9 +975,9 @@ def audit_public_tree(root: pathlib.Path) -> None:
         if path.suffix.lower() in {".mid", ".midi", ".zip"}:
             leaks.append(relative)
             continue
-        with path.open("rb") as handle:
-            prefix = handle.read(4)
-        if prefix == b"MThd":
+        data = path.read_bytes()
+        prefix = data[:4]
+        if contains_structural_smf(data):
             leaks.append(relative)
             continue
         if prefix == b"PK\x03\x04" or zipfile.is_zipfile(path):
@@ -1274,6 +1331,61 @@ def candidate_boundary(
     write_json(output, receipt)
 
 
+def validate_donor_execution_observation(
+    stem: dict[str, Any],
+    obs: dict[str, Any],
+) -> dict[str, Any]:
+    stem_id = stem.get("stem_id", "<unknown>")
+    analysis = stem.get("analysis")
+    if not isinstance(analysis, dict):
+        die(f"{stem_id}: donor source analysis is missing")
+    if obs.get("machines_before_projection") != 0:
+        die(f"{stem_id}: MIDI importer unexpectedly created machines")
+    if not isinstance(obs.get("projection_notes"), int) or obs["projection_notes"] <= 0:
+        die(f"{stem_id}: donor projection contains no notes")
+    if not isinstance(obs.get("render_frames"), int) or obs["render_frames"] <= 0:
+        die(f"{stem_id}: donor projection rendered no frames")
+    if not isinstance(obs.get("render_peak"), int) or obs["render_peak"] <= 0:
+        die(f"{stem_id}: donor projection peak is invalid")
+
+    source_channels = analysis.get("channels")
+    source_note_off_channels = analysis.get("note_off_channels")
+    expected_channel_mask = midi_channel_mask(source_channels)
+    expected_release_mask = midi_channel_mask(source_note_off_channels)
+    if obs.get("midi_channel_mask") != expected_channel_mask:
+        die(
+            f"{stem_id}: imported MIDI channel coverage differs from raw SMF: "
+            f"source={source_channels} imported_mask={obs.get('midi_channel_mask')!r}"
+        )
+    if obs.get("release_channel_mask") != expected_release_mask:
+        die(
+            f"{stem_id}: imported release-channel coverage differs from raw SMF: "
+            f"source={source_note_off_channels} "
+            f"imported_mask={obs.get('release_channel_mask')!r}"
+        )
+    if obs.get("imported_notes") != analysis.get("note_ons"):
+        die(
+            f"{stem_id}: imported note count differs from raw SMF: "
+            f"source={analysis.get('note_ons')} imported={obs.get('imported_notes')}"
+        )
+    if obs.get("releases") != analysis.get("note_offs"):
+        die(
+            f"{stem_id}: imported release count differs from raw SMF: "
+            f"source={analysis.get('note_offs')} imported={obs.get('releases')}"
+        )
+    if obs.get("non_silent_projection") is not True:
+        die(f"{stem_id}: execution projection is silent")
+    if obs.get("projection_kind") != "deterministic-sampler":
+        die(f"{stem_id}: execution projection kind changed")
+    if obs.get("parity_status") != "UNKNOWN":
+        die(f"{stem_id}: donor observation attempted parity promotion")
+    return {
+        "source_channels": list(source_channels),
+        "source_note_off_channels": list(source_note_off_channels),
+        "source_note_offs": analysis["note_offs"],
+    }
+
+
 def donor_summary(
     analysis_path: pathlib.Path,
     bundle_path: pathlib.Path,
@@ -1316,14 +1428,10 @@ def donor_summary(
                 die(f"{stem['stem_id']}: donor raw-SMF analysis binding changed")
             if obs.get("load_result") != "accepted":
                 die(f"{stem['stem_id']}: donor load_result is not accepted")
-            if obs.get("machines_before_projection") != 0:
-                die(f"{stem['stem_id']}: MIDI importer unexpectedly created machines")
-            if not isinstance(obs.get("projection_notes"), int) or obs["projection_notes"] <= 0:
-                die(f"{stem['stem_id']}: donor projection contains no notes")
-            if not isinstance(obs.get("render_frames"), int) or obs["render_frames"] <= 0:
-                die(f"{stem['stem_id']}: donor projection rendered no frames")
-            if not isinstance(obs.get("render_peak"), int) or obs["render_peak"] <= 0:
-                die(f"{stem['stem_id']}: donor projection peak is invalid")
+            coverage = validate_donor_execution_observation(stem, obs)
+            obs["_source_channels"] = coverage["source_channels"]
+            obs["_source_note_off_channels"] = coverage["source_note_off_channels"]
+            obs["_source_note_offs"] = coverage["source_note_offs"]
             if obs.get("private_input_required") is not True:
                 die(f"{stem['stem_id']}: donor private-input flag changed")
             if obs.get("fixture_redistributed") is not False:
@@ -1338,26 +1446,6 @@ def donor_summary(
             render_sha = obs.get("render_sha256")
             if not isinstance(render_sha, str) or len(render_sha) != 64:
                 die(f"{stem['stem_id']}: donor render SHA-256 is invalid")
-            source_channels = stem["analysis"].get("channels")
-            expected_channel_mask = midi_channel_mask(source_channels)
-            if obs.get("midi_channel_mask") != expected_channel_mask:
-                die(
-                    f"{stem['stem_id']}: imported MIDI channel coverage differs "
-                    f"from raw SMF: source={source_channels} "
-                    f"imported_mask={obs.get('midi_channel_mask')!r}"
-                )
-            obs["_source_channels"] = list(source_channels)
-            if obs.get("imported_notes") != stem["analysis"]["note_ons"]:
-                die(
-                    f"{stem['stem_id']}: imported note count differs from raw SMF: "
-                    f"source={stem['analysis']['note_ons']} imported={obs.get('imported_notes')}"
-                )
-            if obs.get("non_silent_projection") is not True:
-                die(f"{stem['stem_id']}: execution projection is silent")
-            if obs.get("projection_kind") != "deterministic-sampulse":
-                die(f"{stem['stem_id']}: execution projection kind changed")
-            if obs.get("parity_status") != "UNKNOWN":
-                die(f"{stem['stem_id']}: donor observation attempted parity promotion")
             observations.append(obs)
         set_spec = manifest_by_name[set_info["name"]]
         stem_records = [
@@ -1369,6 +1457,10 @@ def donor_summary(
                 "source_analysis_sha256": item["source_analysis_sha256"],
                 "source_channels": item["_source_channels"],
                 "midi_channel_mask": item["midi_channel_mask"],
+                "source_note_off_channels": item["_source_note_off_channels"],
+                "source_note_offs": item["_source_note_offs"],
+                "release_channel_mask": item["release_channel_mask"],
+                "releases": item["releases"],
                 "import_event_digest_fnv64": item["import_event_digest_fnv64"],
                 "render_sha256": item["render_sha256"],
             }
@@ -1415,7 +1507,7 @@ def donor_summary(
         "parity_status": "UNKNOWN",
         "claim_scope": (
             "C-Psycle real-world SMF import plus deterministic execution projection. "
-            "The projection attaches a project-owned Sampulse substrate after freezing "
+            "The projection attaches a project-owned classic Sampler substrate after freezing "
             "the untouched imported event digest; it is not native instrument-selection semantics."
         ),
     }
@@ -1508,6 +1600,10 @@ def corpus_summary(
             analysis_sha = record.get("source_analysis_sha256")
             source_channels = record.get("source_channels")
             imported_channel_mask = record.get("midi_channel_mask")
+            source_note_off_channels = record.get("source_note_off_channels")
+            source_note_offs = record.get("source_note_offs")
+            release_channel_mask = record.get("release_channel_mask")
+            releases = record.get("releases")
             digest = record.get("import_event_digest_fnv64")
             render_sha = record.get("render_sha256")
             if (
@@ -1524,6 +1620,17 @@ def corpus_summary(
                 or isinstance(imported_channel_mask, bool)
                 or imported_channel_mask < 0
                 or imported_channel_mask > 0xFFFF
+                or not isinstance(source_note_off_channels, list)
+                or not isinstance(source_note_offs, int)
+                or isinstance(source_note_offs, bool)
+                or source_note_offs < 0
+                or not isinstance(release_channel_mask, int)
+                or isinstance(release_channel_mask, bool)
+                or release_channel_mask < 0
+                or release_channel_mask > 0xFFFF
+                or not isinstance(releases, int)
+                or isinstance(releases, bool)
+                or releases < 0
                 or not isinstance(digest, str)
                 or len(digest) != 16
                 or not isinstance(render_sha, str)
@@ -1545,6 +1652,11 @@ def corpus_summary(
             expected_channel_mask = midi_channel_mask(source_channels)
             if imported_channel_mask != expected_channel_mask:
                 die(f"donor {name} stem MIDI channel coverage is inconsistent")
+            expected_release_mask = midi_channel_mask(source_note_off_channels)
+            if release_channel_mask != expected_release_mask:
+                die(f"donor {name} stem release-channel coverage is inconsistent")
+            if releases != source_note_offs:
+                die(f"donor {name} stem release count is inconsistent")
             observed_channels.update(source_channels)
             seen_ids.add(stem_id)
             seen_names.add(relative_name)
@@ -1701,6 +1813,21 @@ def midi_varlen(value: int) -> bytes:
     return bytes(out)
 
 
+def write_smf_tracks(
+    path: pathlib.Path,
+    tracks: list[bytes | bytearray],
+    *,
+    fmt: int,
+    division: int = 480,
+) -> None:
+    payload = bytearray(b"MThd")
+    payload += struct.pack(">IHHH", 6, fmt, len(tracks), division)
+    for track in tracks:
+        payload += b"MTrk" + struct.pack(">I", len(track)) + track
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+
+
 def write_synthetic_fixture(path: pathlib.Path) -> None:
     track_zero = bytearray()
     track_zero += midi_varlen(0) + b"\xff\x51\x03\x07\xa1\x20"
@@ -1714,12 +1841,35 @@ def write_synthetic_fixture(path: pathlib.Path) -> None:
     track_one += midi_varlen(240) + bytes((0x81, 64, 0))
     track_one += midi_varlen(0) + b"\xff\x2f\x00"
 
-    payload = bytearray(b"MThd")
-    payload += struct.pack(">IHHH", 6, 1, 2, 480)
-    for track in (track_zero, track_one):
-        payload += b"MTrk" + struct.pack(">I", len(track)) + track
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(payload)
+    write_smf_tracks(path, [track_zero, track_one], fmt=1)
+
+
+def write_regression_fixtures(root: pathlib.Path) -> None:
+    zero_duration = bytearray()
+    zero_duration += midi_varlen(0) + bytes((0x90, 60, 100))
+    zero_duration += midi_varlen(0) + bytes((0x80, 60, 0))
+    zero_duration += midi_varlen(0) + b"\xff\x2f\x00"
+    write_smf_tracks(
+        root / "zero-duration.mid", [zero_duration], fmt=0
+    )
+
+    multichannel = bytearray()
+    multichannel += midi_varlen(0) + bytes((0x90, 60, 100))
+    multichannel += midi_varlen(0) + bytes((0x91, 60, 100))
+    multichannel += midi_varlen(10) + bytes((0x81, 60, 0))
+    multichannel += midi_varlen(10) + bytes((0x80, 60, 0))
+    multichannel += midi_varlen(0) + b"\xff\x2f\x00"
+    write_smf_tracks(
+        root / "same-note-multichannel.mid", [multichannel], fmt=0
+    )
+
+    high_note = bytearray()
+    high_note += midi_varlen(0) + bytes((0x90, 120, 100))
+    high_note += midi_varlen(480) + bytes((0x80, 120, 0))
+    high_note += midi_varlen(0) + b"\xff\x2f\x00"
+    write_smf_tracks(
+        root / "high-note.mid", [high_note], fmt=0
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1730,6 +1880,12 @@ def build_parser() -> argparse.ArgumentParser:
     synthetic_fixture.add_argument("output", type=pathlib.Path)
     synthetic_fixture.set_defaults(
         func=lambda args: write_synthetic_fixture(args.output.resolve())
+    )
+
+    regression_fixtures = sub.add_parser("write-regression-fixtures")
+    regression_fixtures.add_argument("output", type=pathlib.Path)
+    regression_fixtures.set_defaults(
+        func=lambda args: write_regression_fixtures(args.output.resolve())
     )
 
     prepare = sub.add_parser("prepare-bundle")

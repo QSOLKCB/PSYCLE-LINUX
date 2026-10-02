@@ -158,6 +158,8 @@ jobs:
           set -euo pipefail
           python3 scripts/phase6c-midi-corpus.py write-synthetic \
             phase6c-generated/phase6c-midi-synthetic.mid
+          python3 scripts/phase6c-midi-corpus.py write-regression-fixtures \
+            phase6c-generated/midi-regressions
           gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer \
             -Wall -Wextra -Werror=implicit-function-declaration \
             -Icpsycle/script/src -Icpsycle/thread/src -Icpsycle/container/src \
@@ -214,6 +216,8 @@ jobs:
           assert observation["patterns"] == 2
           assert observation["imported_notes"] == 2
           assert observation["releases"] == 2
+          assert observation["midi_channel_mask"] == 3
+          assert observation["release_channel_mask"] == 3
           assert observation["machines_before_projection"] == 0
           assert observation["projection_notes"] == 2
           assert observation["projection_kind"] == "deterministic-sampler"
@@ -223,6 +227,38 @@ jobs:
           assert observation["parity_status"] == "UNKNOWN"
           assert len(observation["import_event_digest_fnv64"]) == 16
           PY
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import subprocess
+
+          probe = Path("phase6c-generated/phase6c-midi-corpus-probe").resolve()
+          root = Path("phase6c-generated/midi-regressions")
+          cases = {
+              "zero-duration.mid": (1, 1, 1, 1),
+              "same-note-multichannel.mid": (2, 2, 3, 3),
+              "high-note.mid": (1, 1, 1, 1),
+          }
+          for name, (notes, releases, channel_mask, release_mask) in cases.items():
+              proc = subprocess.run(
+                  [str(probe), str((root / name).resolve())],
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT,
+                  text=True,
+                  check=False,
+              )
+              print(proc.stdout, end="")
+              assert proc.returncode == 0, (name, proc.returncode)
+              lines = [line for line in proc.stdout.splitlines() if line.strip()]
+              observation = json.loads(lines[-1])
+              assert observation["imported_notes"] == notes, name
+              assert observation["releases"] == releases, name
+              assert observation["midi_channel_mask"] == channel_mask, name
+              assert observation["release_channel_mask"] == release_mask, name
+              assert observation["projection_kind"] == "not-run", name
+              assert observation["non_silent_projection"] is False, name
+          PY
+          rm -rf phase6c-generated/midi-regressions
           rm -f \
             phase6c-generated/phase6c-midi-synthetic.mid \
             phase6c-generated/phase6c-midi-synthetic.wav

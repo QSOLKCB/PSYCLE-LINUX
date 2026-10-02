@@ -63,6 +63,7 @@ typedef struct ImportStats {
     uintptr_t midi_cc;
     uintptr_t tempo_commands;
     uint32_t midi_channel_mask;
+    uint32_t release_channel_mask;
     uintptr_t machines_before_projection;
     uintptr_t projection_notes;
     uint64_t digest;
@@ -206,8 +207,10 @@ static int collect_import_stats(psy_audio_Song* song, ImportStats* stats)
                         stats->midi_channel_mask |= UINT32_C(1) << event->mach;
                 } else if (event->note == psy_audio_NOTECOMMANDS_RELEASE) {
                     ++stats->releases;
-                    if (event->mach < 16u)
+                    if (event->mach < 16u) {
                         stats->midi_channel_mask |= UINT32_C(1) << event->mach;
+                        stats->release_channel_mask |= UINT32_C(1) << event->mach;
+                    }
                 } else if (event->note == psy_audio_NOTECOMMANDS_MIDICC) {
                     ++stats->midi_cc;
                     if (event->mach < 16u)
@@ -505,8 +508,8 @@ int main(int argc, char** argv)
     WavStats wav_stats;
     int rc;
 
-    if (argc != 3) {
-        fprintf(stderr, "usage: %s INPUT.mid OUTPUT.wav\n", argv[0]);
+    if (argc != 2 && argc != 3) {
+        fprintf(stderr, "usage: %s INPUT.mid [OUTPUT.wav]\n", argv[0]);
         return 64;
     }
 
@@ -534,10 +537,11 @@ int main(int argc, char** argv)
         return fail("C-Psycle SongReader rejected real-world MIDI stem");
     }
 
+    memset(&wav_stats, 0, sizeof(wav_stats));
     rc = collect_import_stats(song, &import_stats);
-    if (rc == 0)
+    if (rc == 0 && argc == 3)
         rc = install_projection_substrate(song, &player, &import_stats);
-    if (rc == 0)
+    if (rc == 0 && argc == 3)
         rc = render_projection(&player, song, argv[2], &wav_stats);
 
     if (rc == 0) {
@@ -557,14 +561,15 @@ int main(int argc, char** argv)
             "\"midi_cc\":%lu,"
             "\"tempo_commands\":%lu,"
             "\"midi_channel_mask\":%u,"
+            "\"release_channel_mask\":%u,"
             "\"machines_before_projection\":%lu,"
             "\"projection_notes\":%lu,"
             "\"projection_beats\":%.0f,"
-            "\"projection_kind\":\"deterministic-sampler\","
+            "\"projection_kind\":\"%s\","
             "\"import_event_digest_fnv64\":\"%016llx\","
             "\"render_frames\":%u,"
             "\"render_peak\":%d,"
-            "\"non_silent_projection\":true,"
+            "\"non_silent_projection\":%s,"
             "\"parity_status\":\"UNKNOWN\""
             "}\n",
             (unsigned long)import_stats.sequence_tracks,
@@ -576,12 +581,15 @@ int main(int argc, char** argv)
             (unsigned long)import_stats.midi_cc,
             (unsigned long)import_stats.tempo_commands,
             (unsigned)import_stats.midi_channel_mask,
+            (unsigned)import_stats.release_channel_mask,
             (unsigned long)import_stats.machines_before_projection,
             (unsigned long)import_stats.projection_notes,
             PROJECTION_BEATS,
+            argc == 3 ? "deterministic-sampler" : "not-run",
             (unsigned long long)import_stats.digest,
             (unsigned)wav_stats.frames,
-            wav_stats.peak);
+            wav_stats.peak,
+            argc == 3 ? "true" : "false");
     }
 
     psy_audio_player_set_empty_song(&player);

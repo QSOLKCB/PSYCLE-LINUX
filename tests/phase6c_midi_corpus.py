@@ -79,6 +79,8 @@ with tempfile.TemporaryDirectory() as temporary:
     assert parsed["max_polyphony"] == 2
     assert parsed["tempo_events"] == 1
     assert parsed["channels"] == [0, 1]
+    assert parsed["note_on_channels"] == [0, 1]
+    assert parsed["note_off_channels"] == [0, 1]
     assert parsed["malformed_key_signatures"] == [(9, 1)]
     assert parsed["balanced_note_pairs"] is True
     assert parsed["zero_duration_pairs"] == 0
@@ -175,6 +177,71 @@ with tempfile.TemporaryDirectory() as temporary:
     else:
         raise AssertionError("prefixed renamed ZIP payload must fail public-tree audit")
 
+with tempfile.TemporaryDirectory() as temporary:
+    public = Path(temporary)
+    embedded = public / "evidence.txt"
+    synthetic = public / "source.mid"
+    helper.write_synthetic_fixture(synthetic)
+    embedded.write_bytes(b"X" + synthetic.read_bytes())
+    synthetic.unlink()
+    try:
+        helper.audit_public_tree(public)
+    except SystemExit as exc:
+        assert "raw corpus bytes" in str(exc)
+    else:
+        raise AssertionError("prefixed embedded SMF payload must fail public-tree audit")
+
+with tempfile.TemporaryDirectory() as temporary:
+    public = Path(temporary)
+    harmless = public / "notes.txt"
+    harmless.write_bytes(b"ordinary text MThd that is not a MIDI file")
+    helper.audit_public_tree(public)
+
+with tempfile.TemporaryDirectory() as temporary:
+    fixtures = Path(temporary)
+    helper.write_regression_fixtures(fixtures)
+    zero = helper.parse_smf(fixtures / "zero-duration.mid")
+    assert zero["note_ons"] == 1
+    assert zero["note_offs"] == 1
+    assert zero["zero_duration_pairs"] == 1
+    assert zero["note_off_channels"] == [0]
+    multi = helper.parse_smf(fixtures / "same-note-multichannel.mid")
+    assert multi["note_ons"] == 2
+    assert multi["note_offs"] == 2
+    assert multi["channels"] == [0, 1]
+    assert multi["note_off_channels"] == [0, 1]
+    high = helper.parse_smf(fixtures / "high-note.mid")
+    assert high["note_ons"] == 1
+    assert high["note_offs"] == 1
+
+probe_shaped_stem = {
+    "stem_id": "probe-shaped",
+    "analysis": {
+        "channels": [0, 1],
+        "note_off_channels": [0, 1],
+        "note_ons": 2,
+        "note_offs": 2,
+    },
+}
+probe_shaped_observation = {
+    "machines_before_projection": 0,
+    "projection_notes": 2,
+    "render_frames": 1024,
+    "render_peak": 100,
+    "midi_channel_mask": 3,
+    "release_channel_mask": 3,
+    "imported_notes": 2,
+    "releases": 2,
+    "non_silent_projection": True,
+    "projection_kind": "deterministic-sampler",
+    "parity_status": "UNKNOWN",
+}
+coverage = helper.validate_donor_execution_observation(
+    probe_shaped_stem, probe_shaped_observation
+)
+assert coverage["source_channels"] == [0, 1]
+assert coverage["source_note_off_channels"] == [0, 1]
+
 psyconf_source = PSYCONF.read_text(encoding="utf-8")
 assert "#define PSYCLE_USE_MIDI_FILE" in psyconf_source
 assert "/* #define PSYCLE_USE_MIDI_FILE */" not in psyconf_source
@@ -201,6 +268,7 @@ assert "psy_audio_SAMPLER" in probe_source
 assert "psy_audio_create_fileout_driver" in probe_source
 assert "machines_before_projection" in probe_source
 assert "import_event_digest_fnv64" in probe_source
+assert "release_channel_mask" in probe_source
 assert "non_silent_projection" in probe_source
 
 def aggregate_for(set_spec):
@@ -401,6 +469,10 @@ assert 'assert observation["sequence_tracks"] == 2' in legacy_workflow
 assert 'assert observation["machines_before_projection"] == 0' in legacy_workflow
 assert 'assert observation["projection_notes"] == 2' in legacy_workflow
 assert 'assert observation["releases"] == 2' in legacy_workflow
+assert 'assert observation["release_channel_mask"] == 3' in legacy_workflow
+assert "write-regression-fixtures" in legacy_workflow
+assert "same-note-multichannel.mid" in legacy_workflow
+assert "high-note.mid" in legacy_workflow
 assert 'assert observation["non_silent_projection"] is True' in legacy_workflow
 assert (
     "phase6c-generated/phase6c-midi-synthetic.mid \\\n"
@@ -455,6 +527,10 @@ with tempfile.TemporaryDirectory() as temporary:
                 ).hexdigest(),
                 "source_channels": source_channels,
                 "midi_channel_mask": channel_mask,
+                "source_note_off_channels": source_channels,
+                "source_note_offs": 1,
+                "release_channel_mask": channel_mask,
+                "releases": 1,
                 "import_event_digest_fnv64": (
                     f"{index + 1:016x}"[-16:]
                 ),
