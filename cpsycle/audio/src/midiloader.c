@@ -511,7 +511,7 @@ int midiloader_readpitchbend(MidiLoader* self)
     return PSY_OK;
 }
 
-int midiloader_readsysex(MidiLoader* self)
+static int midiloader_readsysex(MidiLoader* self)
 {
     uint32_t length;
     int status;
