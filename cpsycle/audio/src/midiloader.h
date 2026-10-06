@@ -33,11 +33,13 @@ extern "C" {
 */
 
 #define MAX_MIDIFILE_POLYPHONY 64
+#define MIDIFILE_TRACK_SLOTS (MAX_MIDIFILE_POLYPHONY + 1)
 
 typedef struct MidiChannel {
 	psy_audio_PatternEvent tracknote;
 	bool noteoff;
 	double time;
+	uint64_t tick;
 } MidiChannel;
 
 typedef struct MidiTrackState
@@ -47,11 +49,14 @@ typedef struct MidiTrackState
 	uintptr_t automationchannel;
 	double position;
 	double patternoffset;
+	uint64_t position_ticks;
+	uint64_t patternoffset_ticks;
 	psy_audio_PatternNode* patternnode;
 	psy_audio_Pattern* pattern;
 	psy_audio_SequenceTrack* track;	
-	MidiChannel channels[MAX_MIDIFILE_POLYPHONY];	
+	MidiChannel channels[MIDIFILE_TRACK_SLOTS];	
 	uint8_t runningstatus;
+	uint8_t eventstatus;
 	uint8_t byte1;
 	bool hasrunningstatus;
 } MidiTrackState;

@@ -28,6 +28,10 @@ on:
       - 'scripts/phase6c-build-historical-it-observer.py'
       - 'scripts/phase6c-validate-historical-it-original.py'
       - '.github/workflows/phase6c-historical-it-private.yml'
+      - 'scripts/phase6c-midi-corpus.py'
+      - 'tests/phase6c_midi_corpus.py'
+      - 'tests/phase6c_midi_corpus_probe.c'
+      - '.github/workflows/phase6c-midi-corpus-private.yml'
       - 'cpsycle/**'
       - 'psycle-cpp-r12005-sanitized/**'
       - '.github/workflows/phase6c-legacy-playback-import.yml'
@@ -57,6 +61,10 @@ on:
       - 'scripts/phase6c-build-historical-it-observer.py'
       - 'scripts/phase6c-validate-historical-it-original.py'
       - '.github/workflows/phase6c-historical-it-private.yml'
+      - 'scripts/phase6c-midi-corpus.py'
+      - 'tests/phase6c_midi_corpus.py'
+      - 'tests/phase6c_midi_corpus_probe.c'
+      - '.github/workflows/phase6c-midi-corpus-private.yml'
       - 'cpsycle/**'
       - 'psycle-cpp-r12005-sanitized/**'
       - '.github/workflows/phase6c-legacy-playback-import.yml'
@@ -83,6 +91,7 @@ jobs:
         run: |
           python3 tests/phase6c_legacy_module_import.py
           python3 tests/phase6c_historical_it.py
+          python3 tests/phase6c_midi_corpus.py
 
       - name: Generate canonical IT fixture
         run: |
@@ -131,7 +140,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             build-essential pkg-config liblua5.4-dev liblilv-dev
+          sudo apt-get install -y --no-install-recommends             build-essential gdb pkg-config liblua5.4-dev liblilv-dev
 
       - name: Generate canonical IT fixture
         run: |
@@ -142,6 +151,159 @@ jobs:
 
       - name: Build C-Psycle donor player libraries
         run: make -C cpsycle/player -j1
+
+      - name: Build synthetic MIDI corpus execution probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/phase6c-midi-corpus.py write-synthetic \
+            phase6c-generated/phase6c-midi-synthetic.mid
+          python3 scripts/phase6c-midi-corpus.py write-regression-fixtures \
+            phase6c-generated/midi-regressions
+          gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer \
+            -Wall -Wextra -Werror=implicit-function-declaration \
+            -Icpsycle/script/src -Icpsycle/thread/src -Icpsycle/container/src \
+            -Icpsycle/file/src -Icpsycle/diversalis/src -Icpsycle/src \
+            -Icpsycle/audio/src -Icpsycle/dsp/src $(pkg-config --cflags lua) \
+            tests/phase6c_midi_corpus_probe.c \
+            -o phase6c-generated/phase6c-midi-corpus-probe \
+            -Lcpsycle/thread/src -Lcpsycle/script/src -Lcpsycle/container/src \
+            -Lcpsycle/dsp/src -Lcpsycle/audio/src -Lcpsycle/file/src \
+            -Wl,--no-as-needed -laudio -lthread -llilv-0 -ldsp -lscript -lfile \
+            -lm $(pkg-config --libs lua) -lpthread -ldl -lstdc++ -lcontainer
+
+      - name: Prove synthetic SMF import and non-silent projection
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x phase6c-generated/phase6c-midi-corpus-probe
+          set +e
+          phase6c-generated/phase6c-midi-corpus-probe \
+            phase6c-generated/phase6c-midi-synthetic.mid \
+            phase6c-generated/phase6c-midi-synthetic.wav \
+            > phase6c-generated/phase6c-midi-synthetic.log 2>&1
+          rc=$?
+          set -e
+          cat phase6c-generated/phase6c-midi-synthetic.log
+          if [[ "$rc" -ne 0 ]]; then
+            gdb -batch \
+              -ex 'set pagination off' \
+              -ex run \
+              -ex 'thread apply all bt full' \
+              --args phase6c-generated/phase6c-midi-corpus-probe \
+                phase6c-generated/phase6c-midi-synthetic.mid \
+                phase6c-generated/phase6c-midi-synthetic.wav \
+              > phase6c-generated/phase6c-midi-synthetic.gdb.log 2>&1 || true
+            cat phase6c-generated/phase6c-midi-synthetic.gdb.log
+            exit "$rc"
+          fi
+          tail -n 1 phase6c-generated/phase6c-midi-synthetic.log \
+            > phase6c-generated/phase6c-midi-synthetic.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          observation = json.loads(
+              Path("phase6c-generated/phase6c-midi-synthetic.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          assert observation["schema_version"] == 1
+          assert observation["phase"] == "6C"
+          assert observation["contract"] == "legacy-midi-real-world-donor"
+          assert observation["evidence_role"] == "cpsycle-donor-observation"
+          assert observation["load_result"] == "accepted"
+          assert observation["sequence_tracks"] == 2
+          assert observation["patterns"] == 2
+          assert observation["imported_notes"] == 2
+          assert observation["releases"] == 2
+          assert observation["midi_channel_mask"] == 3
+          assert observation["release_channel_mask"] == 3
+          assert observation["machines_before_projection"] == 0
+          assert observation["projection_notes"] == 2
+          assert observation["projection_kind"] == "deterministic-sampler"
+          assert observation["render_frames"] > 0
+          assert observation["render_peak"] > 0
+          assert observation["non_silent_projection"] is True
+          assert observation["parity_status"] == "UNKNOWN"
+          assert len(observation["import_event_digest_fnv64"]) == 16
+          PY
+          python3 - <<'PY'
+          import importlib.util
+          import json
+          import math
+          from pathlib import Path
+          import subprocess
+
+          spec = importlib.util.spec_from_file_location(
+              "phase6c_midi_corpus_ci",
+              Path("scripts/phase6c-midi-corpus.py"),
+          )
+          helper = importlib.util.module_from_spec(spec)
+          assert spec.loader is not None
+          spec.loader.exec_module(helper)
+
+          probe = Path("phase6c-generated/phase6c-midi-corpus-probe").resolve()
+          root = Path("phase6c-generated/midi-regressions")
+          cases = {
+              "zero-duration.mid": (1, 1, 1, 1),
+              "same-note-multichannel.mid": (2, 2, 3, 3),
+              "high-note.mid": (1, 1, 1, 1),
+              "equal-tick-release-reuse.mid": (2, 2, 1, 1),
+              "repeated-two-note-chords.mid": (126, 126, 3, 3),
+              "polyphony-64.mid": (64, 64, 1, 1),
+              "sysex-then-note.mid": (1, 1, 1, 1),
+              "running-status-after-meta.mid": (1, 1, 1, 1),
+              "controller-event.mid": (1, 1, 1, 1),
+              "tick-zero-60bpm.mid": (1, 1, 1, 1),
+          }
+          for name, (notes, releases, channel_mask, release_mask) in cases.items():
+              proc = subprocess.run(
+                  [str(probe), str((root / name).resolve())],
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT,
+                  text=True,
+                  check=False,
+              )
+              print(proc.stdout, end="")
+              assert proc.returncode == 0, (name, proc.returncode)
+              lines = [line for line in proc.stdout.splitlines() if line.strip()]
+              observation = json.loads(lines[-1])
+              analysis = helper.parse_smf(root / name)
+              assert observation["imported_notes"] == notes, name
+              assert observation["releases"] == releases, name
+              assert observation["midi_channel_mask"] == channel_mask, name
+              assert observation["release_channel_mask"] == release_mask, name
+              assert (
+                  observation["note_event_digest_fnv64"]
+                  == analysis["note_event_digest_fnv64"]
+              ), name
+              assert observation["midi_cc"] == analysis["midi_cc"], name
+              assert (
+                  observation["midi_cc_digest_fnv64"]
+                  == analysis["midi_cc_digest_fnv64"]
+              ), name
+              assert math.isclose(
+                  observation["song_bpm"],
+                  analysis["song_bpm"],
+                  abs_tol=0.001,
+              ), name
+              assert observation["projection_kind"] == "not-run", name
+              assert observation["non_silent_projection"] is False, name
+          PY
+          rm -rf phase6c-generated/midi-regressions
+          rm -f \
+            phase6c-generated/phase6c-midi-synthetic.mid \
+            phase6c-generated/phase6c-midi-synthetic.wav
+
+      - name: Upload MIDI crash diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-midi-crash-diagnostics
+          path: |
+            phase6c-generated/phase6c-midi-synthetic.log
+            phase6c-generated/phase6c-midi-synthetic.gdb.log
+          if-no-files-found: warn
 
       - name: Build donor IT loader probe
         shell: bash
@@ -436,6 +598,34 @@ jobs:
           qmake CONFIG-=shared CONFIG+=release psycle-player.pro
           make -j2
 
+      - name: Attest frozen C++ candidate player
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/phase6c-midi-corpus.py attest-candidate-player \
+            psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player \
+            phase6c-generated/candidate-player-attestation.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          receipt = json.loads(
+              Path("phase6c-generated/candidate-player-attestation.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          assert receipt["schema_version"] == 1
+          assert receipt["phase"] == "6C"
+          assert receipt["contract"] == "phase6b-candidate-player-clean-rebuild"
+          assert receipt["evidence_role"] == "candidate-build-attestation"
+          assert receipt["candidate_baseline_sha256"] == (
+              "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a"
+          )
+          assert receipt["source_revision"] == "SourceForge SVN r12005"
+          assert receipt["build_target"] == "psycle-player"
+          assert receipt["clean_rebuild_sha256"] == receipt["player_sha256"]
+          assert receipt["parity_status"] == "UNKNOWN"
+          PY
+
       - name: Observe direct IT import boundary
         shell: bash
         run: |
@@ -507,6 +697,7 @@ jobs:
             phase6c-generated/candidate-psycle-player
             phase6c-generated/candidate-direct-import.log
             phase6c-generated/candidate-direct-import.json
+            phase6c-generated/candidate-player-attestation.json
           if-no-files-found: error
 
 

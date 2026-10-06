@@ -1,0 +1,280 @@
+name: Phase 6C MIDI real-world corpus private observation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6c-midi-corpus-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  donor-real-world-midi:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Acquire and verify private MIDI corpus
+        shell: bash
+        env:
+          MIDI_CORPUS_URL: ${{ secrets.PSYCLE_PHASE6C_MIDI_CORPUS_URL }}
+        run: |
+          set -euo pipefail
+          [[ -n "$MIDI_CORPUS_URL" ]] || {
+            echo "PSYCLE_PHASE6C_MIDI_CORPUS_URL secret is not configured" >&2
+            exit 2
+          }
+          BUNDLE="$RUNNER_TEMP/phase6c-midi-corpus-bundle.zip"
+          curl -fsSL --retry 3 --output "$BUNDLE" "$MIDI_CORPUS_URL"
+          rm -rf phase6c-midi-private
+          python3 scripts/phase6c-midi-corpus.py prepare-bundle             "$BUNDLE" phase6c-midi-private
+          echo "MIDI_CORPUS_BUNDLE=$BUNDLE" >> "$GITHUB_ENV"
+
+      - name: Install donor build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             build-essential pkg-config liblua5.4-dev liblilv-dev
+
+      - name: Build C-Psycle donor and MIDI corpus probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -C cpsycle/player -j1
+          mkdir -p phase6c-midi-public/observations
+          gcc -std=gnu11 -g -O0 -fno-omit-frame-pointer             -Wall -Wextra -Werror=implicit-function-declaration             -Icpsycle/script/src -Icpsycle/thread/src -Icpsycle/container/src             -Icpsycle/file/src -Icpsycle/diversalis/src -Icpsycle/src             -Icpsycle/audio/src -Icpsycle/dsp/src $(pkg-config --cflags lua)             tests/phase6c_midi_corpus_probe.c             -o phase6c-midi-public/phase6c-midi-corpus-probe             -Lcpsycle/thread/src -Lcpsycle/script/src -Lcpsycle/container/src             -Lcpsycle/dsp/src -Lcpsycle/audio/src -Lcpsycle/file/src             -Wl,--no-as-needed -laudio -lthread -llilv-0 -ldsp -lscript -lfile             -lm $(pkg-config --libs lua) -lpthread -ldl -lstdc++ -lcontainer
+          cp -- cpsycle/audio/src/midiloader.c phase6c-midi-public/midiloader.c
+          chmod +x phase6c-midi-public/phase6c-midi-corpus-probe
+
+      - name: Observe all real-world MIDI stems
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          private_root = Path("phase6c-midi-private")
+          analysis = json.loads(
+              (private_root / "corpus-analysis.json").read_text(encoding="utf-8")
+          )
+          public = Path("phase6c-midi-public")
+          observations = public / "observations"
+          probe = (public / "phase6c-midi-corpus-probe").resolve()
+          revision = subprocess.check_output(
+              ["git", "rev-parse", "HEAD"], text=True
+          ).strip()
+
+          def sha(path: Path) -> str:
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          for set_info in analysis["sets"]:
+              print(f"== {set_info['name']} ==")
+              for stem in set_info["stems"]:
+                  source = (private_root / stem["private_path"]).resolve()
+                  if sha(source) != stem["sha256"]:
+                      raise SystemExit(f"{stem['stem_id']}: private stem hash changed")
+                  wav = Path(os.environ["RUNNER_TEMP"]) / f"{stem['stem_id']}.wav"
+                  proc = subprocess.run(
+                      [str(probe), str(source), str(wav)],
+                      stdin=subprocess.DEVNULL,
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.STDOUT,
+                      text=True,
+                      check=False,
+                  )
+                  if proc.returncode != 0:
+                      print(proc.stdout)
+                      raise SystemExit(
+                          f"{stem['stem_id']}: donor probe failed with exit {proc.returncode}"
+                      )
+                  lines = [line for line in proc.stdout.splitlines() if line.strip()]
+                  observation = json.loads(lines[-1])
+                  if observation["phase"] != "6C":
+                      raise SystemExit(f"{stem['stem_id']}: donor phase changed")
+                  if observation["contract"] != "legacy-midi-real-world-donor":
+                      raise SystemExit(f"{stem['stem_id']}: donor contract changed")
+                  if not wav.is_file():
+                      raise SystemExit(f"{stem['stem_id']}: projection WAV missing")
+                  source_analysis_bytes = json.dumps(
+                      stem["analysis"], sort_keys=True, separators=(",", ":")
+                  ).encode()
+                  observation.update({
+                      "stem_id": stem["stem_id"],
+                      "set_name": set_info["name"],
+                      "source_relative_name": stem["relative_name"],
+                      "source_sha256": stem["sha256"],
+                      "source_size_bytes": stem["size_bytes"],
+                      "source_analysis_sha256": hashlib.sha256(
+                          source_analysis_bytes
+                      ).hexdigest(),
+                      "probe_output_sha256": hashlib.sha256(
+                          proc.stdout.encode()
+                      ).hexdigest(),
+                      "render_sha256": sha(wav),
+                      "render_size_bytes": wav.stat().st_size,
+                      "source_revision": revision,
+                      "private_input_required": True,
+                      "fixture_redistributed": False,
+                      "projection_boundary": (
+                          "untouched imported event graph was digested before "
+                          "retargeting notes/releases/MIDI CC to a deterministic "
+                          "project-owned classic Sampler substrate for a 16-beat FileOut render"
+                      ),
+                  })
+                  (observations / f"{stem['stem_id']}.json").write_text(
+                      json.dumps(observation, indent=2, sort_keys=True) + "\n",
+                      encoding="utf-8",
+                  )
+                  wav.unlink()
+          PY
+
+      - name: Build sanitized donor corpus summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/phase6c-midi-corpus.py donor-summary             phase6c-midi-private/corpus-analysis.json             "$MIDI_CORPUS_BUNDLE"             phase6c-midi-public/observations             --probe phase6c-midi-public/phase6c-midi-corpus-probe             --source phase6c-midi-public/midiloader.c             --output phase6c-midi-public/donor-midi-corpus.json
+          rm -rf -- phase6c-midi-private
+          rm -f -- "$MIDI_CORPUS_BUNDLE"
+          python3 scripts/phase6c-midi-corpus.py audit-public phase6c-midi-public
+
+      - name: Upload sanitized donor MIDI corpus evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-midi-real-world-donor
+          path: phase6c-midi-public/
+          if-no-files-found: error
+
+  candidate-midi-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Acquire and verify private MIDI corpus
+        shell: bash
+        env:
+          MIDI_CORPUS_URL: ${{ secrets.PSYCLE_PHASE6C_MIDI_CORPUS_URL }}
+        run: |
+          set -euo pipefail
+          [[ -n "$MIDI_CORPUS_URL" ]] || {
+            echo "PSYCLE_PHASE6C_MIDI_CORPUS_URL secret is not configured" >&2
+            exit 2
+          }
+          BUNDLE="$RUNNER_TEMP/phase6c-midi-corpus-bundle.zip"
+          curl -fsSL --retry 3 --output "$BUNDLE" "$MIDI_CORPUS_URL"
+          rm -rf phase6c-midi-private
+          python3 scripts/phase6c-midi-corpus.py prepare-bundle             "$BUNDLE" phase6c-midi-private
+          echo "MIDI_CORPUS_BUNDLE=$BUNDLE" >> "$GITHUB_ENV"
+
+      - name: Install candidate build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             ca-certificates curl subversion file build-essential pkg-config             qt5-qmake qtbase5-dev libboost-thread-dev libboost-filesystem-dev             libboost-system-dev libboost-chrono-dev libboost-date-time-dev             libxml++2.6-dev zlib1g-dev libsoxr-dev libasound2-dev             libjack-jackd2-dev liblilv-dev liblua5.4-dev
+
+      - name: Verify frozen candidate identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/phase6-upstream-audit.sh phase6-upstream-audit
+          bash scripts/phase6b-sanitized-manifest.sh             phase6-upstream-audit phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-committed-source.sh             psycle-cpp-r12005-sanitized phase6b-sanitized-manifest
+          bash scripts/phase6b-verify-qmake-support.sh             psycle-cpp-r12005-sanitized/build-systems/qmake
+
+      - name: Stage pinned candidate build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEST='psycle-cpp-r12005-sanitized/psycle-plugins/src/psycle/plugin_interface.hpp'
+          ARCHIVE_COMMIT='1863c4177d38d37e8eba9e4eb8857e5023debe6d'
+          EXPECTED_BLOB='2cf4d8f756fa58098fd84b7b44d0ebe1350594c5'
+          test ! -e "$DEST"
+          mkdir -p "$(dirname "$DEST")"
+          curl -fsSL --retry 3             "https://raw.githubusercontent.com/QSOLKCB/PSYCLE-LINUX/$ARCHIVE_COMMIT/cpsycle/plugins/psycle/plugin_interface.hpp"             -o "$DEST"
+          [[ "$(git hash-object "$DEST")" == "$EXPECTED_BLOB" ]]
+          DEST='psycle-cpp-r12005-sanitized/diversalis'
+          test ! -e "$DEST"
+          exported=false
+          for attempt in 1 2 3 4; do
+            rm -rf -- "$DEST"
+            if svn export --quiet --force -r 12005               'https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005'               "$DEST"; then
+              exported=true
+              break
+            fi
+            sleep "$((attempt * 2))"
+          done
+          [[ "$exported" == true ]]
+
+      - name: Build frozen C++ candidate player
+        shell: bash
+        working-directory: psycle-cpp-r12005-sanitized/psycle-player
+        run: |
+          set -euo pipefail
+          qmake CONFIG-=shared CONFIG+=release psycle-player.pro
+          make -j2
+
+      - name: Observe representative direct-MIDI boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase6c-midi-candidate-public
+          PLAYER='psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player'
+          chmod +x "$PLAYER"
+          python3 scripts/phase6c-midi-corpus.py candidate-boundary             phase6c-midi-private/corpus-analysis.json             "$MIDI_CORPUS_BUNDLE"             "$PLAYER"             phase6c-midi-candidate-public/candidate-midi-boundary.json
+          cp -- "$PLAYER" phase6c-midi-candidate-public/candidate-psycle-player
+          chmod +x phase6c-midi-candidate-public/candidate-psycle-player
+          rm -rf -- phase6c-midi-private
+          rm -f -- "$MIDI_CORPUS_BUNDLE"
+          python3 scripts/phase6c-midi-corpus.py audit-public             phase6c-midi-candidate-public
+
+      - name: Upload sanitized candidate MIDI boundary evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-midi-real-world-candidate
+          path: phase6c-midi-candidate-public/
+          if-no-files-found: error
+
+  midi-corpus-summary:
+    needs: [donor-real-world-midi, candidate-midi-boundary]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download donor evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: phase6c-midi-real-world-donor
+          path: phase6c-midi-summary/donor
+
+      - name: Download candidate evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: phase6c-midi-real-world-candidate
+          path: phase6c-midi-summary/candidate
+
+      - name: Build public-safe corpus summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/phase6c-midi-corpus.py summary             --donor phase6c-midi-summary/donor/donor-midi-corpus.json             --candidate phase6c-midi-summary/candidate/candidate-midi-boundary.json             --output phase6c-midi-summary/midi-real-world-corpus-summary.json
+          printf '%s\n'             'private-input-required: PSYCLE_PHASE6C_MIDI_CORPUS_URL'             'outer transport ZIP contains the six manifest-pinned MIDI archives'             'raw MIDI and ZIP bytes are intentionally excluded from evidence artifacts'             > phase6c-midi-summary/private-input-required.txt
+          python3 scripts/phase6c-midi-corpus.py audit-public phase6c-midi-summary
+
+      - name: Upload public-safe MIDI corpus summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-midi-real-world-corpus-summary
+          path: phase6c-midi-summary/
+          if-no-files-found: error

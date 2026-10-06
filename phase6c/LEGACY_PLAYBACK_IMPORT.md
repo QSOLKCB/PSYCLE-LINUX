@@ -14,8 +14,8 @@ While the legacy lane is active, **this document is the working roadmap**. The b
 
 1. [x] **Import/translation baseline** — canonical generated IT identity, donor import/decoder coverage, pinned-original acceptance observation, and frozen-candidate direct-import boundary.
 2. [x] **Sample-mode playback witness** — C-Psycle sample-mode instrument/virtual-generator mapping is restored and the canonical generated fixture has a deterministic non-silent donor playback witness.
-3. [ ] **Historical `SickMaate` three-way summary — current phase** — run the hash-bound historical witness through the available original/candidate/donor observation paths without redistributing its samples.
-4. [ ] **MIDI real-world playback corpus** — begin with the gentler baseline and then exercise dense timing/polyphony/routing cases.
+3. [ ] **Historical `SickMaate` three-way summary — private observation pending** — the privacy-preserving original/candidate/donor workflow is implemented; the three-way observation remains pending manual dispatch with the private historical input.
+4. [ ] **MIDI real-world playback corpus — current phase** — exercise the contributor-supplied SMF corpus from gentle baseline through dense timing/polyphony/routing stress, keeping native MIDI import separate from the deterministic audibility projection.
 5. [ ] **Legacy-lane closeout** — isolate or hand off any remaining shared playback defects, then resume the deferred Phase 6C contract ladder.
 
 No item in this temporary roadmap may promote original-Psycle parity without the normal paired/versioned evidence requirements.
@@ -159,14 +159,73 @@ A remembered historical behavior is useful motivation, not a PASS verdict.
 
 ## MIDI reference corpus
 
-[`reference-corpus/manifest.json`](reference-corpus/manifest.json) freezes the identities and roles of six contributor-supplied MIDI stem sets. They are not the first CI gate, but they are now the follow-on real-world playback corpus once the minimal legacy loader fixture is stable.
+[`reference-corpus/manifest.json`](reference-corpus/manifest.json) is now an executable schema-v2 evidence contract for six contributor-supplied MIDI stem sets. The real archive bytes remain external to the repository and Actions artifacts; their archive SHA-256 identities, aggregate source observations and stress roles are frozen in the manifest.
 
-The corpus spans controlled generation, gentle real-world arrangements, dense polyphony and same-note overlaps, 16-channel routing stress, complex tempo maps, and malformed-but-usable key-signature metadata from a modern exporter.
+### Current MIDI procedure
+
+The private real-world workflow is:
+
+`.github/workflows/phase6c-midi-corpus-private.yml`
+
+It is manual (`workflow_dispatch`) and uses the masked repository secret:
+
+```text
+PSYCLE_PHASE6C_MIDI_CORPUS_URL
+```
+
+The URL points to an **outer transport ZIP** containing the six exact contributor archives. The outer ZIP has no evidence identity of its own. Each inner archive is located by its frozen filename and accepted only if its SHA-256 matches the manifest.
+
+The stress progression is intentionally:
+
+1. **FM Doom** — gentler real-world baseline;
+2. **Celestial Mechanics** — older composition/export behaviour;
+3. **Deterministic Pattern** — controlled-generation/follow-tempo behaviour;
+4. **Blue Glare** — dense modern tempo-map workload;
+5. **Polyrhythmic Patterns** — overlap/polyphony/event-ordering stress;
+6. **NGC3603 Quantum Demoscene** — final routing stress, including all 16 MIDI channels.
+
+For every stem, the private-input analyser independently parses the Standard MIDI File and freezes the observable source structure: SMF type, PPQN, note balance, note count, same-note overlaps, cross-track polyphony, tempo map, channel use, duration, zero-duration pairs and malformed key-signature metadata. The real-world exporter edge is retained rather than normalized away.
+
+### C-Psycle donor boundary
+
+C-Psycle has a real `MThd`/`MidiLoader` song-I/O path. At the start of this phase the retained loader source was already compiled into `libaudio`, but dispatch was disabled by the preserved `PSYCLE_USE_MIDI_FILE` feature gate in `cpsycle/detail/psyconf.h`. This lane restores that existing gate rather than adding a replacement MIDI importer.
+
+Native MIDI import creates sequence tracks and tracker events, but it **does not choose or instantiate a sound-generating machine**. Therefore this lane records two different claims:
+
+1. **native import evidence** — load acceptance plus a digest/count of the untouched imported event graph;
+2. **execution projection** — after the untouched graph is frozen, imported note/release/MIDI-CC events are routed through one deterministic project-owned classic Sampler substrate and rendered through the production Player/FileOutDriver path.
+
+The projection keeps imported note numbers, event offsets, track geometry and tempo commands intact. It supplies only the missing sound source needed for audibility and is explicitly **not** evidence of native MIDI instrument-selection semantics.
+
+Real-corpus renders are bounded to the first 16 beats per imported pattern. The WAV files are used transiently for non-silence/hash observations and then deleted; uploaded evidence contains only sanitized JSON, the exact probe binary and the retained `midiloader.c` source used.
+
+### Frozen C++ candidate boundary
+
+The frozen sanitized C++ candidate has internal MIDI-event machinery but no retained Standard MIDI File loader entry point (`MThd`/`MidiLoader`). The private workflow therefore runs one manifest-bound representative stem from each set against the frozen player and records the direct-load capability boundary only. A direct-load rejection does not imply that its internal MIDI event or plugin semantics are absent.
+
+### Original-reference boundary
+
+Pinned Psycle 1.12.0 x86 is **not observed in this corpus phase**. This lane is real-world donor robustness evidence, not a new parity row. If an original-reference MIDI claim is later required, it must be added as a separately version-pinned observation rather than inferred from historical memory or C-Psycle behaviour.
+
+### Continuous CI boundary
+
+Ordinary PR CI does not need the private corpus. It generates a small project-owned SMF1/480 fixture and runs the same C-Psycle probe end-to-end through:
+
+```text
+SongReader / MidiLoader
+  -> untouched event-graph digest
+  -> deterministic classic Sampler projection
+  -> Player
+  -> FileOutDriver
+  -> non-silent WAV validation
+```
+
+The contract tests also verify malformed-key-signature preservation, cross-track polyphony, candidate source boundaries and raw-MIDI/ZIP privacy rejection.
 
 This gives the project two complementary layers:
 
-1. **minimal generated fixtures** that isolate one rule;
-2. **real musical corpora** that reveal interactions and audible regressions.
+1. **minimal generated fixtures** that continuously isolate and exercise the execution path;
+2. **real musical corpora** that reveal interactions and audible regressions under private, identity-bound observation.
 
 ## Exit criteria for the temporary priority hold
 
