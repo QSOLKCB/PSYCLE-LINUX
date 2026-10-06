@@ -62,6 +62,7 @@ typedef struct ImportStats {
     uintptr_t releases;
     uintptr_t midi_cc;
     uintptr_t tempo_commands;
+    uint64_t tempo_digest;
     uint32_t midi_channel_mask;
     uint32_t release_channel_mask;
     uintptr_t machines_before_projection;
@@ -104,6 +105,19 @@ static void fnv_u64(uint64_t* hash, uint64_t value)
     int shift;
     for (shift = 0; shift < 64; shift += 8)
         fnv_byte(hash, (uint8_t)((value >> shift) & 0xffu));
+}
+
+static void hash_tempo_command(
+    uint64_t* hash,
+    uintptr_t sequence_track,
+    psy_dsp_beatpos_t offset,
+    const psy_audio_PatternEvent* event)
+{
+    int64_t tick = (int64_t)llround(
+        psy_dsp_beatpos_real(offset) * PPQN_DIGEST);
+    fnv_u64(hash, (uint64_t)sequence_track);
+    fnv_u64(hash, (uint64_t)tick);
+    fnv_byte(hash, event->parameter);
 }
 
 static void hash_event(
@@ -157,6 +171,7 @@ static int collect_import_stats(psy_audio_Song* song, ImportStats* stats)
 
     memset(stats, 0, sizeof(*stats));
     stats->digest = UINT64_C(14695981039346656037);
+    stats->tempo_digest = UINT64_C(14695981039346656037);
     stats->sequence_tracks = psy_audio_sequence_num_tracks(sequence);
 
     for (sequence_track = 0;
@@ -216,8 +231,14 @@ static int collect_import_stats(psy_audio_Song* song, ImportStats* stats)
                     if (event->mach < 16u)
                         stats->midi_channel_mask |= UINT32_C(1) << event->mach;
                 }
-                if (event->cmd == psy_audio_PATTERNCMD_SET_TEMPO)
+                if (event->cmd == psy_audio_PATTERNCMD_SET_TEMPO) {
                     ++stats->tempo_commands;
+                    hash_tempo_command(
+                        &stats->tempo_digest,
+                        sequence_track,
+                        psy_audio_patternentry_offset(entry),
+                        event);
+                }
             }
         }
     }
@@ -560,6 +581,7 @@ int main(int argc, char** argv)
             "\"releases\":%lu,"
             "\"midi_cc\":%lu,"
             "\"tempo_commands\":%lu,"
+            "\"tempo_map_digest_fnv64\":\"%016llx\","
             "\"midi_channel_mask\":%u,"
             "\"release_channel_mask\":%u,"
             "\"machines_before_projection\":%lu,"
@@ -580,6 +602,7 @@ int main(int argc, char** argv)
             (unsigned long)import_stats.releases,
             (unsigned long)import_stats.midi_cc,
             (unsigned long)import_stats.tempo_commands,
+            (unsigned long long)import_stats.tempo_digest,
             (unsigned)import_stats.midi_channel_mask,
             (unsigned)import_stats.release_channel_mask,
             (unsigned long)import_stats.machines_before_projection,

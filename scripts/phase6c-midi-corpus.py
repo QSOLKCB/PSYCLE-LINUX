@@ -23,6 +23,7 @@ MANIFEST = ROOT / "phase6c/reference-corpus/manifest.json"
 CONTRACT = "legacy-midi-real-world-corpus"
 DONOR_CONTRACT = "legacy-midi-real-world-donor"
 CANDIDATE_CONTRACT = "legacy-midi-real-world-candidate-boundary"
+CANDIDATE_ATTESTATION_CONTRACT = "phase6b-candidate-player-clean-rebuild"
 SUMMARY_CONTRACT = "legacy-midi-real-world-summary"
 EXPECTED_CANDIDATE_BASELINE = (
     "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a"
@@ -41,6 +42,10 @@ CANDIDATE_PLUGIN_INTERFACE = (
 EXPECTED_CANDIDATE_PLUGIN_BLOB = "2cf4d8f756fa58098fd84b7b44d0ebe1350594c5"
 DIVERSALIS_SOURCE_URL = "https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005"
 DIVERSALIS_REVISION = "12005"
+EXPECTED_DIVERSALIS_FILE_COUNT = 12
+EXPECTED_DIVERSALIS_MANIFEST_SHA256 = (
+    "0294a61fbb52d3972dd12be625756c12d1553294aa8b30df36407880810fac42"
+)
 DONOR_SOURCE = ROOT / "cpsycle/audio/src/midiloader.c"
 DONOR_PROBE_SOURCE = ROOT / "tests/phase6c_midi_corpus_probe.c"
 DONOR_BUILD_ROOT = ROOT / "cpsycle/player"
@@ -141,6 +146,11 @@ def validate_candidate_dependencies() -> dict[str, Any]:
             die("cannot reproduce pinned diversalis SVN export: " + export_output[-1000:])
         canonical_count, canonical_manifest = directory_manifest_identity(canonical)
 
+    if (
+        canonical_count != EXPECTED_DIVERSALIS_FILE_COUNT
+        or canonical_manifest != EXPECTED_DIVERSALIS_MANIFEST_SHA256
+    ):
+        die("pinned SourceForge SVN r12005 diversalis identity changed")
     if staged_count != canonical_count or staged_manifest != canonical_manifest:
         die("staged diversalis dependency differs from pinned SourceForge SVN r12005")
     return {
@@ -149,6 +159,57 @@ def validate_candidate_dependencies() -> dict[str, Any]:
         "diversalis_file_count": staged_count,
         "diversalis_manifest_sha256": staged_manifest,
     }
+
+
+def candidate_attestation_document(
+    identity: dict[str, Any],
+    player_sha256: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "phase": "6C",
+        "contract": CANDIDATE_ATTESTATION_CONTRACT,
+        "evidence_role": "candidate-build-attestation",
+        **identity,
+        "player": "candidate-psycle-player",
+        "player_sha256": player_sha256,
+        "parity_status": "UNKNOWN",
+    }
+
+
+def validate_candidate_attestation(
+    path: pathlib.Path,
+    player: pathlib.Path,
+    expected_repository_commit: str,
+) -> dict[str, Any]:
+    attestation = load_json(path)
+    actual_player_sha = sha256_file(player)
+    if (
+        attestation.get("schema_version") != 1
+        or attestation.get("phase") != "6C"
+        or attestation.get("contract") != CANDIDATE_ATTESTATION_CONTRACT
+        or attestation.get("evidence_role") != "candidate-build-attestation"
+        or attestation.get("candidate_baseline_sha256")
+            != EXPECTED_CANDIDATE_BASELINE
+        or attestation.get("source_revision")
+            != EXPECTED_CANDIDATE_SOURCE_REVISION
+        or attestation.get("repository_commit") != expected_repository_commit
+        or attestation.get("build_target") != "psycle-player"
+        or attestation.get("plugin_interface_git_blob")
+            != EXPECTED_CANDIDATE_PLUGIN_BLOB
+        or attestation.get("diversalis_revision")
+            != f"SourceForge SVN r{DIVERSALIS_REVISION}"
+        or attestation.get("diversalis_file_count")
+            != EXPECTED_DIVERSALIS_FILE_COUNT
+        or attestation.get("diversalis_manifest_sha256")
+            != EXPECTED_DIVERSALIS_MANIFEST_SHA256
+        or attestation.get("player") != "candidate-psycle-player"
+        or attestation.get("player_sha256") != actual_player_sha
+        or attestation.get("clean_rebuild_sha256") != actual_player_sha
+        or attestation.get("parity_status") != "UNKNOWN"
+    ):
+        die("candidate build attestation is incomplete or invalid")
+    return attestation
 
 
 def repository_commit() -> str:
@@ -304,6 +365,34 @@ def validate_donor_probe_build(
         "build_target": "phase6c-midi-corpus-probe",
         "clean_rebuild_sha256": rebuilt_sha,
     }
+
+
+def fnv64_byte(hash_value: int, value: int) -> int:
+    hash_value ^= value & 0xFF
+    return (hash_value * 1099511628211) & 0xFFFFFFFFFFFFFFFF
+
+
+def fnv64_u64(hash_value: int, value: int) -> int:
+    for shift in range(0, 64, 8):
+        hash_value = fnv64_byte(hash_value, (value >> shift) & 0xFF)
+    return hash_value
+
+
+def imported_tempo_parameter(usec_per_quarter: int) -> int:
+    bpm = 60.0 * 1_000_000.0 / usec_per_quarter
+    bpm = int(bpm * 1000) / 1000.0
+    return int(bpm) & 0xFF
+
+
+def tempo_map_digest_fnv64(
+    commands: list[tuple[int, int, int]],
+) -> str:
+    digest = 14695981039346656037
+    for sequence_track, tick, parameter in commands:
+        digest = fnv64_u64(digest, sequence_track)
+        digest = fnv64_u64(digest, tick)
+        digest = fnv64_byte(digest, parameter)
+    return f"{digest:016x}"
 
 
 def midi_channel_mask(channels: Any) -> int:
@@ -565,6 +654,12 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
         pos = end
 
     tempos = [item for track in tracks for item in track["tempo_events"]]
+    tempo_commands = [
+        (track_index, tick, imported_tempo_parameter(usec))
+        for track_index, track in enumerate(tracks)
+        for tick, usec in track["tempo_events"]
+        if tick != 0
+    ]
     bpms = [60_000_000.0 / usec for _, usec in tempos if usec]
 
     ordered_transitions: list[
@@ -651,6 +746,7 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
         "max_polyphony": global_max_polyphony,
         "tempo_events": len(tempos),
         "tempo_events_at_zero": sum(1 for tick, _usec in tempos if tick == 0),
+        "tempo_map_digest_fnv64": tempo_map_digest_fnv64(tempo_commands),
         "tempo_min_bpm": min(bpms) if bpms else None,
         "tempo_max_bpm": max(bpms) if bpms else None,
         "key_signatures": sorted(set(key_sigs)),
@@ -1338,6 +1434,11 @@ def candidate_boundary(
     )
     candidate_identity = validate_frozen_candidate_player(player)
     player_sha = sha256_file(player)
+    attestation_path = output.parent / "candidate-player-attestation.json"
+    write_json(
+        attestation_path,
+        candidate_attestation_document(candidate_identity, player_sha),
+    )
     results = []
     for set_info in analysis["sets"]:
         rep = set_info["representative"]
@@ -1396,6 +1497,8 @@ def candidate_boundary(
         **candidate_identity,
         "player": "candidate-psycle-player",
         "player_sha256": player_sha,
+        "build_attestation": attestation_path.name,
+        "build_attestation_sha256": sha256_file(attestation_path),
         "working_directory": "artifact-root-with-private-input",
         "procedure": (
             "for each corpus set, place the exact representative SMF beside the "
@@ -1470,6 +1573,16 @@ def validate_donor_execution_observation(
         or source_tempo_events_at_zero > source_tempo_events
     ):
         die(f"{stem_id}: raw SMF tempo analysis is invalid")
+    source_tempo_digest = analysis.get("tempo_map_digest_fnv64")
+    if (
+        not isinstance(source_tempo_digest, str)
+        or len(source_tempo_digest) != 16
+    ):
+        die(f"{stem_id}: raw SMF tempo-map digest is invalid")
+    try:
+        int(source_tempo_digest, 16)
+    except ValueError:
+        die(f"{stem_id}: raw SMF tempo-map digest is not hexadecimal")
     expected_tempo_commands = source_tempo_events - source_tempo_events_at_zero
     if obs.get("tempo_commands") != expected_tempo_commands:
         die(
@@ -1477,6 +1590,12 @@ def validate_donor_execution_observation(
             f"source_events={source_tempo_events} "
             f"tick_zero={source_tempo_events_at_zero} "
             f"imported_commands={obs.get('tempo_commands')!r}"
+        )
+    if obs.get("tempo_map_digest_fnv64") != source_tempo_digest:
+        die(
+            f"{stem_id}: imported tempo-map contents differ from raw SMF: "
+            f"source_digest={source_tempo_digest} "
+            f"imported_digest={obs.get('tempo_map_digest_fnv64')!r}"
         )
     if obs.get("non_silent_projection") is not True:
         die(f"{stem_id}: execution projection is silent")
@@ -1490,6 +1609,7 @@ def validate_donor_execution_observation(
         "source_note_offs": analysis["note_offs"],
         "source_tempo_events": source_tempo_events,
         "source_tempo_events_at_zero": source_tempo_events_at_zero,
+        "source_tempo_map_digest_fnv64": source_tempo_digest,
     }
 
 
@@ -1543,6 +1663,9 @@ def donor_summary(
             obs["_source_tempo_events_at_zero"] = coverage[
                 "source_tempo_events_at_zero"
             ]
+            obs["_source_tempo_map_digest_fnv64"] = coverage[
+                "source_tempo_map_digest_fnv64"
+            ]
             if obs.get("private_input_required") is not True:
                 die(f"{stem['stem_id']}: donor private-input flag changed")
             if obs.get("fixture_redistributed") is not False:
@@ -1577,6 +1700,10 @@ def donor_summary(
                     "_source_tempo_events_at_zero"
                 ],
                 "tempo_commands": item["tempo_commands"],
+                "source_tempo_map_digest_fnv64": item[
+                    "_source_tempo_map_digest_fnv64"
+                ],
+                "tempo_map_digest_fnv64": item["tempo_map_digest_fnv64"],
                 "import_event_digest_fnv64": item["import_event_digest_fnv64"],
                 "render_sha256": item["render_sha256"],
             }
@@ -1725,6 +1852,8 @@ def corpus_summary(
             source_tempo_events = record.get("source_tempo_events")
             source_tempo_events_at_zero = record.get("source_tempo_events_at_zero")
             tempo_commands = record.get("tempo_commands")
+            source_tempo_digest = record.get("source_tempo_map_digest_fnv64")
+            imported_tempo_digest = record.get("tempo_map_digest_fnv64")
             digest = record.get("import_event_digest_fnv64")
             render_sha = record.get("render_sha256")
             if (
@@ -1762,6 +1891,10 @@ def corpus_summary(
                 or not isinstance(tempo_commands, int)
                 or isinstance(tempo_commands, bool)
                 or tempo_commands < 0
+                or not isinstance(source_tempo_digest, str)
+                or len(source_tempo_digest) != 16
+                or not isinstance(imported_tempo_digest, str)
+                or len(imported_tempo_digest) != 16
                 or not isinstance(digest, str)
                 or len(digest) != 16
                 or not isinstance(render_sha, str)
@@ -1790,6 +1923,16 @@ def corpus_summary(
                 die(f"donor {name} stem release count is inconsistent")
             if tempo_commands != source_tempo_events - source_tempo_events_at_zero:
                 die(f"donor {name} stem tempo-map coverage is inconsistent")
+            if imported_tempo_digest != source_tempo_digest:
+                die(f"donor {name} stem tempo-map contents are inconsistent")
+            for value, label in (
+                (source_tempo_digest, "source tempo-map digest"),
+                (imported_tempo_digest, "imported tempo-map digest"),
+            ):
+                try:
+                    int(value, 16)
+                except ValueError:
+                    die(f"donor {name} {label} is not hexadecimal")
             observed_tempo_events += source_tempo_events
             observed_tempo_events_at_zero += source_tempo_events_at_zero
             observed_channels.update(source_channels)
@@ -1838,6 +1981,25 @@ def corpus_summary(
             die("donor probe artifact is not an ELF executable")
 
     candidate_sets = candidate.get("sets")
+    require_support(
+        candidate_path,
+        candidate.get("player"),
+        candidate.get("player_sha256"),
+        "candidate player",
+    )
+    require_support(
+        candidate_path,
+        candidate.get("build_attestation"),
+        candidate.get("build_attestation_sha256"),
+        "candidate build attestation",
+    )
+    candidate_artifact = candidate_path.parent / candidate["player"]
+    attestation_path = candidate_path.parent / candidate["build_attestation"]
+    candidate_attestation = validate_candidate_attestation(
+        attestation_path,
+        candidate_artifact,
+        current_revision,
+    )
     if (
         candidate.get("schema_version") != 1
         or candidate.get("phase") != "6C"
@@ -1847,7 +2009,18 @@ def corpus_summary(
         or candidate.get("candidate_baseline_sha256") != EXPECTED_CANDIDATE_BASELINE
         or candidate.get("source_revision") != EXPECTED_CANDIDATE_SOURCE_REVISION
         or candidate.get("build_target") != "psycle-player"
-        or candidate.get("clean_rebuild_sha256") != candidate.get("player_sha256")
+        or candidate.get("clean_rebuild_sha256")
+            != candidate_attestation.get("clean_rebuild_sha256")
+        or candidate.get("player_sha256")
+            != candidate_attestation.get("player_sha256")
+        or candidate.get("plugin_interface_git_blob")
+            != candidate_attestation.get("plugin_interface_git_blob")
+        or candidate.get("diversalis_revision")
+            != candidate_attestation.get("diversalis_revision")
+        or candidate.get("diversalis_file_count")
+            != candidate_attestation.get("diversalis_file_count")
+        or candidate.get("diversalis_manifest_sha256")
+            != candidate_attestation.get("diversalis_manifest_sha256")
         or candidate.get("repository_commit") != current_revision
         or candidate.get("private_input_required") is not True
         or candidate.get("progression_order") != PROGRESSION
@@ -1897,13 +2070,6 @@ def corpus_summary(
         except ValueError:
             die(f"candidate {item.get('set_name')} raw-output SHA-256 is not hexadecimal")
 
-    require_support(
-        candidate_path,
-        candidate.get("player"),
-        candidate.get("player_sha256"),
-        "candidate player",
-    )
-    candidate_artifact = candidate_path.parent / candidate["player"]
     with candidate_artifact.open("rb") as handle:
         if handle.read(4) != b"\x7fELF":
             die("candidate player artifact is not an ELF executable")
@@ -2037,6 +2203,27 @@ def write_regression_fixtures(root: pathlib.Path) -> None:
         root / "repeated-two-note-chords.mid", [repeated_chords], fmt=0
     )
 
+    polyphony_64 = bytearray()
+    for note in range(64):
+        polyphony_64 += midi_varlen(0) + bytes((0x90, note, 100))
+    for note in range(64):
+        polyphony_64 += midi_varlen(10 if note == 0 else 0) + bytes(
+            (0x80, note, 0)
+        )
+    polyphony_64 += midi_varlen(0) + b"\xff\x2f\x00"
+    write_smf_tracks(
+        root / "polyphony-64.mid", [polyphony_64], fmt=0
+    )
+
+    sysex_then_note = bytearray()
+    sysex_then_note += midi_varlen(0) + bytes((0xF0, 0x01, 0x7F))
+    sysex_then_note += midi_varlen(0) + bytes((0x90, 60, 100))
+    sysex_then_note += midi_varlen(10) + bytes((0x80, 60, 0))
+    sysex_then_note += midi_varlen(0) + b"\xff\x2f\x00"
+    write_smf_tracks(
+        root / "sysex-then-note.mid", [sysex_then_note], fmt=0
+    )
+
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2070,16 +2257,10 @@ def build_parser() -> argparse.ArgumentParser:
     attest.set_defaults(
         func=lambda args: write_json(
             args.output.resolve(),
-            {
-                "schema_version": 1,
-                "phase": "6C",
-                "contract": "phase6b-candidate-player-clean-rebuild",
-                "evidence_role": "candidate-build-attestation",
-                **validate_frozen_candidate_player(args.player.resolve()),
-                "player": "candidate-psycle-player",
-                "player_sha256": sha256_file(args.player.resolve()),
-                "parity_status": "UNKNOWN",
-            },
+            candidate_attestation_document(
+                validate_frozen_candidate_player(args.player.resolve()),
+                sha256_file(args.player.resolve()),
+            ),
         )
     )
 

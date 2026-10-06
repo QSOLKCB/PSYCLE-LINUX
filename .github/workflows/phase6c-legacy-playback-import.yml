@@ -240,6 +240,8 @@ jobs:
               "high-note.mid": (1, 1, 1, 1),
               "equal-tick-release-reuse.mid": (2, 2, 1, 1),
               "repeated-two-note-chords.mid": (126, 126, 3, 3),
+              "polyphony-64.mid": (64, 64, 1, 1),
+              "sysex-then-note.mid": (1, 1, 1, 1),
           }
           for name, (notes, releases, channel_mask, release_mask) in cases.items():
               proc = subprocess.run(

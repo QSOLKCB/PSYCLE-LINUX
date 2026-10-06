@@ -45,7 +45,7 @@ void miditrackstate_reset(MidiTrackState* self)
     self->position = 0.0;
     self->patternoffset = 0.0;
     self->runningstatus = 0;
-    for (v = 0; v < MAX_MIDIFILE_POLYPHONY; ++v) {
+    for (v = 0; v < MIDIFILE_TRACK_SLOTS; ++v) {
         psy_audio_PatternEvent ev;
 
         psy_audio_patternevent_init(&ev);
@@ -77,6 +77,7 @@ static int midiloader_readcontroller(MidiLoader*);
 static int midiloader_readprogramchange(MidiLoader*);
 static int midiloader_readchannelpressure(MidiLoader*);
 static int midiloader_readpitchbend(MidiLoader*);
+static int midiloader_readsysex(MidiLoader*);
 /* Midi Meta Events */
 static int midiloader_readmetaevent(MidiLoader*, bool* rv_eoftrack);
 static int midiloader_readmeta_text(MidiLoader*);
@@ -282,10 +283,14 @@ int midiloader_readtrackevents(MidiLoader* self, MCHUNK chunk, uintptr_t trackid
             status = midiloader_readpitchbend(self);
             break;
         case 0xF:
-            if (ln == 0xF) {
+            if (self->currtrack.runningstatus == 0xFF) {
                 status = midiloader_readmetaevent(self, &eoftrack);
-            } else {
-                psyfile_skip(self->fp, 1);
+            } else if (
+                self->currtrack.runningstatus == 0xF0 ||
+                self->currtrack.runningstatus == 0xF7) {
+                status = midiloader_readsysex(self);
+            } else if (psyfile_skip(self->fp, 1) == -1) {
+                status = PSY_ERRFILE;
             }
             break;
         default:
@@ -395,7 +400,7 @@ int midiloader_marknoteoff(MidiLoader* self, uint8_t note)
 {
     uint16_t voice;
     voice = 0;
-    for (voice = 0; voice < MAX_MIDIFILE_POLYPHONY; ++voice) {
+    for (voice = 0; voice < MIDIFILE_TRACK_SLOTS; ++voice) {
         MidiChannel* channel = &self->currtrack.channels[voice];
 
         if (!channel->noteoff &&
@@ -503,6 +508,20 @@ int midiloader_readpitchbend(MidiLoader* self)
     if ((status = psyfile_read(self->fp, &byte2, 1))) {
         return status;
     }    
+    return PSY_OK;
+}
+
+int midiloader_readsysex(MidiLoader* self)
+{
+    uint32_t length;
+    int status;
+
+    if ((status = readvarlen(self->fp, &length))) {
+        return status;
+    }
+    if (psyfile_skip(self->fp, length) == -1) {
+        return PSY_ERRFILE;
+    }
     return PSY_OK;
 }
 
@@ -931,7 +950,7 @@ static void midiloader_flushnoteoffs(MidiLoader* self)
 {
     uint16_t voice;
 
-    for (voice = 0; voice < MAX_MIDIFILE_POLYPHONY; ++voice) {
+    for (voice = 0; voice < MIDIFILE_TRACK_SLOTS; ++voice) {
         MidiChannel* channel;
 
         channel = &self->currtrack.channels[voice];
@@ -951,8 +970,8 @@ void midiloader_writepatternevent(MidiLoader* self, psy_audio_PatternEvent ev)
     uint16_t voice;
     uint16_t channelvoice;
 
-    channelvoice = MAX_MIDIFILE_POLYPHONY;
-    for (voice = 0; voice < MAX_MIDIFILE_POLYPHONY; ++voice) {
+    channelvoice = MIDIFILE_TRACK_SLOTS;
+    for (voice = 0; voice < MIDIFILE_TRACK_SLOTS; ++voice) {
         MidiChannel* channel;
 
         channel = &self->currtrack.channels[voice];
@@ -967,18 +986,18 @@ void midiloader_writepatternevent(MidiLoader* self, psy_audio_PatternEvent ev)
         }
         channel->noteoff = FALSE;
         channel->tracknote.note = psy_audio_NOTECOMMANDS_EMPTY;
-        if (channelvoice == MAX_MIDIFILE_POLYPHONY) {
+        if (channelvoice == MIDIFILE_TRACK_SLOTS) {
             channelvoice = voice;
         }
     }
-    if (channelvoice == MAX_MIDIFILE_POLYPHONY) {
-        for (channelvoice = 1; channelvoice < MAX_MIDIFILE_POLYPHONY; ++channelvoice) {
+    if (channelvoice == MIDIFILE_TRACK_SLOTS) {
+        for (channelvoice = 1; channelvoice < MIDIFILE_TRACK_SLOTS; ++channelvoice) {
             if (self->currtrack.channels[channelvoice].tracknote.note == psy_audio_NOTECOMMANDS_EMPTY) {
                 break;
             }
         }
     }
-    if (channelvoice != MAX_MIDIFILE_POLYPHONY) {
+    if (channelvoice != MIDIFILE_TRACK_SLOTS) {
 		psy_audio_PatternEntry entry;
 
         self->currtrack.channels[channelvoice].tracknote = ev;
@@ -996,10 +1015,7 @@ void midiloader_writepatternevent(MidiLoader* self, psy_audio_PatternEvent ev)
 }
 
 
-/* midi variable length
-
-
-/* midi variable length fileio funtions */
+/* midi variable length fileio functions */
 int midiloader_readvarlentext(PsyFile* fp, char_dyn_t** rv)
 {
     int status;
