@@ -242,7 +242,7 @@ static int install_projection_substrate(
     psy_audio_Sequence* sequence = psy_audio_song_sequence(song);
     uintptr_t sequence_track;
 
-    for (slot = 0; slot < 16u; ++slot) {
+    for (slot = 0; slot < psy_audio_MASTER_INDEX; ++slot) {
         if (psy_audio_machines_at(machines, slot))
             ++stats->machines_before_projection;
     }

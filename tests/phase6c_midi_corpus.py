@@ -213,6 +213,13 @@ with tempfile.TemporaryDirectory() as temporary:
     high = helper.parse_smf(fixtures / "high-note.mid")
     assert high["note_ons"] == 1
     assert high["note_offs"] == 1
+    equal_tick = helper.parse_smf(fixtures / "equal-tick-release-reuse.mid")
+    assert equal_tick["note_ons"] == 2
+    assert equal_tick["note_offs"] == 2
+    chords = helper.parse_smf(fixtures / "repeated-two-note-chords.mid")
+    assert chords["note_ons"] == 126
+    assert chords["note_offs"] == 126
+    assert chords["channels"] == [0, 1]
 
 probe_shaped_stem = {
     "stem_id": "probe-shaped",
@@ -221,6 +228,8 @@ probe_shaped_stem = {
         "note_off_channels": [0, 1],
         "note_ons": 2,
         "note_offs": 2,
+        "tempo_events": 1,
+        "tempo_events_at_zero": 1,
     },
 }
 probe_shaped_observation = {
@@ -232,6 +241,7 @@ probe_shaped_observation = {
     "release_channel_mask": 3,
     "imported_notes": 2,
     "releases": 2,
+    "tempo_commands": 0,
     "non_silent_projection": True,
     "projection_kind": "deterministic-sampler",
     "parity_status": "UNKNOWN",
@@ -241,6 +251,22 @@ coverage = helper.validate_donor_execution_observation(
 )
 assert coverage["source_channels"] == [0, 1]
 assert coverage["source_note_off_channels"] == [0, 1]
+assert coverage["source_tempo_events"] == 1
+assert coverage["source_tempo_events_at_zero"] == 1
+
+bad_tempo_stem = json.loads(json.dumps(probe_shaped_stem))
+bad_tempo_stem["analysis"]["tempo_events"] = 539
+bad_tempo_stem["analysis"]["tempo_events_at_zero"] = 1
+bad_tempo_observation = dict(probe_shaped_observation)
+bad_tempo_observation["tempo_commands"] = 0
+try:
+    helper.validate_donor_execution_observation(
+        bad_tempo_stem, bad_tempo_observation
+    )
+except SystemExit as exc:
+    assert "imported tempo map differs" in str(exc)
+else:
+    raise AssertionError("lost imported tempo map must be rejected")
 
 psyconf_source = PSYCONF.read_text(encoding="utf-8")
 assert "#define PSYCLE_USE_MIDI_FILE" in psyconf_source
@@ -250,6 +276,10 @@ helper_source = HELPER.read_text(encoding="utf-8")
 assert "caller-supplied binary is intentionally not trusted as evidence" in helper_source
 assert '["make", "clean"]' in helper_source
 assert '["make", "-j2"]' in helper_source
+assert "validate_candidate_dependencies" in helper_source
+assert "EXPECTED_CANDIDATE_PLUGIN_BLOB" in helper_source
+assert "DIVERSALIS_SOURCE_URL" in helper_source
+assert "directory_manifest_identity" in helper_source
 
 midiloader_source = (ROOT / "cpsycle/audio/src/midiloader.c").read_text(
     encoding="utf-8"
@@ -270,6 +300,7 @@ assert "machines_before_projection" in probe_source
 assert "import_event_digest_fnv64" in probe_source
 assert "release_channel_mask" in probe_source
 assert "non_silent_projection" in probe_source
+assert "slot < psy_audio_MASTER_INDEX" in probe_source
 
 def aggregate_for(set_spec):
     expected = set_spec["analysis_expectations"]
@@ -474,6 +505,8 @@ assert 'assert observation["release_channel_mask"] == 3' in legacy_workflow
 assert "write-regression-fixtures" in legacy_workflow
 assert "same-note-multichannel.mid" in legacy_workflow
 assert "high-note.mid" in legacy_workflow
+assert "equal-tick-release-reuse.mid" in legacy_workflow
+assert "repeated-two-note-chords.mid" in legacy_workflow
 assert 'assert observation["non_silent_projection"] is True' in legacy_workflow
 assert (
     "phase6c-generated/phase6c-midi-synthetic.mid \\\n"
@@ -532,6 +565,9 @@ with tempfile.TemporaryDirectory() as temporary:
                 "source_note_offs": 1,
                 "release_channel_mask": channel_mask,
                 "releases": 1,
+                "source_tempo_events": 1,
+                "source_tempo_events_at_zero": 1,
+                "tempo_commands": 0,
                 "import_event_digest_fnv64": (
                     f"{index + 1:016x}"[-16:]
                 ),

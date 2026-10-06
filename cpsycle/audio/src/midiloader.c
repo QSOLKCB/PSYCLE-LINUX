@@ -942,6 +942,7 @@ static void midiloader_flushnoteoffs(MidiLoader* self)
             midiloader_insertnoteoff(self, voice, channel);
         }
         channel->noteoff = FALSE;
+        channel->tracknote.note = psy_audio_NOTECOMMANDS_EMPTY;
     }
 }
 
@@ -951,21 +952,23 @@ void midiloader_writepatternevent(MidiLoader* self, psy_audio_PatternEvent ev)
     uint16_t channelvoice;
 
     channelvoice = MAX_MIDIFILE_POLYPHONY;
-    if (self->currtrack.patternoffset != self->currtrack.position) {
-        for (voice = 0; voice < MAX_MIDIFILE_POLYPHONY; ++voice) {
-            if (self->currtrack.channels[voice].noteoff) {
-                if (self->currtrack.channels[voice].time < self->currtrack.position) {
-                    if (self->currtrack.channels[voice].time >= self->currtrack.patternoffset) {
-                        midiloader_insertnoteoff(
-                            self, voice, &self->currtrack.channels[voice]);
-                    } else {
-                        /* noteoff was in previous patttern */
-                        /* todo */
-                    }                
-                }
-                channelvoice = voice;
-                self->currtrack.channels[voice].noteoff = FALSE;
-            }
+    for (voice = 0; voice < MAX_MIDIFILE_POLYPHONY; ++voice) {
+        MidiChannel* channel;
+
+        channel = &self->currtrack.channels[voice];
+        if (!channel->noteoff || channel->time > self->currtrack.position) {
+            continue;
+        }
+        if (channel->time >= self->currtrack.patternoffset) {
+            midiloader_insertnoteoff(self, voice, channel);
+        } else {
+            /* noteoff was in previous patttern */
+            /* todo */
+        }
+        channel->noteoff = FALSE;
+        channel->tracknote.note = psy_audio_NOTECOMMANDS_EMPTY;
+        if (channelvoice == MAX_MIDIFILE_POLYPHONY) {
+            channelvoice = voice;
         }
     }
     if (channelvoice == MAX_MIDIFILE_POLYPHONY) {
@@ -991,6 +994,9 @@ void midiloader_writepatternevent(MidiLoader* self, psy_audio_PatternEvent ev)
 		psy_audio_patternentry_dispose(&entry);
     }
 }
+
+
+/* midi variable length
 
 
 /* midi variable length fileio funtions */

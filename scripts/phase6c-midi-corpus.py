@@ -14,6 +14,7 @@ import shlex
 import shutil
 import struct
 import subprocess
+import tempfile
 import zipfile
 from typing import Any
 
@@ -34,6 +35,12 @@ CANDIDATE_PLAYER = (
 CANDIDATE_BASELINE_RECEIPT = (
     ROOT / "phase6b-sanitized-manifest/baseline.sha256"
 )
+CANDIDATE_PLUGIN_INTERFACE = (
+    CANDIDATE_SOURCE_ROOT / "psycle-plugins/src/psycle/plugin_interface.hpp"
+)
+EXPECTED_CANDIDATE_PLUGIN_BLOB = "2cf4d8f756fa58098fd84b7b44d0ebe1350594c5"
+DIVERSALIS_SOURCE_URL = "https://svn.code.sf.net/p/psycle/code/trunk/diversalis@12005"
+DIVERSALIS_REVISION = "12005"
 DONOR_SOURCE = ROOT / "cpsycle/audio/src/midiloader.c"
 DONOR_PROBE_SOURCE = ROOT / "tests/phase6c_midi_corpus_probe.c"
 DONOR_BUILD_ROOT = ROOT / "cpsycle/player"
@@ -77,6 +84,71 @@ def sha256_file(path: pathlib.Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def directory_manifest_identity(root: pathlib.Path) -> tuple[int, str]:
+    if not root.is_dir():
+        die(f"candidate dependency tree is missing: {root}")
+    records: list[str] = []
+    for path in sorted(
+        (item for item in root.rglob("*") if item.is_file()),
+        key=lambda item: item.relative_to(root).as_posix(),
+    ):
+        relative = path.relative_to(root).as_posix()
+        records.append(f"{sha256_file(path)}  {relative}\n")
+    if not records:
+        die(f"candidate dependency tree is empty: {root}")
+    return len(records), sha256_bytes("".join(records).encode("utf-8"))
+
+
+def validate_candidate_dependencies() -> dict[str, Any]:
+    if not CANDIDATE_PLUGIN_INTERFACE.is_file():
+        die("pinned candidate plugin interface is missing")
+    try:
+        plugin_blob = subprocess.check_output(
+            ["git", "hash-object", str(CANDIDATE_PLUGIN_INTERFACE)],
+            cwd=ROOT,
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        die(f"cannot hash candidate plugin interface: {exc}")
+    if plugin_blob != EXPECTED_CANDIDATE_PLUGIN_BLOB:
+        die("pinned candidate plugin interface identity changed")
+
+    staged_diversalis = CANDIDATE_SOURCE_ROOT / "diversalis"
+    staged_count, staged_manifest = directory_manifest_identity(staged_diversalis)
+    with tempfile.TemporaryDirectory(prefix="phase6c-diversalis-") as temporary:
+        canonical = pathlib.Path(temporary) / "diversalis"
+        export_output = ""
+        for _attempt in range(4):
+            if canonical.exists():
+                shutil.rmtree(canonical)
+            proc = subprocess.run(
+                [
+                    "svn", "export", "--quiet", "--force", "-r",
+                    DIVERSALIS_REVISION, DIVERSALIS_SOURCE_URL, str(canonical),
+                ],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=False,
+            )
+            export_output = proc.stdout
+            if proc.returncode == 0:
+                break
+        else:
+            die("cannot reproduce pinned diversalis SVN export: " + export_output[-1000:])
+        canonical_count, canonical_manifest = directory_manifest_identity(canonical)
+
+    if staged_count != canonical_count or staged_manifest != canonical_manifest:
+        die("staged diversalis dependency differs from pinned SourceForge SVN r12005")
+    return {
+        "plugin_interface_git_blob": plugin_blob,
+        "diversalis_revision": f"SourceForge SVN r{DIVERSALIS_REVISION}",
+        "diversalis_file_count": staged_count,
+        "diversalis_manifest_sha256": staged_manifest,
+    }
 
 
 def repository_commit() -> str:
@@ -578,6 +650,7 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
         "zero_duration_pairs": global_zero_duration_pairs,
         "max_polyphony": global_max_polyphony,
         "tempo_events": len(tempos),
+        "tempo_events_at_zero": sum(1 for tick, _usec in tempos if tick == 0),
         "tempo_min_bpm": min(bpms) if bpms else None,
         "tempo_max_bpm": max(bpms) if bpms else None,
         "key_signatures": sorted(set(key_sigs)),
@@ -1175,6 +1248,7 @@ def validate_frozen_candidate_player(player: pathlib.Path) -> dict[str, str]:
             "unexpected untracked frozen-candidate build input: "
             + ", ".join(unexpected[:10])
         )
+    dependency_identity = validate_candidate_dependencies()
 
     qmake = subprocess.run(
         [
@@ -1236,6 +1310,7 @@ def validate_frozen_candidate_player(player: pathlib.Path) -> dict[str, str]:
         "source_revision": EXPECTED_CANDIDATE_SOURCE_REVISION,
         "repository_commit": repository_commit,
         "build_target": "psycle-player",
+        **dependency_identity,
         "clean_rebuild_sha256": rebuilt_sha,
     }
 
@@ -1373,6 +1448,26 @@ def validate_donor_execution_observation(
             f"{stem_id}: imported release count differs from raw SMF: "
             f"source={analysis.get('note_offs')} imported={obs.get('releases')}"
         )
+    source_tempo_events = analysis.get("tempo_events")
+    source_tempo_events_at_zero = analysis.get("tempo_events_at_zero")
+    if (
+        not isinstance(source_tempo_events, int)
+        or isinstance(source_tempo_events, bool)
+        or source_tempo_events < 0
+        or not isinstance(source_tempo_events_at_zero, int)
+        or isinstance(source_tempo_events_at_zero, bool)
+        or source_tempo_events_at_zero < 0
+        or source_tempo_events_at_zero > source_tempo_events
+    ):
+        die(f"{stem_id}: raw SMF tempo analysis is invalid")
+    expected_tempo_commands = source_tempo_events - source_tempo_events_at_zero
+    if obs.get("tempo_commands") != expected_tempo_commands:
+        die(
+            f"{stem_id}: imported tempo map differs from raw SMF: "
+            f"source_events={source_tempo_events} "
+            f"tick_zero={source_tempo_events_at_zero} "
+            f"imported_commands={obs.get('tempo_commands')!r}"
+        )
     if obs.get("non_silent_projection") is not True:
         die(f"{stem_id}: execution projection is silent")
     if obs.get("projection_kind") != "deterministic-sampler":
@@ -1383,6 +1478,8 @@ def validate_donor_execution_observation(
         "source_channels": list(source_channels),
         "source_note_off_channels": list(source_note_off_channels),
         "source_note_offs": analysis["note_offs"],
+        "source_tempo_events": source_tempo_events,
+        "source_tempo_events_at_zero": source_tempo_events_at_zero,
     }
 
 
@@ -1432,6 +1529,10 @@ def donor_summary(
             obs["_source_channels"] = coverage["source_channels"]
             obs["_source_note_off_channels"] = coverage["source_note_off_channels"]
             obs["_source_note_offs"] = coverage["source_note_offs"]
+            obs["_source_tempo_events"] = coverage["source_tempo_events"]
+            obs["_source_tempo_events_at_zero"] = coverage[
+                "source_tempo_events_at_zero"
+            ]
             if obs.get("private_input_required") is not True:
                 die(f"{stem['stem_id']}: donor private-input flag changed")
             if obs.get("fixture_redistributed") is not False:
@@ -1461,6 +1562,11 @@ def donor_summary(
                 "source_note_offs": item["_source_note_offs"],
                 "release_channel_mask": item["release_channel_mask"],
                 "releases": item["releases"],
+                "source_tempo_events": item["_source_tempo_events"],
+                "source_tempo_events_at_zero": item[
+                    "_source_tempo_events_at_zero"
+                ],
+                "tempo_commands": item["tempo_commands"],
                 "import_event_digest_fnv64": item["import_event_digest_fnv64"],
                 "render_sha256": item["render_sha256"],
             }
@@ -1604,6 +1710,9 @@ def corpus_summary(
             source_note_offs = record.get("source_note_offs")
             release_channel_mask = record.get("release_channel_mask")
             releases = record.get("releases")
+            source_tempo_events = record.get("source_tempo_events")
+            source_tempo_events_at_zero = record.get("source_tempo_events_at_zero")
+            tempo_commands = record.get("tempo_commands")
             digest = record.get("import_event_digest_fnv64")
             render_sha = record.get("render_sha256")
             if (
@@ -1631,6 +1740,16 @@ def corpus_summary(
                 or not isinstance(releases, int)
                 or isinstance(releases, bool)
                 or releases < 0
+                or not isinstance(source_tempo_events, int)
+                or isinstance(source_tempo_events, bool)
+                or source_tempo_events < 0
+                or not isinstance(source_tempo_events_at_zero, int)
+                or isinstance(source_tempo_events_at_zero, bool)
+                or source_tempo_events_at_zero < 0
+                or source_tempo_events_at_zero > source_tempo_events
+                or not isinstance(tempo_commands, int)
+                or isinstance(tempo_commands, bool)
+                or tempo_commands < 0
                 or not isinstance(digest, str)
                 or len(digest) != 16
                 or not isinstance(render_sha, str)
@@ -1657,6 +1776,8 @@ def corpus_summary(
                 die(f"donor {name} stem release-channel coverage is inconsistent")
             if releases != source_note_offs:
                 die(f"donor {name} stem release count is inconsistent")
+            if tempo_commands != source_tempo_events - source_tempo_events_at_zero:
+                die(f"donor {name} stem tempo-map coverage is inconsistent")
             observed_channels.update(source_channels)
             seen_ids.add(stem_id)
             seen_names.add(relative_name)
@@ -1870,6 +1991,31 @@ def write_regression_fixtures(root: pathlib.Path) -> None:
     write_smf_tracks(
         root / "high-note.mid", [high_note], fmt=0
     )
+
+    equal_tick_reuse = bytearray()
+    equal_tick_reuse += midi_varlen(0) + bytes((0x90, 60, 100))
+    equal_tick_reuse += midi_varlen(10) + bytes((0x80, 60, 0))
+    equal_tick_reuse += midi_varlen(0) + bytes((0x90, 62, 100))
+    equal_tick_reuse += midi_varlen(10) + bytes((0x80, 62, 0))
+    equal_tick_reuse += midi_varlen(0) + b"\xff\x2f\x00"
+    write_smf_tracks(
+        root / "equal-tick-release-reuse.mid", [equal_tick_reuse], fmt=0
+    )
+
+    repeated_chords = bytearray()
+    for index in range(63):
+        note = 60 + (index % 12)
+        repeated_chords += midi_varlen(0 if index == 0 else 1) + bytes(
+            (0x90, note, 100)
+        )
+        repeated_chords += midi_varlen(0) + bytes((0x91, note, 100))
+        repeated_chords += midi_varlen(1) + bytes((0x80, note, 0))
+        repeated_chords += midi_varlen(0) + bytes((0x81, note, 0))
+    repeated_chords += midi_varlen(0) + b"\xff\x2f\x00"
+    write_smf_tracks(
+        root / "repeated-two-note-chords.mid", [repeated_chords], fmt=0
+    )
+
 
 
 def build_parser() -> argparse.ArgumentParser:
