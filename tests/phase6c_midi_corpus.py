@@ -566,9 +566,13 @@ with tempfile.TemporaryDirectory() as temporary:
                 "source_note_offs": 1,
                 "release_channel_mask": channel_mask,
                 "releases": 1,
-                "source_tempo_events": 1,
+                "source_tempo_events": set_spec["analysis_expectations"][
+                    "tempo_events_per_stem"
+                ],
                 "source_tempo_events_at_zero": 1,
-                "tempo_commands": 0,
+                "tempo_commands": (
+                    set_spec["analysis_expectations"]["tempo_events_per_stem"] - 1
+                ),
                 "import_event_digest_fnv64": (
                     f"{index + 1:016x}"[-16:]
                 ),
