@@ -44,6 +44,8 @@ void miditrackstate_reset(MidiTrackState* self)
     self->automationchannel = 1;
     self->position = 0.0;
     self->patternoffset = 0.0;
+    self->position_ticks = 0;
+    self->patternoffset_ticks = 0;
     self->runningstatus = 0;
     self->eventstatus = 0;
     for (v = 0; v < MIDIFILE_TRACK_SLOTS; ++v) {
@@ -52,6 +54,7 @@ void miditrackstate_reset(MidiTrackState* self)
         psy_audio_patternevent_init(&ev);
         self->channels[v].tracknote = ev;
         self->channels[v].time = 0.0;
+        self->channels[v].tick = 0;
         self->channels[v].noteoff = FALSE;
     }    
 }
@@ -99,6 +102,8 @@ static int midiloader_readmeta_keysignature(MidiLoader*);
 static int midiloader_readmeta_properietaryevent(MidiLoader*);
 /* Misc methods */
 static uint8_t midiloader_playablenote(uint8_t);
+static psy_dsp_beatpos_t midiloader_tick_offset(
+    const MidiLoader*, uint64_t absolute_tick);
 static void midiloader_insertnoteoff(MidiLoader*, uint16_t, const MidiChannel*);
 static void midiloader_flushnoteoffs(MidiLoader*);
 static void midiloader_writepatternevent(MidiLoader*, psy_audio_PatternEvent);
@@ -234,6 +239,7 @@ void midiloader_appendtrack(MidiLoader* self, uintptr_t trackidx)
     self->currtrack.pattern = pattern;    
     /* insert pattern */
     self->currtrack.position = 0.0;
+    self->currtrack.position_ticks = 0;
     self->currtrack.patternnode = NULL;    
 }
 
@@ -353,13 +359,13 @@ int midiloader_readdeltatime(MidiLoader* self)
 {
     int status;
     uint32_t deltatime;
-    double offset;    
 
     if ((status = readvarlen(self->fp, &deltatime))) {
         return status;
     }
-    offset = deltatime / (double)self->mthd.division;
-    self->currtrack.position += offset;      
+    self->currtrack.position_ticks += deltatime;
+    self->currtrack.position =
+        self->currtrack.position_ticks / (double)self->mthd.division;
     return PSY_OK;
 }
 
@@ -421,6 +427,7 @@ int midiloader_marknoteoff(MidiLoader* self, uint8_t note)
                 channel->tracknote.mach == self->currtrack.channel) {
             channel->noteoff = TRUE;
             channel->time = self->currtrack.position;
+            channel->tick = self->currtrack.position_ticks;
             break;
         }
     }
@@ -463,9 +470,12 @@ int midiloader_readcontroller(MidiLoader* self)
     ev.mach = self->currtrack.channel;
     ev.cmd = controller;
     ev.parameter = value;            
-    node = psy_audio_pattern_find_node(self->currtrack.pattern, 0,
-        psy_dsp_beatpos_make_real(self->currtrack.position, psy_dsp_DEFAULT_PPQ),
-		psy_dsp_beatpos_make_real(0.01, psy_dsp_DEFAULT_PPQ), &prev);
+    node = psy_audio_pattern_find_node(
+        self->currtrack.pattern,
+        0,
+        midiloader_tick_offset(self, self->currtrack.position_ticks),
+		psy_dsp_beatpos_make_real(0.01, psy_dsp_DEFAULT_PPQ),
+        &prev);
     if (node) {
         psy_audio_PatternEntry* entry;
 
@@ -478,8 +488,8 @@ int midiloader_readcontroller(MidiLoader* self)
 		psy_audio_patternentry_set_event(&entry, ev, 0);
         psy_audio_pattern_insert(self->currtrack.pattern,
 			self->currtrack.patternnode, 0, 
-            psy_dsp_beatpos_make_real(self->currtrack.position -
-				self->currtrack.patternoffset, psy_dsp_DEFAULT_PPQ),
+            midiloader_tick_offset(
+                self, self->currtrack.position_ticks),
 				&entry);
 		psy_audio_patternentry_dispose(&entry);
         self->currtrack.patternnode = psy_audio_pattern_begin(self->currtrack.pattern)->tail;
@@ -783,9 +793,8 @@ int midiloader_readmeta_tempo(MidiLoader* self)
         self->currtrack.patternnode = psy_audio_pattern_insert(
 			self->currtrack.pattern,
             self->currtrack.patternnode, self->currtrack.automationchannel,
-            psy_dsp_beatpos_make_real(
-				self->currtrack.position - self->currtrack.patternoffset,
-				psy_dsp_DEFAULT_PPQ),
+            midiloader_tick_offset(
+                self, self->currtrack.position_ticks),
 			&entry);
 		psy_audio_patternentry_dispose(&entry);
     }
@@ -915,6 +924,20 @@ int midiloader_readbyte1(MidiLoader* self, uint8_t* rv)
     return PSY_OK;
 }
 
+static psy_dsp_beatpos_t midiloader_tick_offset(
+    const MidiLoader* self, uint64_t absolute_tick)
+{
+    psy_dsp_beatpos_t rv;
+    uint64_t relative_tick;
+
+    assert(self);
+    relative_tick = absolute_tick - self->currtrack.patternoffset_ticks;
+    rv.ticks = (int32_t)(
+        (relative_tick * psy_dsp_DEFAULT_PPQ) / self->mthd.division);
+    rv.res = psy_dsp_DEFAULT_PPQ;
+    return rv;
+}
+
 static uint8_t midiloader_playablenote(uint8_t note)
 {
     return note > psy_audio_NOTECOMMANDS_B9
@@ -930,9 +953,7 @@ static void midiloader_insertnoteoff(
     psy_audio_PatternNode* prev;
     psy_dsp_beatpos_t offset;
 
-    offset = psy_dsp_beatpos_make_real(
-        channel->time - self->currtrack.patternoffset,
-        psy_dsp_DEFAULT_PPQ);
+    offset = midiloader_tick_offset(self, channel->tick);
     psy_audio_patternevent_init(&noteoff);
     noteoff.note = psy_audio_NOTECOMMANDS_RELEASE;
     noteoff.mach = channel->tracknote.mach;
@@ -1019,9 +1040,8 @@ void midiloader_writepatternevent(MidiLoader* self, psy_audio_PatternEvent ev)
         self->currtrack.patternnode = psy_audio_pattern_insert(
             self->currtrack.pattern, self->currtrack.patternnode,
             channelvoice,
-            psy_dsp_beatpos_make_real(
-				self->currtrack.position - self->currtrack.patternoffset,
-				psy_dsp_DEFAULT_PPQ),
+            midiloader_tick_offset(
+                self, self->currtrack.position_ticks),
 			&entry);
 		psy_audio_patternentry_dispose(&entry);
     }

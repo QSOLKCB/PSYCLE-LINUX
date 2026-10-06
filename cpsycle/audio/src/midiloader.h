@@ -39,6 +39,7 @@ typedef struct MidiChannel {
 	psy_audio_PatternEvent tracknote;
 	bool noteoff;
 	double time;
+	uint64_t tick;
 } MidiChannel;
 
 typedef struct MidiTrackState
@@ -48,6 +49,8 @@ typedef struct MidiTrackState
 	uintptr_t automationchannel;
 	double position;
 	double patternoffset;
+	uint64_t position_ticks;
+	uint64_t patternoffset_ticks;
 	psy_audio_PatternNode* patternnode;
 	psy_audio_Pattern* pattern;
 	psy_audio_SequenceTrack* track;	
