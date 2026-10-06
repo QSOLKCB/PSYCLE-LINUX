@@ -312,6 +312,7 @@ def aggregate_for(set_spec):
         "same_note_overlaps": expected["same_note_overlaps"],
         "max_polyphony": expected["max_polyphony"],
         "tempo_events_total": expected["tempo_events_per_stem"] * set_spec["stems"],
+        "tempo_events_at_zero_total": set_spec["stems"],
         "tempo_events_per_stem": [expected["tempo_events_per_stem"]],
         "tempo_min_bpm": expected["tempo_range_bpm"][0],
         "tempo_max_bpm": expected["tempo_range_bpm"][1],

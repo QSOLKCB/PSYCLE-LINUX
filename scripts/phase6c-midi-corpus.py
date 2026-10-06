@@ -729,6 +729,13 @@ def validate_aggregate_against_manifest(
             f"expected={expected_tempo_per_stem} "
             f"actual={aggregate.get('tempo_events_per_stem')}"
         )
+    expected_tempo_total = expected_tempo_per_stem * set_spec["stems"]
+    if aggregate.get("tempo_events_total") != expected_tempo_total:
+        die(
+            f"{set_spec['name']}: tempo-map total changed: "
+            f"expected={expected_tempo_total} "
+            f"actual={aggregate.get('tempo_events_total')}"
+        )
 
     if aggregate.get("formats") != [1] or aggregate.get("divisions") != [480]:
         die(f"{set_spec['name']}: corpus files are not uniformly SMF1/480 PPQN")
@@ -811,6 +818,9 @@ def validate_set_aggregate(
         "same_note_overlaps": sum(stem["analysis"]["same_note_overlaps"] for stem in stems),
         "max_polyphony": max((stem["analysis"]["max_polyphony"] for stem in stems), default=0),
         "tempo_events_total": sum(stem["analysis"]["tempo_events"] for stem in stems),
+        "tempo_events_at_zero_total": sum(
+            stem["analysis"]["tempo_events_at_zero"] for stem in stems
+        ),
         "tempo_events_per_stem": sorted(
             {stem["analysis"]["tempo_events"] for stem in stems}
         ),
@@ -1154,7 +1164,7 @@ def bind_analysis_root(
     analysis["_analysis_root"] = str(analysis_path.parent.resolve())
 
 
-def validate_frozen_candidate_player(player: pathlib.Path) -> dict[str, str]:
+def validate_frozen_candidate_player(player: pathlib.Path) -> dict[str, Any]:
     expected_player = CANDIDATE_PLAYER.resolve()
     if player.resolve() != expected_player:
         die(
@@ -1698,6 +1708,8 @@ def corpus_summary(
         expected_indexes = set(range(observed_stems))
         actual_indexes: set[int] = set()
         observed_channels: set[int] = set()
+        observed_tempo_events = 0
+        observed_tempo_events_at_zero = 0
         for record in stem_records:
             stem_id = record.get("stem_id")
             relative_name = record.get("source_relative_name")
@@ -1778,6 +1790,8 @@ def corpus_summary(
                 die(f"donor {name} stem release count is inconsistent")
             if tempo_commands != source_tempo_events - source_tempo_events_at_zero:
                 die(f"donor {name} stem tempo-map coverage is inconsistent")
+            observed_tempo_events += source_tempo_events
+            observed_tempo_events_at_zero += source_tempo_events_at_zero
             observed_channels.update(source_channels)
             seen_ids.add(stem_id)
             seen_names.add(relative_name)
@@ -1796,6 +1810,13 @@ def corpus_summary(
                     die(f"donor {name} {label} is not hexadecimal")
         if actual_indexes != expected_indexes:
             die(f"donor {name} stem indexes are incomplete or duplicated")
+        if observed_tempo_events != item["source_aggregate"].get("tempo_events_total"):
+            die(f"donor {name} stem tempo-event total differs from source aggregate")
+        if (
+            observed_tempo_events_at_zero
+            != item["source_aggregate"].get("tempo_events_at_zero_total")
+        ):
+            die(f"donor {name} tick-zero tempo total differs from source aggregate")
         if sorted(observed_channels) != item["source_aggregate"].get("channels"):
             die(f"donor {name} imported MIDI channel union differs from source analysis")
 
