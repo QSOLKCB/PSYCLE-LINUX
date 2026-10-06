@@ -228,9 +228,19 @@ jobs:
           assert len(observation["import_event_digest_fnv64"]) == 16
           PY
           python3 - <<'PY'
+          import importlib.util
           import json
+          import math
           from pathlib import Path
           import subprocess
+
+          spec = importlib.util.spec_from_file_location(
+              "phase6c_midi_corpus_ci",
+              Path("scripts/phase6c-midi-corpus.py"),
+          )
+          helper = importlib.util.module_from_spec(spec)
+          assert spec.loader is not None
+          spec.loader.exec_module(helper)
 
           probe = Path("phase6c-generated/phase6c-midi-corpus-probe").resolve()
           root = Path("phase6c-generated/midi-regressions")
@@ -242,6 +252,9 @@ jobs:
               "repeated-two-note-chords.mid": (126, 126, 3, 3),
               "polyphony-64.mid": (64, 64, 1, 1),
               "sysex-then-note.mid": (1, 1, 1, 1),
+              "running-status-after-meta.mid": (1, 1, 1, 1),
+              "controller-event.mid": (1, 1, 1, 1),
+              "tick-zero-60bpm.mid": (1, 1, 1, 1),
           }
           for name, (notes, releases, channel_mask, release_mask) in cases.items():
               proc = subprocess.run(
@@ -255,10 +268,25 @@ jobs:
               assert proc.returncode == 0, (name, proc.returncode)
               lines = [line for line in proc.stdout.splitlines() if line.strip()]
               observation = json.loads(lines[-1])
+              analysis = helper.parse_smf(root / name)
               assert observation["imported_notes"] == notes, name
               assert observation["releases"] == releases, name
               assert observation["midi_channel_mask"] == channel_mask, name
               assert observation["release_channel_mask"] == release_mask, name
+              assert (
+                  observation["note_event_digest_fnv64"]
+                  == analysis["note_event_digest_fnv64"]
+              ), name
+              assert observation["midi_cc"] == analysis["midi_cc"], name
+              assert (
+                  observation["midi_cc_digest_fnv64"]
+                  == analysis["midi_cc_digest_fnv64"]
+              ), name
+              assert math.isclose(
+                  observation["song_bpm"],
+                  analysis["song_bpm"],
+                  abs_tol=0.001,
+              ), name
               assert observation["projection_kind"] == "not-run", name
               assert observation["non_silent_projection"] is False, name
           PY

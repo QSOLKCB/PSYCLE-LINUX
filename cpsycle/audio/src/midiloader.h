@@ -53,6 +53,7 @@ typedef struct MidiTrackState
 	psy_audio_SequenceTrack* track;	
 	MidiChannel channels[MIDIFILE_TRACK_SLOTS];	
 	uint8_t runningstatus;
+	uint8_t eventstatus;
 	uint8_t byte1;
 	bool hasrunningstatus;
 } MidiTrackState;

@@ -378,10 +378,13 @@ def fnv64_u64(hash_value: int, value: int) -> int:
     return hash_value
 
 
-def imported_tempo_parameter(usec_per_quarter: int) -> int:
+def normalized_tempo_bpm(usec_per_quarter: int) -> float:
     bpm = 60.0 * 1_000_000.0 / usec_per_quarter
-    bpm = int(bpm * 1000) / 1000.0
-    return int(bpm) & 0xFF
+    return int(bpm * 1000) / 1000.0
+
+
+def imported_tempo_parameter(usec_per_quarter: int) -> int:
+    return int(normalized_tempo_bpm(usec_per_quarter)) & 0xFF
 
 
 def tempo_map_digest_fnv64(
@@ -393,6 +396,29 @@ def tempo_map_digest_fnv64(
         digest = fnv64_u64(digest, tick)
         digest = fnv64_byte(digest, parameter)
     return f"{digest:016x}"
+
+
+def semantic_event_multiset_digest_fnv64(
+    events: list[tuple[int, ...]],
+) -> str:
+    total = 0
+    for event in events:
+        if len(event) < 2:
+            raise ValueError("semantic event requires sequence track and tick")
+        digest = 14695981039346656037
+        digest = fnv64_u64(digest, event[0])
+        digest = fnv64_u64(digest, event[1])
+        for value in event[2:]:
+            digest = fnv64_byte(digest, value)
+        total = (total + digest) & 0xFFFFFFFFFFFFFFFF
+    return f"{total:016x}"
+
+
+def imported_note_semantics(note: int, velocity: int) -> tuple[int, int, int]:
+    normalized_note = min(note, 119)
+    if velocity == 64:
+        return normalized_note, 0, 0
+    return normalized_note, 0x0C, int((velocity / 127.0) * 128) & 0xFF
 
 
 def midi_channel_mask(channels: Any) -> int:
@@ -480,6 +506,8 @@ def parse_track(track: bytes) -> dict[str, Any]:
     time_signatures = 0
     end_tick = 0
     note_transitions: list[tuple[int, int, int, int, bool]] = []
+    note_attacks: list[tuple[int, int, int, int, int]] = []
+    controller_events: list[tuple[int, int, int, int, int]] = []
     event_serial = 0
 
     while pos < len(track):
@@ -559,6 +587,10 @@ def parse_track(track: bytes) -> dict[str, Any]:
             aftertouch += 1
         elif kind == 0xE0:
             pitch_bend += 1
+        elif kind == 0xB0 and len(payload) == 2:
+            controller_events.append(
+                (tick, event_serial, channel, payload[0], payload[1])
+            )
 
         is_note_on = kind == 0x90 and len(payload) == 2 and payload[1] != 0
         is_note_off = kind == 0x80 or (kind == 0x90 and len(payload) == 2 and payload[1] == 0)
@@ -566,6 +598,9 @@ def parse_track(track: bytes) -> dict[str, Any]:
             note = payload[0]
             note_on_channels.add(channel)
             note_transitions.append((tick, event_serial, channel, note, True))
+            note_attacks.append(
+                (tick, event_serial, channel, note, payload[1])
+            )
             key = (channel, note)
             queue = active[key]
             if queue:
@@ -610,6 +645,8 @@ def parse_track(track: bytes) -> dict[str, Any]:
         "remaining_active_notes": remaining,
         "end_tick": end_tick,
         "note_transitions": note_transitions,
+        "note_attacks": note_attacks,
+        "controller_events": controller_events,
     }
 
 
@@ -654,6 +691,28 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
         pos = end
 
     tempos = [item for track in tracks for item in track["tempo_events"]]
+    note_events: list[tuple[int, ...]] = []
+    for track_index, track in enumerate(tracks):
+        for tick, _serial, channel, note, velocity in track["note_attacks"]:
+            normalized_note, cmd, parameter = imported_note_semantics(
+                note, velocity
+            )
+            note_events.append(
+                (
+                    track_index,
+                    tick,
+                    normalized_note,
+                    channel,
+                    cmd,
+                    parameter,
+                )
+            )
+    controller_events = [
+        (track_index, tick, channel, controller, value)
+        for track_index, track in enumerate(tracks)
+        for tick, _serial, channel, controller, value
+        in track["controller_events"]
+    ]
     tempo_commands = [
         (track_index, tick, imported_tempo_parameter(usec))
         for track_index, track in enumerate(tracks)
@@ -661,6 +720,10 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
         if tick != 0
     ]
     bpms = [60_000_000.0 / usec for _, usec in tempos if usec]
+    song_bpm = 120.0
+    for tick, usec in tempos:
+        if tick == 0:
+            song_bpm = normalized_tempo_bpm(usec)
 
     ordered_transitions: list[
         tuple[int, int, int, int, int, int, bool]
@@ -741,6 +804,14 @@ def parse_smf_bytes(data: bytes, *, label: str = "<bytes>") -> dict[str, Any]:
         "division": division,
         "note_ons": sum(track["note_ons"] for track in tracks),
         "note_offs": sum(track["note_offs"] for track in tracks),
+        "note_event_digest_fnv64": semantic_event_multiset_digest_fnv64(
+            note_events
+        ),
+        "midi_cc": len(controller_events),
+        "midi_cc_digest_fnv64": semantic_event_multiset_digest_fnv64(
+            controller_events
+        ),
+        "song_bpm": song_bpm,
         "same_note_overlaps": global_same_note_overlaps,
         "zero_duration_pairs": global_zero_duration_pairs,
         "max_polyphony": global_max_polyphony,
@@ -1556,11 +1627,69 @@ def validate_donor_execution_observation(
             f"{stem_id}: imported note count differs from raw SMF: "
             f"source={analysis.get('note_ons')} imported={obs.get('imported_notes')}"
         )
+    source_note_digest = analysis.get("note_event_digest_fnv64")
+    if (
+        not isinstance(source_note_digest, str)
+        or len(source_note_digest) != 16
+    ):
+        die(f"{stem_id}: raw SMF note-event digest is invalid")
+    try:
+        int(source_note_digest, 16)
+    except ValueError:
+        die(f"{stem_id}: raw SMF note-event digest is not hexadecimal")
+    if obs.get("note_event_digest_fnv64") != source_note_digest:
+        die(
+            f"{stem_id}: imported note-event contents differ from raw SMF: "
+            f"source_digest={source_note_digest} "
+            f"imported_digest={obs.get('note_event_digest_fnv64')!r}"
+        )
     if obs.get("releases") != analysis.get("note_offs"):
         die(
             f"{stem_id}: imported release count differs from raw SMF: "
             f"source={analysis.get('note_offs')} imported={obs.get('releases')}"
         )
+    source_midi_cc = analysis.get("midi_cc")
+    source_midi_cc_digest = analysis.get("midi_cc_digest_fnv64")
+    if (
+        not isinstance(source_midi_cc, int)
+        or isinstance(source_midi_cc, bool)
+        or source_midi_cc < 0
+        or not isinstance(source_midi_cc_digest, str)
+        or len(source_midi_cc_digest) != 16
+    ):
+        die(f"{stem_id}: raw SMF controller analysis is invalid")
+    try:
+        int(source_midi_cc_digest, 16)
+    except ValueError:
+        die(f"{stem_id}: raw SMF controller digest is not hexadecimal")
+    if obs.get("midi_cc") != source_midi_cc:
+        die(
+            f"{stem_id}: imported MIDI controller count differs from raw SMF: "
+            f"source={source_midi_cc} imported={obs.get('midi_cc')!r}"
+        )
+    if obs.get("midi_cc_digest_fnv64") != source_midi_cc_digest:
+        die(
+            f"{stem_id}: imported MIDI controller contents differ from raw SMF"
+        )
+
+    source_song_bpm = analysis.get("song_bpm")
+    imported_song_bpm = obs.get("song_bpm")
+    if (
+        not isinstance(source_song_bpm, (int, float))
+        or isinstance(source_song_bpm, bool)
+        or not isinstance(imported_song_bpm, (int, float))
+        or isinstance(imported_song_bpm, bool)
+        or not math.isclose(
+            float(imported_song_bpm),
+            float(source_song_bpm),
+            abs_tol=0.001,
+        )
+    ):
+        die(
+            f"{stem_id}: imported tick-zero song BPM differs from raw SMF: "
+            f"source={source_song_bpm!r} imported={imported_song_bpm!r}"
+        )
+
     source_tempo_events = analysis.get("tempo_events")
     source_tempo_events_at_zero = analysis.get("tempo_events_at_zero")
     if (
@@ -1607,6 +1736,10 @@ def validate_donor_execution_observation(
         "source_channels": list(source_channels),
         "source_note_off_channels": list(source_note_off_channels),
         "source_note_offs": analysis["note_offs"],
+        "source_note_event_digest_fnv64": source_note_digest,
+        "source_midi_cc": source_midi_cc,
+        "source_midi_cc_digest_fnv64": source_midi_cc_digest,
+        "source_song_bpm": float(source_song_bpm),
         "source_tempo_events": source_tempo_events,
         "source_tempo_events_at_zero": source_tempo_events_at_zero,
         "source_tempo_map_digest_fnv64": source_tempo_digest,
@@ -1659,6 +1792,14 @@ def donor_summary(
             obs["_source_channels"] = coverage["source_channels"]
             obs["_source_note_off_channels"] = coverage["source_note_off_channels"]
             obs["_source_note_offs"] = coverage["source_note_offs"]
+            obs["_source_note_event_digest_fnv64"] = coverage[
+                "source_note_event_digest_fnv64"
+            ]
+            obs["_source_midi_cc"] = coverage["source_midi_cc"]
+            obs["_source_midi_cc_digest_fnv64"] = coverage[
+                "source_midi_cc_digest_fnv64"
+            ]
+            obs["_source_song_bpm"] = coverage["source_song_bpm"]
             obs["_source_tempo_events"] = coverage["source_tempo_events"]
             obs["_source_tempo_events_at_zero"] = coverage[
                 "source_tempo_events_at_zero"
@@ -1695,6 +1836,20 @@ def donor_summary(
                 "source_note_offs": item["_source_note_offs"],
                 "release_channel_mask": item["release_channel_mask"],
                 "releases": item["releases"],
+                "source_note_event_digest_fnv64": item[
+                    "_source_note_event_digest_fnv64"
+                ],
+                "note_event_digest_fnv64": item[
+                    "note_event_digest_fnv64"
+                ],
+                "source_midi_cc": item["_source_midi_cc"],
+                "midi_cc": item["midi_cc"],
+                "source_midi_cc_digest_fnv64": item[
+                    "_source_midi_cc_digest_fnv64"
+                ],
+                "midi_cc_digest_fnv64": item["midi_cc_digest_fnv64"],
+                "source_song_bpm": item["_source_song_bpm"],
+                "song_bpm": item["song_bpm"],
                 "source_tempo_events": item["_source_tempo_events"],
                 "source_tempo_events_at_zero": item[
                     "_source_tempo_events_at_zero"
@@ -1849,6 +2004,18 @@ def corpus_summary(
             source_note_offs = record.get("source_note_offs")
             release_channel_mask = record.get("release_channel_mask")
             releases = record.get("releases")
+            source_note_digest = record.get(
+                "source_note_event_digest_fnv64"
+            )
+            imported_note_digest = record.get("note_event_digest_fnv64")
+            source_midi_cc = record.get("source_midi_cc")
+            imported_midi_cc = record.get("midi_cc")
+            source_midi_cc_digest = record.get(
+                "source_midi_cc_digest_fnv64"
+            )
+            imported_midi_cc_digest = record.get("midi_cc_digest_fnv64")
+            source_song_bpm = record.get("source_song_bpm")
+            imported_song_bpm = record.get("song_bpm")
             source_tempo_events = record.get("source_tempo_events")
             source_tempo_events_at_zero = record.get("source_tempo_events_at_zero")
             tempo_commands = record.get("tempo_commands")
@@ -1881,6 +2048,24 @@ def corpus_summary(
                 or not isinstance(releases, int)
                 or isinstance(releases, bool)
                 or releases < 0
+                or not isinstance(source_note_digest, str)
+                or len(source_note_digest) != 16
+                or not isinstance(imported_note_digest, str)
+                or len(imported_note_digest) != 16
+                or not isinstance(source_midi_cc, int)
+                or isinstance(source_midi_cc, bool)
+                or source_midi_cc < 0
+                or not isinstance(imported_midi_cc, int)
+                or isinstance(imported_midi_cc, bool)
+                or imported_midi_cc < 0
+                or not isinstance(source_midi_cc_digest, str)
+                or len(source_midi_cc_digest) != 16
+                or not isinstance(imported_midi_cc_digest, str)
+                or len(imported_midi_cc_digest) != 16
+                or not isinstance(source_song_bpm, (int, float))
+                or isinstance(source_song_bpm, bool)
+                or not isinstance(imported_song_bpm, (int, float))
+                or isinstance(imported_song_bpm, bool)
                 or not isinstance(source_tempo_events, int)
                 or isinstance(source_tempo_events, bool)
                 or source_tempo_events < 0
@@ -1921,11 +2106,27 @@ def corpus_summary(
                 die(f"donor {name} stem release-channel coverage is inconsistent")
             if releases != source_note_offs:
                 die(f"donor {name} stem release count is inconsistent")
+            if imported_note_digest != source_note_digest:
+                die(f"donor {name} stem note-event contents are inconsistent")
+            if imported_midi_cc != source_midi_cc:
+                die(f"donor {name} stem MIDI controller count is inconsistent")
+            if imported_midi_cc_digest != source_midi_cc_digest:
+                die(f"donor {name} stem MIDI controller contents are inconsistent")
+            if not math.isclose(
+                float(imported_song_bpm),
+                float(source_song_bpm),
+                abs_tol=0.001,
+            ):
+                die(f"donor {name} stem song BPM is inconsistent")
             if tempo_commands != source_tempo_events - source_tempo_events_at_zero:
                 die(f"donor {name} stem tempo-map coverage is inconsistent")
             if imported_tempo_digest != source_tempo_digest:
                 die(f"donor {name} stem tempo-map contents are inconsistent")
             for value, label in (
+                (source_note_digest, "source note-event digest"),
+                (imported_note_digest, "imported note-event digest"),
+                (source_midi_cc_digest, "source MIDI controller digest"),
+                (imported_midi_cc_digest, "imported MIDI controller digest"),
                 (source_tempo_digest, "source tempo-map digest"),
                 (imported_tempo_digest, "imported tempo-map digest"),
             ):
@@ -2222,6 +2423,35 @@ def write_regression_fixtures(root: pathlib.Path) -> None:
     sysex_then_note += midi_varlen(0) + b"\xff\x2f\x00"
     write_smf_tracks(
         root / "sysex-then-note.mid", [sysex_then_note], fmt=0
+    )
+
+    running_after_meta = bytearray()
+    running_after_meta += midi_varlen(0) + bytes((0x90, 60, 100))
+    running_after_meta += midi_varlen(0) + b"\xff\x01\x00"
+    running_after_meta += midi_varlen(480) + bytes((60, 0))
+    running_after_meta += midi_varlen(0) + b"\xff\x2f\x00"
+    write_smf_tracks(
+        root / "running-status-after-meta.mid",
+        [running_after_meta],
+        fmt=0,
+    )
+
+    controller_event = bytearray()
+    controller_event += midi_varlen(0) + bytes((0x90, 60, 100))
+    controller_event += midi_varlen(240) + bytes((0xB0, 64, 127))
+    controller_event += midi_varlen(240) + bytes((0x80, 60, 0))
+    controller_event += midi_varlen(0) + b"\xff\x2f\x00"
+    write_smf_tracks(
+        root / "controller-event.mid", [controller_event], fmt=0
+    )
+
+    tick_zero_60 = bytearray()
+    tick_zero_60 += midi_varlen(0) + b"\xff\x51\x03\x0f\x42\x40"
+    tick_zero_60 += midi_varlen(0) + bytes((0x90, 60, 100))
+    tick_zero_60 += midi_varlen(480) + bytes((0x80, 60, 0))
+    tick_zero_60 += midi_varlen(0) + b"\xff\x2f\x00"
+    write_smf_tracks(
+        root / "tick-zero-60bpm.mid", [tick_zero_60], fmt=0
     )
 
 

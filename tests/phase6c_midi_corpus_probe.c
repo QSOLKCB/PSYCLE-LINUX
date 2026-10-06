@@ -62,6 +62,8 @@ typedef struct ImportStats {
     uintptr_t releases;
     uintptr_t midi_cc;
     uintptr_t tempo_commands;
+    uint64_t note_event_digest;
+    uint64_t midi_cc_digest;
     uint64_t tempo_digest;
     uint32_t midi_channel_mask;
     uint32_t release_channel_mask;
@@ -105,6 +107,24 @@ static void fnv_u64(uint64_t* hash, uint64_t value)
     int shift;
     for (shift = 0; shift < 64; shift += 8)
         fnv_byte(hash, (uint8_t)((value >> shift) & 0xffu));
+}
+
+static uint64_t semantic_event_hash(
+    uintptr_t sequence_track,
+    psy_dsp_beatpos_t offset,
+    const uint8_t* fields,
+    size_t field_count)
+{
+    uint64_t hash = UINT64_C(14695981039346656037);
+    int64_t tick = (int64_t)llround(
+        psy_dsp_beatpos_real(offset) * PPQN_DIGEST);
+    size_t index;
+
+    fnv_u64(&hash, (uint64_t)sequence_track);
+    fnv_u64(&hash, (uint64_t)tick);
+    for (index = 0; index < field_count; ++index)
+        fnv_byte(&hash, fields[index]);
+    return hash;
 }
 
 static void hash_tempo_command(
@@ -171,6 +191,8 @@ static int collect_import_stats(psy_audio_Song* song, ImportStats* stats)
 
     memset(stats, 0, sizeof(*stats));
     stats->digest = UINT64_C(14695981039346656037);
+    stats->note_event_digest = 0;
+    stats->midi_cc_digest = 0;
     stats->tempo_digest = UINT64_C(14695981039346656037);
     stats->sequence_tracks = psy_audio_sequence_num_tracks(sequence);
 
@@ -217,7 +239,18 @@ static int collect_import_stats(psy_audio_Song* song, ImportStats* stats)
                     event);
 
                 if (event->note <= psy_audio_NOTECOMMANDS_B9) {
+                    uint8_t fields[4];
+
                     ++stats->notes;
+                    fields[0] = event->note;
+                    fields[1] = event->mach;
+                    fields[2] = event->cmd;
+                    fields[3] = event->parameter;
+                    stats->note_event_digest += semantic_event_hash(
+                        sequence_track,
+                        psy_audio_patternentry_offset(entry),
+                        fields,
+                        sizeof(fields));
                     if (event->mach < 16u)
                         stats->midi_channel_mask |= UINT32_C(1) << event->mach;
                 } else if (event->note == psy_audio_NOTECOMMANDS_RELEASE) {
@@ -227,7 +260,17 @@ static int collect_import_stats(psy_audio_Song* song, ImportStats* stats)
                         stats->release_channel_mask |= UINT32_C(1) << event->mach;
                     }
                 } else if (event->note == psy_audio_NOTECOMMANDS_MIDICC) {
+                    uint8_t fields[3];
+
                     ++stats->midi_cc;
+                    fields[0] = event->mach;
+                    fields[1] = event->cmd;
+                    fields[2] = event->parameter;
+                    stats->midi_cc_digest += semantic_event_hash(
+                        sequence_track,
+                        psy_audio_patternentry_offset(entry),
+                        fields,
+                        sizeof(fields));
                     if (event->mach < 16u)
                         stats->midi_channel_mask |= UINT32_C(1) << event->mach;
                 }
@@ -527,6 +570,7 @@ int main(int argc, char** argv)
     psy_audio_Song* song;
     ImportStats import_stats;
     WavStats wav_stats;
+    double imported_song_bpm;
     int rc;
 
     if (argc != 2 && argc != 3) {
@@ -559,6 +603,7 @@ int main(int argc, char** argv)
     }
 
     memset(&wav_stats, 0, sizeof(wav_stats));
+    imported_song_bpm = psy_audio_song_bpm(song);
     rc = collect_import_stats(song, &import_stats);
     if (rc == 0 && argc == 3)
         rc = install_projection_substrate(song, &player, &import_stats);
@@ -580,6 +625,9 @@ int main(int argc, char** argv)
             "\"imported_notes\":%lu,"
             "\"releases\":%lu,"
             "\"midi_cc\":%lu,"
+            "\"note_event_digest_fnv64\":\"%016llx\","
+            "\"midi_cc_digest_fnv64\":\"%016llx\","
+            "\"song_bpm\":%.3f,"
             "\"tempo_commands\":%lu,"
             "\"tempo_map_digest_fnv64\":\"%016llx\","
             "\"midi_channel_mask\":%u,"
@@ -601,6 +649,9 @@ int main(int argc, char** argv)
             (unsigned long)import_stats.notes,
             (unsigned long)import_stats.releases,
             (unsigned long)import_stats.midi_cc,
+            (unsigned long long)import_stats.note_event_digest,
+            (unsigned long long)import_stats.midi_cc_digest,
+            imported_song_bpm,
             (unsigned long)import_stats.tempo_commands,
             (unsigned long long)import_stats.tempo_digest,
             (unsigned)import_stats.midi_channel_mask,

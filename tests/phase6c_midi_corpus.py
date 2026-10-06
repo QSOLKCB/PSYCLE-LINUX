@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import math
 import struct
 import tempfile
 import zipfile
@@ -228,6 +229,13 @@ with tempfile.TemporaryDirectory() as temporary:
     assert sysex["sysex_events"] == 1
     assert sysex["note_ons"] == 1
     assert sysex["note_offs"] == 1
+    running = helper.parse_smf(fixtures / "running-status-after-meta.mid")
+    assert running["note_ons"] == 1
+    assert running["note_offs"] == 1
+    controller = helper.parse_smf(fixtures / "controller-event.mid")
+    assert controller["midi_cc"] == 1
+    sixty = helper.parse_smf(fixtures / "tick-zero-60bpm.mid")
+    assert math.isclose(sixty["song_bpm"], 60.0, abs_tol=0.001)
 
 probe_shaped_stem = {
     "stem_id": "probe-shaped",
@@ -236,6 +244,15 @@ probe_shaped_stem = {
         "note_off_channels": [0, 1],
         "note_ons": 2,
         "note_offs": 2,
+        "note_event_digest_fnv64": helper.semantic_event_multiset_digest_fnv64(
+            [
+                (0, 0, 60, 0, 0x0C, int((100 / 127.0) * 128)),
+                (0, 0, 64, 1, 0x0C, int((96 / 127.0) * 128)),
+            ]
+        ),
+        "midi_cc": 0,
+        "midi_cc_digest_fnv64": helper.semantic_event_multiset_digest_fnv64([]),
+        "song_bpm": 120.0,
         "tempo_events": 1,
         "tempo_events_at_zero": 1,
         "tempo_map_digest_fnv64": helper.tempo_map_digest_fnv64([]),
@@ -249,7 +266,15 @@ probe_shaped_observation = {
     "midi_channel_mask": 3,
     "release_channel_mask": 3,
     "imported_notes": 2,
+    "note_event_digest_fnv64": probe_shaped_stem["analysis"][
+        "note_event_digest_fnv64"
+    ],
     "releases": 2,
+    "midi_cc": 0,
+    "midi_cc_digest_fnv64": probe_shaped_stem["analysis"][
+        "midi_cc_digest_fnv64"
+    ],
+    "song_bpm": 120.0,
     "tempo_commands": 0,
     "tempo_map_digest_fnv64": helper.tempo_map_digest_fnv64([]),
     "non_silent_projection": True,
@@ -263,6 +288,48 @@ assert coverage["source_channels"] == [0, 1]
 assert coverage["source_note_off_channels"] == [0, 1]
 assert coverage["source_tempo_events"] == 1
 assert coverage["source_tempo_events_at_zero"] == 1
+
+bad_note_stem = json.loads(json.dumps(probe_shaped_stem))
+bad_note_stem["analysis"]["note_event_digest_fnv64"] = (
+    helper.semantic_event_multiset_digest_fnv64(
+        [(0, 240, 72, 0, 0x0C, int((100 / 127.0) * 128))]
+    )
+)
+try:
+    helper.validate_donor_execution_observation(
+        bad_note_stem, probe_shaped_observation
+    )
+except SystemExit as exc:
+    assert "note-event contents differ" in str(exc)
+else:
+    raise AssertionError("wrong imported note pitch/timing must be rejected")
+
+bad_cc_stem = json.loads(json.dumps(probe_shaped_stem))
+bad_cc_stem["analysis"]["midi_cc"] = 1
+bad_cc_stem["analysis"]["midi_cc_digest_fnv64"] = (
+    helper.semantic_event_multiset_digest_fnv64(
+        [(0, 240, 0, 64, 127)]
+    )
+)
+try:
+    helper.validate_donor_execution_observation(
+        bad_cc_stem, probe_shaped_observation
+    )
+except SystemExit as exc:
+    assert "controller count differs" in str(exc)
+else:
+    raise AssertionError("lost MIDI controller event must be rejected")
+
+bad_bpm_stem = json.loads(json.dumps(probe_shaped_stem))
+bad_bpm_stem["analysis"]["song_bpm"] = 60.0
+try:
+    helper.validate_donor_execution_observation(
+        bad_bpm_stem, probe_shaped_observation
+    )
+except SystemExit as exc:
+    assert "tick-zero song BPM differs" in str(exc)
+else:
+    raise AssertionError("wrong normalized tick-zero song BPM must be rejected")
 
 bad_tempo_stem = json.loads(json.dumps(probe_shaped_stem))
 bad_tempo_stem["analysis"]["tempo_events"] = 2
@@ -527,6 +594,9 @@ assert "equal-tick-release-reuse.mid" in legacy_workflow
 assert "repeated-two-note-chords.mid" in legacy_workflow
 assert "polyphony-64.mid" in legacy_workflow
 assert "sysex-then-note.mid" in legacy_workflow
+assert "running-status-after-meta.mid" in legacy_workflow
+assert "controller-event.mid" in legacy_workflow
+assert "tick-zero-60bpm.mid" in legacy_workflow
 assert 'assert observation["non_silent_projection"] is True' in legacy_workflow
 assert (
     "phase6c-generated/phase6c-midi-synthetic.mid \\\n"
@@ -585,6 +655,26 @@ with tempfile.TemporaryDirectory() as temporary:
                 "source_note_offs": 1,
                 "release_channel_mask": channel_mask,
                 "releases": 1,
+                "source_note_event_digest_fnv64": (
+                    helper.semantic_event_multiset_digest_fnv64(
+                        [(0, index, 60, source_channels[0], 0, 0)]
+                    )
+                ),
+                "note_event_digest_fnv64": (
+                    helper.semantic_event_multiset_digest_fnv64(
+                        [(0, index, 60, source_channels[0], 0, 0)]
+                    )
+                ),
+                "source_midi_cc": 0,
+                "midi_cc": 0,
+                "source_midi_cc_digest_fnv64": (
+                    helper.semantic_event_multiset_digest_fnv64([])
+                ),
+                "midi_cc_digest_fnv64": (
+                    helper.semantic_event_multiset_digest_fnv64([])
+                ),
+                "source_song_bpm": 120.0,
+                "song_bpm": 120.0,
                 "source_tempo_events": set_spec["analysis_expectations"][
                     "tempo_events_per_stem"
                 ],

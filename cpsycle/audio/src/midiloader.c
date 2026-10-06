@@ -45,6 +45,7 @@ void miditrackstate_reset(MidiTrackState* self)
     self->position = 0.0;
     self->patternoffset = 0.0;
     self->runningstatus = 0;
+    self->eventstatus = 0;
     for (v = 0; v < MIDIFILE_TRACK_SLOTS; ++v) {
         psy_audio_PatternEvent ev;
 
@@ -257,8 +258,8 @@ int midiloader_readtrackevents(MidiLoader* self, MCHUNK chunk, uintptr_t trackid
         if ((status = midiloader_readstatusbyte(self))) {
             return status;
         }
-        ln = self->currtrack.runningstatus & 0x0F;
-        hn = (self->currtrack.runningstatus & 0xF0) >> 4;
+        ln = self->currtrack.eventstatus & 0x0F;
+        hn = (self->currtrack.eventstatus & 0xF0) >> 4;
         self->currtrack.channel = (uint8_t)ln;
         switch (hn) {
         case 0x8:
@@ -283,11 +284,11 @@ int midiloader_readtrackevents(MidiLoader* self, MCHUNK chunk, uintptr_t trackid
             status = midiloader_readpitchbend(self);
             break;
         case 0xF:
-            if (self->currtrack.runningstatus == 0xFF) {
+            if (self->currtrack.eventstatus == 0xFF) {
                 status = midiloader_readmetaevent(self, &eoftrack);
             } else if (
-                self->currtrack.runningstatus == 0xF0 ||
-                self->currtrack.runningstatus == 0xF7) {
+                self->currtrack.eventstatus == 0xF0 ||
+                self->currtrack.eventstatus == 0xF7) {
                 status = midiloader_readsysex(self);
             } else if (psyfile_skip(self->fp, 1) == -1) {
                 status = PSY_ERRFILE;
@@ -326,12 +327,24 @@ int midiloader_readstatusbyte(MidiLoader* self)
     if ((status = psyfile_read(self->fp, &statusbyte, 1))) {
         return status;
     }
-    if (statusbyte < 0x80) {        
+    if (statusbyte < 0x80) {
+        if (self->currtrack.runningstatus < 0x80 ||
+                self->currtrack.runningstatus > 0xEF) {
+            return PSY_ERRFILE;
+        }
+        self->currtrack.eventstatus = self->currtrack.runningstatus;
         self->currtrack.hasrunningstatus = TRUE;
         self->currtrack.byte1 = statusbyte;
     } else {
-        self->currtrack.runningstatus = statusbyte;
+        self->currtrack.eventstatus = statusbyte;
         self->currtrack.hasrunningstatus = FALSE;
+        if (statusbyte >= 0x80 && statusbyte <= 0xEF) {
+            self->currtrack.runningstatus = statusbyte;
+        } else if (statusbyte != 0xFF) {
+            /* System-exclusive/common status cancels channel running status.
+            ** SMF meta status 0xFF does not. */
+            self->currtrack.runningstatus = 0;
+        }
     }
     return PSY_OK;
 }
