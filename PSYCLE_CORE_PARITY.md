@@ -149,6 +149,10 @@ Phase 6 separates engine gaps from UI gaps. The absence of a full tracker UI in 
 - C-Psycle platform UI bridge implementation details;
 - C-Psycle's newer event-sequencer internals when they differ from original Psycle.
 
+## Legacy detour handoff
+
+The [legacy-lane closeout](phase6c/LEGACY_CLOSEOUT.md) records the IT/MIDI donor repairs and named follow-ups for unresolved import/translation/runtime boundaries. Its implementation is complete; historical and MIDI private observations remain pending. No matrix row is added or promoted, and the return point after observation review is the pending Sampler PS1 E-D3/E-C3 paired witness.
+
 ## Current implementation backlog
 
 Phase 6C now justifies this evidence backlog:

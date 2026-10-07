@@ -183,6 +183,15 @@ jobs:
           qmake CONFIG-=shared CONFIG+=release psycle-player.pro
           make -j2
 
+      - name: Attest frozen historical candidate player
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase6c-historical-public
+          python3 scripts/phase6c-midi-corpus.py attest-candidate-player \
+            psycle-cpp-r12005-sanitized/psycle-player/++qmake/psycle-player \
+            phase6c-historical-public/candidate-player-attestation.json
+
       - name: Observe candidate historical direct-import boundary
         shell: bash
         run: |
@@ -199,7 +208,8 @@ jobs:
           python3 scripts/phase6c-historical-it.py candidate \
             "$RUNROOT/d-503_-_sickmaate.it" \
             "$RUNROOT/candidate-psycle-player" \
-            phase6c-historical-public/candidate-historical-it.json
+            phase6c-historical-public/candidate-historical-it.json \
+            --attestation phase6c-historical-public/candidate-player-attestation.json
           rm -rf -- "$RUNROOT"
           rm -f -- "$HISTORICAL_IT"
           ! find phase6c-historical-public -type f -iname '*.it' -print -quit | grep -q .

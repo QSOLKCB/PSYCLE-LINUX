@@ -15,8 +15,8 @@ While the legacy lane is active, **this document is the working roadmap**. The b
 1. [x] **Import/translation baseline** — canonical generated IT identity, donor import/decoder coverage, pinned-original acceptance observation, and frozen-candidate direct-import boundary.
 2. [x] **Sample-mode playback witness** — C-Psycle sample-mode instrument/virtual-generator mapping is restored and the canonical generated fixture has a deterministic non-silent donor playback witness.
 3. [ ] **Historical `SickMaate` three-way summary — private observation pending** — the privacy-preserving original/candidate/donor workflow is implemented; the three-way observation remains pending manual dispatch with the private historical input.
-4. [ ] **MIDI real-world playback corpus — current phase** — exercise the contributor-supplied SMF corpus from gentle baseline through dense timing/polyphony/routing stress, keeping native MIDI import separate from the deterministic audibility projection.
-5. [ ] **Legacy-lane closeout** — isolate or hand off any remaining shared playback defects, then resume the deferred Phase 6C contract ladder.
+4. [ ] **MIDI real-world playback corpus — implementation complete, private observation pending** — exercise the contributor-supplied SMF corpus from gentle baseline through dense timing/polyphony/routing stress, keeping native MIDI import separate from the deterministic audibility projection.
+5. [x] **Legacy-lane implementation closeout** — repaired donor defects and remaining boundaries are recorded in the checked [closeout ledger](LEGACY_CLOSEOUT.md). Private observation/review gates remain pending before the deferred Phase 6C contract ladder resumes.
 
 No item in this temporary roadmap may promote original-Psycle parity without the normal paired/versioned evidence requirements.
 
@@ -227,6 +227,12 @@ This gives the project two complementary layers:
 1. **minimal generated fixtures** that continuously isolate and exercise the execution path;
 2. **real musical corpora** that reveal interactions and audible regressions under private, identity-bound observation.
 
+## Implementation closeout
+
+The final implementation step is recorded in [`LEGACY_CLOSEOUT.md`](LEGACY_CLOSEOUT.md) and `legacy-closeout.json`. The closeout validator preserves the matrix and private-input manifest identities, checks all repair/handoff dispositions, and can revalidate downloaded combined observation artifacts through the existing lane validators. This is the intended v0.2.0 checkpoint. It does not turn implemented workflows into completed private observations or clear the priority hold by itself.
+
+After the outstanding private observations are reviewed, resume the pending Sampler PS1 E-D3/E-C3 paired runtime witness before widening the remaining PS1, XMSampler and routing contracts.
+
 ## Exit criteria for the temporary priority hold
 
 Resume the previously deferred Phase 6C expansion after all of the following are true:
@@ -238,6 +244,6 @@ Resume the previously deferred Phase 6C expansion after all of the following are
 - [x] C-Psycle sample-mode import has a deterministic non-silent playback witness from the unchanged canonical fixture;
 - [ ] the historical `SickMaate` witness has a hash-bound original/candidate/C-Psycle observation summary without redistributing its samples;
 - [ ] the contributor-supplied MIDI corpus has begun real-world playback observations after the minimal IT witness is stable;
-- [ ] any discovered shared playback defect has either been isolated or explicitly handed off to a narrow fix/evidence PR.
+- [x] shared playback defects discovered in the implemented detour have been repaired in the donor or explicitly handed off with a scoped next action in [`legacy-closeout.json`](legacy-closeout.json); new private-run findings must receive the same treatment.
 
 Only then return to the remaining Sampler PS1, XMSampler, routing and other Phase 6C rows.

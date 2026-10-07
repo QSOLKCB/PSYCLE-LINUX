@@ -6,6 +6,14 @@ on:
       - main
       - 'phase-6c/**'
     paths:
+      - 'phase6c/legacy-closeout.json'
+      - 'phase6c/LEGACY_CLOSEOUT.md'
+      - 'phase6c/compatibility-matrix.json'
+      - 'phase6c/SAMPLER_PS1.md'
+      - 'phase6c/DELAYED_RETRIGGER.md'
+      - 'phase6c/evidence/sampler-ps1/pitch-hosted/**'
+      - 'scripts/phase6c-legacy-closeout.py'
+      - 'tests/phase6c_legacy_closeout.py'
       - 'phase6c/LEGACY_PLAYBACK_IMPORT.md'
       - 'phase6c/evidence/legacy-module-import/**'
       - 'phase6c/reference-corpus/**'
@@ -39,6 +47,14 @@ on:
       - 'README.md'
   pull_request:
     paths:
+      - 'phase6c/legacy-closeout.json'
+      - 'phase6c/LEGACY_CLOSEOUT.md'
+      - 'phase6c/compatibility-matrix.json'
+      - 'phase6c/SAMPLER_PS1.md'
+      - 'phase6c/DELAYED_RETRIGGER.md'
+      - 'phase6c/evidence/sampler-ps1/pitch-hosted/**'
+      - 'scripts/phase6c-legacy-closeout.py'
+      - 'tests/phase6c_legacy_closeout.py'
       - 'phase6c/LEGACY_PLAYBACK_IMPORT.md'
       - 'phase6c/evidence/legacy-module-import/**'
       - 'phase6c/reference-corpus/**'
@@ -92,6 +108,19 @@ jobs:
           python3 tests/phase6c_legacy_module_import.py
           python3 tests/phase6c_historical_it.py
           python3 tests/phase6c_midi_corpus.py
+          python3 tests/phase6c_legacy_closeout.py
+
+      - name: Validate legacy implementation closeout and pending gates
+        run: |
+          python3 scripts/phase6c-legacy-closeout.py \
+            --output phase6c-generated/legacy-closeout.json
+
+      - name: Upload legacy closeout handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6c-legacy-lane-closeout
+          path: phase6c-generated/legacy-closeout.json
+          if-no-files-found: error
 
       - name: Generate canonical IT fixture
         run: |
