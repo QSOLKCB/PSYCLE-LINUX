@@ -816,7 +816,27 @@ with tempfile.TemporaryDirectory() as temporary:
     helper.corpus_summary(donor_path, candidate_path, root / "summary.json")
     assert (root / "summary.json").exists()
 
+    # The closeout must validate the full native corpus component contract too.
+    closeout_spec = importlib.util.spec_from_file_location(
+        "phase6c_closeout_midi_test", ROOT / "scripts/phase6c-legacy-closeout.py"
+    )
+    closeout = importlib.util.module_from_spec(closeout_spec)
+    assert closeout_spec.loader is not None
+    closeout_spec.loader.exec_module(closeout)
+    helper.write_json(
+        root / "midi-real-world-corpus-summary.json",
+        helper.load_json(root / "summary.json"),
+    )
+    checked = closeout.revalidate_summary(root, "midi-real-world-corpus")
+    assert checked["status"] == "COMPONENTS_REVALIDATED"
+
     candidate_attestation_path.unlink()
+    try:
+        closeout.revalidate_summary(root, "midi-real-world-corpus")
+    except SystemExit as exc:
+        assert "candidate build attestation support file is missing" in str(exc)
+    else:
+        raise AssertionError("closeout must reject missing candidate attestation")
     try:
         helper.corpus_summary(
             donor_path, candidate_path, root / "missing-attestation.json"

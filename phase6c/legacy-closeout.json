@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "phase": "6C",
+  "contract": "legacy-playback-import-closeout",
+  "implementation_status": "COMPLETE",
+  "parity_status": "UNKNOWN",
+  "resume_contract": "sampler-ps1-extended-timing",
+  "preserved_inputs": {
+    "phase6c/compatibility-matrix.json": "70e9321d9b5cb5960d2bf15f7ee2c3b71824a7780cf9602395bc4f79c7f7f1c6",
+    "phase6c/reference-corpus/manifest.json": "e5ade0893e9b1f00861120a3f6f216e03a4328a83ee0ce9224d52592c865d949",
+    "phase6c/evidence/legacy-module-import/historical-sickmaate.json": "07099abd15c028d8be5a27d76a4990f2b51fb4cecd2b1e09b5727356891c318d"
+  },
+  "dispositions": [
+    {
+      "id": "it-sample-mode-route",
+      "status": "REPAIRED_DONOR_ONLY",
+      "scope": "IT sample-mode imports now materialize Sampulse instruments and virtual-generator routes. The canonical fixture produces two identical non-silent 512-frame donor renders.",
+      "next_action": "Keep this donor regression; measure original/candidate sample and command semantics independently.",
+      "references": [
+        "cpsycle/audio/src/itmodule2.c",
+        "tests/phase6c_legacy_it_playback.c"
+      ]
+    },
+    {
+      "id": "midi-import-execution",
+      "status": "REPAIRED_DONOR_ONLY",
+      "scope": "Restore the existing SMF feature gate and initialize imported PatternEntry objects. Freeze native import before attaching the project-owned classic Sampler for a bounded execution projection.",
+      "next_action": "Keep native import distinct from instrument selection and audibility.",
+      "references": [
+        "cpsycle/detail/psyconf.h",
+        "cpsycle/audio/src/midiloader.c",
+        "tests/phase6c_midi_corpus_probe.c"
+      ]
+    },
+    {
+      "id": "midi-release-polyphony",
+      "status": "REPAIRED_DONOR_ONLY",
+      "scope": "Preserve equal-tick and terminal releases, channel-aware matching, all 128 MIDI note slots, and 64 simultaneous voices with reuse.",
+      "next_action": "Retain zero-duration, equal-tick, multichannel, high-note, repeated-chord and 64-note regression fixtures.",
+      "references": [
+        "cpsycle/audio/src/midiloader.c",
+        "scripts/phase6c-midi-corpus.py",
+        "tests/phase6c_midi_corpus.py"
+      ]
+    },
+    {
+      "id": "midi-tempo-event-semantics",
+      "status": "REPAIRED_DONOR_ONLY",
+      "scope": "Preserve exact cumulative ticks, tempo maps and tick-zero BPM, SysEx parsing and channel running status across meta events. Independently compare note, controller and tempo semantics with imported graph digests.",
+      "next_action": "Keep the synthetic semantic comparisons in the native donor CI lane; run the six-set private corpus separately.",
+      "references": [
+        "cpsycle/audio/src/midiloader.c",
+        "tests/phase6c_midi_corpus_probe.c",
+        "scripts/phase6c-midi-corpus.py"
+      ]
+    },
+    {
+      "id": "sampulse-ended-voice",
+      "status": "REPAIRED_DONOR_ONLY",
+      "scope": "Do not recalculate the period of an ended foreground voice whose wave controller lacks a sample. This repair was exposed by the earlier Sampulse MIDI projection.",
+      "next_action": "Keep the sample-mode IT playback witness; the MIDI lane now deliberately uses classic Sampler.",
+      "references": [
+        "cpsycle/audio/src/xmsampler.c",
+        "tests/phase6c_legacy_it_playback.c",
+        "tests/phase6c_historical_it_probe.c"
+      ]
+    },
+    {
+      "id": "candidate-legacy-file-loaders",
+      "status": "HANDED_OFF",
+      "scope": "Frozen C++ direct IT/SMF load rejection is a scoped host/song-I/O boundary. Internal sampler and MIDI machinery are not classified as absent.",
+      "next_action": "A later narrow loader capability/evidence PR must pin original requirements before candidate convergence.",
+      "references": [
+        "phase6c/LEGACY_PLAYBACK_IMPORT.md",
+        "scripts/phase6c-historical-it.py",
+        "scripts/phase6c-midi-corpus.py"
+      ]
+    },
+    {
+      "id": "it-note-cut-translation",
+      "status": "HANDED_OFF",
+      "scope": "The retained donor maps IT note cut 254 to Psycle release; this is an explicit translation compromise, not an original-Psycle equivalence claim.",
+      "next_action": "Observe pinned-original note-cut versus release behavior with a minimal fixture before changing the translation.",
+      "references": [
+        "cpsycle/audio/src/itmodule2.c",
+        "tests/phase6c_legacy_it_loader.c",
+        "phase6c/LEGACY_PLAYBACK_IMPORT.md"
+      ]
+    },
+    {
+      "id": "midi-native-instrument-selection",
+      "status": "HANDED_OFF",
+      "scope": "SMF import creates no sound-generating machines. Deterministic classic-Sampler projection supplies audibility while preserving the pre-projection imported graph.",
+      "next_action": "Keep native MIDI instrument choice, external MIDI output and original-reference MIDI parity in separate observation/implementation lanes.",
+      "references": [
+        "tests/phase6c_midi_corpus_probe.c",
+        "phase6c/reference-corpus/manifest.json"
+      ]
+    },
+    {
+      "id": "original-runtime-sampler",
+      "status": "HANDED_OFF",
+      "scope": "Original-reference sample startup and ambiguous render attribution remain unresolved in existing lanes; donor repairs do not resolve these boundaries.",
+      "next_action": "Resume the pending PS1 E-D3/E-C3 paired witness after observation closeout, then narrow envelope/loop/panning/offset/volume/retrigger and state witnesses.",
+      "references": [
+        "phase6c/SAMPLER_PS1.md",
+        "phase6c/DELAYED_RETRIGGER.md",
+        "phase6c/evidence/sampler-ps1/pitch-hosted/observation.json"
+      ]
+    }
+  ],
+  "pending_observations": {
+    "historical-sickmaate": {
+      "status": "PENDING_PRIVATE_DISPATCH",
+      "workflow": ".github/workflows/phase6c-historical-it-private.yml"
+    },
+    "midi-real-world-corpus": {
+      "status": "PENDING_PRIVATE_DISPATCH",
+      "workflow": ".github/workflows/phase6c-midi-corpus-private.yml"
+    }
+  }
+}
