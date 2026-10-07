@@ -266,6 +266,10 @@ assert "phase6c-historical-summary/donor/" in workflow
 assert "phase6c-historical-summary/candidate/" in workflow
 assert "phase6c-historical-summary/original/" in workflow
 assert "historical module bytes leaked into combined artifact" in workflow
+assert "Attest frozen historical candidate player" in workflow
+assert "phase6c-midi-corpus.py attest-candidate-player" in workflow
+assert "--attestation phase6c-historical-public/candidate-player-attestation.json" in workflow
+assert "candidate_build_identity" in HELPER.read_text(encoding="utf-8")
 for upload_block in workflow.split("uses: actions/upload-artifact@v4")[1:]:
     block = upload_block.split("\n      - name:", 1)[0]
     assert ".it" not in block.lower(), block

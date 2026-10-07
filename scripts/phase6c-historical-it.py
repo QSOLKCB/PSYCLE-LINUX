@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import pathlib
 import shutil
@@ -24,6 +25,28 @@ EXPECTED_REFERENCE_INSTALLER_SIZE = 9322919
 EXPECTED_REFERENCE_EXECUTABLE_SHA256 = (
     "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6"
 )
+BUILD_IDENTITY_FIELDS = (
+    "candidate_baseline_sha256", "source_revision", "repository_commit",
+    "build_target", "plugin_interface_git_blob", "diversalis_revision",
+    "diversalis_file_count", "diversalis_manifest_sha256", "clean_rebuild_sha256",
+)
+
+
+def candidate_build_identity(player: pathlib.Path, attestation: pathlib.Path) -> dict[str, Any]:
+    """Reuse the exact frozen-player attestation contract from the MIDI lane."""
+    spec = importlib.util.spec_from_file_location(
+        "historical_candidate_build", ROOT / "scripts/phase6c-midi-corpus.py"
+    )
+    helper = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(helper)
+    with player.open("rb") as handle:
+        if handle.read(4) != b"\x7fELF":
+            die("historical candidate player is not an ELF executable")
+    verified = helper.validate_candidate_attestation(
+        attestation, player, helper.repository_commit()
+    )
+    return {field: verified[field] for field in BUILD_IDENTITY_FIELDS}
 
 
 def die(message: str) -> "NoReturn":
@@ -154,6 +177,10 @@ def command_candidate(args: argparse.Namespace) -> None:
     identity = validate_historical_file(input_path)
     if not player.is_file():
         die(f"candidate player is missing: {player}")
+    attestation = args.attestation.resolve()
+    if attestation.parent != args.output.resolve().parent:
+        die("historical candidate attestation must be retained beside its receipt")
+    build_identity = candidate_build_identity(player, attestation)
     player_sha = sha256_file(player)
     if input_path.parent != player.parent:
         die("candidate replay requires the private IT beside the candidate player")
@@ -183,6 +210,9 @@ def command_candidate(args: argparse.Namespace) -> None:
         "source_size_bytes": identity["size_bytes"],
         "player": "candidate-psycle-player",
         "player_sha256": player_sha,
+        **build_identity,
+        "build_attestation": attestation.name,
+        "build_attestation_sha256": sha256_file(attestation),
         "command": [
             "./candidate-psycle-player",
             "--output-driver",
@@ -346,6 +376,18 @@ def validate_summary_components(
         candidate.get("player_sha256"),
         "candidate player",
     )
+    require_public_support_file(
+        candidate_path,
+        candidate.get("build_attestation"),
+        candidate.get("build_attestation_sha256"),
+        "candidate build attestation",
+    )
+    build_identity = candidate_build_identity(
+        candidate_path.parent / candidate["player"],
+        candidate_path.parent / candidate["build_attestation"],
+    )
+    if any(candidate.get(field) != value for field, value in build_identity.items()):
+        die("historical candidate receipt differs from its frozen build identity")
     require_hash(candidate.get("raw_output_sha256"), "candidate raw_output_sha256")
 
     require_common_receipt(
@@ -473,6 +515,7 @@ def build_parser() -> argparse.ArgumentParser:
     candidate.add_argument("input", type=pathlib.Path)
     candidate.add_argument("player", type=pathlib.Path)
     candidate.add_argument("output", type=pathlib.Path)
+    candidate.add_argument("--attestation", type=pathlib.Path, required=True)
     candidate.set_defaults(func=command_candidate)
 
     summary = sub.add_parser("summary", help="build a public-safe three-way summary")

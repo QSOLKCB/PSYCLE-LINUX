@@ -64,9 +64,13 @@ python3 scripts/phase6c-legacy-closeout.py \
 
 The tool reruns the existing summary/component validators, checks the recreated
 summary matches, rejects missing or changed support files, and audits the roots
-for private payloads and symlinks. MIDI evidence is revision-bound by its
-existing validator: use a checkout of the exact workflow head to revalidate a
-downloaded corpus artifact, rather than relabeling old evidence as a new run.
+for private payloads and symlinks. Both lanes require the frozen candidate's
+clean-rebuild attestation, retained executable, dependency identities and exact
+workflow repository revision. Use a checkout of the exact workflow head to
+revalidate downloaded artifacts, rather than relabeling old evidence as a new
+run. Historical artifacts produced before this attestation was added cannot
+satisfy the closeout gate; repeat the private observation with the attested
+workflow instead of retroactively issuing identity claims for an old run.
 
 `COMPONENTS_REVALIDATED` means summary integrity under those existing contracts.
 It is narrower than an independent execution replay or a new original-reference
