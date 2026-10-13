@@ -141,13 +141,8 @@ def audit_artifact(root: pathlib.Path) -> None:
     # Reject links before the lane validators read any support file.
     if root.is_symlink() or any(path.is_symlink() for path in root.rglob("*")):
         fail("observation artifacts must not contain symlinks")
+    # Use the same payload guard as the private MIDI workflow before upload.
     load_helper("phase6c-midi-corpus.py").audit_public_tree(root)
-    for path in root.rglob("*"):
-        if path.is_file():
-            prefix = path.read_bytes()[:12]
-            wave = prefix[:4] in {b"RIFF", b"RIFX", b"RF64"} and prefix[8:12] == b"WAVE"
-            if path.suffix.lower() in {".it", ".wav"} or prefix.startswith(b"IMPM") or wave:
-                fail("observation artifact contains raw IT/audio payload")
 
 
 def revalidate_summary(root: pathlib.Path, lane: str) -> dict[str, Any]:

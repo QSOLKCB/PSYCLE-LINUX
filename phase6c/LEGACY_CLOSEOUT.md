@@ -72,6 +72,22 @@ run. Historical artifacts produced before this attestation was added cannot
 satisfy the closeout gate; repeat the private observation with the attested
 workflow instead of retroactively issuing identity claims for an old run.
 
+MIDI summaries also bind every retained per-stem observation by relative path
+and SHA-256, recheck its identity and execution fields, and require each
+candidate representative to match the corresponding donor member. Older
+summaries without those bindings do not satisfy the strengthened gate; rerun
+the private workflow rather than adding unsupported claims to old evidence.
+The MIDI pre-upload audit rejects raw IT/audio payloads as well as MIDI/ZIP
+inputs, including renamed files with recognized headers.
+
+Historical donor validation checks the declared workflow revision and retained
+`itmodule2.c` bytes against the committed blob at that revision (not a dirty
+worktree copy). The retained probe hash and ELF
+file-type check establish artifact consistency only: this lane does not yet
+independently attest that the donor executable was rebuilt from those sources.
+A self-consistent substituted ELF cannot be excluded by these checks alone.
+That remaining build-provenance boundary must not be described as closed.
+
 `COMPONENTS_REVALIDATED` means summary integrity under those existing contracts.
 It is narrower than an independent execution replay or a new original-reference
 behavioral verdict. Missing artifacts stay `PENDING_PRIVATE_DISPATCH`; malformed
