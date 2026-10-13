@@ -1222,11 +1222,17 @@ def audit_public_tree(root: pathlib.Path) -> None:
         if not path.is_file():
             continue
         relative = path.relative_to(root).as_posix()
-        if path.suffix.lower() in {".mid", ".midi", ".zip"}:
+        if path.suffix.lower() in {".mid", ".midi", ".zip", ".it", ".wav"}:
             leaks.append(relative)
             continue
         data = path.read_bytes()
         prefix = data[:4]
+        if prefix == b"IMPM":
+            leaks.append(relative)
+            continue
+        if prefix in {b"RIFF", b"RIFX", b"RF64"} and data[8:12] == b"WAVE":
+            leaks.append(relative)
+            continue
         if contains_structural_smf(data):
             leaks.append(relative)
             continue
@@ -1821,11 +1827,19 @@ def donor_summary(
             render_sha = obs.get("render_sha256")
             if not isinstance(render_sha, str) or len(render_sha) != 64:
                 die(f"{stem['stem_id']}: donor render SHA-256 is invalid")
+            try:
+                observation_name = path.resolve().relative_to(output.parent.resolve()).as_posix()
+            except ValueError:
+                die(f"{stem['stem_id']}: observation must be retained inside the donor artifact")
+            obs["_observation"] = observation_name
+            obs["_observation_sha256"] = sha256_file(path)
             observations.append(obs)
         set_spec = manifest_by_name[set_info["name"]]
         stem_records = [
             {
                 "stem_id": item["stem_id"],
+                "observation": item["_observation"],
+                "observation_sha256": item["_observation_sha256"],
                 "source_relative_name": item["source_relative_name"],
                 "source_sha256": item["source_sha256"],
                 "source_size_bytes": item["source_size_bytes"],
@@ -1860,6 +1874,12 @@ def donor_summary(
                 ],
                 "tempo_map_digest_fnv64": item["tempo_map_digest_fnv64"],
                 "import_event_digest_fnv64": item["import_event_digest_fnv64"],
+                "imported_notes": item["imported_notes"],
+                "projection_notes": item["projection_notes"],
+                "projection_beats": item["projection_beats"],
+                "render_frames": item["render_frames"],
+                "render_peak": item["render_peak"],
+                "render_size_bytes": item["render_size_bytes"],
                 "render_sha256": item["render_sha256"],
             }
             for item in observations
@@ -1924,19 +1944,26 @@ def corpus_summary(
         relative_name: Any,
         expected_sha: Any,
         label: str,
-    ) -> None:
-        if not isinstance(relative_name, str) or not relative_name:
+    ) -> pathlib.Path:
+        if not isinstance(relative_name, str) or not relative_name or "\\" in relative_name:
             die(f"{label} support path is missing")
         relative = pathlib.PurePosixPath(relative_name)
         if relative.is_absolute() or ".." in relative.parts:
             die(f"{label} support path escapes its artifact root")
         path = receipt_path.parent / pathlib.Path(*relative.parts)
+        if (
+            not path.resolve().is_relative_to(receipt_path.parent.resolve())
+            or any((receipt_path.parent / pathlib.Path(*relative.parts[:index])).is_symlink()
+                   for index in range(1, len(relative.parts) + 1))
+        ):
+            die(f"{label} support path escapes or links outside its artifact contract")
         if not path.is_file():
             die(f"{label} support file is missing: {relative_name}")
         if not isinstance(expected_sha, str) or len(expected_sha) != 64:
             die(f"{label} support SHA-256 is invalid")
         if sha256_file(path) != expected_sha.lower():
             die(f"{label} support file hash mismatch: {relative_name}")
+        return path
 
     current_revision = repository_commit()
     canonical_donor_source_sha = sha256_file(DONOR_SOURCE)
@@ -2028,7 +2055,7 @@ def corpus_summary(
                 or not isinstance(relative_name, str)
                 or not isinstance(source_sha, str)
                 or len(source_sha) != 64
-                or not isinstance(source_size, int)
+                or type(source_size) is not int
                 or source_size <= 0
                 or not isinstance(analysis_sha, str)
                 or len(analysis_sha) != 64
@@ -2163,6 +2190,51 @@ def corpus_summary(
             die(f"donor {name} tick-zero tempo total differs from source aggregate")
         if sorted(observed_channels) != item["source_aggregate"].get("channels"):
             die(f"donor {name} imported MIDI channel union differs from source analysis")
+        for record in stem_records:
+            observation_path = require_support(
+                donor_path, record.get("observation"), record.get("observation_sha256"),
+                f"donor {record['stem_id']} observation",
+            )
+            observation = load_json(observation_path)
+            required = {
+                "schema_version": 1, "phase": "6C", "contract": DONOR_CONTRACT,
+                "evidence_role": "cpsycle-donor-observation", "set_name": name,
+                "source_revision": current_revision, "load_result": "accepted",
+                "machines_before_projection": 0, "non_silent_projection": True,
+                "projection_kind": "deterministic-sampler", "projection_beats": 16,
+                "private_input_required": True,
+                "fixture_redistributed": False, "parity_status": "UNKNOWN",
+            }
+            for field, expected in required.items():
+                if type(observation.get(field)) is not type(expected) or observation[field] != expected:
+                    die(f"donor {record['stem_id']} observation {field} is invalid")
+            # Compare the retained producer receipt with its summary projection.
+            # Raw private SMF/audio bytes are deliberately not replayed here.
+            for field in (
+                "stem_id", "source_relative_name", "source_sha256", "source_size_bytes",
+                "source_analysis_sha256", "midi_channel_mask", "release_channel_mask",
+                "releases", "note_event_digest_fnv64", "midi_cc", "midi_cc_digest_fnv64",
+                "song_bpm", "tempo_commands", "tempo_map_digest_fnv64",
+                "import_event_digest_fnv64", "render_sha256",
+            ):
+                if type(observation.get(field)) is not type(record[field]) or observation[field] != record[field]:
+                    die(f"donor {record['stem_id']} observation {field} differs from its summary")
+            for field in ("imported_notes", "projection_notes", "render_frames", "render_peak", "render_size_bytes"):
+                if type(record.get(field)) is not int or record[field] <= 0:
+                    die(f"donor {record['stem_id']} observation summary {field} is invalid")
+                if type(observation.get(field)) is not int or observation[field] <= 0:
+                    die(f"donor {record['stem_id']} observation {field} is invalid")
+                if observation[field] != record[field]:
+                    die(f"donor {record['stem_id']} observation {field} differs from its summary")
+            if type(record.get("projection_beats")) is not int or record["projection_beats"] != 16:
+                die(f"donor {record['stem_id']} observation summary projection_beats is invalid")
+            output_sha = observation.get("probe_output_sha256")
+            if not isinstance(output_sha, str) or len(output_sha) != 64:
+                die(f"donor {record['stem_id']} observation probe-output SHA-256 is invalid")
+            try:
+                int(output_sha, 16)
+            except ValueError:
+                die(f"donor {record['stem_id']} observation probe-output SHA-256 is invalid")
 
     require_support(
         donor_path,
@@ -2260,10 +2332,20 @@ def corpus_summary(
             or not rep_id.endswith("-" + rep_sha[:12])
             or not isinstance(rep_name, str)
             or not rep_name
-            or not isinstance(rep_size, int)
+            or type(rep_size) is not int
             or rep_size <= 0
         ):
             die(f"candidate {item.get('set_name')} representative identity is incomplete")
+        donor_set = next(entry for entry in donor["sets"] if entry["name"] == set_name)
+        matches = [
+            record for record in donor_set["stems"]
+            if record["stem_id"] == rep_id
+            and record["source_relative_name"] == rep_name
+            and record["source_sha256"] == rep_sha
+            and record["source_size_bytes"] == rep_size
+        ]
+        if len(matches) != 1:
+            die(f"candidate {set_name} representative does not match one donor corpus member")
         if not isinstance(raw_sha, str) or len(raw_sha) != 64:
             die(f"candidate {item.get('set_name')} raw-output SHA-256 is invalid")
         try:

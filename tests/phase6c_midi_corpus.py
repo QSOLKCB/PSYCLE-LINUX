@@ -199,6 +199,30 @@ with tempfile.TemporaryDirectory() as temporary:
     helper.audit_public_tree(public)
 
 with tempfile.TemporaryDirectory() as temporary:
+    public = Path(temporary)
+    # Inert extension/header markers only; no private music or audio is used.
+    for name, payload in (
+        ("render.wav", b"project-owned marker"),
+        ("render.WAV", b"project-owned marker"),
+        ("module.it", b"project-owned marker"),
+        ("renamed-module.log", b"IMPMproject-owned marker"),
+        ("renamed-riff.log", b"RIFF\x04\x00\x00\x00WAVE"),
+        ("renamed-rifx.log", b"RIFX\x00\x00\x00\x04WAVE"),
+        ("renamed-rf64.log", b"RF64\xff\xff\xff\xffWAVE"),
+    ):
+        path = public / name
+        path.write_bytes(payload)
+        try:
+            helper.audit_public_tree(public)
+        except SystemExit as exc:
+            assert "raw corpus bytes" in str(exc)
+        else:
+            raise AssertionError(f"raw audio marker {name} must fail pre-upload audit")
+        path.unlink()
+    (public / "notes.txt").write_bytes(b"ordinary text RIFF WAVE is not an audio header")
+    helper.audit_public_tree(public)
+
+with tempfile.TemporaryDirectory() as temporary:
     fixtures = Path(temporary)
     helper.write_regression_fixtures(fixtures)
     zero = helper.parse_smf(fixtures / "zero-duration.mid")
@@ -615,6 +639,8 @@ with tempfile.TemporaryDirectory() as temporary:
     candidate_dir = root / "candidate"
     donor_dir.mkdir()
     candidate_dir.mkdir()
+    observations_dir = donor_dir / "observations"
+    observations_dir.mkdir()
     donor_source = donor_dir / "midiloader.c"
     donor_probe = donor_dir / "phase6c-midi-corpus-probe"
     candidate_player = candidate_dir / "candidate-psycle-player"
@@ -705,10 +731,38 @@ with tempfile.TemporaryDirectory() as temporary:
                 "import_event_digest_fnv64": (
                     f"{index + 1:016x}"[-16:]
                 ),
+                "imported_notes": 1, "projection_notes": 1, "projection_beats": 16,
+                "render_frames": 1, "render_peak": 1, "render_size_bytes": 46,
                 "render_sha256": hashlib.sha256(
                     f"render:{name}:{index}".encode()
                 ).hexdigest(),
             })
+            record = stem_records[-1]
+            observation = {
+                key: value for key, value in record.items()
+                if key in {
+                    "stem_id", "source_relative_name", "source_sha256", "source_size_bytes",
+                    "source_analysis_sha256", "midi_channel_mask", "release_channel_mask",
+                    "releases", "note_event_digest_fnv64", "midi_cc", "midi_cc_digest_fnv64",
+                    "song_bpm", "tempo_commands", "tempo_map_digest_fnv64",
+                    "import_event_digest_fnv64", "render_sha256",
+                    "imported_notes", "projection_notes", "projection_beats",
+                    "render_frames", "render_peak", "render_size_bytes",
+                }
+            }
+            observation.update({
+                "schema_version": 1, "phase": "6C", "contract": helper.DONOR_CONTRACT,
+                "evidence_role": "cpsycle-donor-observation", "set_name": name,
+                "source_revision": current_revision, "load_result": "accepted",
+                "machines_before_projection": 0, "non_silent_projection": True,
+                "projection_kind": "deterministic-sampler", "private_input_required": True,
+                "fixture_redistributed": False, "parity_status": "UNKNOWN",
+                "probe_output_sha256": "e" * 64,
+            })
+            observation_path = observations_dir / f"{record['stem_id']}.json"
+            helper.write_json(observation_path, observation)
+            record["observation"] = observation_path.relative_to(donor_dir).as_posix()
+            record["observation_sha256"] = sha(observation_path)
         donor_sets.append({
             "name": name,
             "slug": helper.slug(name),
@@ -725,12 +779,10 @@ with tempfile.TemporaryDirectory() as temporary:
             "set_name": name,
             "archive": set_spec["archive"],
             "archive_sha256": set_spec["sha256"],
-            "representative_stem_id": (
-                f"{helper.slug(name)}-00-" + ("b" * 12)
-            ),
-            "representative_relative_name": "00.mid",
-            "representative_size_bytes": 32,
-            "representative_sha256": "b" * 64,
+            "representative_stem_id": stem_records[0]["stem_id"],
+            "representative_relative_name": stem_records[0]["source_relative_name"],
+            "representative_size_bytes": stem_records[0]["source_size_bytes"],
+            "representative_sha256": stem_records[0]["source_sha256"],
             "raw_output_sha256": "c" * 64,
             "direct_midi_load": "rejected",
             "exit_code": 2,
@@ -829,6 +881,96 @@ with tempfile.TemporaryDirectory() as temporary:
     )
     checked = closeout.revalidate_summary(root, "midi-real-world-corpus")
     assert checked["status"] == "COMPONENTS_REVALIDATED"
+
+    def reject_summary(message):
+        try:
+            helper.corpus_summary(donor_path, candidate_path, root / "negative-summary.json")
+        except SystemExit as exc:
+            assert message in str(exc), str(exc)
+        else:
+            raise AssertionError(f"expected summary rejection: {message}")
+
+    first_record = donor["sets"][0]["stems"][0]
+    observation_path = donor_dir / first_record["observation"]
+    original_observation_bytes = observation_path.read_bytes()
+    observation_path.unlink()
+    reject_summary("support file is missing")
+    try:
+        closeout.revalidate_summary(root, "midi-real-world-corpus")
+    except SystemExit as exc:
+        assert "observation support file is missing" in str(exc), str(exc)
+    else:
+        raise AssertionError("closeout must reject a missing retained observation")
+    observation_path.write_text('{"load_result":"rejected"}')
+    reject_summary("support file hash mismatch")
+    observation_path.write_bytes(original_observation_bytes)
+
+    # Even an updated hash cannot admit a conflicting receipt or unbound run.
+    for field, bad in (
+        ("schema_version", True), ("contract", "wrong-contract"),
+        ("evidence_role", "candidate-observation"), ("set_name", "wrong-set"),
+        ("source_revision", "0" * 40), ("load_result", "rejected"),
+        ("non_silent_projection", False), ("projection_kind", "different-sampler"),
+        ("private_input_required", False), ("fixture_redistributed", True),
+        ("parity_status", "PASS"), ("machines_before_projection", True),
+        ("stem_id", "wrong-stem"), ("source_sha256", "0" * 64),
+        ("source_relative_name", "wrong.mid"), ("source_size_bytes", True),
+        ("source_analysis_sha256", "0" * 64), ("render_sha256", "0" * 64),
+        ("import_event_digest_fnv64", "0" * 16), ("releases", 0),
+        ("projection_notes", 0), ("render_frames", 0), ("render_peak", True),
+        ("render_size_bytes", 0), ("probe_output_sha256", "g" * 64),
+        ("projection_beats", 17), ("imported_notes", 2), ("projection_notes", 2),
+        ("render_frames", 2), ("render_peak", 2), ("render_size_bytes", 48),
+    ):
+        changed = json.loads(original_observation_bytes)
+        changed[field] = bad
+        helper.write_json(observation_path, changed)
+        changed_donor = json.loads(json.dumps(donor))
+        changed_donor["sets"][0]["stems"][0]["observation_sha256"] = sha(observation_path)
+        helper.write_json(donor_path, changed_donor)
+        reject_summary("observation")
+    observation_path.write_bytes(original_observation_bytes)
+
+    for field, value in (
+        ("observation", None), ("observation_sha256", None),
+        ("observation", "../outside.json"), ("observation", "/outside.json"),
+        ("observation", "..\\outside.json"),
+        ("imported_notes", None), ("projection_notes", 2),
+        ("projection_beats", 17), ("render_frames", 2),
+        ("render_peak", 2), ("render_size_bytes", 48),
+    ):
+        changed_donor = json.loads(json.dumps(donor))
+        if value is None:
+            del changed_donor["sets"][0]["stems"][0][field]
+        else:
+            changed_donor["sets"][0]["stems"][0][field] = value
+        helper.write_json(donor_path, changed_donor)
+        reject_summary("observation")
+    helper.write_json(donor_path, donor)
+
+    linked_observation = donor_dir / "linked-observation.json"
+    linked_observation.symlink_to(observation_path)
+    changed_donor = json.loads(json.dumps(donor))
+    changed_donor["sets"][0]["stems"][0]["observation"] = linked_observation.name
+    helper.write_json(donor_path, changed_donor)
+    reject_summary("support path escapes or links")
+    linked_observation.unlink()
+    helper.write_json(donor_path, donor)
+
+    # A self-consistent representative identity must still belong to this set.
+    for updates in (
+        {"representative_relative_name": "different.mid"},
+        {"representative_size_bytes": 999},
+        {"representative_stem_id": first_record["stem_id"].replace("-00-", "-99-")},
+        {"representative_sha256": "b" * 64,
+         "representative_stem_id": helper.slug(helper.PROGRESSION[0]) + "-00-" + "b" * 12},
+    ):
+        changed_candidate = json.loads(json.dumps(candidate))
+        changed_candidate["sets"][0].update(updates)
+        helper.write_json(candidate_path, changed_candidate)
+        reject_summary("representative does not match one donor corpus member")
+    helper.write_json(candidate_path, candidate)
+    assert closeout.revalidate_summary(root, "midi-real-world-corpus")["status"] == "COMPONENTS_REVALIDATED"
 
     candidate_attestation_path.unlink()
     try:

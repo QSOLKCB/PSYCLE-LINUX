@@ -14,6 +14,7 @@ from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "phase6c/evidence/legacy-module-import/historical-sickmaate.json"
+DONOR_SOURCE = ROOT / "cpsycle/audio/src/itmodule2.c"
 EXPECTED_CONTRACT = "legacy-impulse-tracker-import-reference"
 SUMMARY_CONTRACT = "legacy-impulse-tracker-three-way-summary"
 EXPECTED_REFERENCE_BUILD = "Psycle 1.12.0 x86"
@@ -313,6 +314,33 @@ def require_original_reference_identity(original: dict[str, Any]) -> None:
         die("original historical receipt is bound to the wrong Psycle executable SHA-256")
 
 
+def validate_donor_source_identity(donor_path: pathlib.Path, donor: dict[str, Any]) -> None:
+    """Bind retained source to this checkout; do not attest a donor rebuild."""
+    try:
+        revision = subprocess.check_output(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True
+        ).strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        die(f"cannot resolve donor repository revision: {exc}")
+    if donor.get("source_revision") != revision:
+        die("historical donor source revision differs from the checked-out workflow head")
+    try:
+        source = subprocess.check_output(
+            ["git", "-C", str(ROOT), "show",
+             f"{revision}:{DONOR_SOURCE.relative_to(ROOT).as_posix()}"],
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        die(f"cannot read committed historical donor source: {exc}")
+    if donor.get("source_file_sha256") != sha256_bytes(source):
+        die("retained historical donor source does not match committed itmodule2.c")
+    probe = donor_path.parent / donor["probe_executable"]
+    with probe.open("rb") as handle:
+        if handle.read(4) != b"\x7fELF":
+            die("historical donor probe artifact is not an ELF executable")
+    # The support-file check binds the retained probe bytes to its receipt. ELF
+    # magic is only a file-type check, not proof of build origin or execution.
+
+
 def validate_summary_components(
     *,
     source: dict[str, Any],
@@ -353,6 +381,7 @@ def validate_summary_components(
         donor.get("probe_executable_sha256"),
         "donor probe",
     )
+    validate_donor_source_identity(donor_path, donor)
     require_hash(donor.get("raw_output_sha256"), "donor raw_output_sha256")
 
     require_common_receipt(
