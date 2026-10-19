@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "contract": "sampler-ps1-static-pitch-pilot",
+  "evidence_kind": "direct-objdump-static-observation",
+  "observation_date": "2026-10-19",
+  "parity_status": "UNKNOWN",
+  "classification_allowed": false,
+  "original_runtime_observed": false,
+  "target_executed": false,
+  "installer_executed": false,
+  "rea_executed": false,
+  "source_function_binding": "source-correspondence inference; no symbols or PDB",
+  "original": {
+    "installer_filename": "PsycleInstallerx86-1.12.0.exe",
+    "installer_size": 9322919,
+    "installer_sha256": "f42c7f542011804346dd924f011684ac40fd7c62c1b25c5de72776f88ea86769",
+    "executable_name": "psycle.exe",
+    "executable_size": 5400576,
+    "executable_sha256_before": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+    "executable_sha256_after": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+    "image_base": "0x400000",
+    "format": "pei-i386"
+  },
+  "extractor": {
+    "package": "innoextract",
+    "version": "1.9-0.1+b1",
+    "architecture": "amd64",
+    "package_url": "https://deb.debian.org/debian/pool/main/i/innoextract/innoextract_1.9-0.1+b1_amd64.deb",
+    "package_sha256": "01894eb3ff9b6ab1ff6d12010459fafb5edb9de69c4cc73eb921952825657dcc",
+    "executable_sha256": "03516c95e430069ea619d093478b5d9f5492e0781a54b8dd046a395636bc272c",
+    "method": "local dpkg-deb extraction, no package maintainer scripts",
+    "target_selection": "app/psycle.exe only"
+  },
+  "provider": {
+    "name": "GNU objdump",
+    "version": "GNU Binutils for Debian 2.44",
+    "executable_sha256": "96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f",
+    "host": "Debian 13 amd64"
+  },
+  "raw_evidence": {
+    "committed": false,
+    "reason": "binary-derived outputs retained locally; publication provenance not established",
+    "reproduction": "phase6c/REA_SAMPLER_STATIC_RESULT.md",
+    "outputs": [
+      {
+        "name": "entry-context.disasm",
+        "argv": [
+          "objdump",
+          "-d",
+          "-M",
+          "intel",
+          "--start-address=0x4b3340",
+          "--stop-address=0x4b33db",
+          "/tmp/psycle-static-pilot/extracted/app/psycle.exe"
+        ],
+        "exit_status": 0,
+        "stdout_sha256": "abaecd4bd361ca1edaeb43f86fb518c3754509110b4875178bf997516841c6b4",
+        "va_start": "0x4b3340",
+        "va_end_exclusive": "0x4b33db",
+        "rva_start": "0xb3340",
+        "file_offset_start": "0xb2740",
+        "range_bytes_sha256": "e19814d3304e44e8ba75754794ce72ef7bc64e982777a533a1544a5050521680"
+      },
+      {
+        "name": "ordinary-pitch.disasm",
+        "argv": [
+          "objdump",
+          "-d",
+          "-M",
+          "intel",
+          "--start-address=0x4b3808",
+          "--stop-address=0x4b3933",
+          "/tmp/psycle-static-pilot/extracted/app/psycle.exe"
+        ],
+        "exit_status": 0,
+        "stdout_sha256": "a1c26755ff6ebae8a351b59c845223d65d10a598da9777db85e436f20677436e",
+        "va_start": "0x4b3808",
+        "va_end_exclusive": "0x4b3933",
+        "rva_start": "0xb3808",
+        "file_offset_start": "0xb2c08",
+        "range_bytes_sha256": "83483cfe12adaf76184c93227b6857904e99fb4e0e92179b2d7d03bcb643339e"
+      },
+      {
+        "name": "caller-context.disasm",
+        "argv": [
+          "objdump",
+          "-d",
+          "-M",
+          "intel",
+          "--start-address=0x4b3ed0",
+          "--stop-address=0x4b3f2b",
+          "/tmp/psycle-static-pilot/extracted/app/psycle.exe"
+        ],
+        "exit_status": 0,
+        "stdout_sha256": "deac0ce7ef77823fa1dfd0d36b87b546d4f71b7278da5f1def05285e23210c6b",
+        "va_start": "0x4b3ed0",
+        "va_end_exclusive": "0x4b3f2b",
+        "rva_start": "0xb3ed0",
+        "file_offset_start": "0xb32d0",
+        "range_bytes_sha256": "e4efdc6ea716111031e363c75fdeb30bddd0e5adc08137e2333d8f7158bf4af1"
+      },
+      {
+        "name": "pow-thunk.disasm",
+        "argv": [
+          "objdump",
+          "-d",
+          "-M",
+          "intel",
+          "--start-address=0x588528",
+          "--stop-address=0x58852e",
+          "/tmp/psycle-static-pilot/extracted/app/psycle.exe"
+        ],
+        "exit_status": 0,
+        "stdout_sha256": "b5b62b3a198f566e680148d272d02d2c5d324c05a46e429eb9a33970c36303e0",
+        "va_start": "0x588528",
+        "va_end_exclusive": "0x58852e",
+        "rva_start": "0x188528",
+        "file_offset_start": "0x187928",
+        "range_bytes_sha256": "495bb0fa7aaad2cf95d1e6d97aeabcf4b764d5ceb52740dc8e5c33d0bc0613a0"
+      },
+      {
+        "name": "conversion-helper.disasm",
+        "argv": [
+          "objdump",
+          "-d",
+          "-M",
+          "intel",
+          "--start-address=0x588586",
+          "--stop-address=0x5885fb",
+          "/tmp/psycle-static-pilot/extracted/app/psycle.exe"
+        ],
+        "exit_status": 0,
+        "stdout_sha256": "02d63ee3da4bb4bc2e13bf7178c4671f76048308e8e2b6d0b8d21a4d13edec19",
+        "va_start": "0x588586",
+        "va_end_exclusive": "0x5885fb",
+        "rva_start": "0x188586",
+        "file_offset_start": "0x187986",
+        "range_bytes_sha256": "5333b186c02836974c6f792303aeb2c00d856316b93ccbbe65f51def6ae661b4"
+      }
+    ]
+  },
+  "constants": [
+    {
+      "va": "0x5ca5e8",
+      "file_offset": "0x1c99e8",
+      "format": "binary32",
+      "value": 0.009999999776482582
+    },
+    {
+      "va": "0x5ca598",
+      "file_offset": "0x1c9998",
+      "format": "binary32",
+      "value": 0.0833333358168602
+    },
+    {
+      "va": "0x5ca498",
+      "file_offset": "0x1c9898",
+      "format": "binary64",
+      "value": 2.0
+    },
+    {
+      "va": "0x5ca388",
+      "file_offset": "0x1c9788",
+      "format": "binary32",
+      "value": 4294967296.0
+    },
+    {
+      "va": "0x5ca2c0",
+      "file_offset": "0x1c96c0",
+      "format": "binary64",
+      "value": 4294967296.0
+    }
+  ],
+  "candidate": {
+    "source_baseline": "00cd95562b78303b82e17f62fff4b58622f7c0e78c0b4dd850d448082a53893a",
+    "sampler_blob": "9edc00fb9013fbfde0bb0977398b934265b9c463",
+    "observation_kind": "source-only",
+    "rate_basis": "44100/output_rate"
+  },
+  "original_source": {
+    "repository": "jpaquim/psycle",
+    "commit": "7ac6d2c3553e2ee8dda55814d8e689919c345478",
+    "Sampler.cpp": "6cc0bd7328d01131c3d41b68f4e5d4189959e364",
+    "XMInstrument.hpp": "67bc801d4df35a05176e3372c3824ff3067d09fd",
+    "Player.hpp": "51bf11c360c52437e421dd39a00ff6ea23507e58"
+  },
+  "observed_rate_operands": {
+    "numerator": "unsigned 32-bit field at wave-like object +0x44",
+    "denominator": "signed 32-bit field at object from global 0x99AA78 +0xCC0"
+  },
+  "unknowns": [
+    "debug-symbol/build-to-source binding",
+    "actual runtime reachability and field values",
+    "x87 precision and control state",
+    "external math runtime behavior",
+    "conversion-helper exact rounding behavior",
+    "downstream resampler/audible output",
+    "paired runtime parity"
+  ]
+}
