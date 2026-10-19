@@ -6,17 +6,19 @@ On 19 October 2026 the maintainer deferred the existing implementation roadmap
 for this bounded investigation. Its purpose is to reduce one original-binary
 uncertainty before deciding the next compatibility step toward v1.0.0.
 
-**Current result: protocol prepared; original binary inspection NOT RUN.**
-The official installer was subsequently downloaded as data and its 9,322,919-byte
-size and SHA-256 were verified against the pin below. Static string inspection
-identifies Inno Setup 5.3.10 (Unicode). The installed `psycle.exe` has not been
-extracted: no suitable static Inno extractor is currently available. No installer
-or target was executed. No address,
-disassembly, recovered formula, provider result or runtime parity is asserted
-by this document. The broad Sampler PS1 row and scoped pitch witness remain
-`UNKNOWN`. The existing [source contract](evidence/sampler-ps1/source-contract.json)
-and [hosted pitch observation](evidence/sampler-ps1/pitch-hosted/observation.json)
-are retained, not replaced by this plan.
+**Current result: a bounded direct-objdump observation is recorded in
+[the static result](REA_SAMPLER_STATIC_RESULT.md).** The official installer and
+extracted executable both match the frozen hashes. With maintainer approval,
+Debian innoextract was unpacked locally and used only for static extraction.
+Neither the Windows installer nor Psycle was executed; REA itself was not run.
+The observed arithmetic and source-correspondence assumptions are recorded
+separately from unresolved runtime/precision questions. Independent review and
+fresh exact-head Codex review are required before pilot closeout.
+
+The broad Sampler PS1 row and scoped pitch witness remain `UNKNOWN`. The existing
+[source contract](evidence/sampler-ps1/source-contract.json) and
+[hosted pitch observation](evidence/sampler-ps1/pitch-hosted/observation.json)
+are retained, not replaced by this static observation.
 
 ## One question, one normal-playback path
 
@@ -63,9 +65,10 @@ formula/limitations. Do not change historical fixtures, manifests or verdicts.
 
 ## Provider readiness and bounded static procedure
 
-The preparation environment has GNU objdump 2.44 with advertised `pei-i386`
-coverage. REA, Ghidra and Rizin were not found on PATH. Provider capability output
-is not proof of successful analysis of this artifact. Nothing was installed.
+The preparation environment has GNU objdump 2.44 with `pei-i386` coverage.
+The direct pass and its tool/extraction pins are recorded in the static result.
+REA, Ghidra and Rizin were not found on PATH and were not installed. Provider
+capability output alone is not proof of successful analysis of an artifact.
 
 REA is the proposed investigation interface, not an authority or sandbox.
 The documentation reviewed is from [morluto/rea](https://github.com/morluto/rea),
