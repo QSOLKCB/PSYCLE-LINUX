@@ -35,7 +35,13 @@
     "name": "GNU objdump",
     "version": "GNU Binutils for Debian 2.44",
     "executable_sha256": "96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f",
-    "host": "Debian 13 amd64"
+    "host": "Debian 13 amd64",
+    "invoked_path": "/usr/bin/objdump",
+    "resolved_path": "/usr/bin/x86_64-linux-gnu-objdump",
+    "environment_overrides": {
+      "LC_ALL": "C"
+    },
+    "environment_limitations": "remaining inherited environment not captured; no claim of hermetic execution"
   },
   "raw_evidence": {
     "committed": false,
@@ -45,7 +51,7 @@
       {
         "name": "entry-context.disasm",
         "argv": [
-          "objdump",
+          "/usr/bin/objdump",
           "-d",
           "-M",
           "intel",
@@ -59,12 +65,21 @@
         "va_end_exclusive": "0x4b33db",
         "rva_start": "0xb3340",
         "file_offset_start": "0xb2740",
-        "range_bytes_sha256": "e19814d3304e44e8ba75754794ce72ef7bc64e982777a533a1544a5050521680"
+        "range_bytes_sha256": "e19814d3304e44e8ba75754794ce72ef7bc64e982777a533a1544a5050521680",
+        "provider_sha256_before": "96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f",
+        "input_sha256_before": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+        "stderr_name": "entry-context.disasm.stderr",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_size_bytes": 0,
+        "stdout_size_bytes": 2862,
+        "provider_sha256_after": "96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f",
+        "input_sha256_after": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+        "capture_complete": true
       },
       {
         "name": "ordinary-pitch.disasm",
         "argv": [
-          "objdump",
+          "/usr/bin/objdump",
           "-d",
           "-M",
           "intel",
@@ -78,12 +93,21 @@
         "va_end_exclusive": "0x4b3933",
         "rva_start": "0xb3808",
         "file_offset_start": "0xb2c08",
-        "range_bytes_sha256": "83483cfe12adaf76184c93227b6857904e99fb4e0e92179b2d7d03bcb643339e"
+        "range_bytes_sha256": "83483cfe12adaf76184c93227b6857904e99fb4e0e92179b2d7d03bcb643339e",
+        "provider_sha256_before": "96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f",
+        "input_sha256_before": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+        "stderr_name": "ordinary-pitch.disasm.stderr",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_size_bytes": 0,
+        "stdout_size_bytes": 4951,
+        "provider_sha256_after": "96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f",
+        "input_sha256_after": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+        "capture_complete": true
       },
       {
         "name": "caller-context.disasm",
         "argv": [
-          "objdump",
+          "/usr/bin/objdump",
           "-d",
           "-M",
           "intel",
@@ -97,12 +121,21 @@
         "va_end_exclusive": "0x4b3f2b",
         "rva_start": "0xb3ed0",
         "file_offset_start": "0xb32d0",
-        "range_bytes_sha256": "e4efdc6ea716111031e363c75fdeb30bddd0e5adc08137e2333d8f7158bf4af1"
+        "range_bytes_sha256": "e4efdc6ea716111031e363c75fdeb30bddd0e5adc08137e2333d8f7158bf4af1",
+        "provider_sha256_before": "96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f",
+        "input_sha256_before": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+        "stderr_name": "caller-context.disasm.stderr",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_size_bytes": 0,
+        "stdout_size_bytes": 1709,
+        "provider_sha256_after": "96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f",
+        "input_sha256_after": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+        "capture_complete": true
       },
       {
         "name": "pow-thunk.disasm",
         "argv": [
-          "objdump",
+          "/usr/bin/objdump",
           "-d",
           "-M",
           "intel",
@@ -116,12 +149,21 @@
         "va_end_exclusive": "0x58852e",
         "rva_start": "0x188528",
         "file_offset_start": "0x187928",
-        "range_bytes_sha256": "495bb0fa7aaad2cf95d1e6d97aeabcf4b764d5ceb52740dc8e5c33d0bc0613a0"
+        "range_bytes_sha256": "495bb0fa7aaad2cf95d1e6d97aeabcf4b764d5ceb52740dc8e5c33d0bc0613a0",
+        "provider_sha256_before": "96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f",
+        "input_sha256_before": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+        "stderr_name": "pow-thunk.disasm.stderr",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_size_bytes": 0,
+        "stdout_size_bytes": 198,
+        "provider_sha256_after": "96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f",
+        "input_sha256_after": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+        "capture_complete": true
       },
       {
         "name": "conversion-helper.disasm",
         "argv": [
-          "objdump",
+          "/usr/bin/objdump",
           "-d",
           "-M",
           "intel",
@@ -135,7 +177,16 @@
         "va_end_exclusive": "0x5885fb",
         "rva_start": "0x188586",
         "file_offset_start": "0x187986",
-        "range_bytes_sha256": "5333b186c02836974c6f792303aeb2c00d856316b93ccbbe65f51def6ae661b4"
+        "range_bytes_sha256": "5333b186c02836974c6f792303aeb2c00d856316b93ccbbe65f51def6ae661b4",
+        "provider_sha256_before": "96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f",
+        "input_sha256_before": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+        "stderr_name": "conversion-helper.disasm.stderr",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_size_bytes": 0,
+        "stdout_size_bytes": 2082,
+        "provider_sha256_after": "96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f",
+        "input_sha256_after": "fdb130d2465d5b4a4acfbfe0bfb2368926380fe07a383c4774f0951591b6d6b6",
+        "capture_complete": true
       }
     ]
   },
@@ -196,5 +247,25 @@
     "conversion-helper exact rounding behavior",
     "downstream resampler/audible output",
     "paired runtime parity"
-  ]
+  ],
+  "scope": {
+    "kind": "bounded static ordinary-note arithmetic; no runtime observation",
+    "includes": [
+      "source-corresponding ordinary note with empty command vector",
+      "non-synchronized-loop branch",
+      "zero coarse and fine tuning for the proposed comparison",
+      "per-wave rate divided by player output-rate factor"
+    ],
+    "excludes": [
+      "portamento/retrigger or other tracker effects",
+      "synchronized-loop branch behavior",
+      "fine-tune compatibility outside zero tuning",
+      "XMSampler",
+      "malformed inputs",
+      "runtime reachability or actual loaded values",
+      "downstream resampler or audible output",
+      "broad Sampler parity"
+    ],
+    "source_labels": "inferred by source correspondence; machine field offsets and instruction operations observed statically"
+  }
 }
