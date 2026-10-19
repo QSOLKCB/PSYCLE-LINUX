@@ -18,8 +18,8 @@ normal Sampler PS1 pitch/sample-rate calculation in the pinned original Psycle
 [pilot protocol](phase6c/REA_SAMPLER_PILOT.md).
 
 The implementation/evidence status and next-milestone descriptions below are
-the retained checkpoint and deferred sequence. No binary-analysis result or new
-parity verdict is claimed. A proper v1.0.0 still requires the complete release
+the retained checkpoint and deferred sequence. A [bounded direct static result](phase6c/REA_SAMPLER_STATIC_RESULT.md) now records
+source-corresponding pitch arithmetic; no runtime parity verdict is claimed. A proper v1.0.0 still requires the complete release
 acceptance areas in Phase 11, including original-reference runtime evidence.
 
 ## Important Architecture Clarification
