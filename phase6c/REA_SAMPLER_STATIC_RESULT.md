@@ -43,7 +43,13 @@ calculation was reached or that the pitch witness has a new runtime verdict.
   observed version: innoextract 1.9.
 - Provider: installed GNU objdump (GNU Binutils for Debian) 2.44, SHA-256
   `96afb8521834982d0e711b5d6e9785252bf82129fb0106b93a6bd54d83fae11f`,
-  on Debian 13 amd64. No provider plugins, debugger, target or installer were run.
+  on Debian 13 amd64. Invoked path `/usr/bin/objdump`, resolved path
+  `/usr/bin/x86_64-linux-gnu-objdump`. The five recorded calls were repeated
+  explicitly through that path with `LC_ALL=C`, before/after provider and input
+  hashes, complete stdout/stderr capture and exit status. All stderr streams were
+  empty; stdout hashes reproduced exactly. Other inherited environment values
+  were not retained, so this is not claimed to be a hermetic run.
+  No provider plugins, debugger, target or installer were run.
 
 The extractor listed the archive and extracted only `app/psycle.exe` as data.
 The Windows installer, target, bundled DLLs and plugins were never executed.
@@ -152,7 +158,7 @@ Verify the extracted executable hash before and after analysis. Record provider
 version/hash, arguments, stdout/stderr, exit status and host. For each bounded
 region in the address table, substitute its start/end values:
 
-    objdump -d -M intel --start-address=0x4b3808 --stop-address=0x4b3933 /tmp/psycle-static-pilot/extracted/app/psycle.exe
+    LC_ALL=C /usr/bin/objdump -d -M intel --start-address=0x4b3808 --stop-address=0x4b3933 /tmp/psycle-static-pilot/extracted/app/psycle.exe
 
 Also inspect headers/imports with `objdump -f -h` and `objdump -p`. Check actual
 PE section mapping before translating addresses, and read constants at the
