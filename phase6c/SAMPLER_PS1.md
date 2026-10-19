@@ -1,5 +1,10 @@
 # Phase 6C — Sampler PS1 Compatibility
 
+> Sequencing update, 19 October 2026: the previously described next/return
+> ladder is deferred by the [roadmap decision](../ROADMAP.md#current-sequencing-decision--19-october-2026).
+> The [bounded static pilot](REA_SAMPLER_PILOT.md) is active; historical evidence,
+> pending observations and classification/closeout gates below remain unchanged.
+
 ## Status
 
 The broad **Sampler PS1 behaviour** row remains **UNKNOWN**.
