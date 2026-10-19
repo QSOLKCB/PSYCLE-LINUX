@@ -1,5 +1,13 @@
 # PSYCLE-LINUX Porting Policy
 
+## Current work sequencing
+
+The [19 October roadmap decision](ROADMAP.md#current-sequencing-decision--19-october-2026)
+defers the previous implementation sequence for the bounded
+[normal-playback static pilot](phase6c/REA_SAMPLER_PILOT.md). References below to
+immediate Phase 6C/6D work describe the retained deferred plan. Source authority,
+provenance, preservation and paired-observation requirements remain unchanged.
+
 ## Purpose
 
 PSYCLE-LINUX is a **compatibility and preservation project**, not a clean-sheet DAW rewrite.
