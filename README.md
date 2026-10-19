@@ -8,6 +8,20 @@ PSYCLE-LINUX exists to bring the workflow and behaviour of the original Psycle M
 
 This project is not a ground-up DAW redesign.
 
+## Current priority — bounded original-Psycle investigation
+
+The previous implementation roadmap is **deferred**, with its history and
+acceptance gates retained. The active work is a small static investigation of
+normal Sampler PS1 pitch/sample-rate calculation in the pinned original Psycle
+1.12.0 x86 binary, compared with the frozen Linux candidate. See the
+[roadmap decision](ROADMAP.md#current-sequencing-decision--19-october-2026) and
+[pilot protocol](phase6c/REA_SAMPLER_PILOT.md).
+
+The implementation/evidence status and next-milestone descriptions below are
+the retained checkpoint and deferred sequence. A [bounded direct static result](phase6c/REA_SAMPLER_STATIC_RESULT.md) now records
+source-corresponding pitch arithmetic; no runtime parity verdict is claimed. A proper v1.0.0 still requires the complete release
+acceptance areas in Phase 11, including original-reference runtime evidence.
+
 ## Important Architecture Clarification
 
 Direct clarification from long-time Psycle maintainer **JosepMa / JAZ** has made the upstream lineage more precise than the project originally understood it.

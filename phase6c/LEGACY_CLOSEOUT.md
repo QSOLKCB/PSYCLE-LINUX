@@ -1,5 +1,10 @@
 # Phase 6C — Legacy-lane closeout
 
+> Sequencing update, 19 October 2026: the previously described next/return
+> ladder is deferred by the [roadmap decision](../ROADMAP.md#current-sequencing-decision--19-october-2026).
+> The [bounded static pilot](REA_SAMPLER_PILOT.md) is active; historical evidence,
+> pending observations and classification/closeout gates below remain unchanged.
+
 The IT/MIDI detour has an **implementation closeout**, recorded in
 [`legacy-closeout.json`](legacy-closeout.json). The repaired donor paths and
 remaining capability/translation boundaries have explicit dispositions and

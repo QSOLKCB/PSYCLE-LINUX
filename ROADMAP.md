@@ -1,5 +1,58 @@
 # PSYCLE-LINUX Roadmap
 
+## Current sequencing decision — 19 October 2026
+
+The maintainer has **deferred the previous implementation roadmap** in favour of
+one bounded, preservation-first investigation toward a proper v1.0.0 stable
+release: statically inspect the ordinary Sampler PS1 pitch/sample-rate
+calculation in the hash-pinned original Psycle 1.12.0 x86 binary, compare it
+with the frozen C++ candidate, and retain reproducible evidence and limitations.
+The active plan and exit criteria are in
+[`phase6c/REA_SAMPLER_PILOT.md`](phase6c/REA_SAMPLER_PILOT.md).
+
+This is a sequencing change, not completion or cancellation of earlier work.
+The phase history, checklists, source baselines, fixtures, matrix verdicts,
+private-observation holds and Phase 7 backlog below are preserved. Their
+references to “current”, “active”, “next” and the legacy-lane return order
+record the deferred plan; this section governs present work. Existing CI and
+preservation checks continue. The pending private IT/MIDI observations are not
+waived, and the pilot does not clear `AWAITING_OBSERVATION_REVIEW`.
+
+Only the normal-playback static pilot is active. It does not authorize a
+malformed-input audit, target execution, broad binary reconstruction, engine
+rewrite, UI expansion, merge or release tag. Static correspondence cannot
+change a compatibility row from `UNKNOWN`. Phase 11's full release acceptance
+areas remain required; finishing this pilot alone cannot establish v1.0.0.
+
+### Byte-exactness baseline — 19 October 2026
+
+Before the static pilot, main commit
+[`634649293b52ff928a89c0c5ada0f457ee10f743`](https://github.com/QSOLKCB/PSYCLE-LINUX/tree/634649293b52ff928a89c0c5ada0f457ee10f743)
+recorded **20 compatibility contracts: 3 scoped PASS, 1 MISSING, 1 DIFFERENT,
+15 UNKNOWN** in the [frozen matrix](https://github.com/QSOLKCB/PSYCLE-LINUX/blob/634649293b52ff928a89c0c5ada0f457ee10f743/phase6c/compatibility-matrix.json).
+The three PASS results cover one PSY2 load, one PSY3 load, and single-sequence
+order `0,2,1,2`; they do not establish byte-identical audio or whole-subsystem
+parity. [Save capability](https://github.com/QSOLKCB/PSYCLE-LINUX/blob/634649293b52ff928a89c0c5ada0f457ee10f743/phase6c/evidence/project-io-serialization-roundtrip/comparison.json)
+was MISSING (candidate save versions 2/3/4 produced no output), and
+[tick timing](https://github.com/QSOLKCB/PSYCLE-LINUX/blob/634649293b52ff928a89c0c5ada0f457ee10f743/phase6c/evidence/sequencer-bpm-lpb-tick/comparison.json)
+was DIFFERENT for the BPM 137 / LPB 8 / TPB 24 fixture.
+
+The [prior pitch witness](https://github.com/QSOLKCB/PSYCLE-LINUX/blob/634649293b52ff928a89c0c5ada0f457ee10f743/phase6c/evidence/sampler-ps1/pitch-hosted/observation.json)
+produced two candidate renders with the same SHA-256
+`0771e8a407b8fc6fe96603b66b75df2591f8e96530626c01367bd126fd8680c1`
+and an 11,025-frame active span. Original Psycle exited during rendering and
+produced no qualifying render pair. This proves candidate repeatability, not
+original-to-candidate byte equality. The retained
+[delayed/retrigger comparison](https://github.com/QSOLKCB/PSYCLE-LINUX/blob/634649293b52ff928a89c0c5ada0f457ee10f743/phase6c/evidence/sequencer-delayed-retrigger-same-witness/observation.json)
+also lacks a qualifying cross-side runtime pair.
+
+No measured “percentage of exact bytes” or reconstructed-function machine-code
+match was established. These contract counts are a scoped evidence inventory,
+not a completion percentage. The [new static result](phase6c/REA_SAMPLER_STATIC_RESULT.md)
+adds verified original-binary custody and a bounded instruction/data-flow
+mapping; it does not improve an engine parity verdict or demonstrate recreated
+machine-code bytes. Original/candidate runtime comparison remains the next gate.
+
 ## Guiding Rule
 
 > **Port Psycle to Linux. Do not reinvent Psycle.**
