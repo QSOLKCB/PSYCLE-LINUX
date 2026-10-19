@@ -7,7 +7,11 @@ for this bounded investigation. Its purpose is to reduce one original-binary
 uncertainty before deciding the next compatibility step toward v1.0.0.
 
 **Current result: protocol prepared; original binary inspection NOT RUN.**
-No original executable is present in the inspected working copy. No address,
+The official installer was subsequently downloaded as data and its 9,322,919-byte
+size and SHA-256 were verified against the pin below. Static string inspection
+identifies Inno Setup 5.3.10 (Unicode). The installed `psycle.exe` has not been
+extracted: no suitable static Inno extractor is currently available. No installer
+or target was executed. No address,
 disassembly, recovered formula, provider result or runtime parity is asserted
 by this document. The broad Sampler PS1 row and scoped pitch witness remain
 `UNKNOWN`. The existing [source contract](evidence/sampler-ps1/source-contract.json)
