@@ -21,6 +21,11 @@ REA itself was neither installed nor executed. The result is a direct-provider
 preparation step under the [pilot protocol](REA_SAMPLER_PILOT.md), not a claim
 that REA recovered the function or that the entire pilot's review gates closed.
 
+Execution statements in this report describe the local static investigation.
+The repository's unchanged hosted regression CI runs independently and includes
+an original-Windows observer. Its activity is not evidence that this static
+calculation was reached or that the pitch witness has a new runtime verdict.
+
 ## Artifact and tool custody
 
 - Official SourceForge installer: 9,322,919 bytes, SHA-256
