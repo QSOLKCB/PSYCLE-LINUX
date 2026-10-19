@@ -1,5 +1,29 @@
 # PSYCLE-LINUX Roadmap
 
+## Current sequencing decision — 19 October 2026
+
+The maintainer has **deferred the previous implementation roadmap** in favour of
+one bounded, preservation-first investigation toward a proper v1.0.0 stable
+release: statically inspect the ordinary Sampler PS1 pitch/sample-rate
+calculation in the hash-pinned original Psycle 1.12.0 x86 binary, compare it
+with the frozen C++ candidate, and retain reproducible evidence and limitations.
+The active plan and exit criteria are in
+[`phase6c/REA_SAMPLER_PILOT.md`](phase6c/REA_SAMPLER_PILOT.md).
+
+This is a sequencing change, not completion or cancellation of earlier work.
+The phase history, checklists, source baselines, fixtures, matrix verdicts,
+private-observation holds and Phase 7 backlog below are preserved. Their
+references to “current”, “active”, “next” and the legacy-lane return order
+record the deferred plan; this section governs present work. Existing CI and
+preservation checks continue. The pending private IT/MIDI observations are not
+waived, and the pilot does not clear `AWAITING_OBSERVATION_REVIEW`.
+
+Only the normal-playback static pilot is active. It does not authorize a
+malformed-input audit, target execution, broad binary reconstruction, engine
+rewrite, UI expansion, merge or release tag. Static correspondence cannot
+change a compatibility row from `UNKNOWN`. Phase 11's full release acceptance
+areas remain required; finishing this pilot alone cannot establish v1.0.0.
+
 ## Guiding Rule
 
 > **Port Psycle to Linux. Do not reinvent Psycle.**
