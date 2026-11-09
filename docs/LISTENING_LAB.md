@@ -49,6 +49,44 @@ The --player option is intentionally explicit so reports can identify the
 actual executable bytes; selecting an executable does not assert that it is
 the frozen Phase 6B build. The GUI hashes both song and player in its report.
 
+## No GUI display / tmux troubleshooting
+
+If the terminal prints `_tkinter.TclError: no display name and no $DISPLAY
+environment variable`, **python3-tk is already installed**; the shell cannot
+reach the desktop display. This commonly happens in SSH, a detached tmux server,
+or a shell launched outside the graphical login session.
+
+Check the environment in the *failing shell*:
+
+~~~sh
+printf 'DISPLAY=%s\n' "$DISPLAY"
+printf 'WAYLAND_DISPLAY=%s\n' "$WAYLAND_DISPLAY"
+printf 'XDG_SESSION_TYPE=%s\n' "$XDG_SESSION_TYPE"
+printf 'TMUX=%s\n' "$TMUX"
+~~~
+
+On a GNOME/Wayland desktop, Tk ordinarily connects through XWayland using
+`DISPLAY` (often `:0` or `:1`, but **do not guess the value**).
+
+**Recommended:** open a fresh graphical GNOME Terminal *outside tmux/SSH*,
+check that `DISPLAY` is populated there, and launch the GUI directly:
+
+~~~sh
+cd ~/PSYCLE-LINUX
+python3 ui/listening_lab.py
+~~~
+
+If this works outside tmux, the audio application is fine and the tmux
+session needs its environment updated. Old tmux panes retain the environment
+from when their shell was created; merely reattaching does not necessarily
+repair it. Compare the variables in the two terminals before deciding how
+to propagate your real desktop values. Do not assume a remote shell can
+reach the local display.
+
+For headless CI, run `xvfb-run -a python3 ui/listening_lab.py --smoke-test`.
+Xvfb only proves the window can be constructed; it is **not** a substitute
+for interactive listening on a physical desktop.
+
 ## Listening procedure
 
 1. **Lower system output volume** before starting. There is no in-app gain
