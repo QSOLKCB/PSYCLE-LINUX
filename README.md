@@ -8,6 +8,18 @@ PSYCLE-LINUX exists to bring the workflow and behaviour of the original Psycle M
 
 This project is not a ground-up DAW redesign.
 
+## Early human-ear Listening Lab (experimental)
+
+An opt-in, **candidate-only desktop listening GUI** is available at
+[`ui/listening_lab.py`](ui/listening_lab.py). It opens local `.psy`
+songs with the existing C++ `psycle-player`, supports ALSA/JACK output,
+Stop, optional WAV output, and hash-bound JSON listening notes. See
+[the Linux setup and listening procedure](docs/LISTENING_LAB.md).
+
+This is a temporary human-observation harness requested on 9 November 2026,
+**not** the finished Psycle tracker interface or an original-Psycle
+compatibility verdict. The deferred engine/parity gates remain in force.
+
 ## Current priority — bounded original-Psycle investigation
 
 The previous implementation roadmap is **deferred**, with its history and
