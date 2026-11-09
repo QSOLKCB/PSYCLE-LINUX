@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import subprocess
 import tempfile
 import time
@@ -392,12 +393,31 @@ def main() -> None:
     parser.add_argument("--song", type=Path)
     parser.add_argument("--smoke-test", action="store_true", help="Construct widgets then exit (CI/Xvfb)")
     args = parser.parse_args()
-    root = tk.Tk()
+    try:
+        root = tk.Tk()
+    except tk.TclError as error:
+        print(f"Listening Lab: Tk desktop initialization failed: {error}", file=sys.stderr)
+        if "display" in str(error).lower() or not os.environ.get("DISPLAY"):
+            print(
+                "Tkinter is installed, but this shell cannot reach an X11/XWayland "
+                "display. Open a fresh terminal inside the graphical desktop "
+                "(outside tmux or SSH) and try again.",
+                file=sys.stderr,
+            )
+            for key in ("DISPLAY", "WAYLAND_DISPLAY", "XDG_SESSION_TYPE", "TMUX"):
+                print(f"  {key}={os.environ.get(key) or '<unset>'}", file=sys.stderr)
+            print(
+                "On GNOME Wayland, Tk typically uses XWayland. "
+                "Do not guess DISPLAY=:0; use your actual session environment.",
+                file=sys.stderr,
+            )
+        return 2
     ListeningLab(root, args.player, args.song)
     if args.smoke_test:
         root.after(200, root.destroy)
     root.mainloop()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
