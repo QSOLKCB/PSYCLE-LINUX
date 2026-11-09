@@ -274,7 +274,7 @@ class ListeningLab:
         self.log.configure(state="disabled")
 
     def _play(self) -> None:
-        if self.session is not None and self.session.poll() is None:
+        if self.session is not None and self.session.process is not None and self.session.poll() is None:
             return
         cfg = PlaybackConfig(
             player=Path(self.player_var.get()).expanduser(),
@@ -288,8 +288,14 @@ class ListeningLab:
             cfg.validate()
             if self.session is not None:
                 self.session.close()
-            self.session = PlayerSession(cfg)
-            self.session.start()
+                self.session = None
+            candidate = PlayerSession(cfg)
+            try:
+                candidate.start()
+            except (OSError, subprocess.SubprocessError):
+                candidate.close()
+                raise
+            self.session = candidate
         except (ValueError, OSError, subprocess.SubprocessError) as error:
             messagebox.showerror("Cannot start playback", str(error))
             return
@@ -347,7 +353,11 @@ class ListeningLab:
                 "driver": cfg.driver,
                 "device": cfg.device,
                 "wav_output": str(cfg.wav_output.resolve()) if cfg.wav_output else None,
-                "wav_sha256": sha256(cfg.wav_output) if cfg.wav_output and cfg.wav_output.is_file() else None,
+                "wav_sha256": (
+                    sha256(cfg.wav_output)
+                    if cfg.wav_output and session.poll() is not None and cfg.wav_output.is_file()
+                    else None
+                ),
                 "configured_plugin_paths_enabled": cfg.allow_plugins,
                 "player_exit_code": session.process.poll() if session.process else None,
                 "user_observation": self.issue_var.get(),
