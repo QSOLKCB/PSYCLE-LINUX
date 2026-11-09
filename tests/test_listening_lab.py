@@ -2,6 +2,9 @@
 """Headless contract tests for the early Listening Lab controller."""
 import os
 from pathlib import Path
+import io
+import contextlib
+import tkinter as tk
 import stat
 import sys
 import tempfile
@@ -10,7 +13,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ui"))
-from listening_lab import PlaybackConfig, PlayerSession
+from listening_lab import PlaybackConfig, PlayerSession, main
 
 
 class ListeningLabTests(unittest.TestCase):
@@ -91,6 +94,35 @@ class ListeningLabTests(unittest.TestCase):
                 self.assertTrue(session.ended_utc)
             finally:
                 session.close()
+
+    def test_headless_tk_error_is_actionable_and_returns_nonzero(self):
+        stderr = io.StringIO()
+        with (
+            mock.patch("sys.argv", ["listening_lab.py"]),
+            mock.patch("listening_lab.tk.Tk", side_effect=tk.TclError(
+                "no display name and no $DISPLAY environment variable"
+            )),
+            mock.patch.dict(os.environ, {"DISPLAY": "", "WAYLAND_DISPLAY": "", "TMUX": "/tmp/tmux-session"}),
+            contextlib.redirect_stderr(stderr),
+        ):
+            self.assertEqual(main(), 2)
+        message = stderr.getvalue()
+        self.assertIn("Tk desktop initialization failed", message)
+        self.assertIn("DISPLAY=<unset>", message)
+        self.assertIn("TMUX=/tmp/tmux-session", message)
+        self.assertIn("fresh terminal", message)
+
+    def test_non_display_tk_error_is_not_misdiagnosed(self):
+        stderr = io.StringIO()
+        with (
+            mock.patch("sys.argv", ["listening_lab.py"]),
+            mock.patch("listening_lab.tk.Tk", side_effect=tk.TclError("invalid Tcl initialization")),
+            mock.patch.dict(os.environ, {"DISPLAY": ":99"}),
+            contextlib.redirect_stderr(stderr),
+        ):
+            self.assertEqual(main(), 2)
+        self.assertIn("invalid Tcl initialization", stderr.getvalue())
+        self.assertNotIn("outside tmux or SSH", stderr.getvalue())
 
 
 if __name__ == "__main__":
