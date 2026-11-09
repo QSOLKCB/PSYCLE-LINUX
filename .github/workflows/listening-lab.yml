@@ -1,0 +1,37 @@
+name: Early Listening Lab GUI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ui/listening_lab.py'
+      - 'tests/test_listening_lab.py'
+      - 'docs/LISTENING_LAB.md'
+      - '.github/workflows/listening-lab.yml'
+  pull_request:
+    paths:
+      - 'ui/listening_lab.py'
+      - 'tests/test_listening_lab.py'
+      - 'docs/LISTENING_LAB.md'
+      - '.github/workflows/listening-lab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controller-and-gui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tk and virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-tk xvfb
+      - name: Python syntax check
+        run: python3 -m py_compile ui/listening_lab.py tests/test_listening_lab.py
+      - name: Fake-player subprocess regressions
+        run: python3 -m unittest discover -s tests -p 'test_listening_lab.py' -v
+      - name: Native GUI construction under Xvfb
+        run: xvfb-run -a python3 ui/listening_lab.py --smoke-test
